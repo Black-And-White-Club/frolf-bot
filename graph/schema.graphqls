@@ -1,0 +1,119 @@
+# graph/schema.graphqls
+
+"""
+Represents a user in the system.
+"""
+type User {
+  id: ID!
+  name: String!
+  discordID: String!
+  tagNumber: Int
+  rounds: [Round!]!
+}
+
+"""
+Represents a round of play.
+"""
+type Round {
+  id: ID!
+  title: String! # New field for the title of the round
+  location: String!
+  eventType: String
+  date: String! # Date in a standard format
+  time: String! # Time in a standard format
+  participants: [Participant!]! # Updated to use a Participant type
+  scores: [Score!]!
+  finalized: Boolean!
+}
+
+"""
+Represents a participant's response in a round.
+"""
+type Participant {
+  user: User!
+  response: Response! # Accept/Tentative/Decline
+}
+
+"""
+Represents the response of a participant.
+"""
+enum Response {
+  ACCEPT
+  TENTATIVE
+  DECLINE
+}
+
+"""
+Represents a location for a round.
+"""
+type Location {
+  id: ID!
+  course: String!
+  address: String
+  city: String
+}
+
+"""
+Represents a tag associated with a user.
+"""
+type Tag {
+  id: ID!
+  tagNumber: Int
+  lastPlayed: String! # Example: "2023-10-01"
+  durationHeld: Int # Duration in days since lastPlayed
+}
+
+"""
+Represents a score for a user in a round.
+"""
+type Score {
+  userID: ID!
+  score: Int!
+}
+
+"""
+Represents the leaderboard of users and their placements.
+"""
+type Leaderboard {
+  users: [User!]!
+  placements: [Tag!]!
+}
+
+"""
+Queries available in the API.
+"""
+type Query {
+  getUser(id: ID!): User
+  getLeaderboard: Leaderboard
+  getRounds(limit: Int, offset: Int): [Round!]!
+}
+
+"""
+Mutations available in the API.
+"""
+type Mutation {
+  createUser(input: UserInput!): User!
+  scheduleRound(input: RoundInput!): Round!
+  joinRound(roundID: ID!, userID: ID!): Round!
+  submitScore(roundID: ID!, userID: ID!, score: Int!): Round!
+  finalizeRound(roundID: ID!): Round!
+}
+
+"""
+Input type for creating a new user.
+"""
+input UserInput {
+  name: String!
+  discordID: String!
+}
+
+"""
+Input type for scheduling a new round.
+"""
+input RoundInput {
+  title: String! # New field for the title of the round
+  location: String!
+  eventType: String
+  date: String! # Date in a standard format
+  time: String! # Time in a standard format
+}
