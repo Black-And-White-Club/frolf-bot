@@ -19,3 +19,24 @@
 
 # Go workspace file
 go.work
+.DS_Store
+
+ IDEs and editors
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# General
+Thumbs.db
+*.log
+
+# Local env files
+.env
+.env.local
+.env.development
+.env.test
+.env.production

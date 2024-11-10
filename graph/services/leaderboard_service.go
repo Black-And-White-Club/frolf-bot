@@ -1,16 +1,22 @@
-package service
+package services
 
 import (
 	"context"
 	"fmt"
 
 	"cloud.google.com/go/firestore"
-	"github.com/romero-jace/leaderboard/graph/model"
+	"github.com/romero-jace/tcr-bot/graph/model"
+	"google.golang.org/api/iterator"
 )
 
 // LeaderboardService handles operations related to the leaderboard
 type LeaderboardService struct {
 	FirestoreClient *firestore.Client
+}
+
+// NewLeaderboardService creates a new instance of LeaderboardService
+func NewLeaderboardService(client *firestore.Client) *LeaderboardService {
+	return &LeaderboardService{FirestoreClient: client}
 }
 
 // GetLeaderboard retrieves the current leaderboard from Firestore
@@ -42,7 +48,7 @@ func (s *LeaderboardService) getAllUsers(ctx context.Context) ([]*model.User, er
 
 	for {
 		doc, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done { // Change here
 			break
 		}
 		if err != nil {
@@ -62,15 +68,33 @@ func (s *LeaderboardService) getAllUsers(ctx context.Context) ([]*model.User, er
 
 // getPlacements retrieves the placements from Firestore or calculates them
 func (s *LeaderboardService) getPlacements(ctx context.Context) ([]*model.Tag, error) {
-	// This is a placeholder implementation.
-	// You would typically fetch scores or rankings from Firestore or calculate them based on your logic.
-	// For this example, let's assume we have a fixed list of placements.
+	var placements []*model.Tag
 
-	// Example placements
-	placements := []*model.Tag{
-		{Name: "User 1", Position: 1},
-		{Name: "User 2", Position: 2},
-		{Name: "User 3", Position: 3},
+	// Fetch scores from Firestore or calculate placements based on scores
+	iter := s.FirestoreClient.Collection("scores").Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done { // Change here
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var score model.Score
+		err = doc.DataTo(&score)
+		if err != nil {
+			return nil, err
+		}
+
+		// Here you would calculate the placement based on the score
+		// For example, you might want to create a Tag based on the score
+		placements = append(placements, &model.Tag{
+			Name:     score.UserID, // Assuming you have a way to get the user's name
+			Position: score.Score,  // This is just an example; adjust as needed
+		})
 	}
 
 	return placements, nil

@@ -5,7 +5,6 @@ package graph
 import (
 	"bytes"
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"strconv"
@@ -47,6 +46,12 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	EditLog struct {
+		Changes   func(childComplexity int) int
+		EditorID  func(childComplexity int) int
+		Timestamp func(childComplexity int) int
+	}
+
 	Leaderboard struct {
 		Placements func(childComplexity int) int
 		Users      func(childComplexity int) int
@@ -61,13 +66,14 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CreateUser    func(childComplexity int, input model.UserInput) int
-		FinalizeRound func(childComplexity int, roundID string) int
+		FinalizeRound func(childComplexity int, roundID string, editorID string) int
 		JoinRound     func(childComplexity int, roundID string, userID string) int
 		ScheduleRound func(childComplexity int, input model.RoundInput) int
 		SubmitScore   func(childComplexity int, roundID string, userID string, score int) int
 	}
 
 	Participant struct {
+		Rank     func(childComplexity int) int
 		Response func(childComplexity int) int
 		User     func(childComplexity int) int
 	}
@@ -75,11 +81,12 @@ type ComplexityRoot struct {
 	Query struct {
 		GetLeaderboard func(childComplexity int) int
 		GetRounds      func(childComplexity int, limit *int, offset *int) int
-		GetUser        func(childComplexity int, id string) int
+		GetUser        func(childComplexity int, discordID string) int
 	}
 
 	Round struct {
 		Date         func(childComplexity int) int
+		EditHistory  func(childComplexity int) int
 		EventType    func(childComplexity int) int
 		Finalized    func(childComplexity int) int
 		ID           func(childComplexity int) int
@@ -99,6 +106,8 @@ type ComplexityRoot struct {
 		DurationHeld func(childComplexity int) int
 		ID           func(childComplexity int) int
 		LastPlayed   func(childComplexity int) int
+		Name         func(childComplexity int) int
+		Position     func(childComplexity int) int
 		TagNumber    func(childComplexity int) int
 	}
 
@@ -106,6 +115,7 @@ type ComplexityRoot struct {
 		DiscordID func(childComplexity int) int
 		ID        func(childComplexity int) int
 		Name      func(childComplexity int) int
+		Role      func(childComplexity int) int
 		Rounds    func(childComplexity int) int
 		TagNumber func(childComplexity int) int
 	}
@@ -116,10 +126,10 @@ type MutationResolver interface {
 	ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error)
 	JoinRound(ctx context.Context, roundID string, userID string) (*model.Round, error)
 	SubmitScore(ctx context.Context, roundID string, userID string, score int) (*model.Round, error)
-	FinalizeRound(ctx context.Context, roundID string) (*model.Round, error)
+	FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error)
 }
 type QueryResolver interface {
-	GetUser(ctx context.Context, id string) (*model.User, error)
+	GetUser(ctx context.Context, discordID string) (*model.User, error)
 	GetLeaderboard(ctx context.Context) (*model.Leaderboard, error)
 	GetRounds(ctx context.Context, limit *int, offset *int) ([]*model.Round, error)
 }
@@ -142,6 +152,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "EditLog.changes":
+		if e.complexity.EditLog.Changes == nil {
+			break
+		}
+
+		return e.complexity.EditLog.Changes(childComplexity), true
+
+	case "EditLog.editorID":
+		if e.complexity.EditLog.EditorID == nil {
+			break
+		}
+
+		return e.complexity.EditLog.EditorID(childComplexity), true
+
+	case "EditLog.timestamp":
+		if e.complexity.EditLog.Timestamp == nil {
+			break
+		}
+
+		return e.complexity.EditLog.Timestamp(childComplexity), true
 
 	case "Leaderboard.placements":
 		if e.complexity.Leaderboard.Placements == nil {
@@ -207,7 +238,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.FinalizeRound(childComplexity, args["roundID"].(string)), true
+		return e.complexity.Mutation.FinalizeRound(childComplexity, args["roundID"].(string), args["editorID"].(string)), true
 
 	case "Mutation.joinRound":
 		if e.complexity.Mutation.JoinRound == nil {
@@ -244,6 +275,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Mutation.SubmitScore(childComplexity, args["roundID"].(string), args["userID"].(string), args["score"].(int)), true
+
+	case "Participant.rank":
+		if e.complexity.Participant.Rank == nil {
+			break
+		}
+
+		return e.complexity.Participant.Rank(childComplexity), true
 
 	case "Participant.response":
 		if e.complexity.Participant.Response == nil {
@@ -288,7 +326,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.GetUser(childComplexity, args["id"].(string)), true
+		return e.complexity.Query.GetUser(childComplexity, args["discordID"].(string)), true
 
 	case "Round.date":
 		if e.complexity.Round.Date == nil {
@@ -296,6 +334,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Round.Date(childComplexity), true
+
+	case "Round.editHistory":
+		if e.complexity.Round.EditHistory == nil {
+			break
+		}
+
+		return e.complexity.Round.EditHistory(childComplexity), true
 
 	case "Round.eventType":
 		if e.complexity.Round.EventType == nil {
@@ -388,6 +433,20 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Tag.LastPlayed(childComplexity), true
 
+	case "Tag.name":
+		if e.complexity.Tag.Name == nil {
+			break
+		}
+
+		return e.complexity.Tag.Name(childComplexity), true
+
+	case "Tag.position":
+		if e.complexity.Tag.Position == nil {
+			break
+		}
+
+		return e.complexity.Tag.Position(childComplexity), true
+
 	case "Tag.tagNumber":
 		if e.complexity.Tag.TagNumber == nil {
 			break
@@ -415,6 +474,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.User.Name(childComplexity), true
+
+	case "User.role":
+		if e.complexity.User.Role == nil {
+			break
+		}
+
+		return e.complexity.User.Role(childComplexity), true
 
 	case "User.rounds":
 		if e.complexity.User.Rounds == nil {
@@ -536,19 +602,141 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(ec.Schema(), ec.Schema().Types[name]), nil
 }
 
-//go:embed "schema.graphqls"
-var sourcesFS embed.FS
+var sources = []*ast.Source{
+	{Name: "../schema.graphqls", Input: `# graph/schema.graphqls
 
-func sourceData(filename string) string {
-	data, err := sourcesFS.ReadFile(filename)
-	if err != nil {
-		panic(fmt.Sprintf("codegen problem: %s not available", filename))
-	}
-	return string(data)
+"""
+Represents a user in the system.
+"""
+type User {
+  id: ID!
+  name: String!
+  discordID: String!
+  tagNumber: Int
+  rounds: [Round!]!
+  role: String! # Fixed capitalization to match Go conventions
 }
 
-var sources = []*ast.Source{
-	{Name: "schema.graphqls", Input: sourceData("schema.graphqls"), BuiltIn: false},
+"""
+Represents a round of play.
+"""
+type Round {
+  id: ID!
+  title: String! # Title of the round
+  location: String!
+  eventType: String
+  date: String! # Date in a standard format
+  time: String! # Time in a standard format
+  participants: [Participant!]! # Participants in the round
+  scores: [Score!]! # Scores submitted for the round
+  finalized: Boolean! # Indicates if the round is finalized
+  editHistory: [EditLog!]! # History of edits made to the round
+}
+
+"""
+Represents a participant's response in a round.
+"""
+type Participant {
+  user: User!
+  response: Response! # Accept/Tentative/Decline
+  rank: Int! # Added rank field to track participant's rank
+}
+
+"""
+Represents the response of a participant.
+"""
+enum Response {
+  ACCEPT
+  TENTATIVE
+  DECLINE
+}
+
+"""
+Represents a log entry for edits made to a round.
+"""
+type EditLog {
+  editorID: String! # ID of the user who made the edit
+  timestamp: String! # Timestamp of the edit in ISO format
+  changes: String! # Description of the changes made
+}
+
+"""
+Represents a location for a round.
+"""
+type Location {
+  id: ID!
+  course: String!
+  address: String
+  city: String
+}
+
+"""
+Represents a tag associated with a user.
+"""
+type Tag {
+  id: ID!
+  tagNumber: Int
+  lastPlayed: String! # Example: "2023-10-01"
+  durationHeld: Int # Duration in days since lastPlayed
+  name: String! # New field for the name
+  position: Int! # New field for the position
+}
+
+"""
+Represents a score for a user in a round.
+"""
+type Score {
+  userID: ID!
+  score: Int!
+}
+
+"""
+Represents the leaderboard of users and their placements.
+"""
+type Leaderboard {
+  users: [User!]!
+  placements: [Tag!]!
+}
+
+"""
+Queries available in the API.
+"""
+type Query {
+  getUser(discordID: String!): User
+  getLeaderboard: Leaderboard
+  getRounds(limit: Int, offset: Int): [Round!]!
+}
+
+"""
+Mutations available in the API.
+"""
+type Mutation {
+  createUser(input: UserInput!): User!
+  scheduleRound(input: RoundInput!): Round!
+  joinRound(roundID: ID!, userID: ID!): Round!
+  submitScore(roundID: ID!, userID: ID!, score: Int!): Round!
+  finalizeRound(roundID: ID!, editorID: ID!): Round!
+}
+
+"""
+Input type for creating a new user.
+"""
+input UserInput {
+  name: String!
+  discordID: String!
+}
+
+"""
+Input type for scheduling a new round.
+"""
+input RoundInput {
+  title: String! # Title of the round
+  location: String!
+  eventType: String
+  date: String! # Date in a standard format
+  time: String! # Time in a standard format
+}
+`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -587,6 +775,11 @@ func (ec *executionContext) field_Mutation_finalizeRound_args(ctx context.Contex
 		return nil, err
 	}
 	args["roundID"] = arg0
+	arg1, err := ec.field_Mutation_finalizeRound_argsEditorID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["editorID"] = arg1
 	return args, nil
 }
 func (ec *executionContext) field_Mutation_finalizeRound_argsRoundID(
@@ -595,6 +788,19 @@ func (ec *executionContext) field_Mutation_finalizeRound_argsRoundID(
 ) (string, error) {
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("roundID"))
 	if tmp, ok := rawArgs["roundID"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_finalizeRound_argsEditorID(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (string, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("editorID"))
+	if tmp, ok := rawArgs["editorID"]; ok {
 		return ec.unmarshalNID2string(ctx, tmp)
 	}
 
@@ -792,20 +998,20 @@ func (ec *executionContext) field_Query_getRounds_argsOffset(
 func (ec *executionContext) field_Query_getUser_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	arg0, err := ec.field_Query_getUser_argsID(ctx, rawArgs)
+	arg0, err := ec.field_Query_getUser_argsDiscordID(ctx, rawArgs)
 	if err != nil {
 		return nil, err
 	}
-	args["id"] = arg0
+	args["discordID"] = arg0
 	return args, nil
 }
-func (ec *executionContext) field_Query_getUser_argsID(
+func (ec *executionContext) field_Query_getUser_argsDiscordID(
 	ctx context.Context,
 	rawArgs map[string]interface{},
 ) (string, error) {
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-	if tmp, ok := rawArgs["id"]; ok {
-		return ec.unmarshalNID2string(ctx, tmp)
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("discordID"))
+	if tmp, ok := rawArgs["discordID"]; ok {
+		return ec.unmarshalNString2string(ctx, tmp)
 	}
 
 	var zeroVal string
@@ -866,6 +1072,138 @@ func (ec *executionContext) field___Type_fields_argsIncludeDeprecated(
 
 // region    **************************** field.gotpl *****************************
 
+func (ec *executionContext) _EditLog_editorID(ctx context.Context, field graphql.CollectedField, obj *model.EditLog) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EditLog_editorID(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.EditorID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EditLog_editorID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EditLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EditLog_timestamp(ctx context.Context, field graphql.CollectedField, obj *model.EditLog) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EditLog_timestamp(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Timestamp, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EditLog_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EditLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EditLog_changes(ctx context.Context, field graphql.CollectedField, obj *model.EditLog) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EditLog_changes(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Changes, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EditLog_changes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EditLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Leaderboard_users(ctx context.Context, field graphql.CollectedField, obj *model.Leaderboard) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Leaderboard_users(ctx, field)
 	if err != nil {
@@ -915,6 +1253,8 @@ func (ec *executionContext) fieldContext_Leaderboard_users(_ context.Context, fi
 				return ec.fieldContext_User_tagNumber(ctx, field)
 			case "rounds":
 				return ec.fieldContext_User_rounds(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -969,6 +1309,10 @@ func (ec *executionContext) fieldContext_Leaderboard_placements(_ context.Contex
 				return ec.fieldContext_Tag_lastPlayed(ctx, field)
 			case "durationHeld":
 				return ec.fieldContext_Tag_durationHeld(ctx, field)
+			case "name":
+				return ec.fieldContext_Tag_name(ctx, field)
+			case "position":
+				return ec.fieldContext_Tag_position(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Tag", field.Name)
 		},
@@ -1195,6 +1539,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_tagNumber(ctx, field)
 			case "rounds":
 				return ec.fieldContext_User_rounds(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -1270,6 +1616,8 @@ func (ec *executionContext) fieldContext_Mutation_scheduleRound(ctx context.Cont
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1345,6 +1693,8 @@ func (ec *executionContext) fieldContext_Mutation_joinRound(ctx context.Context,
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1420,6 +1770,8 @@ func (ec *executionContext) fieldContext_Mutation_submitScore(ctx context.Contex
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1452,7 +1804,7 @@ func (ec *executionContext) _Mutation_finalizeRound(ctx context.Context, field g
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().FinalizeRound(rctx, fc.Args["roundID"].(string))
+		return ec.resolvers.Mutation().FinalizeRound(rctx, fc.Args["roundID"].(string), fc.Args["editorID"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1495,6 +1847,8 @@ func (ec *executionContext) fieldContext_Mutation_finalizeRound(ctx context.Cont
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1562,6 +1916,8 @@ func (ec *executionContext) fieldContext_Participant_user(_ context.Context, fie
 				return ec.fieldContext_User_tagNumber(ctx, field)
 			case "rounds":
 				return ec.fieldContext_User_rounds(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -1613,6 +1969,50 @@ func (ec *executionContext) fieldContext_Participant_response(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Participant_rank(ctx context.Context, field graphql.CollectedField, obj *model.Participant) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Participant_rank(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Rank, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Participant_rank(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Participant",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_getUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Query_getUser(ctx, field)
 	if err != nil {
@@ -1627,7 +2027,7 @@ func (ec *executionContext) _Query_getUser(ctx context.Context, field graphql.Co
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().GetUser(rctx, fc.Args["id"].(string))
+		return ec.resolvers.Query().GetUser(rctx, fc.Args["discordID"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1659,6 +2059,8 @@ func (ec *executionContext) fieldContext_Query_getUser(ctx context.Context, fiel
 				return ec.fieldContext_User_tagNumber(ctx, field)
 			case "rounds":
 				return ec.fieldContext_User_rounds(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -1781,6 +2183,8 @@ func (ec *executionContext) fieldContext_Query_getRounds(ctx context.Context, fi
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -2232,6 +2636,8 @@ func (ec *executionContext) fieldContext_Round_participants(_ context.Context, f
 				return ec.fieldContext_Participant_user(ctx, field)
 			case "response":
 				return ec.fieldContext_Participant_response(ctx, field)
+			case "rank":
+				return ec.fieldContext_Participant_rank(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Participant", field.Name)
 		},
@@ -2328,6 +2734,58 @@ func (ec *executionContext) fieldContext_Round_finalized(_ context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Round_editHistory(ctx context.Context, field graphql.CollectedField, obj *model.Round) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Round_editHistory(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.EditHistory, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.EditLog)
+	fc.Result = res
+	return ec.marshalNEditLog2ᚕᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐEditLogᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Round_editHistory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Round",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "editorID":
+				return ec.fieldContext_EditLog_editorID(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_EditLog_timestamp(ctx, field)
+			case "changes":
+				return ec.fieldContext_EditLog_changes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EditLog", field.Name)
 		},
 	}
 	return fc, nil
@@ -2591,6 +3049,94 @@ func (ec *executionContext) fieldContext_Tag_durationHeld(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Tag_name(ctx context.Context, field graphql.CollectedField, obj *model.Tag) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Tag_name(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Name, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Tag_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tag",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tag_position(ctx context.Context, field graphql.CollectedField, obj *model.Tag) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Tag_position(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Position, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Tag_position(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tag",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_User_id(ctx, field)
 	if err != nil {
@@ -2821,8 +3367,54 @@ func (ec *executionContext) fieldContext_User_rounds(_ context.Context, field gr
 				return ec.fieldContext_Round_scores(ctx, field)
 			case "finalized":
 				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _User_role(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_User_role(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Role, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_User_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4698,6 +5290,55 @@ func (ec *executionContext) unmarshalInputUserInput(ctx context.Context, obj int
 
 // region    **************************** object.gotpl ****************************
 
+var editLogImplementors = []string{"EditLog"}
+
+func (ec *executionContext) _EditLog(ctx context.Context, sel ast.SelectionSet, obj *model.EditLog) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, editLogImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EditLog")
+		case "editorID":
+			out.Values[i] = ec._EditLog_editorID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._EditLog_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changes":
+			out.Values[i] = ec._EditLog_changes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var leaderboardImplementors = []string{"Leaderboard"}
 
 func (ec *executionContext) _Leaderboard(ctx context.Context, sel ast.SelectionSet, obj *model.Leaderboard) graphql.Marshaler {
@@ -4888,6 +5529,11 @@ func (ec *executionContext) _Participant(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "rank":
+			out.Values[i] = ec._Participant_rank(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5074,6 +5720,11 @@ func (ec *executionContext) _Round(ctx context.Context, sel ast.SelectionSet, ob
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "editHistory":
+			out.Values[i] = ec._Round_editHistory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5166,6 +5817,16 @@ func (ec *executionContext) _Tag(ctx context.Context, sel ast.SelectionSet, obj 
 			}
 		case "durationHeld":
 			out.Values[i] = ec._Tag_durationHeld(ctx, field, obj)
+		case "name":
+			out.Values[i] = ec._Tag_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "position":
+			out.Values[i] = ec._Tag_position(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5219,6 +5880,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			out.Values[i] = ec._User_tagNumber(ctx, field, obj)
 		case "rounds":
 			out.Values[i] = ec._User_rounds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "role":
+			out.Values[i] = ec._User_role(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -5584,6 +6250,60 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNEditLog2ᚕᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐEditLogᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.EditLog) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNEditLog2ᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐEditLog(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNEditLog2ᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐEditLog(ctx context.Context, sel ast.SelectionSet, v *model.EditLog) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EditLog(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v interface{}) (string, error) {

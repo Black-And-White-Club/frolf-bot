@@ -8,6 +8,13 @@ import (
 	"strconv"
 )
 
+// Represents a log entry for edits made to a round.
+type EditLog struct {
+	EditorID  string `json:"editorID"`
+	Timestamp string `json:"timestamp"`
+	Changes   string `json:"changes"`
+}
+
 // Represents the leaderboard of users and their placements.
 type Leaderboard struct {
 	Users      []*User `json:"users"`
@@ -30,6 +37,7 @@ type Mutation struct {
 type Participant struct {
 	User     *User    `json:"user"`
 	Response Response `json:"response"`
+	Rank     int      `json:"rank"`
 }
 
 // Queries available in the API.
@@ -47,6 +55,7 @@ type Round struct {
 	Participants []*Participant `json:"participants"`
 	Scores       []*Score       `json:"scores"`
 	Finalized    bool           `json:"finalized"`
+	EditHistory  []*EditLog     `json:"editHistory"`
 }
 
 // Input type for scheduling a new round.
@@ -70,6 +79,8 @@ type Tag struct {
 	TagNumber    *int   `json:"tagNumber,omitempty"`
 	LastPlayed   string `json:"lastPlayed"`
 	DurationHeld *int   `json:"durationHeld,omitempty"`
+	Name         string `json:"name"`
+	Position     int    `json:"position"`
 }
 
 // Represents a user in the system.
@@ -79,6 +90,7 @@ type User struct {
 	DiscordID string   `json:"discordID"`
 	TagNumber *int     `json:"tagNumber,omitempty"`
 	Rounds    []*Round `json:"rounds"`
+	Role      string   `json:"role"`
 }
 
 // Input type for creating a new user.

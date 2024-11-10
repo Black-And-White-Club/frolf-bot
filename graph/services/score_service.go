@@ -6,12 +6,15 @@ import (
 	"errors"
 	"sort"
 	"strconv"
-	"your-module/graph/model"
+	"strings"
+
 	"cloud.google.com/go/firestore"
+	"github.com/romero-jace/tcr-bot/graph/model"
 )
 
 type ScoreService struct {
 	client *firestore.Client
+	DB     *firestore.Client
 }
 
 // NewScoreService creates a new instance of ScoreService
@@ -52,7 +55,7 @@ func (s *ScoreService) SubmitScore(ctx context.Context, round *model.Round, scor
 				}
 				if !found {
 					// If no existing score found, add a new score entry
-					round.Scores = append(round.Scores, &model.Score{User ID: userID, Score: score})
+					round.Scores = append(round.Scores, &model.Score{UserID: userID, Score: score})
 				}
 			}
 		}
@@ -60,12 +63,12 @@ func (s *ScoreService) SubmitScore(ctx context.Context, round *model.Round, scor
 	return nil
 }
 
-// FinalizeRound finalizes a round and updates rankings
-func (s *ScoreService) FinalizeRound(round *model.Round, editorID string) error {
+// ProcessScoring calculates rankings based on scores
+func (s *ScoreService) ProcessScoring(round *model.Round) error {
 	// Prepare a list for ranking
 	type ParticipantScore struct {
 		UserID string
-		Score   int
+		Score  int
 	}
 
 	var scores []ParticipantScore
@@ -93,26 +96,13 @@ func (s *ScoreService) FinalizeRound(round *model.Round, editorID string) error 
 	// Update rankings based on scores
 	for rank, participantScore := range scores {
 		// Update the participant's ranking in the round
-		for i, participant := range round.Participants {
+		for _, participant := range round.Participants {
 			if participant.User.ID == participantScore.UserID {
 				participant.Rank = rank + 1 // Rank is 1-based
 				break
 			}
 		}
 	}
-
-	// Log the edit action
-	editLog := model.EditLog{
-		EditorID:  editorID,
-		Timestamp: time.Now(),
-		Changes:   "Finalized round and updated rankings",
-	}
-
-	// Add the edit log to the round's edit history
-	round.EditHistory = append(round.EditHistory, editLog)
-
-	// Lock the round to prevent further changes
-	round.IsFinalized = true
 
 	return nil
 }
@@ -124,13 +114,25 @@ func isValidGolfScore(score string) bool {
 		return false
 	}
 	if score[0] == '+' || score[0] == '-' {
-		score = score[1:] // Remove leading sign for further validation
+		score = score[1:] // Remove the sign for validation
 	}
-	// Check if the remaining part is an integer
-	for _, char := range score {
-		if char < '0 || char > '9' {
-			return false
-		}
+	_, err := strconv.Atoi(score)
+	return err == nil
+}
+
+// GetUser Score retrieves the score for a specific user from Firestore
+func (s *ScoreService) GetUserScore(ctx context.Context, userID string) (int, error) {
+	doc, err := s.DB.Collection("scores").Doc(userID).Get(ctx)
+	if err != nil {
+		return 0, err
 	}
-	return true
+
+	var data struct {
+		Score int `firestore:"score"`
+	}
+	if err := doc.DataTo(&data); err != nil {
+		return 0, err
+	}
+
+	return data.Score, nil
 }

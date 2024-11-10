@@ -6,19 +6,15 @@ package graph
 
 import (
 	"context"
+	"strconv"
 
-	"github.com/romero-jace/leaderboard/graph/model"
-	service "github.com/romero-jace/tcr-bot/graph/services"
+	"github.com/romero-jace/tcr-bot/graph/model"
 )
 
-type Resolver struct {
-	UserService  *services.UserService
-	RoundService *services.RoundService // Add RoundService here
-}
-
-// CreateUser is the resolver for the createUser field.
+// CreateUser  is the resolver for the createUser  field.
 func (r *mutationResolver) CreateUser(ctx context.Context, input model.UserInput) (*model.User, error) {
-	user, err := service.CreateUser(ctx, input)
+	// Correctly call the CreateUser  method on the UserService
+	user, err := r.UserServices.UserService.CreateUser(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +23,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input model.UserInput
 
 // ScheduleRound is the resolver for the scheduleRound field.
 func (r *mutationResolver) ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error) {
-	round, err := r.RoundService.ScheduleRound(ctx, input)
+	round, err := r.ScoringServices.RoundService.ScheduleRound(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +32,7 @@ func (r *mutationResolver) ScheduleRound(ctx context.Context, input model.RoundI
 
 // JoinRound is the resolver for the joinRound field.
 func (r *mutationResolver) JoinRound(ctx context.Context, roundID string, userID string) (*model.Round, error) {
-	round, err := r.RoundService.JoinRound(ctx, roundID, userID)
+	round, err := r.ScoringServices.RoundService.JoinRound(ctx, roundID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +41,8 @@ func (r *mutationResolver) JoinRound(ctx context.Context, roundID string, userID
 
 // SubmitScore is the resolver for the submitScore field.
 func (r *mutationResolver) SubmitScore(ctx context.Context, roundID string, userID string, score int) (*model.Round, error) {
-	round, err := r.RoundService.SubmitScore(ctx, roundID, userID, score)
+	scores := map[string]string{userID: strconv.Itoa(score)}
+	round, err := r.ScoringServices.RoundService.SubmitScore(ctx, roundID, scores)
 	if err != nil {
 		return nil, err
 	}
@@ -53,17 +50,17 @@ func (r *mutationResolver) SubmitScore(ctx context.Context, roundID string, user
 }
 
 // FinalizeRound is the resolver for the finalizeRound field.
-func (r *mutationResolver) FinalizeRound(ctx context.Context, roundID string) (*model.Round, error) {
-	round, err := r.RoundService.FinalizeRound(ctx, roundID)
+func (r *mutationResolver) FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error) {
+	round, err := r.ScoringServices.RoundService.FinalizeRound(ctx, roundID, editorID) // Pass both roundID and editorID
 	if err != nil {
 		return nil, err
 	}
 	return round, nil
 }
 
-// GetUser is the resolver for the getUser field.
-func (r *queryResolver) GetUser(ctx context.Context, id string) (*model.User, error) {
-	user, err := service.GetUser(ctx, id)
+// GetUser  is the resolver for the getUser  field.
+func (r *queryResolver) GetUser(ctx context.Context, discordID string) (*model.User, error) {
+	user, err := r.UserServices.GetUser(ctx, discordID)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +69,7 @@ func (r *queryResolver) GetUser(ctx context.Context, id string) (*model.User, er
 
 // GetLeaderboard is the resolver for the getLeaderboard field.
 func (r *queryResolver) GetLeaderboard(ctx context.Context) (*model.Leaderboard, error) {
-	leaderboard, err := r.LeaderboardService.GetLeaderboard(ctx)
+	leaderboard, err := r.LeaderboardService.GetLeaderboard(ctx) // Use LeaderboardService
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +78,7 @@ func (r *queryResolver) GetLeaderboard(ctx context.Context) (*model.Leaderboard,
 
 // GetRounds is the resolver for the getRounds field.
 func (r *queryResolver) GetRounds(ctx context.Context, limit *int, offset *int) ([]*model.Round, error) {
-	rounds, err := r.RoundService.GetRounds(ctx, limit, offset)
+	rounds, err := r.ScoringServices.RoundService.GetRounds(ctx, limit, offset)
 	if err != nil {
 		return nil, err
 	}

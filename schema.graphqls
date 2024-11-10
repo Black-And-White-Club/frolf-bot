@@ -9,6 +9,7 @@ type User {
   discordID: String!
   tagNumber: Int
   rounds: [Round!]!
+  role: String! # Fixed capitalization to match Go conventions
 }
 
 """
@@ -16,14 +17,15 @@ Represents a round of play.
 """
 type Round {
   id: ID!
-  title: String! # New field for the title of the round
+  title: String! # Title of the round
   location: String!
   eventType: String
   date: String! # Date in a standard format
   time: String! # Time in a standard format
-  participants: [Participant!]! # Updated to use a Participant type
-  scores: [Score!]!
-  finalized: Boolean!
+  participants: [Participant!]! # Participants in the round
+  scores: [Score!]! # Scores submitted for the round
+  finalized: Boolean! # Indicates if the round is finalized
+  editHistory: [EditLog!]! # History of edits made to the round
 }
 
 """
@@ -32,6 +34,7 @@ Represents a participant's response in a round.
 type Participant {
   user: User!
   response: Response! # Accept/Tentative/Decline
+  rank: Int! # Added rank field to track participant's rank
 }
 
 """
@@ -41,6 +44,15 @@ enum Response {
   ACCEPT
   TENTATIVE
   DECLINE
+}
+
+"""
+Represents a log entry for edits made to a round.
+"""
+type EditLog {
+  editorID: String! # ID of the user who made the edit
+  timestamp: String! # Timestamp of the edit in ISO format
+  changes: String! # Description of the changes made
 }
 
 """
@@ -61,6 +73,8 @@ type Tag {
   tagNumber: Int
   lastPlayed: String! # Example: "2023-10-01"
   durationHeld: Int # Duration in days since lastPlayed
+  name: String! # New field for the name
+  position: Int! # New field for the position
 }
 
 """
@@ -83,9 +97,10 @@ type Leaderboard {
 Queries available in the API.
 """
 type Query {
-  getUser(id: ID!): User
+  getUser(discordID: String!): User
   getLeaderboard: Leaderboard
   getRounds(limit: Int, offset: Int): [Round!]!
+  getUserScore(userID: String!): Int
 }
 
 """
@@ -96,7 +111,7 @@ type Mutation {
   scheduleRound(input: RoundInput!): Round!
   joinRound(roundID: ID!, userID: ID!): Round!
   submitScore(roundID: ID!, userID: ID!, score: Int!): Round!
-  finalizeRound(roundID: ID!): Round!
+  finalizeRound(roundID: ID!, editorID: ID!): Round!
 }
 
 """
@@ -111,7 +126,7 @@ input UserInput {
 Input type for scheduling a new round.
 """
 input RoundInput {
-  title: String! # New field for the title of the round
+  title: String! # Title of the round
   location: String!
   eventType: String
   date: String! # Date in a standard format
