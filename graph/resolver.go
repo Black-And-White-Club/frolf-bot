@@ -2,8 +2,8 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"log"
-	"strconv"
 
 	"cloud.google.com/go/firestore"
 	"github.com/romero-jace/tcr-bot/graph/model"    // Corrected import path
@@ -56,6 +56,16 @@ func NewResolver(userService *services.UserService, scoreService *services.Score
 	}
 }
 
+// In your resolver.go or a utility file
+func getUserIDFromContext(ctx context.Context) (string, error) {
+	// Assuming you have a way to get the user ID from the context
+	userID, ok := ctx.Value("userID").(string)
+	if !ok {
+		return "", errors.New("user ID not found in context")
+	}
+	return userID, nil
+}
+
 // Query resolvers
 
 // GetUser  resolver
@@ -76,27 +86,4 @@ func (r *Resolver) GetRounds(ctx context.Context, limit *int, offset *int) ([]*m
 // GetUser Score resolver
 func (r *Resolver) GetUserScore(ctx context.Context, userID string) (int, error) {
 	return r.ScoringServices.ScoreService.GetUserScore(ctx, userID) // Call the method from ScoreService
-}
-
-// Mutation resolvers
-
-// ScheduleRound resolver
-func (r *Resolver) ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error) {
-	return r.ScoringServices.RoundService.ScheduleRound(ctx, input) // Implement this method in your RoundService
-}
-
-// JoinRound resolver
-func (r *Resolver) JoinRound(ctx context.Context, roundID string, userID string) (*model.Round, error) {
-	return r.ScoringServices.RoundService.JoinRound(ctx, roundID, userID) // Implement this method in your RoundService
-}
-
-// SubmitScore resolver
-func (r *Resolver) SubmitScore(ctx context.Context, roundID string, userID string, score int) (*model.Round, error) {
-	scores := map[string]string{userID: strconv.Itoa(score)} // Convert score to string
-	return r.ScoringServices.RoundService.SubmitScore(ctx, roundID, scores)
-}
-
-// FinalizeRound resolver
-func (r *Resolver) FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error) {
-	return r.ScoringServices.RoundService.FinalizeRound(ctx, roundID, editorID) // Implement this method in your RoundService
 }

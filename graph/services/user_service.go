@@ -29,6 +29,12 @@ func (us *UserService) CreateUser(ctx context.Context, input model.UserInput) (*
 		return nil, fmt.Errorf("DiscordID and Name are required")
 	}
 
+	// Check if the user already exists
+	existingUserDoc, err := us.client.Collection("users").Doc(input.DiscordID).Get(ctx)
+	if err == nil && existingUserDoc.Exists() {
+		return nil, fmt.Errorf("User  with DiscordID %s already exists", input.DiscordID)
+	}
+
 	// Create a new user
 	newUser := &model.User{
 		DiscordID: input.DiscordID,
@@ -36,12 +42,8 @@ func (us *UserService) CreateUser(ctx context.Context, input model.UserInput) (*
 	}
 
 	// Attempt to create the user document in Firestore
-	_, err := us.client.Collection("users").Doc(newUser.DiscordID).Set(ctx, newUser)
+	_, err = us.client.Collection("users").Doc(newUser.DiscordID).Set(ctx, newUser)
 	if err != nil {
-		// Check if the error is a NotFound error
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return nil, fmt.Errorf("User  with DiscordID %s not found", input.DiscordID)
-		}
 		return nil, err
 	}
 
@@ -63,7 +65,7 @@ func (us *UserService) GetUser(ctx context.Context, discordID string) (*model.Us
 	if err != nil {
 		// Check if the error is a NotFound error
 		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return nil, fmt.Errorf("User  with DiscordID %s not found", discordID)
+			return nil, fmt.Errorf("User with DiscordID %s not found", discordID)
 		}
 		return nil, err
 	}

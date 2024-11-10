@@ -66,8 +66,10 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CreateUser    func(childComplexity int, input model.UserInput) int
-		FinalizeRound func(childComplexity int, roundID string, editorID string) int
-		JoinRound     func(childComplexity int, roundID string, userID string) int
+		DeleteRound   func(childComplexity int, roundID string) int
+		EditRound     func(childComplexity int, roundID string, input model.RoundInput) int
+		FinalizeRound func(childComplexity int, roundID string) int
+		JoinRound     func(childComplexity int, input model.JoinRoundInput) int
 		ScheduleRound func(childComplexity int, input model.RoundInput) int
 		SubmitScore   func(childComplexity int, roundID string, userID string, score int) int
 	}
@@ -82,9 +84,11 @@ type ComplexityRoot struct {
 		GetLeaderboard func(childComplexity int) int
 		GetRounds      func(childComplexity int, limit *int, offset *int) int
 		GetUser        func(childComplexity int, discordID string) int
+		GetUserScore   func(childComplexity int, userID string) int
 	}
 
 	Round struct {
+		CreatorID    func(childComplexity int) int
 		Date         func(childComplexity int) int
 		EditHistory  func(childComplexity int) int
 		EventType    func(childComplexity int) int
@@ -124,14 +128,17 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	CreateUser(ctx context.Context, input model.UserInput) (*model.User, error)
 	ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error)
-	JoinRound(ctx context.Context, roundID string, userID string) (*model.Round, error)
+	JoinRound(ctx context.Context, input model.JoinRoundInput) (*model.Round, error)
 	SubmitScore(ctx context.Context, roundID string, userID string, score int) (*model.Round, error)
-	FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error)
+	FinalizeRound(ctx context.Context, roundID string) (*model.Round, error)
+	EditRound(ctx context.Context, roundID string, input model.RoundInput) (*model.Round, error)
+	DeleteRound(ctx context.Context, roundID string) (bool, error)
 }
 type QueryResolver interface {
 	GetUser(ctx context.Context, discordID string) (*model.User, error)
 	GetLeaderboard(ctx context.Context) (*model.Leaderboard, error)
 	GetRounds(ctx context.Context, limit *int, offset *int) ([]*model.Round, error)
+	GetUserScore(ctx context.Context, userID string) (*int, error)
 }
 
 type executableSchema struct {
@@ -228,6 +235,30 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Mutation.CreateUser(childComplexity, args["input"].(model.UserInput)), true
 
+	case "Mutation.deleteRound":
+		if e.complexity.Mutation.DeleteRound == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteRound_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeleteRound(childComplexity, args["roundID"].(string)), true
+
+	case "Mutation.editRound":
+		if e.complexity.Mutation.EditRound == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_editRound_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.EditRound(childComplexity, args["roundID"].(string), args["input"].(model.RoundInput)), true
+
 	case "Mutation.finalizeRound":
 		if e.complexity.Mutation.FinalizeRound == nil {
 			break
@@ -238,7 +269,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.FinalizeRound(childComplexity, args["roundID"].(string), args["editorID"].(string)), true
+		return e.complexity.Mutation.FinalizeRound(childComplexity, args["roundID"].(string)), true
 
 	case "Mutation.joinRound":
 		if e.complexity.Mutation.JoinRound == nil {
@@ -250,7 +281,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.JoinRound(childComplexity, args["roundID"].(string), args["userID"].(string)), true
+		return e.complexity.Mutation.JoinRound(childComplexity, args["input"].(model.JoinRoundInput)), true
 
 	case "Mutation.scheduleRound":
 		if e.complexity.Mutation.ScheduleRound == nil {
@@ -327,6 +358,25 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.GetUser(childComplexity, args["discordID"].(string)), true
+
+	case "Query.getUserScore":
+		if e.complexity.Query.GetUserScore == nil {
+			break
+		}
+
+		args, err := ec.field_Query_getUserScore_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.GetUserScore(childComplexity, args["userID"].(string)), true
+
+	case "Round.creatorID":
+		if e.complexity.Round.CreatorID == nil {
+			break
+		}
+
+		return e.complexity.Round.CreatorID(childComplexity), true
 
 	case "Round.date":
 		if e.complexity.Round.Date == nil {
@@ -504,6 +554,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	rc := graphql.GetOperationContext(ctx)
 	ec := executionContext{rc, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputJoinRoundInput,
 		ec.unmarshalInputRoundInput,
 		ec.unmarshalInputUserInput,
 	)
@@ -631,6 +682,7 @@ type Round {
   scores: [Score!]! # Scores submitted for the round
   finalized: Boolean! # Indicates if the round is finalized
   editHistory: [EditLog!]! # History of edits made to the round
+  creatorID: String! # Add this line to include the creator ID
 }
 
 """
@@ -705,6 +757,7 @@ type Query {
   getUser(discordID: String!): User
   getLeaderboard: Leaderboard
   getRounds(limit: Int, offset: Int): [Round!]!
+  getUserScore(userID: String!): Int
 }
 
 """
@@ -713,9 +766,20 @@ Mutations available in the API.
 type Mutation {
   createUser(input: UserInput!): User!
   scheduleRound(input: RoundInput!): Round!
-  joinRound(roundID: ID!, userID: ID!): Round!
+  joinRound(input: JoinRoundInput!): Round! # Updated to use the new input type
   submitScore(roundID: ID!, userID: ID!, score: Int!): Round!
-  finalizeRound(roundID: ID!, editorID: ID!): Round!
+  finalizeRound(roundID: ID!): Round!
+  editRound(roundID: ID!, input: RoundInput!): Round! # Add this line for editing rounds
+  deleteRound(roundID: ID!): Boolean! # Add this line for deleting rounds
+}
+
+"""
+Input type for joining a round.
+"""
+input JoinRoundInput {
+  roundID: ID! # ID of the round to join
+  userID: ID! # ID of the user joining the round
+  response: Response! # Response type (ACCEPT, TENTATIVE, DECLINE)
 }
 
 """
@@ -767,6 +831,70 @@ func (ec *executionContext) field_Mutation_createUser_argsInput(
 	return zeroVal, nil
 }
 
+func (ec *executionContext) field_Mutation_deleteRound_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	arg0, err := ec.field_Mutation_deleteRound_argsRoundID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["roundID"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_deleteRound_argsRoundID(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (string, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("roundID"))
+	if tmp, ok := rawArgs["roundID"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_editRound_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	arg0, err := ec.field_Mutation_editRound_argsRoundID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["roundID"] = arg0
+	arg1, err := ec.field_Mutation_editRound_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_editRound_argsRoundID(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (string, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("roundID"))
+	if tmp, ok := rawArgs["roundID"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_editRound_argsInput(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (model.RoundInput, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNRoundInput2githubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐRoundInput(ctx, tmp)
+	}
+
+	var zeroVal model.RoundInput
+	return zeroVal, nil
+}
+
 func (ec *executionContext) field_Mutation_finalizeRound_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
@@ -775,11 +903,6 @@ func (ec *executionContext) field_Mutation_finalizeRound_args(ctx context.Contex
 		return nil, err
 	}
 	args["roundID"] = arg0
-	arg1, err := ec.field_Mutation_finalizeRound_argsEditorID(ctx, rawArgs)
-	if err != nil {
-		return nil, err
-	}
-	args["editorID"] = arg1
 	return args, nil
 }
 func (ec *executionContext) field_Mutation_finalizeRound_argsRoundID(
@@ -795,57 +918,26 @@ func (ec *executionContext) field_Mutation_finalizeRound_argsRoundID(
 	return zeroVal, nil
 }
 
-func (ec *executionContext) field_Mutation_finalizeRound_argsEditorID(
-	ctx context.Context,
-	rawArgs map[string]interface{},
-) (string, error) {
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("editorID"))
-	if tmp, ok := rawArgs["editorID"]; ok {
-		return ec.unmarshalNID2string(ctx, tmp)
-	}
-
-	var zeroVal string
-	return zeroVal, nil
-}
-
 func (ec *executionContext) field_Mutation_joinRound_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	arg0, err := ec.field_Mutation_joinRound_argsRoundID(ctx, rawArgs)
+	arg0, err := ec.field_Mutation_joinRound_argsInput(ctx, rawArgs)
 	if err != nil {
 		return nil, err
 	}
-	args["roundID"] = arg0
-	arg1, err := ec.field_Mutation_joinRound_argsUserID(ctx, rawArgs)
-	if err != nil {
-		return nil, err
-	}
-	args["userID"] = arg1
+	args["input"] = arg0
 	return args, nil
 }
-func (ec *executionContext) field_Mutation_joinRound_argsRoundID(
+func (ec *executionContext) field_Mutation_joinRound_argsInput(
 	ctx context.Context,
 	rawArgs map[string]interface{},
-) (string, error) {
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("roundID"))
-	if tmp, ok := rawArgs["roundID"]; ok {
-		return ec.unmarshalNID2string(ctx, tmp)
+) (model.JoinRoundInput, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNJoinRoundInput2githubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐJoinRoundInput(ctx, tmp)
 	}
 
-	var zeroVal string
-	return zeroVal, nil
-}
-
-func (ec *executionContext) field_Mutation_joinRound_argsUserID(
-	ctx context.Context,
-	rawArgs map[string]interface{},
-) (string, error) {
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("userID"))
-	if tmp, ok := rawArgs["userID"]; ok {
-		return ec.unmarshalNID2string(ctx, tmp)
-	}
-
-	var zeroVal string
+	var zeroVal model.JoinRoundInput
 	return zeroVal, nil
 }
 
@@ -992,6 +1084,29 @@ func (ec *executionContext) field_Query_getRounds_argsOffset(
 	}
 
 	var zeroVal *int
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Query_getUserScore_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	arg0, err := ec.field_Query_getUserScore_argsUserID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["userID"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Query_getUserScore_argsUserID(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (string, error) {
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("userID"))
+	if tmp, ok := rawArgs["userID"]; ok {
+		return ec.unmarshalNString2string(ctx, tmp)
+	}
+
+	var zeroVal string
 	return zeroVal, nil
 }
 
@@ -1618,6 +1733,8 @@ func (ec *executionContext) fieldContext_Mutation_scheduleRound(ctx context.Cont
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1650,7 +1767,7 @@ func (ec *executionContext) _Mutation_joinRound(ctx context.Context, field graph
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().JoinRound(rctx, fc.Args["roundID"].(string), fc.Args["userID"].(string))
+		return ec.resolvers.Mutation().JoinRound(rctx, fc.Args["input"].(model.JoinRoundInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1695,6 +1812,8 @@ func (ec *executionContext) fieldContext_Mutation_joinRound(ctx context.Context,
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1772,6 +1891,8 @@ func (ec *executionContext) fieldContext_Mutation_submitScore(ctx context.Contex
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1804,7 +1925,7 @@ func (ec *executionContext) _Mutation_finalizeRound(ctx context.Context, field g
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().FinalizeRound(rctx, fc.Args["roundID"].(string), fc.Args["editorID"].(string))
+		return ec.resolvers.Mutation().FinalizeRound(rctx, fc.Args["roundID"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1849,6 +1970,8 @@ func (ec *executionContext) fieldContext_Mutation_finalizeRound(ctx context.Cont
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -1861,6 +1984,140 @@ func (ec *executionContext) fieldContext_Mutation_finalizeRound(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_finalizeRound_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_editRound(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_editRound(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().EditRound(rctx, fc.Args["roundID"].(string), fc.Args["input"].(model.RoundInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.Round)
+	fc.Result = res
+	return ec.marshalNRound2ᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐRound(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_editRound(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Round_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Round_title(ctx, field)
+			case "location":
+				return ec.fieldContext_Round_location(ctx, field)
+			case "eventType":
+				return ec.fieldContext_Round_eventType(ctx, field)
+			case "date":
+				return ec.fieldContext_Round_date(ctx, field)
+			case "time":
+				return ec.fieldContext_Round_time(ctx, field)
+			case "participants":
+				return ec.fieldContext_Round_participants(ctx, field)
+			case "scores":
+				return ec.fieldContext_Round_scores(ctx, field)
+			case "finalized":
+				return ec.fieldContext_Round_finalized(ctx, field)
+			case "editHistory":
+				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_editRound_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteRound(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_deleteRound(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().DeleteRound(rctx, fc.Args["roundID"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteRound(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteRound_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2185,6 +2442,8 @@ func (ec *executionContext) fieldContext_Query_getRounds(ctx context.Context, fi
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -2197,6 +2456,58 @@ func (ec *executionContext) fieldContext_Query_getRounds(ctx context.Context, fi
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_getRounds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_getUserScore(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_getUserScore(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().GetUserScore(rctx, fc.Args["userID"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*int)
+	fc.Result = res
+	return ec.marshalOInt2ᚖint(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_getUserScore(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_getUserScore_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2791,6 +3102,50 @@ func (ec *executionContext) fieldContext_Round_editHistory(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Round_creatorID(ctx context.Context, field graphql.CollectedField, obj *model.Round) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Round_creatorID(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.CreatorID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Round_creatorID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Round",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Score_userID(ctx context.Context, field graphql.CollectedField, obj *model.Score) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Score_userID(ctx, field)
 	if err != nil {
@@ -3369,6 +3724,8 @@ func (ec *executionContext) fieldContext_User_rounds(_ context.Context, field gr
 				return ec.fieldContext_Round_finalized(ctx, field)
 			case "editHistory":
 				return ec.fieldContext_Round_editHistory(ctx, field)
+			case "creatorID":
+				return ec.fieldContext_Round_creatorID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Round", field.Name)
 		},
@@ -5193,6 +5550,47 @@ func (ec *executionContext) fieldContext___Type_specifiedByURL(_ context.Context
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputJoinRoundInput(ctx context.Context, obj interface{}) (model.JoinRoundInput, error) {
+	var it model.JoinRoundInput
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"roundID", "userID", "response"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "roundID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roundID"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RoundID = data
+		case "userID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userID"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UserID = data
+		case "response":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("response"))
+			data, err := ec.unmarshalNResponse2githubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐResponse(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Response = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputRoundInput(ctx context.Context, obj interface{}) (model.RoundInput, error) {
 	var it model.RoundInput
 	asMap := map[string]interface{}{}
@@ -5485,6 +5883,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "editRound":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_editRound(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteRound":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteRound(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5636,6 +6048,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "getUserScore":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_getUserScore(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -5722,6 +6153,11 @@ func (ec *executionContext) _Round(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "editHistory":
 			out.Values[i] = ec._Round_editHistory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "creatorID":
+			out.Values[i] = ec._Round_creatorID(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -6334,6 +6770,11 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNJoinRoundInput2githubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐJoinRoundInput(ctx context.Context, v interface{}) (model.JoinRoundInput, error) {
+	res, err := ec.unmarshalInputJoinRoundInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNParticipant2ᚕᚖgithubᚗcomᚋromeroᚑjaceᚋtcrᚑbotᚋgraphᚋmodelᚐParticipantᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Participant) graphql.Marshaler {

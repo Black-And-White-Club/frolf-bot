@@ -136,3 +136,31 @@ func (s *ScoreService) GetUserScore(ctx context.Context, userID string) (int, er
 
 	return data.Score, nil
 }
+
+// EditScore allows a user to edit their previously submitted score
+func (s *ScoreService) EditScore(ctx context.Context, round *model.Round, userID string, newScoreStr string) error {
+	// Trim spaces and validate the new score format
+	newScoreStr = strings.TrimSpace(newScoreStr)
+
+	// Validate new score format
+	if !isValidGolfScore(newScoreStr) {
+		return errors.New("invalid score format for user " + userID)
+	}
+
+	// Convert new score to an integer
+	newScore, err := strconv.Atoi(newScoreStr)
+	if err != nil {
+		return err // This should not happen due to the validation above
+	}
+
+	// Find and update the score for the user
+	for _, existingScore := range round.Scores {
+		if existingScore.UserID == userID {
+			existingScore.Score = newScore // Update existing score
+			return nil
+		}
+	}
+
+	// If the user does not have a score, return an error
+	return errors.New("no existing score found for user " + userID)
+}

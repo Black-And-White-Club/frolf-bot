@@ -1,3 +1,6 @@
+//go:build !test
+// +build !test
+
 package main
 
 import (
@@ -9,6 +12,8 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/romero-jace/tcr-bot/graph"
 	"github.com/romero-jace/tcr-bot/graph/services"
 )
@@ -29,7 +34,7 @@ func main() {
 	// Initialize your services
 	userService := services.NewUserService(client)
 	scoreService := services.NewScoreService(client)
-	roundService := services.NewRoundService(client)
+	roundService := services.NewRoundService(client, scoreService) // Pass scoreService here
 	leaderboardService := services.NewLeaderboardService(client)
 
 	// Create a new resolver
@@ -38,12 +43,24 @@ func main() {
 	// Set up GraphQL server
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 
-	// Set up HTTP server
-	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	http.Handle("/query", srv)
+	// Set up Chi router
+	router := chi.NewRouter()
 
+	// Use Chi's built-in middleware
+	router.Use(middleware.RequestID) // Generates a unique request ID
+	router.Use(middleware.Logger)    // Logs each request
+	router.Use(middleware.Recoverer) // Recovers from panics
+
+	// Apply your custom middleware
+	router.Use(services.Middleware(client))
+
+	// Set up routes
+	router.Handle("/", playground.Handler("GraphQL playground", "/query"))
+	router.Handle("/query", srv)
+
+	// Start the server
 	log.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", router); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

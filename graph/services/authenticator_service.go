@@ -9,11 +9,7 @@ import (
 )
 
 // A private key for context that only this package can access
-var userCtxKey = &contextKey{"user"}
-
-type contextKey struct {
-	name string
-}
+type contextKey struct{}
 
 // User represents an authenticated user
 type User struct {
@@ -46,25 +42,24 @@ func Middleware(firestoreClient *firestore.Client) func(http.Handler) http.Handl
 			}
 
 			// Get the user from Firestore
-			user, err := getUserByID(firestoreClient, userId)
+			user, err := getUserByID(firestoreClient, r.Context(), userId)
 			if err != nil {
 				http.Error(w, "User  not found", http.StatusForbidden)
 				return
 			}
 
 			// Put it in context
-			ctx := context.WithValue(r.Context(), userCtxKey, user)
+			ctx := context.WithValue(r.Context(), contextKey{}, user)
 
 			// Call the next with our new context
-			r = r.WithContext(ctx)
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 // ForContext finds the user from the context. REQUIRES Middleware to have run.
 func ForContext(ctx context.Context) *User {
-	raw, _ := ctx.Value(userCtxKey).(*User)
+	raw, _ := ctx.Value(contextKey{}).(*User)
 	return raw
 }
 
@@ -72,13 +67,14 @@ func ForContext(ctx context.Context) *User {
 func validateAndGetUserID(c *http.Cookie) (string, error) {
 	// Implement your cookie validation logic here
 	// If valid, return the user ID
+	// Example: decode JWT or check a signature
 	return "user-id", nil // Replace with actual logic
 }
 
 // getUser ByID retrieves the user from Firestore
-func getUserByID(client *firestore.Client, userID string) (*User, error) {
+func getUserByID(client *firestore.Client, ctx context.Context, userID string) (*User, error) {
 	docRef := client.Collection("users").Doc(userID)
-	docSnap, err := docRef.Get(context.Background())
+	docSnap, err := docRef.Get(ctx)
 	if err != nil {
 		return nil, err
 	}

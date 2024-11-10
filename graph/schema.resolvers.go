@@ -6,6 +6,7 @@ package graph
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/romero-jace/tcr-bot/graph/model"
@@ -21,41 +22,59 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input model.UserInput
 	return user, nil
 }
 
-// ScheduleRound is the resolver for the scheduleRound field.
+// ScheduleRound resolver
 func (r *mutationResolver) ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error) {
-	round, err := r.ScoringServices.RoundService.ScheduleRound(ctx, input)
+	creatorID, err := getUserIDFromContext(ctx) // Implement this function to get the user ID from the context
 	if err != nil {
 		return nil, err
 	}
-	return round, nil
+
+	return r.ScoringServices.RoundService.ScheduleRound(ctx, input, creatorID)
 }
 
-// JoinRound is the resolver for the joinRound field.
-func (r *mutationResolver) JoinRound(ctx context.Context, roundID string, userID string) (*model.Round, error) {
-	round, err := r.ScoringServices.RoundService.JoinRound(ctx, roundID, userID)
-	if err != nil {
-		return nil, err
-	}
-	return round, nil
+// JoinRound resolver
+func (r *mutationResolver) JoinRound(ctx context.Context, input model.JoinRoundInput) (*model.Round, error) {
+	// Access the fields of the input struct
+	roundID := input.RoundID
+	userID := input.UserID
+	response := input.Response
+
+	// Call your service method with the extracted values
+	return r.ScoringServices.RoundService.JoinRound(ctx, roundID, userID, response) // Use the correct service
 }
 
-// SubmitScore is the resolver for the submitScore field.
+// SubmitScore resolver
 func (r *mutationResolver) SubmitScore(ctx context.Context, roundID string, userID string, score int) (*model.Round, error) {
+	// Prepare the scores map
 	scores := map[string]string{userID: strconv.Itoa(score)}
+
+	// Call the SubmitScore method from RoundService
 	round, err := r.ScoringServices.RoundService.SubmitScore(ctx, roundID, scores)
 	if err != nil {
 		return nil, err
 	}
+
 	return round, nil
 }
 
-// FinalizeRound is the resolver for the finalizeRound field.
-func (r *mutationResolver) FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error) {
-	round, err := r.ScoringServices.RoundService.FinalizeRound(ctx, roundID, editorID) // Pass both roundID and editorID
+// FinalizeRound resolver
+func (r *mutationResolver) FinalizeRound(ctx context.Context, roundID string) (*model.Round, error) {
+	editorID, err := getUserIDFromContext(ctx) // Implement this function to get the user ID from the context
 	if err != nil {
 		return nil, err
 	}
-	return round, nil
+
+	return r.ScoringServices.RoundService.FinalizeRound(ctx, roundID, editorID)
+}
+
+// EditRound is the resolver for the editRound field.
+func (r *mutationResolver) EditRound(ctx context.Context, roundID string, input model.RoundInput) (*model.Round, error) {
+	panic(fmt.Errorf("not implemented: EditRound - editRound"))
+}
+
+// DeleteRound is the resolver for the deleteRound field.
+func (r *mutationResolver) DeleteRound(ctx context.Context, roundID string) (bool, error) {
+	panic(fmt.Errorf("not implemented: DeleteRound - deleteRound"))
 }
 
 // GetUser  is the resolver for the getUser  field.
@@ -83,6 +102,15 @@ func (r *queryResolver) GetRounds(ctx context.Context, limit *int, offset *int) 
 		return nil, err
 	}
 	return rounds, nil
+}
+
+// GetUser Score is the resolver for the getUser Score field.
+func (r *queryResolver) GetUserScore(ctx context.Context, userID string) (*int, error) {
+	score, err := r.ScoringServices.ScoreService.GetUserScore(ctx, userID) // Call the method from ScoreService
+	if err != nil {
+		return nil, err
+	}
+	return &score, nil // Return a pointer to the score
 }
 
 // Mutation returns MutationResolver implementation.

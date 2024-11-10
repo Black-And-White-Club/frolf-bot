@@ -1,5 +1,7 @@
 //go:build tools
 
+// !test
+
 package tools
 
 import (

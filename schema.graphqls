@@ -26,6 +26,7 @@ type Round {
   scores: [Score!]! # Scores submitted for the round
   finalized: Boolean! # Indicates if the round is finalized
   editHistory: [EditLog!]! # History of edits made to the round
+  creatorID: String! # Add this line to include the creator ID
 }
 
 """
@@ -109,9 +110,20 @@ Mutations available in the API.
 type Mutation {
   createUser(input: UserInput!): User!
   scheduleRound(input: RoundInput!): Round!
-  joinRound(roundID: ID!, userID: ID!): Round!
+  joinRound(input: JoinRoundInput!): Round! # Updated to use the new input type
   submitScore(roundID: ID!, userID: ID!, score: Int!): Round!
-  finalizeRound(roundID: ID!, editorID: ID!): Round!
+  finalizeRound(roundID: ID!): Round!
+  editRound(roundID: ID!, input: RoundInput!): Round! # Add this line for editing rounds
+  deleteRound(roundID: ID!): Boolean! # Add this line for deleting rounds
+}
+
+"""
+Input type for joining a round.
+"""
+input JoinRoundInput {
+  roundID: ID! # ID of the round to join
+  userID: ID! # ID of the user joining the round
+  response: Response! # Response type (ACCEPT, TENTATIVE, DECLINE)
 }
 
 """

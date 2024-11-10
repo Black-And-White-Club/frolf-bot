@@ -15,6 +15,13 @@ type EditLog struct {
 	Changes   string `json:"changes"`
 }
 
+// Input type for joining a round.
+type JoinRoundInput struct {
+	RoundID  string   `json:"roundID"`
+	UserID   string   `json:"userID"`
+	Response Response `json:"response"`
+}
+
 // Represents the leaderboard of users and their placements.
 type Leaderboard struct {
 	Users      []*User `json:"users"`
@@ -56,6 +63,7 @@ type Round struct {
 	Scores       []*Score       `json:"scores"`
 	Finalized    bool           `json:"finalized"`
 	EditHistory  []*EditLog     `json:"editHistory"`
+	CreatorID    string         `json:"creatorID"`
 }
 
 // Input type for scheduling a new round.
