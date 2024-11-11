@@ -1,4 +1,3 @@
-// graph/services/score_service.go
 package services
 
 import (
@@ -15,6 +14,12 @@ import (
 type ScoreService struct {
 	client *firestore.Client
 	DB     *firestore.Client
+
+	// Function fields for mocking
+	SubmitScoreFunc    func(ctx context.Context, round *model.Round, scores map[string]string) error
+	ProcessScoringFunc func(round *model.Round) error
+	GetUserScoreFunc   func(ctx context.Context, userID string) (int, error)
+	EditScoreFunc      func(ctx context.Context, round *model.Round, userID string, newScoreStr string) error
 }
 
 // NewScoreService creates a new instance of ScoreService
@@ -26,6 +31,10 @@ func NewScoreService(client *firestore.Client) *ScoreService {
 
 // SubmitScore allows users to submit scores for themselves or multiple people
 func (s *ScoreService) SubmitScore(ctx context.Context, round *model.Round, scores map[string]string) error {
+	if s.SubmitScoreFunc != nil {
+		return s.SubmitScoreFunc(ctx, round, scores) // Call the mock function if set
+	}
+
 	// Update scores for accepted participants
 	for userID, scoreStr := range scores {
 		// Trim spaces and validate the score format
@@ -65,6 +74,10 @@ func (s *ScoreService) SubmitScore(ctx context.Context, round *model.Round, scor
 
 // ProcessScoring calculates rankings based on scores
 func (s *ScoreService) ProcessScoring(round *model.Round) error {
+	if s.ProcessScoringFunc != nil {
+		return s.ProcessScoringFunc(round) // Call the mock function if set
+	}
+
 	// Prepare a list for ranking
 	type ParticipantScore struct {
 		UserID string
@@ -122,6 +135,10 @@ func isValidGolfScore(score string) bool {
 
 // GetUser Score retrieves the score for a specific user from Firestore
 func (s *ScoreService) GetUserScore(ctx context.Context, userID string) (int, error) {
+	if s.GetUserScoreFunc != nil {
+		return s.GetUserScoreFunc(ctx, userID) // Call the mock function if set
+	}
+
 	doc, err := s.DB.Collection("scores").Doc(userID).Get(ctx)
 	if err != nil {
 		return 0, err
@@ -139,6 +156,10 @@ func (s *ScoreService) GetUserScore(ctx context.Context, userID string) (int, er
 
 // EditScore allows a user to edit their previously submitted score
 func (s *ScoreService) EditScore(ctx context.Context, round *model.Round, userID string, newScoreStr string) error {
+	if s.EditScoreFunc != nil {
+		return s.EditScoreFunc(ctx, round, userID, newScoreStr) // Call the mock function if set
+	}
+
 	// Trim spaces and validate the new score format
 	newScoreStr = strings.TrimSpace(newScoreStr)
 

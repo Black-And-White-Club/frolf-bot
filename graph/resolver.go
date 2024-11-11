@@ -14,7 +14,13 @@ import (
 type Resolver struct {
 	UserServices       UserServices
 	ScoringServices    ScoringServices
-	LeaderboardService *services.LeaderboardService // Add this line
+	LeaderboardService *services.LeaderboardService
+
+	// Function fields for mocking
+	CreateUserFunc     func(ctx context.Context, input model.UserInput) (*model.User, error)
+	GetLeaderboardFunc func(ctx context.Context) (*model.Leaderboard, error)
+	GetRoundsFunc      func(ctx context.Context, limit *int, offset *int) ([]*model.Round, error)
+	GetUserScoreFunc   func(ctx context.Context, userID string) (int, error)
 	DB                 *firestore.Client
 }
 
@@ -30,8 +36,11 @@ func (us *UserServices) GetUser(ctx context.Context, discordID string) (*model.U
 
 // CreateUser  is a wrapper method for UserService's CreateUser
 func (r *Resolver) CreateUser(ctx context.Context, input model.UserInput) (*model.User, error) {
+	if r.CreateUserFunc != nil {
+		return r.CreateUserFunc(ctx, input) // Call the mock function if set
+	}
+
 	log.Printf("CreateUser  called with input: %+v", input)
-	// Call the CreateUser  method on the UserService field
 	return r.UserServices.UserService.CreateUser(ctx, input)
 }
 
@@ -51,15 +60,20 @@ func NewResolver(userService *services.UserService, scoreService *services.Score
 			ScoreService: scoreService,
 			RoundService: roundService,
 		},
-		LeaderboardService: leaderboardService, // Add this line
-		DB:                 db,                 // Pass the Firestore client
+		LeaderboardService: leaderboardService,
+		DB:                 db,
 	}
 }
 
-// In your resolver.go or a utility file
-func getUserIDFromContext(ctx context.Context) (string, error) {
-	// Assuming you have a way to get the user ID from the context
-	userID, ok := ctx.Value("userID").(string)
+// Define a custom type for the context key
+type contextKey string
+
+// Export the key by capitalizing the first letter
+const UserIDKey contextKey = "userID"
+
+// GetUser IDFromContext retrieves the user ID from the context
+func GetUserIDFromContext(ctx context.Context) (string, error) {
+	userID, ok := ctx.Value(UserIDKey).(string)
 	if !ok {
 		return "", errors.New("user ID not found in context")
 	}
@@ -75,15 +89,27 @@ func (r *Resolver) GetUser(ctx context.Context, discordID string) (*model.User, 
 
 // GetLeaderboard resolver
 func (r *Resolver) GetLeaderboard(ctx context.Context) (*model.Leaderboard, error) {
-	return r.LeaderboardService.GetLeaderboard(ctx) // Implement this method in your LeaderboardService
+	if r.GetLeaderboardFunc != nil {
+		return r.GetLeaderboardFunc(ctx) // Call the mock function if set
+	}
+
+	return r.LeaderboardService.GetLeaderboard(ctx) // Call the actual method
 }
 
 // GetRounds resolver
 func (r *Resolver) GetRounds(ctx context.Context, limit *int, offset *int) ([]*model.Round, error) {
-	return r.ScoringServices.RoundService.GetRounds(ctx, limit, offset) // Implement this method in your RoundService
+	if r.GetRoundsFunc != nil {
+		return r.GetRoundsFunc(ctx, limit, offset) // Call the mock function if set
+	}
+
+	return r.ScoringServices.RoundService.GetRounds(ctx, limit, offset) // Call the actual method
 }
 
 // GetUser Score resolver
 func (r *Resolver) GetUserScore(ctx context.Context, userID string) (int, error) {
-	return r.ScoringServices.ScoreService.GetUserScore(ctx, userID) // Call the method from ScoreService
+	if r.GetUserScoreFunc != nil {
+		return r.GetUserScoreFunc(ctx, userID) // Call the mock function if set
+	}
+
+	return r.ScoringServices.ScoreService.GetUserScore(ctx, userID) // Call the actual method
 }

@@ -1,4 +1,3 @@
-// graph/services/round_service.go
 package services
 
 import (
@@ -16,6 +15,16 @@ import (
 type RoundService struct {
 	client       *firestore.Client
 	scoreService *ScoreService
+
+	// Function fields for mocking
+	ScheduleRoundFunc func(ctx context.Context, input model.RoundInput, creatorID string) (*model.Round, error)
+	SubmitScoreFunc   func(ctx context.Context, roundID string, scores map[string]string) (*model.Round, error)
+	JoinRoundFunc     func(ctx context.Context, roundID string, userID string, response model.Response) (*model.Round, error)
+	GetRoundsFunc     func(ctx context.Context, limit *int, offset *int) ([]*model.Round, error)
+	GetRoundByIDFunc  func(ctx context.Context, roundID string) (*model.Round, error)
+	EditRoundFunc     func(ctx context.Context, roundID string, userID string, input model.RoundInput) (*model.Round, error)
+	DeleteRoundFunc   func(ctx context.Context, roundID string, userID string) error
+	FinalizeRoundFunc func(ctx context.Context, roundID string, editorID string) (*model.Round, error)
 }
 
 // NewRoundService creates a new instance of RoundService
@@ -45,8 +54,12 @@ func normalizeDateTime(input string) (string, string, error) {
 	return militaryTime, date, nil
 }
 
-// / ScheduleRound creates a new round
+// ScheduleRound creates a new round
 func (s *RoundService) ScheduleRound(ctx context.Context, input model.RoundInput, creatorID string) (*model.Round, error) {
+	if s.ScheduleRoundFunc != nil {
+		return s.ScheduleRoundFunc(ctx, input, creatorID) // Call the mock function if set
+	}
+
 	militaryTime, date, err := normalizeDateTime(input.Time)
 	if err != nil {
 		return nil, err
@@ -79,6 +92,10 @@ func (s *RoundService) ScheduleRound(ctx context.Context, input model.RoundInput
 
 // SubmitScore allows users to submit scores for a round
 func (s *RoundService) SubmitScore(ctx context.Context, roundID string, scores map[string]string) (*model.Round, error) {
+	if s.SubmitScoreFunc != nil {
+		return s.SubmitScoreFunc(ctx, roundID, scores) // Call the mock function if set
+	}
+
 	round, err := s.GetRoundByID(ctx, roundID)
 	if err != nil {
 		return nil, err
@@ -101,6 +118,10 @@ func (s *RoundService) SubmitScore(ctx context.Context, roundID string, scores m
 
 // JoinRound allows a user to join an existing round
 func (s *RoundService) JoinRound(ctx context.Context, roundID string, userID string, response model.Response) (*model.Round, error) {
+	if s.JoinRoundFunc != nil {
+		return s.JoinRoundFunc(ctx, roundID, userID, response) // Call the mock function if set
+	}
+
 	docRef := s.client.Collection("rounds").Doc(roundID)
 
 	var round model.Round // Declare round here
@@ -153,6 +174,10 @@ func (s *RoundService) JoinRound(ctx context.Context, roundID string, userID str
 
 // GetRounds retrieves a list of rounds with optional pagination
 func (s *RoundService) GetRounds(ctx context.Context, limit *int, offset *int) ([]*model.Round, error) {
+	if s.GetRoundsFunc != nil {
+		return s.GetRoundsFunc(ctx, limit, offset) // Call the mock function if set
+	}
+
 	query := s.client.Collection("rounds").OrderBy("date", firestore.Desc).Limit(*limit)
 	if offset != nil {
 		query = query.Offset(*offset)
@@ -177,6 +202,10 @@ func (s *RoundService) GetRounds(ctx context.Context, limit *int, offset *int) (
 
 // GetRoundByID retrieves a round by its ID
 func (s *RoundService) GetRoundByID(ctx context.Context, roundID string) (*model.Round, error) {
+	if s.GetRoundByIDFunc != nil {
+		return s.GetRoundByIDFunc(ctx, roundID) // Call the mock function if set
+	}
+
 	docRef := s.client.Collection("rounds").Doc(roundID)
 	doc, err := docRef.Get(ctx)
 	if err != nil {
@@ -193,6 +222,10 @@ func (s *RoundService) GetRoundByID(ctx context.Context, roundID string) (*model
 
 // EditRound allows the creator to edit the round
 func (s *RoundService) EditRound(ctx context.Context, roundID string, userID string, input model.RoundInput) (*model.Round, error) {
+	if s.EditRoundFunc != nil {
+		return s.EditRoundFunc(ctx, roundID, userID, input) // Call the mock function if set
+	}
+
 	docRef := s.client.Collection("rounds").Doc(roundID)
 
 	var round model.Round // Declare round here
@@ -245,6 +278,10 @@ func (s *RoundService) EditRound(ctx context.Context, roundID string, userID str
 
 // DeleteRound allows a user to delete a round
 func (s *RoundService) DeleteRound(ctx context.Context, roundID string, userID string) error {
+	if s.DeleteRoundFunc != nil {
+		return s.DeleteRoundFunc(ctx, roundID, userID) // Call the mock function if set
+	}
+
 	docRef := s.client.Collection("rounds").Doc(roundID)
 
 	// Use a transaction to ensure safe deletion
@@ -277,6 +314,10 @@ func (s *RoundService) DeleteRound(ctx context.Context, roundID string, userID s
 
 // FinalizeRound finalizes a round
 func (s *RoundService) FinalizeRound(ctx context.Context, roundID string, editorID string) (*model.Round, error) {
+	if s.FinalizeRoundFunc != nil {
+		return s.FinalizeRoundFunc(ctx, roundID, editorID) // Call the mock function if set
+	}
+
 	docRef := s.client.Collection("rounds").Doc(roundID)
 	doc, err := docRef.Get(ctx)
 	if err != nil {

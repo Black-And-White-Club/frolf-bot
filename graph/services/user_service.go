@@ -5,23 +5,32 @@ import (
 	"fmt"
 	"log"
 
-	"cloud.google.com/go/firestore"              // Make sure to import Firestore
-	"github.com/romero-jace/tcr-bot/graph/model" // Import the iterator package
+	// Make sure to import Firestore
+	"github.com/romero-jace/tcr-bot/graph/model" // Import the model package
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
+// UserService struct with function fields for mocking
 type UserService struct {
-	client *firestore.Client
+	client FirestoreClient // Change to use the interface
+
+	// Function fields for mocking
+	CreateUserFunc func(ctx context.Context, input model.UserInput) (*model.User, error)
+	GetUserFunc    func(ctx context.Context, discordID string) (*model.User, error)
 }
 
 // NewUser Service creates a new UserService
-func NewUserService(client *firestore.Client) *UserService {
+func NewUserService(client FirestoreClient) *UserService {
 	return &UserService{client: client}
 }
 
 // CreateUser  creates a new user in Firestore
 func (us *UserService) CreateUser(ctx context.Context, input model.UserInput) (*model.User, error) {
+	if us.CreateUserFunc != nil {
+		return us.CreateUserFunc(ctx, input) // Call the mock function if set
+	}
+
 	log.Printf("Creating user with Discord ID: %s", input.DiscordID)
 
 	// Validate input
@@ -30,9 +39,16 @@ func (us *UserService) CreateUser(ctx context.Context, input model.UserInput) (*
 	}
 
 	// Check if the user already exists
-	existingUserDoc, err := us.client.Collection("users").Doc(input.DiscordID).Get(ctx)
-	if err == nil && existingUserDoc.Exists() {
-		return nil, fmt.Errorf("User  with DiscordID %s already exists", input.DiscordID)
+	_, err := us.client.Collection("users").Doc(input.DiscordID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			// User does not exist, proceed to create a new user
+		} else {
+			// Some other error occurred
+			return nil, fmt.Errorf("failed to check if user exists: %v", err)
+		}
+		// If we reach here, it means the user exists
+		return nil, fmt.Errorf("user with Discord ID %s already exists", input.DiscordID)
 	}
 
 	// Create a new user
@@ -41,41 +57,34 @@ func (us *UserService) CreateUser(ctx context.Context, input model.UserInput) (*
 		Name:      input.Name,
 	}
 
-	// Attempt to create the user document in Firestore
+	// Save the user to Firestore
 	_, err = us.client.Collection("users").Doc(newUser.DiscordID).Set(ctx, newUser)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
 
-	log.Printf("User  created successfully: %v", newUser)
 	return newUser, nil
 }
 
-// GetUser  retrieves a user from Firestore
+// GetUser  retrieves a user by Discord ID
 func (us *UserService) GetUser(ctx context.Context, discordID string) (*model.User, error) {
-	log.Printf("Retrieving user with Discord ID: %s", discordID)
+	if us.GetUserFunc != nil {
+		return us.GetUserFunc(ctx, discordID) // Call the mock function if set
+	}
 
-	// Validate input
 	if discordID == "" {
 		return nil, fmt.Errorf("DiscordID is required")
 	}
 
-	// Attempt to retrieve the user document from Firestore
 	doc, err := us.client.Collection("users").Doc(discordID).Get(ctx)
 	if err != nil {
-		// Check if the error is a NotFound error
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return nil, fmt.Errorf("User with DiscordID %s not found", discordID)
-		}
-		return nil, err
+		return nil, status.Error(codes.NotFound, "user not found")
 	}
 
-	// Map the document data to the User model
 	var user model.User
 	if err := doc.DataTo(&user); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert document data: %v", err)
 	}
 
-	log.Printf("User  retrieved successfully: %v", user)
 	return &user, nil
 }

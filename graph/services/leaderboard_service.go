@@ -12,6 +12,10 @@ import (
 // LeaderboardService handles operations related to the leaderboard
 type LeaderboardService struct {
 	FirestoreClient *firestore.Client
+
+	// Function fields for mocking
+	GetLeaderboardFunc    func(ctx context.Context) (*model.Leaderboard, error)
+	UpdateLeaderboardFunc func(ctx context.Context, userID string, newPlacement *model.Tag) error
 }
 
 // NewLeaderboardService creates a new instance of LeaderboardService
@@ -21,6 +25,10 @@ func NewLeaderboardService(client *firestore.Client) *LeaderboardService {
 
 // GetLeaderboard retrieves the current leaderboard from Firestore
 func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (*model.Leaderboard, error) {
+	if s.GetLeaderboardFunc != nil {
+		return s.GetLeaderboardFunc(ctx) // Call the mock function if set
+	}
+
 	users, err := s.getAllUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users: %w", err)
@@ -94,6 +102,10 @@ func (s *LeaderboardService) getPlacements(ctx context.Context) ([]*model.Tag, e
 
 // UpdateLeaderboard allows authorized users to update the leaderboard
 func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, userID string, newPlacement *model.Tag) error {
+	if s.UpdateLeaderboardFunc != nil {
+		return s.UpdateLeaderboardFunc(ctx, userID, newPlacement) // Call the mock function if set
+	}
+
 	if !s.hasPermission(userID) {
 		return fmt.Errorf("user does not have permission to edit the leaderboard")
 	}

@@ -1,4 +1,3 @@
-// handler.go
 package graph
 
 import (
@@ -7,56 +6,29 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/go-chi/chi/v5"
-	"github.com/romero-jace/tcr-bot/graph/services" // Adjust the import path
 )
 
-// Response represents a standard JSON response structure
+// Response structure for JSON responses
 type Response struct {
 	Message string `json:"message"`
 }
 
-// ExampleHandler is a sample HTTP handler that requires authentication
-func ExampleHandler(w http.ResponseWriter, r *http.Request) {
-	user := services.ForContext(r.Context())
-	if user == nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var message string
-	if user.IsAdmin() {
-		message = "Hello Admin! You have full access."
-	} else if user.IsEditor() {
-		message = "Hello Editor! You can edit the leaderboard."
-	} else {
-		message = "Hello User! You can view the leaderboard."
-	}
-
-	respondWithJSON(w, http.StatusOK, Response{Message: message})
-}
-
-// respondWithError sends a JSON error response
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	w.WriteHeader(code)
-	respondWithJSON(w, code, Response{Message: message})
-}
-
-// respondWithJSON sends a JSON response
-func respondWithJSON(w http.ResponseWriter, code int, payload Response) {
+// RespondWithJSON sends a JSON response
+func RespondWithJSON(w http.ResponseWriter, code int, payload Response) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(payload)
+	data, _ := json.Marshal(payload) // Marshal to JSON without a newline
+	w.Write(data)                    // Write the JSON directly
 }
 
-// SetupRoutes sets up the HTTP routes and applies middleware
+// SetupRoutes sets up the HTTP routes
 func SetupRoutes(firestoreClient *firestore.Client) *chi.Mux {
-	router := chi.NewRouter()
+	r := chi.NewRouter()
 
-	// Apply the middleware to the ExampleHandler
-	router.With(services.Middleware(firestoreClient)).Get("/example", ExampleHandler)
+	// GraphQL endpoint
+	r.Post("/v1/tcr", func(w http.ResponseWriter, r *http.Request) {
+		// Handle GraphQL requests here
+	})
 
-	// Add more routes as needed
-	// Example: router.With(services.Middleware(firestoreClient)).Post("/another", AnotherHandler)
-
-	return router
+	return r
 }

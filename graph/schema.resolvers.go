@@ -24,7 +24,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input model.UserInput
 
 // ScheduleRound resolver
 func (r *mutationResolver) ScheduleRound(ctx context.Context, input model.RoundInput) (*model.Round, error) {
-	creatorID, err := getUserIDFromContext(ctx) // Implement this function to get the user ID from the context
+	creatorID, err := GetUserIDFromContext(ctx) // Implement this function to get the user ID from the context
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (r *mutationResolver) SubmitScore(ctx context.Context, roundID string, user
 
 // FinalizeRound resolver
 func (r *mutationResolver) FinalizeRound(ctx context.Context, roundID string) (*model.Round, error) {
-	editorID, err := getUserIDFromContext(ctx) // Implement this function to get the user ID from the context
+	editorID, err := GetUserIDFromContext(ctx) // Implement this function to get the user ID from the context
 	if err != nil {
 		return nil, err
 	}
