@@ -1,0 +1,32 @@
+# Leaderboard-related queries
+extend type Query {
+  getLeaderboard: Leaderboard!
+  getUserTag(discordID: ID!): Tag # Query to get a specific user's tag by discordID
+}
+
+type Leaderboard {
+  users: [User!]! # Using the shared User type
+  placements: [Tag!]!
+  editLog: [EditLogEntry!]! # Reference to shared EditLogEntry type
+}
+
+type Tag {
+  id: ID!
+  tagNumber: Int! # The rank or tag number
+  lastPlayed: String! # Timestamp of the last played round
+  durationHeld: Int! # Duration in days the tag has been held
+  name: String! # Name of the user (from Discord)
+  editLog: [EditLogEntry!]! # Reference to shared EditLogEntry type
+}
+
+# Mutation to update leaderboard
+extend type Mutation {
+  updateTag(discordID: ID!, tagNumber: Int!): Tag! # Update a user's tag
+  receiveScores(scores: [ScoreInput!]!): Leaderboard! # Receive scores and update leaderboard
+}
+
+input ScoreInput {
+  userID: ID!
+  score: Int!
+  tagNumber: Int! # Tag number associated with the user
+}

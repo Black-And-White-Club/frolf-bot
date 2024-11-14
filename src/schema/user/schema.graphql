@@ -1,0 +1,42 @@
+# user/userSchema.graphql
+
+# User-related types, queries, and mutations
+extend type Query {
+  getUser (discordID: String!): User
+}
+
+extend type Mutation {
+  createUser (input: UserInput!): User!
+  updateUser (input: UpdateUser Input!): User!
+}
+
+# User type definition
+type User {
+  id: ID!
+  name: String!
+  discordID: String!
+  tagNumber: Int
+  role: UserRole!
+  editLog: [EditLogEntry!]!  # Reference to the shared EditLogEntry type
+}
+
+# Input types for creating and updating users
+input UserInput {
+  name: String!
+  discordID: String!
+  tagNumber: Int
+}
+
+input UpdateUserInput {
+  id: ID!
+  name: String
+  tagNumber: Int
+  role: UserRole
+}
+
+# Enum for user roles
+enum UserRole {
+  RATTLER
+  EDITOR
+  ADMIN
+}

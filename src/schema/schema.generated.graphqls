@@ -1,0 +1,98 @@
+type EditLog {
+  changes: String!
+  editorID: String!
+  timestamp: String!
+}
+
+input JoinRoundInput {
+  response: Response!
+  roundID: ID!
+  userID: ID!
+}
+
+type Leaderboard {
+  editLog: [EditLog!]!
+  placements: [Tag!]!
+  users: [User!]!
+}
+
+type Mutation {
+  createUser(input: UserInput!): User!
+  deleteRound(roundID: ID!): Boolean!
+  editRound(input: RoundInput!, roundID: ID!): Round!
+  finalizeRound(roundID: ID!): Round!
+  joinRound(input: JoinRoundInput!): Round!
+  scheduleRound(input: RoundInput!): Round!
+  submitScore(roundID: ID!, score: Int!, userID: ID!): Round!
+}
+
+type Participant {
+  rank: Int!
+  response: Response!
+  user: User!
+}
+
+type Query {
+  getLeaderboard: Leaderboard
+  getRounds(limit: Int, offset: Int): [Round!]!
+  getUser(discordID: String!): User
+  getUserScore(userID: String!): Int
+}
+
+enum Response {
+  ACCEPT
+  DECLINE
+  TENTATIVE
+}
+
+type Round {
+  creatorID: String!
+  date: String!
+  editLog: [EditLog!]!
+  eventType: String
+  finalized: Boolean!
+  id: ID!
+  location: String!
+  participants: [Participant!]!
+  scores: [Score!]!
+  time: String!
+  title: String!
+}
+
+input RoundInput {
+  date: String!
+  eventType: String
+  location: String!
+  time: String!
+  title: String!
+}
+
+type Score {
+  editLog: [EditLog!]!
+  score: Int!
+  userID: ID!
+}
+
+type Tag {
+  durationHeld: Int
+  editLog: [EditLog!]!
+  id: ID!
+  lastPlayed: String!
+  name: String!
+  tagNumber: Int
+}
+
+type User {
+  discordID: String!
+  editLog: [EditLog!]!
+  id: ID!
+  name: String!
+  role: String!
+  rounds: [Round!]!
+  tagNumber: Int
+}
+
+input UserInput {
+  discordID: String!
+  name: String!
+}

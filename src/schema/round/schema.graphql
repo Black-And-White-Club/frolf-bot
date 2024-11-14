@@ -1,0 +1,75 @@
+# Round-related types, queries, and mutations
+extend type Query {
+  getRounds(limit: Int, offset: Int): [Round!]!
+  getRound(roundID: ID!): Round! # Query to get details of a specific round
+}
+
+extend type Mutation {
+  scheduleRound(input: RoundInput!): Round!
+  joinRound(input: JoinRoundInput!): Round!
+  submitScore(roundID: ID!, userID: ID!, score: Int!, tag: Int!): Round! # Updated to include tag
+  finalizeAndProcessScores(roundID: ID!): Round!
+  editRound(roundID: ID!, input: RoundInput!): Round!
+  deleteRound(roundID: ID!): Boolean!
+  updateParticipantResponse(
+    roundID: ID!
+    userID: ID!
+    response: Response!
+  ): Round! # Update participant response
+}
+
+type Round {
+  id: ID!
+  title: String!
+  location: String!
+  eventType: String
+  date: String!
+  time: String!
+  participants: [Participant!]!
+  scores: [Score!]!
+  finalized: Boolean!
+  editLog: [EditLogEntry!]!
+  creatorID: String!
+  state: RoundState! # Enum for the state of the round
+}
+
+input RoundInput {
+  title: String!
+  location: String!
+  eventType: String
+  date: String!
+  time: String!
+}
+
+input JoinRoundInput {
+  roundID: ID!
+  userID: ID!
+  response: Response!
+}
+
+type Participant {
+  user: User!
+  response: Response!
+  tag: Int! # Current tag number from the Leaderboard Module
+}
+
+enum RoundState {
+  UPCOMING
+  IN_PROGRESS
+  FINALIZED
+  DELETED
+}
+
+enum Response {
+  ACCEPT
+  TENTATIVE
+  DECLINE
+}
+
+# Additional types for handling scores and logs
+type Score {
+  userID: ID!
+  score: Int!
+  tag: Int! # Added tag field to Score
+  editLog: [EditLogEntry!]!
+}

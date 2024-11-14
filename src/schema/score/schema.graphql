@@ -1,0 +1,17 @@
+# Score-related queries
+extend type Query {
+  getUserScore(userID: String!, roundID: ID!): Int
+  getScoresForRound(roundID: ID!): [Score!]! # Query to get all scores for a specific round
+}
+
+type Score {
+  userID: ID!
+  score: Int!
+  tag: Int!
+  editLog: [EditLogEntry!]!
+}
+
+extend type Mutation {
+  updateScore(roundID: ID!, userID: ID!, score: Int!, tag: Int!): Score! # Updated to include tag
+  processScores(roundID: ID!): Leaderboard! # Finalize scores and submit to leaderboard
+}
