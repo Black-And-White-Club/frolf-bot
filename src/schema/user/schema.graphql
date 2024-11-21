@@ -2,22 +2,20 @@
 
 # User-related types, queries, and mutations
 extend type Query {
-  getUser (discordID: String!): User
+  getUser(discordID: String!): User
 }
 
 extend type Mutation {
-  createUser (input: UserInput!): User!
-  updateUser (input: UpdateUser Input!): User!
+  createUser(input: UserInput!): User!
+  updateUser(input: UpdateUserInput!): User!
 }
 
 # User type definition
 type User {
-  id: ID!
   name: String!
   discordID: String!
   tagNumber: Int
   role: UserRole!
-  editLog: [EditLogEntry!]!  # Reference to the shared EditLogEntry type
 }
 
 # Input types for creating and updating users
@@ -25,13 +23,14 @@ input UserInput {
   name: String!
   discordID: String!
   tagNumber: Int
+  role: UserRole!
 }
 
 input UpdateUserInput {
-  id: ID!
-  name: String
+  discordID: String!
+  name: String!
   tagNumber: Int
-  role: UserRole
+  role: UserRole!
 }
 
 # Enum for user roles

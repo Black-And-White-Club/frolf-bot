@@ -28,7 +28,6 @@ type Round {
   participants: [Participant!]!
   scores: [Score!]!
   finalized: Boolean!
-  editLog: [EditLogEntry!]!
   creatorID: String!
   state: RoundState! # Enum for the state of the round
 }
@@ -71,5 +70,4 @@ type Score {
   userID: ID!
   score: Int!
   tag: Int! # Added tag field to Score
-  editLog: [EditLogEntry!]!
 }

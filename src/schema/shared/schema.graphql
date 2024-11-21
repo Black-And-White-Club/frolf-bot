@@ -1,8 +1,0 @@
-# Shared types, enums, and inputs
-
-type EditLogEntry {
-  id: ID!
-  source: ID! # Who dun it
-  changes: String!
-  timestamp: String!
-}

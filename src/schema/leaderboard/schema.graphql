@@ -7,7 +7,6 @@ extend type Query {
 type Leaderboard {
   users: [User!]! # Using the shared User type
   placements: [Tag!]!
-  editLog: [EditLogEntry!]! # Reference to shared EditLogEntry type
 }
 
 type Tag {
@@ -16,7 +15,6 @@ type Tag {
   lastPlayed: String! # Timestamp of the last played round
   durationHeld: Int! # Duration in days the tag has been held
   name: String! # Name of the user (from Discord)
-  editLog: [EditLogEntry!]! # Reference to shared EditLogEntry type
 }
 
 # Mutation to update leaderboard

@@ -8,7 +8,6 @@ type Score {
   userID: ID!
   score: Int!
   tag: Int!
-  editLog: [EditLogEntry!]!
 }
 
 extend type Mutation {

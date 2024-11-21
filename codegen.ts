@@ -1,25 +1,13 @@
-import type { CodegenConfig } from "@graphql-codegen/cli";
-import { defineConfig } from "@eddeee888/gcg-typescript-resolver-files";
+// codegen.ts
+import { CodegenConfig } from "@graphql-codegen/cli";
 
 const config: CodegenConfig = {
-  schema: "**/schema.graphql",
+  schema: "./src/schema/**/*.graphql", // Path to your GraphQL schema files
   generates: {
-    "src/schema": defineConfig({
-      // The following config is designed to work with GraphQL Yoga's File uploads feature
-      // https://the-guild.dev/graphql/yoga-server/docs/features/file-uploads
-      scalarsOverrides: {
-        File: { type: "File" },
-      },
-      resolverGeneration: {
-        query: "*",
-        mutation: "*",
-        subscription: "*",
-        scalar: "!*.File",
-        object: "*",
-        union: "",
-        interface: "",
-      },
-    }),
+    "./src/types.generated.ts": {
+      plugins: ["typescript", "typescript-resolvers"],
+    },
   },
 };
+
 export default config;
