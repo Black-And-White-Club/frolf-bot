@@ -5,6 +5,7 @@ import { resolvers } from "./resolvers";
 import { UserService } from "./services/UserService";
 import { drizzle } from "drizzle-orm/node-postgres"; // Import Drizzle ORM
 import { Client } from "pg"; // Import PostgreSQL client
+import "reflect-metadata";
 
 // Create a PostgreSQL client
 const client = new Client({

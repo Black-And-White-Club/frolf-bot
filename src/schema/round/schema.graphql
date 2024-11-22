@@ -7,15 +7,11 @@ extend type Query {
 extend type Mutation {
   scheduleRound(input: RoundInput!): Round!
   joinRound(input: JoinRoundInput!): Round!
-  submitScore(roundID: ID!, userID: ID!, score: Int!, tag: Int!): Round! # Updated to include tag
+  submitScore(roundID: ID!, score: Int!, tagNumber: Int!): Round! # Updated to include tag
   finalizeAndProcessScores(roundID: ID!): Round!
   editRound(roundID: ID!, input: RoundInput!): Round!
   deleteRound(roundID: ID!): Boolean!
-  updateParticipantResponse(
-    roundID: ID!
-    userID: ID!
-    response: Response!
-  ): Round! # Update participant response
+  updateParticipantResponse(roundID: ID!, response: Response!): Round! # Update participant response
 }
 
 type Round {
@@ -42,14 +38,13 @@ input RoundInput {
 
 input JoinRoundInput {
   roundID: ID!
-  userID: ID!
   response: Response!
 }
 
 type Participant {
   user: User!
   response: Response!
-  tag: Int! # Current tag number from the Leaderboard Module
+  tagNumber: Int # Current tagNumber number from the Leaderboard Module
 }
 
 enum RoundState {
@@ -67,7 +62,6 @@ enum Response {
 
 # Additional types for handling scores and logs
 type Score {
-  userID: ID!
   score: Int!
-  tag: Int! # Added tag field to Score
+  tagNumber: Int # Added tag field to Score
 }

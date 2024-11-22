@@ -6,6 +6,9 @@ const config: CodegenConfig = {
   generates: {
     "./src/types.generated.ts": {
       plugins: ["typescript", "typescript-resolvers"],
+      config: {
+        avoidOptionals: false, // Allow optional fields to be generated as nullable
+      },
     },
   },
 };

@@ -1,16 +1,32 @@
-# Score-related queries
-extend type Query {
-  getUserScore(userID: String!, roundID: ID!): Int
-  getScoresForRound(roundID: ID!): [Score!]! # Query to get all scores for a specific round
-}
-
+# Additional types for handling scores and logs
 type Score {
-  userID: ID!
+  discordID: ID!
   score: Int!
-  tag: Int!
+  tagNumber: Int
 }
 
+# Updated mutation for processing scores
 extend type Mutation {
-  updateScore(roundID: ID!, userID: ID!, score: Int!, tag: Int!): Score! # Updated to include tag
-  processScores(roundID: ID!): Leaderboard! # Finalize scores and submit to leaderboard
+  updateScore(
+    roundID: ID!
+    discordID: String!
+    score: Int!
+    tagNumber: Int
+  ): Score!
+
+  # Updated to include input type
+  processScores(input: ProcessScoresInput!): Leaderboard!
+}
+
+# Input type for processing scores
+input ProcessScoresInput {
+  roundID: ID!
+  scores: [ScoreInput!]! # Array of scores to process
+}
+
+# Input type for score details
+input ScoreInput {
+  discordID: String!
+  score: Int!
+  tagNumber: Int
 }
