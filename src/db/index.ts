@@ -1,5 +1,4 @@
 // db/index.ts
-import { pgTable, serial, text, varchar } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
@@ -8,13 +7,19 @@ import { User } from "./models/User";
 
 export { User };
 
-// Initialize the database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-export const db = drizzle({ client: pool });
+// Function to create a new database connection
+export function createDbClient(connectionDetails: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}) {
+  const pool = new Pool(connectionDetails);
+  return drizzle({ client: pool });
+}
 
 // Provide utility functions for specific queries
-export async function testDbConnection() {
+export async function testDbConnection(db: ReturnType<typeof drizzle>) {
   return db.execute("select 1");
 }

@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
-import { db, User as UserModel } from "../db";
+// src/services/UserService.ts
+import { Injectable, Inject } from "@nestjs/common";
+import { User as UserModel } from "../db/models/User"; // Ensure this import is correct
 import { eq } from "drizzle-orm";
 import { User as GraphQLUser, UserRole } from "../types.generated"; // Importing the GraphQL types
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -13,11 +14,15 @@ interface UpdateUserInput {
 
 @Injectable()
 export class UserService {
-  constructor(private readonly db: ReturnType<typeof drizzle>) {
+  constructor(
+    @Inject("DATABASE_CONNECTION")
+    private readonly db: ReturnType<typeof drizzle>
+  ) {
     console.log("Injected DB instance:", db);
   }
+
   async getUserByDiscordID(discordID: string): Promise<GraphQLUser | null> {
-    const users = await db
+    const users = await this.db
       .select()
       .from(UserModel)
       .where(eq(UserModel.discordID, discordID))
@@ -25,7 +30,6 @@ export class UserService {
 
     if (users.length > 0) {
       const user = users[0];
-
       return {
         __typename: "User", // Ensure this matches your GraphQL type
         discordID: user.discordID!, // Use discordID as the primary identifier
@@ -39,7 +43,7 @@ export class UserService {
   }
 
   async getUserByTagNumber(tagNumber: number): Promise<GraphQLUser | null> {
-    const users = await db
+    const users = await this.db
       .select()
       .from(UserModel)
       .where(eq(UserModel.tagNumber, tagNumber))
@@ -47,7 +51,6 @@ export class UserService {
 
     if (users.length > 0) {
       const user = users[0];
-
       return {
         __typename: "User", // Ensure this matches your GraphQL type
         discordID: user.discordID!, // Use discordID as the primary identifier
@@ -77,7 +80,7 @@ export class UserService {
       role: "RATTLER" as UserRole,
     };
 
-    const result = await db
+    const result = await this.db
       .insert(UserModel)
       .values(newUser)
       .returning();
@@ -98,7 +101,7 @@ export class UserService {
   ): Promise<GraphQLUser> {
     const user = await this.getUserByDiscordID(input.discordID);
     if (!user) {
-      throw new Error("User  not found");
+      throw new Error("User not found");
     }
 
     if (
@@ -109,7 +112,7 @@ export class UserService {
       throw new Error("Only ADMIN can change roles to ADMIN or EDITOR");
     }
 
-    await db
+    await this.db
       .update(UserModel)
       .set({
         name: input.name !== undefined ? input.name : user.name,
