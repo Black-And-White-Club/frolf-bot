@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { db, User as UserModel } from "../db";
 import { eq } from "drizzle-orm";
 import { User as GraphQLUser, UserRole } from "../types.generated"; // Importing the GraphQL types
+import { drizzle } from "drizzle-orm/node-postgres";
 
 interface UpdateUserInput {
   discordID: string;
@@ -12,11 +13,36 @@ interface UpdateUserInput {
 
 @Injectable()
 export class UserService {
+  constructor(private readonly db: ReturnType<typeof drizzle>) {
+    console.log("Injected DB instance:", db);
+  }
   async getUserByDiscordID(discordID: string): Promise<GraphQLUser | null> {
     const users = await db
       .select()
       .from(UserModel)
       .where(eq(UserModel.discordID, discordID))
+      .execute();
+
+    if (users.length > 0) {
+      const user = users[0];
+
+      return {
+        __typename: "User", // Ensure this matches your GraphQL type
+        discordID: user.discordID!, // Use discordID as the primary identifier
+        name: user.name!, // Use non-null assertion if you're sure it exists
+        tagNumber: user.tagNumber,
+        role: user.role as UserRole,
+      };
+    }
+
+    return null; // No user found
+  }
+
+  async getUserByTagNumber(tagNumber: number): Promise<GraphQLUser | null> {
+    const users = await db
+      .select()
+      .from(UserModel)
+      .where(eq(UserModel.tagNumber, tagNumber))
       .execute();
 
     if (users.length > 0) {

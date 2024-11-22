@@ -229,9 +229,9 @@ export type Tag = {
 };
 
 export type UpdateUserInput = {
-  discordID: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  role: UserRole;
+  discordID?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  role?: InputMaybe<UserRole>;
   tagNumber?: InputMaybe<Scalars['Int']['input']>;
 };
 

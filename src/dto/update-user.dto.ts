@@ -1,26 +1,25 @@
-// src/dto/update-user.dto.ts
-
-import { IsString, IsInt, IsOptional } from "class-validator";
-import { UserRole } from "../enums/user-role.enum"; // Adjust the path according to your structure
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsNotEmpty,
+} from "class-validator";
+import { UserRole } from "../enums/user-role.enum";
 
 export class UpdateUserDto {
+  @IsOptional() // Make name optional for updates
   @IsString()
-  discordID: string;
-
-  @IsString()
-  @IsOptional() // Name is optional in the update
   name?: string;
 
-  @IsInt()
-  @IsOptional() // Tag number is optional in the update
-  tagNumber?: number;
-
+  @IsNotEmpty({ message: "DiscordID should not be empty" })
   @IsString()
-  @IsOptional() // Role is optional in the update
-  role?: UserRole; // You can also use UserRole enum if you import it
+  discordID!: string; // This field should always be required for updates
 
-  // Constructor to initialize the required properties
-  constructor(discordID: string) {
-    this.discordID = discordID;
-  }
+  @IsOptional() // Make tagNumber optional for updates
+  @IsInt()
+  tagNumber?: number | null; // Allow tagNumber to be a number or null
+
+  @IsEnum(UserRole)
+  role!: UserRole; // Ensure that the role is always provided
 }

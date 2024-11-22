@@ -1,63 +1,87 @@
-import { Resolver, Query, Mutation, Args } from "@nestjs/graphql";
-import { UserService } from "../services/UserService"; // Ensure this is the correct import
-import {
-  User as UserType,
-  UserInput,
-  UpdateUserInput,
-  UserRole,
-} from "../types.generated"; // Import generated types
-import { CreateUserDto } from "../dto/create-user.dto"; // Import CreateUser  Dto
-import { UpdateUserDto } from "../dto/update-user.dto"; // Import UpdateUser  Dto
-import { plainToClass } from "class-transformer"; // Importing for transformation
-import { validate } from "class-validator"; // Importing for validation
+import { plainToClass } from "class-transformer";
+import { validate } from "class-validator";
+import { UserInput, UserRole } from "../types.generated";
+import { UserService } from "../services/UserService";
+import { CreateUserDto } from "../dto/create-user.dto";
+import { UpdateUserDto } from "../dto/update-user.dto";
 
-@Resolver() // Specify UserType as the resolver's type
-export class UserResolver {
-  constructor(private readonly userService: UserService) {} // Inject UserService as an instance
-
-  @Mutation() // Specify UserType as the return type
-  async createUser(@Args("input") input: UserInput): Promise<UserType> {
-    const createUserDto = plainToClass(CreateUserDto, input);
-    const errors = await validate(createUserDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!"); // You can customize this error handling
-    }
-    return await this.userService.createUser(createUserDto);
-  }
-
-  @Mutation() // Specify UserType as the return type
-  async updateUser(
-    @Args("input") input: UpdateUserInput,
-    @Args("requesterRole") requesterRole: UserRole
-  ): Promise<UserType> {
-    const updateUserDto = plainToClass(UpdateUserDto, input);
-    const errors = await validate(updateUserDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!"); // You can customize this error handling
-    }
-
-    // Check if the requesterRole is Admin
-    if (requesterRole !== UserRole.Admin) {
-      throw new Error("Only Admin can update user roles to Editor or Admin."); // Custom error message
-    }
-
-    // Check if the new role is Editor or Admin
-    if (
-      updateUserDto.role === UserRole.Editor ||
-      updateUserDto.role === UserRole.Admin
+export const UserResolver = {
+  Query: {
+    async getUser(
+      _: any,
+      args: { discordID?: string; tagNumber?: number },
+      context: { userService: UserService }
     ) {
-      // You can also add additional checks here if needed
-      return await this.userService.updateUser(updateUserDto, requesterRole);
-    } else {
-      // Proceed with the update if the role is not Editor or Admin
-      return await this.userService.updateUser(updateUserDto, requesterRole);
-    }
-  }
+      if (args.discordID) {
+        const user = await context.userService.getUserByDiscordID(
+          args.discordID
+        );
+        if (!user) {
+          throw new Error("User not found by discordID");
+        }
+        return user;
+      } else if (args.tagNumber) {
+        const user = await context.userService.getUserByTagNumber(
+          args.tagNumber
+        );
+        if (!user) {
+          throw new Error("User not found by Tag");
+        }
+        return user;
+      } else {
+        throw new Error("Please provide either discordID or tagNumber");
+      }
+    },
+  },
+  Mutation: {
+    async createUser(
+      _: any,
+      args: { input: UserInput },
+      context: { userService: UserService }
+    ) {
+      const createUserDto = plainToClass(CreateUserDto, args.input);
+      const errors = await validate(createUserDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+      return await context.userService.createUser(createUserDto);
+    },
 
-  @Query() // Specify UserType as the return type and allow null
-  async getUser(
-    @Args("discordID") discordID: string
-  ): Promise<UserType | null> {
-    return await this.userService.getUserByDiscordID(discordID);
-  }
-}
+    async updateUser(
+      _: any,
+      args: { input: UpdateUserDto; requesterRole: UserRole },
+      context: { userService: UserService }
+    ) {
+      const { input, requesterRole } = args;
+
+      // Fetch the current user based on the provided discordID (if it exists)
+      const currentUser = await context.userService.getUserByDiscordID(
+        input.discordID
+      );
+
+      if (!currentUser) {
+        throw new Error("User not found");
+      }
+
+      // Ensure that discordID and role are populated with defaults if not provided
+      const updateUserDto: UpdateUserDto = {
+        discordID: input.discordID || currentUser.discordID, // Ensuring discordID is not undefined
+        role: input.role || currentUser.role, // Ensuring role is not undefined
+        name: input.name || currentUser.name, // If name is provided, update it
+        tagNumber:
+          input.tagNumber === undefined
+            ? currentUser.tagNumber
+            : input.tagNumber, // Handle undefined or null tagNumber
+      };
+
+      // Validate the DTO
+      const errors = await validate(updateUserDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+
+      // Perform the update
+      return await context.userService.updateUser(updateUserDto, requesterRole);
+    },
+  },
+};

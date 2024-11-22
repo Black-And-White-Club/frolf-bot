@@ -1,5 +1,3 @@
-# user/userSchema.graphql
-
 # User-related types, queries, and mutations
 extend type Query {
   getUser(discordID: String!): User
@@ -27,10 +25,10 @@ input UserInput {
 }
 
 input UpdateUserInput {
-  discordID: String!
-  name: String!
+  discordID: String
+  name: String
   tagNumber: Int
-  role: UserRole!
+  role: UserRole
 }
 
 # Enum for user roles

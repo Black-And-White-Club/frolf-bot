@@ -9,19 +9,18 @@ import {
 import { UserRole } from "../enums/user-role.enum"; // Adjust the path according to your structure
 
 export class CreateUserDto {
+  @IsNotEmpty({ message: "Name should not be empty" })
   @IsString()
-  @IsNotEmpty()
   name!: string;
 
+  @IsNotEmpty({ message: "DiscordID should not be empty" })
   @IsString()
-  @IsNotEmpty()
   discordID!: string;
 
   @IsInt()
   @IsOptional()
-  tagNumber?: number;
+  tagNumber: number | undefined;
 
   @IsEnum(UserRole)
-  @IsNotEmpty()
   role!: UserRole;
 }
