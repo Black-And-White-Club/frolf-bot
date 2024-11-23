@@ -5,17 +5,17 @@ extend type Query {
 }
 
 extend type Mutation {
-  scheduleRound(input: RoundInput!): Round!
+  scheduleRound(input: ScheduleRoundInput!): Round!
   joinRound(input: JoinRoundInput!): Round!
-  submitScore(roundID: ID!, score: Int!, tagNumber: Int!): Round! # Updated to include tag
+  submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round! # Updated to include tag
   finalizeAndProcessScores(roundID: ID!): Round!
-  editRound(roundID: ID!, input: RoundInput!): Round!
+  editRound(roundID: ID!, input: EditRoundInput!): Round!
   deleteRound(roundID: ID!): Boolean!
   updateParticipantResponse(roundID: ID!, response: Response!): Round! # Update participant response
 }
 
 type Round {
-  id: ID!
+  roundID: ID!
   title: String!
   location: String!
   eventType: String
@@ -25,26 +25,36 @@ type Round {
   scores: [Score!]!
   finalized: Boolean!
   creatorID: String!
-  state: RoundState! # Enum for the state of the round
+  state: RoundState!
 }
 
-input RoundInput {
+input ScheduleRoundInput {
   title: String!
   location: String!
   eventType: String
   date: String!
   time: String!
+  creatorID: String!
+}
+
+input EditRoundInput {
+  title: String
+  location: String
+  eventType: String
+  date: String
+  time: String
 }
 
 input JoinRoundInput {
   roundID: ID!
+  discordID: String!
   response: Response!
 }
 
 type Participant {
-  user: User!
+  discordID: String!
   response: Response!
-  tagNumber: Int # Current tagNumber number from the Leaderboard Module
+  tagNumber: Int
 }
 
 enum RoundState {

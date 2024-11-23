@@ -1,6 +1,6 @@
 // src/services/UserService.ts
 import { Injectable, Inject } from "@nestjs/common";
-import { User as UserModel } from "../db/models/User"; // Ensure this import is correct
+import { users as UserModel } from "../db/models/User"; // Ensure this import is correct
 import { eq } from "drizzle-orm";
 import { User as GraphQLUser, UserRole } from "../types.generated"; // Importing the GraphQL types
 import { drizzle } from "drizzle-orm/node-postgres";

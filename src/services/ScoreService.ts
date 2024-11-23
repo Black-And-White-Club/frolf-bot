@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { Score as ScoreModel } from "../db/models/Score"; // Ensure this import is correct
+import { scores as ScoreModel } from "../db/models/Score"; // Ensure this import is correct
 import { eq, and } from "drizzle-orm"; // Import and for combining conditions
 import { Score as GraphQLScore } from "../types.generated"; // Importing the GraphQL types
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -63,27 +63,19 @@ export class ScoreService {
     const processedScores: GraphQLScore[] = [];
 
     for (const scoreInput of scores) {
+      // Check for existing score for the given discordID and roundID
       const existingScore = await this.getUserScore(
         scoreInput.discordID,
         roundID
       );
+
       if (existingScore) {
-        // Update existing score
-        await this.db
-          .update(ScoreModel)
-          .set({
-            score: scoreInput.score,
-            tagNumber: scoreInput.tagNumber || null, // Ensure this is number | null
-          })
-          .where(
-            and(
-              eq(ScoreModel.discordID, scoreInput.discordID),
-              eq(ScoreModel.roundID, roundID)
-            )
-          )
-          .execute();
+        // If an existing score is found, throw an error
+        throw new Error(
+          "Score for this Discord ID already exists for the given round"
+        );
       } else {
-        // Create new score
+        // Create new score if it doesn't exist
         await this.db
           .insert(ScoreModel)
           .values({
@@ -93,15 +85,15 @@ export class ScoreService {
             tagNumber: scoreInput.tagNumber || null, // Ensure this is number | null
           })
           .execute();
-      }
 
-      // Push processed score to return array
-      processedScores.push({
-        __typename: "Score",
-        discordID: scoreInput.discordID,
-        score: scoreInput.score,
-        tagNumber: scoreInput.tagNumber || null, // This should now be valid
-      });
+        // Push processed score to return array
+        processedScores.push({
+          __typename: "Score",
+          discordID: scoreInput.discordID,
+          score: scoreInput.score,
+          tagNumber: scoreInput.tagNumber || null, // This should now be valid
+        });
+      }
     }
 
     return processedScores;

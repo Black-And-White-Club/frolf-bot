@@ -1,11 +1,13 @@
 // src/db/models/User.ts
 import { pgTable, varchar, integer } from "drizzle-orm/pg-core";
+import { timestamps } from "./timetamps.helpers";
 
-export const User = pgTable("users", {
-  name: varchar("name"),
-  discordID: varchar("discordID")
+export const users = pgTable("users", {
+  name: varchar(),
+  discordID: varchar()
     .unique()
     .notNull(),
-  tagNumber: integer("tagNumber").unique(),
-  role: varchar("role"),
+  tagNumber: integer().unique(),
+  role: varchar(),
+  ...timestamps,
 });

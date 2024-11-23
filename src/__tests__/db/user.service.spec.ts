@@ -1,7 +1,7 @@
 // src/__tests__/db/user.service.spec.ts
 import { expect, describe, it, beforeAll, afterAll } from "vitest";
 import { UserService } from "../../services/UserService";
-import { User } from "../../db/models/User";
+import { users } from "../../db/models/User";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import {
@@ -27,10 +27,6 @@ describe("User Service", () => {
     postgresContainer = await new PostgreSqlContainer(
       "postgres:alpine"
     ).start();
-    console.log("PostgreSQL container started with settings:", {
-      host: postgresContainer.getHost(),
-      port: postgresContainer.getPort(),
-    });
 
     // Set up the PostgreSQL client with container details
     client = new Client({
@@ -58,15 +54,18 @@ describe("User Service", () => {
     service = module.get<UserService>(UserService);
 
     // Create the required user table if it doesn't exist
-    await db.execute(
-      `CREATE TABLE IF NOT EXISTS users (
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR,
         "discordID" VARCHAR UNIQUE,
         "tagNumber" INT,
-        role VARCHAR
-      )`
-    );
+        role VARCHAR,
+        "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
+        "updated_at" TIMESTAMP DEFAULT NOW() NOT NULL,
+        "deleted_at" TIMESTAMP
+      )
+    `);
   });
 
   afterAll(async () => {
@@ -94,14 +93,16 @@ describe("User Service", () => {
 
     const dbUser = await db
       .select()
-      .from(User)
-      .where(eq(User.discordID, user.discordID))
+      .from(users)
+      .where(eq(users.discordID, user.discordID))
       .execute();
 
-    expect(dbUser[0]).toEqual({
-      ...user,
-      role: "RATTLER",
-    });
+    expect(dbUser[0]).toEqual(
+      expect.objectContaining({
+        ...user,
+        role: "RATTLER",
+      })
+    );
   });
 
   it("should throw an error when creating a user with an existing Discord ID", async () => {
@@ -167,16 +168,18 @@ describe("User Service", () => {
 
     const dbUser = await db
       .select()
-      .from(User)
-      .where(eq(User.discordID, user.discordID))
+      .from(users)
+      .where(eq(users.discordID, user.discordID))
       .execute();
 
-    expect(dbUser[0]).toEqual({
-      name: "Updated User",
-      discordID: user.discordID,
-      tagNumber: 456,
-      role: "RATTLER",
-    });
+    expect(dbUser[0]).toEqual(
+      expect.objectContaining({
+        name: "Updated User",
+        discordID: user.discordID,
+        tagNumber: 456,
+        role: "RATTLER",
+      })
+    );
   });
 
   it("should throw an error when updating a user that does not exist", async () => {

@@ -61,7 +61,10 @@ export const ScoreResolver = {
       // Call the service method with the roundID and the array of scores
       return await context.scoreService.processScores(
         processScoresDto.roundID,
-        processScoresDto.scores
+        processScoresDto.scores.map((score) => ({
+          ...score,
+          score: parseInt(score.score.toString(), 10), // Ensure score is an integer
+        }))
       );
     },
   },
