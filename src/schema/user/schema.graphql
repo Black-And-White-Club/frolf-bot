@@ -1,0 +1,39 @@
+# User-related types, queries, and mutations
+extend type Query {
+  getUser(discordID: String!): User
+}
+
+extend type Mutation {
+  createUser(input: UserInput!): User!
+  updateUser(input: UpdateUserInput!): User!
+}
+
+# User type definition
+type User {
+  name: String!
+  discordID: String!
+  tagNumber: Int
+  role: UserRole!
+}
+
+# Input types for creating and updating users
+input UserInput {
+  name: String!
+  discordID: String!
+  tagNumber: Int
+  role: UserRole!
+}
+
+input UpdateUserInput {
+  discordID: String
+  name: String
+  tagNumber: Int
+  role: UserRole
+}
+
+# Enum for user roles
+enum UserRole {
+  RATTLER
+  EDITOR
+  ADMIN
+}

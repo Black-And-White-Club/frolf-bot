@@ -1,0 +1,32 @@
+# Additional types for handling scores and logs
+type Score {
+  discordID: ID!
+  score: Int!
+  tagNumber: Int
+}
+
+# Updated mutation for processing scores
+extend type Mutation {
+  updateScore(
+    roundID: ID!
+    discordID: String!
+    score: Int!
+    tagNumber: Int
+  ): Score!
+
+  # Updated to include input type
+  processScores(input: ProcessScoresInput!): Leaderboard!
+}
+
+# Input type for processing scores
+input ProcessScoresInput {
+  roundID: ID!
+  scores: [ScoreInput!]! # Array of scores to process
+}
+
+# Input type for score details
+input ScoreInput {
+  discordID: String!
+  score: Int!
+  tagNumber: Int
+}
