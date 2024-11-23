@@ -7,7 +7,7 @@ import {
   date,
   time,
 } from "drizzle-orm/pg-core";
-import { timestamps } from "./timetamps.helpers";
+import { timestamps } from "../../db/helpers/timetamps.helpers";
 
 export const RoundModel = pgTable("rounds", {
   roundID: serial().primaryKey(),

@@ -1,0 +1,145 @@
+input EditRoundInput {
+  date: String
+  eventType: String
+  location: String
+  time: String
+  title: String
+}
+
+input JoinRoundInput {
+  discordID: String!
+  response: Response!
+  roundID: ID!
+}
+
+type Leaderboard {
+  placements: [TagNumber!]!
+  users: [User!]!
+}
+
+type Mutation {
+  createUser(input: UserInput!): User!
+  deleteRound(roundID: ID!): Boolean!
+  editRound(input: EditRoundInput!, roundID: ID!): Round!
+  finalizeAndProcessScores(roundID: ID!): Round!
+  joinRound(input: JoinRoundInput!): Round!
+  linkTag(discordID: ID!, newTagNumber: Int!): TagNumber!
+  manualTagUpdate(discordID: ID!, newTagNumber: Int!): TagNumber!
+  processScores(input: ProcessScoresInput!): Leaderboard!
+  receiveScores(scores: [ScoreData!]!): Leaderboard!
+  scheduleRound(input: ScheduleRoundInput!): Round!
+  submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round!
+  updateParticipantResponse(response: Response!, roundID: ID!): Round!
+  updateScore(discordID: String!, roundID: ID!, score: Int!, tagNumber: Int): Score!
+  updateTag(discordID: ID!, tagNumber: Int!): TagNumber!
+  updateUser(input: UpdateUserInput!): User!
+}
+
+type Participant {
+  discordID: String!
+  response: Response!
+  tagNumber: Int
+}
+
+input ProcessScoresInput {
+  roundID: ID!
+  scores: [ScoreInput!]!
+}
+
+type Query {
+  getLeaderboard(limit: Int, page: Int): Leaderboard!
+  getRound(roundID: ID!): Round!
+  getRounds(limit: Int, offset: Int): [Round!]!
+  getScoresForRound(roundID: String!): [Score!]!
+  getUser(discordID: String!): User
+  getUserScore(discordID: String!, roundID: String!): Score!
+  getUserTag(discordID: ID!): TagNumber
+}
+
+enum Response {
+  ACCEPT
+  DECLINE
+  TENTATIVE
+}
+
+type Round {
+  creatorID: String!
+  date: String!
+  eventType: String
+  finalized: Boolean!
+  location: String!
+  participants: [Participant!]!
+  roundID: ID!
+  scores: [Score!]!
+  state: RoundState!
+  time: String!
+  title: String!
+}
+
+enum RoundState {
+  DELETED
+  FINALIZED
+  IN_PROGRESS
+  UPCOMING
+}
+
+input ScheduleRoundInput {
+  creatorID: String!
+  date: String!
+  eventType: String
+  location: String!
+  time: String!
+  title: String!
+}
+
+type Score {
+  discordID: String!
+  score: Int!
+  tagNumber: Int
+}
+
+input ScoreData {
+  discordID: ID!
+  score: Int!
+  tagNumber: Int
+}
+
+input ScoreInput {
+  discordID: String!
+  score: Int!
+  tagNumber: Int
+}
+
+type TagNumber {
+  discordID: ID!
+  durationHeld: Int!
+  lastPlayed: String!
+  tagNumber: Int!
+}
+
+input UpdateUserInput {
+  discordID: String
+  name: String
+  role: UserRole
+  tagNumber: Int
+}
+
+type User {
+  discordID: String!
+  name: String!
+  role: UserRole!
+  tagNumber: Int
+}
+
+input UserInput {
+  discordID: String!
+  name: String!
+  role: UserRole!
+  tagNumber: Int
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+  RATTLER
+}

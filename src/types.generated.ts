@@ -1,15 +1,17 @@
 import { GraphQLResolveInfo } from 'graphql';
-export type Maybe<T> = T | null;
-export type InputMaybe<T> = Maybe<T>;
+export type Maybe<T> = T | null | undefined;
+export type InputMaybe<T> = T | null | undefined;
 export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
 export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
 export type MakeEmpty<T extends { [key: string]: unknown }, K extends keyof T> = { [_ in K]?: never };
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
+export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable<T[P]> };
+export type EnumResolverSignature<T, AllowedValues = any> = { [key in keyof T]?: AllowedValues };
 /** All built-in and custom scalars, mapped to their actual values */
 export type Scalars = {
-  ID: { input: string; output: string; }
+  ID: { input: string; output: string | number; }
   String: { input: string; output: string; }
   Boolean: { input: boolean; output: boolean; }
   Int: { input: number; output: number; }
@@ -56,73 +58,73 @@ export type Mutation = {
 };
 
 
-export type MutationCreateUserArgs = {
+export type MutationcreateUserArgs = {
   input: UserInput;
 };
 
 
-export type MutationDeleteRoundArgs = {
+export type MutationdeleteRoundArgs = {
   roundID: Scalars['ID']['input'];
 };
 
 
-export type MutationEditRoundArgs = {
+export type MutationeditRoundArgs = {
   input: EditRoundInput;
   roundID: Scalars['ID']['input'];
 };
 
 
-export type MutationFinalizeAndProcessScoresArgs = {
+export type MutationfinalizeAndProcessScoresArgs = {
   roundID: Scalars['ID']['input'];
 };
 
 
-export type MutationJoinRoundArgs = {
+export type MutationjoinRoundArgs = {
   input: JoinRoundInput;
 };
 
 
-export type MutationLinkTagArgs = {
+export type MutationlinkTagArgs = {
   discordID: Scalars['ID']['input'];
   newTagNumber: Scalars['Int']['input'];
 };
 
 
-export type MutationManualTagUpdateArgs = {
+export type MutationmanualTagUpdateArgs = {
   discordID: Scalars['ID']['input'];
   newTagNumber: Scalars['Int']['input'];
 };
 
 
-export type MutationProcessScoresArgs = {
+export type MutationprocessScoresArgs = {
   input: ProcessScoresInput;
 };
 
 
-export type MutationReceiveScoresArgs = {
+export type MutationreceiveScoresArgs = {
   scores: Array<ScoreData>;
 };
 
 
-export type MutationScheduleRoundArgs = {
+export type MutationscheduleRoundArgs = {
   input: ScheduleRoundInput;
 };
 
 
-export type MutationSubmitScoreArgs = {
+export type MutationsubmitScoreArgs = {
   roundID: Scalars['ID']['input'];
   score: Scalars['Int']['input'];
   tagNumber?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
-export type MutationUpdateParticipantResponseArgs = {
+export type MutationupdateParticipantResponseArgs = {
   response: Response;
   roundID: Scalars['ID']['input'];
 };
 
 
-export type MutationUpdateScoreArgs = {
+export type MutationupdateScoreArgs = {
   discordID: Scalars['String']['input'];
   roundID: Scalars['ID']['input'];
   score: Scalars['Int']['input'];
@@ -130,13 +132,13 @@ export type MutationUpdateScoreArgs = {
 };
 
 
-export type MutationUpdateTagArgs = {
+export type MutationupdateTagArgs = {
   discordID: Scalars['ID']['input'];
   tagNumber: Scalars['Int']['input'];
 };
 
 
-export type MutationUpdateUserArgs = {
+export type MutationupdateUserArgs = {
   input: UpdateUserInput;
 };
 
@@ -157,42 +159,54 @@ export type Query = {
   getLeaderboard: Leaderboard;
   getRound: Round;
   getRounds: Array<Round>;
+  getScoresForRound: Array<Score>;
   getUser?: Maybe<User>;
+  getUserScore: Score;
   getUserTag?: Maybe<TagNumber>;
 };
 
 
-export type QueryGetLeaderboardArgs = {
+export type QuerygetLeaderboardArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   page?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
-export type QueryGetRoundArgs = {
+export type QuerygetRoundArgs = {
   roundID: Scalars['ID']['input'];
 };
 
 
-export type QueryGetRoundsArgs = {
+export type QuerygetRoundsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
-export type QueryGetUserArgs = {
+export type QuerygetScoresForRoundArgs = {
+  roundID: Scalars['String']['input'];
+};
+
+
+export type QuerygetUserArgs = {
   discordID: Scalars['String']['input'];
 };
 
 
-export type QueryGetUserTagArgs = {
+export type QuerygetUserScoreArgs = {
+  discordID: Scalars['String']['input'];
+  roundID: Scalars['String']['input'];
+};
+
+
+export type QuerygetUserTagArgs = {
   discordID: Scalars['ID']['input'];
 };
 
-export enum Response {
-  Accept = 'ACCEPT',
-  Decline = 'DECLINE',
-  Tentative = 'TENTATIVE'
-}
+export type Response =
+  | 'ACCEPT'
+  | 'DECLINE'
+  | 'TENTATIVE';
 
 export type Round = {
   __typename?: 'Round';
@@ -209,12 +223,11 @@ export type Round = {
   title: Scalars['String']['output'];
 };
 
-export enum RoundState {
-  Deleted = 'DELETED',
-  Finalized = 'FINALIZED',
-  InProgress = 'IN_PROGRESS',
-  Upcoming = 'UPCOMING'
-}
+export type RoundState =
+  | 'DELETED'
+  | 'FINALIZED'
+  | 'IN_PROGRESS'
+  | 'UPCOMING';
 
 export type ScheduleRoundInput = {
   creatorID: Scalars['String']['input'];
@@ -227,7 +240,7 @@ export type ScheduleRoundInput = {
 
 export type Score = {
   __typename?: 'Score';
-  discordID: Scalars['ID']['output'];
+  discordID: Scalars['String']['output'];
   score: Scalars['Int']['output'];
   tagNumber?: Maybe<Scalars['Int']['output']>;
 };
@@ -274,11 +287,10 @@ export type UserInput = {
   tagNumber?: InputMaybe<Scalars['Int']['input']>;
 };
 
-export enum UserRole {
-  Admin = 'ADMIN',
-  Editor = 'EDITOR',
-  Rattler = 'RATTLER'
-}
+export type UserRole =
+  | 'ADMIN'
+  | 'EDITOR'
+  | 'RATTLER';
 
 
 
@@ -351,49 +363,49 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
 
 /** Mapping between all available schema types and the resolvers types */
 export type ResolversTypes = {
-  Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   EditRoundInput: EditRoundInput;
-  ID: ResolverTypeWrapper<Scalars['ID']['output']>;
-  Int: ResolverTypeWrapper<Scalars['Int']['output']>;
+  String: ResolverTypeWrapper<Scalars['String']['output']>;
   JoinRoundInput: JoinRoundInput;
-  Leaderboard: ResolverTypeWrapper<Leaderboard>;
+  ID: ResolverTypeWrapper<Scalars['ID']['output']>;
+  Leaderboard: ResolverTypeWrapper<Omit<Leaderboard, 'users'> & { users: Array<ResolversTypes['User']> }>;
   Mutation: ResolverTypeWrapper<{}>;
-  Participant: ResolverTypeWrapper<Participant>;
+  Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
+  Int: ResolverTypeWrapper<Scalars['Int']['output']>;
+  Participant: ResolverTypeWrapper<Omit<Participant, 'response'> & { response: ResolversTypes['Response'] }>;
   ProcessScoresInput: ProcessScoresInput;
   Query: ResolverTypeWrapper<{}>;
-  Response: Response;
-  Round: ResolverTypeWrapper<Round>;
-  RoundState: RoundState;
+  Response: ResolverTypeWrapper<'ACCEPT' | 'TENTATIVE' | 'DECLINE'>;
+  Round: ResolverTypeWrapper<Omit<Round, 'participants' | 'state'> & { participants: Array<ResolversTypes['Participant']>, state: ResolversTypes['RoundState'] }>;
+  RoundState: ResolverTypeWrapper<'UPCOMING' | 'IN_PROGRESS' | 'FINALIZED' | 'DELETED'>;
   ScheduleRoundInput: ScheduleRoundInput;
   Score: ResolverTypeWrapper<Score>;
   ScoreData: ScoreData;
   ScoreInput: ScoreInput;
-  String: ResolverTypeWrapper<Scalars['String']['output']>;
   TagNumber: ResolverTypeWrapper<TagNumber>;
   UpdateUserInput: UpdateUserInput;
-  User: ResolverTypeWrapper<User>;
+  User: ResolverTypeWrapper<Omit<User, 'role'> & { role: ResolversTypes['UserRole'] }>;
   UserInput: UserInput;
-  UserRole: UserRole;
+  UserRole: ResolverTypeWrapper<'ADMIN' | 'EDITOR' | 'RATTLER'>;
 };
 
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = {
-  Boolean: Scalars['Boolean']['output'];
   EditRoundInput: EditRoundInput;
-  ID: Scalars['ID']['output'];
-  Int: Scalars['Int']['output'];
+  String: Scalars['String']['output'];
   JoinRoundInput: JoinRoundInput;
-  Leaderboard: Leaderboard;
+  ID: Scalars['ID']['output'];
+  Leaderboard: Omit<Leaderboard, 'users'> & { users: Array<ResolversParentTypes['User']> };
   Mutation: {};
+  Boolean: Scalars['Boolean']['output'];
+  Int: Scalars['Int']['output'];
   Participant: Participant;
   ProcessScoresInput: ProcessScoresInput;
   Query: {};
-  Round: Round;
+  Round: Omit<Round, 'participants'> & { participants: Array<ResolversParentTypes['Participant']> };
   ScheduleRoundInput: ScheduleRoundInput;
   Score: Score;
   ScoreData: ScoreData;
   ScoreInput: ScoreInput;
-  String: Scalars['String']['output'];
   TagNumber: TagNumber;
   UpdateUserInput: UpdateUserInput;
   User: User;
@@ -407,21 +419,21 @@ export type LeaderboardResolvers<ContextType = any, ParentType extends Resolvers
 };
 
 export type MutationResolvers<ContextType = any, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = {
-  createUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationCreateUserArgs, 'input'>>;
-  deleteRound?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteRoundArgs, 'roundID'>>;
-  editRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationEditRoundArgs, 'input' | 'roundID'>>;
-  finalizeAndProcessScores?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationFinalizeAndProcessScoresArgs, 'roundID'>>;
-  joinRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationJoinRoundArgs, 'input'>>;
-  linkTag?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationLinkTagArgs, 'discordID' | 'newTagNumber'>>;
-  manualTagUpdate?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationManualTagUpdateArgs, 'discordID' | 'newTagNumber'>>;
-  processScores?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, RequireFields<MutationProcessScoresArgs, 'input'>>;
-  receiveScores?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, RequireFields<MutationReceiveScoresArgs, 'scores'>>;
-  scheduleRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationScheduleRoundArgs, 'input'>>;
-  submitScore?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationSubmitScoreArgs, 'roundID' | 'score'>>;
-  updateParticipantResponse?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationUpdateParticipantResponseArgs, 'response' | 'roundID'>>;
-  updateScore?: Resolver<ResolversTypes['Score'], ParentType, ContextType, RequireFields<MutationUpdateScoreArgs, 'discordID' | 'roundID' | 'score'>>;
-  updateTag?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationUpdateTagArgs, 'discordID' | 'tagNumber'>>;
-  updateUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationUpdateUserArgs, 'input'>>;
+  createUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationcreateUserArgs, 'input'>>;
+  deleteRound?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationdeleteRoundArgs, 'roundID'>>;
+  editRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationeditRoundArgs, 'input' | 'roundID'>>;
+  finalizeAndProcessScores?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationfinalizeAndProcessScoresArgs, 'roundID'>>;
+  joinRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationjoinRoundArgs, 'input'>>;
+  linkTag?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationlinkTagArgs, 'discordID' | 'newTagNumber'>>;
+  manualTagUpdate?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationmanualTagUpdateArgs, 'discordID' | 'newTagNumber'>>;
+  processScores?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, RequireFields<MutationprocessScoresArgs, 'input'>>;
+  receiveScores?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, RequireFields<MutationreceiveScoresArgs, 'scores'>>;
+  scheduleRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationscheduleRoundArgs, 'input'>>;
+  submitScore?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationsubmitScoreArgs, 'roundID' | 'score'>>;
+  updateParticipantResponse?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<MutationupdateParticipantResponseArgs, 'response' | 'roundID'>>;
+  updateScore?: Resolver<ResolversTypes['Score'], ParentType, ContextType, RequireFields<MutationupdateScoreArgs, 'discordID' | 'roundID' | 'score'>>;
+  updateTag?: Resolver<ResolversTypes['TagNumber'], ParentType, ContextType, RequireFields<MutationupdateTagArgs, 'discordID' | 'tagNumber'>>;
+  updateUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationupdateUserArgs, 'input'>>;
 };
 
 export type ParticipantResolvers<ContextType = any, ParentType extends ResolversParentTypes['Participant'] = ResolversParentTypes['Participant']> = {
@@ -432,12 +444,16 @@ export type ParticipantResolvers<ContextType = any, ParentType extends Resolvers
 };
 
 export type QueryResolvers<ContextType = any, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = {
-  getLeaderboard?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, Partial<QueryGetLeaderboardArgs>>;
-  getRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<QueryGetRoundArgs, 'roundID'>>;
-  getRounds?: Resolver<Array<ResolversTypes['Round']>, ParentType, ContextType, Partial<QueryGetRoundsArgs>>;
-  getUser?: Resolver<Maybe<ResolversTypes['User']>, ParentType, ContextType, RequireFields<QueryGetUserArgs, 'discordID'>>;
-  getUserTag?: Resolver<Maybe<ResolversTypes['TagNumber']>, ParentType, ContextType, RequireFields<QueryGetUserTagArgs, 'discordID'>>;
+  getLeaderboard?: Resolver<ResolversTypes['Leaderboard'], ParentType, ContextType, Partial<QuerygetLeaderboardArgs>>;
+  getRound?: Resolver<ResolversTypes['Round'], ParentType, ContextType, RequireFields<QuerygetRoundArgs, 'roundID'>>;
+  getRounds?: Resolver<Array<ResolversTypes['Round']>, ParentType, ContextType, Partial<QuerygetRoundsArgs>>;
+  getScoresForRound?: Resolver<Array<ResolversTypes['Score']>, ParentType, ContextType, RequireFields<QuerygetScoresForRoundArgs, 'roundID'>>;
+  getUser?: Resolver<Maybe<ResolversTypes['User']>, ParentType, ContextType, RequireFields<QuerygetUserArgs, 'discordID'>>;
+  getUserScore?: Resolver<ResolversTypes['Score'], ParentType, ContextType, RequireFields<QuerygetUserScoreArgs, 'discordID' | 'roundID'>>;
+  getUserTag?: Resolver<Maybe<ResolversTypes['TagNumber']>, ParentType, ContextType, RequireFields<QuerygetUserTagArgs, 'discordID'>>;
 };
+
+export type ResponseResolvers = EnumResolverSignature<{ ACCEPT?: any, DECLINE?: any, TENTATIVE?: any }, ResolversTypes['Response']>;
 
 export type RoundResolvers<ContextType = any, ParentType extends ResolversParentTypes['Round'] = ResolversParentTypes['Round']> = {
   creatorID?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -454,8 +470,10 @@ export type RoundResolvers<ContextType = any, ParentType extends ResolversParent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 };
 
+export type RoundStateResolvers = EnumResolverSignature<{ DELETED?: any, FINALIZED?: any, IN_PROGRESS?: any, UPCOMING?: any }, ResolversTypes['RoundState']>;
+
 export type ScoreResolvers<ContextType = any, ParentType extends ResolversParentTypes['Score'] = ResolversParentTypes['Score']> = {
-  discordID?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  discordID?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   score?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   tagNumber?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
@@ -477,14 +495,19 @@ export type UserResolvers<ContextType = any, ParentType extends ResolversParentT
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 };
 
+export type UserRoleResolvers = EnumResolverSignature<{ ADMIN?: any, EDITOR?: any, RATTLER?: any }, ResolversTypes['UserRole']>;
+
 export type Resolvers<ContextType = any> = {
   Leaderboard?: LeaderboardResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;
   Participant?: ParticipantResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
+  Response?: ResponseResolvers;
   Round?: RoundResolvers<ContextType>;
+  RoundState?: RoundStateResolvers;
   Score?: ScoreResolvers<ContextType>;
   TagNumber?: TagNumberResolvers<ContextType>;
   User?: UserResolvers<ContextType>;
+  UserRole?: UserRoleResolvers;
 };
 

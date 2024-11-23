@@ -3,9 +3,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 // Import User model
-import { User } from "./models/User";
-
-export { User };
+import { users } from "../modules/user/user.model";
+import { RoundModel } from "../modules/round/round.model";
+import { leaderboard } from "./models/Leaderboard";
+import { scores } from "./models/Score";
+export { users, RoundModel, leaderboard, scores };
 
 // Function to create a new database connection
 export function createDbClient(connectionDetails: {

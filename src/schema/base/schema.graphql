@@ -1,3 +1,0 @@
-# Base schema defining the root types
-type Query
-type Mutation

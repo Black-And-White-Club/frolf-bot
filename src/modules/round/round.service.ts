@@ -1,17 +1,17 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
-import { RoundModel } from "../db/models/Round";
+import { RoundModel } from "./round.model";
 import {
   Round as GraphQLRound,
   Participant as GraphQLParticipant,
   RoundState,
   Response,
-} from "../types.generated";
-import { ScheduleRoundInput } from "../dto/round-input.dto";
-import { JoinRoundInput } from "../dto/join-round-input.dto";
-import { ScoreService } from "./ScoreService";
-import { EditRoundInput } from "../dto/edit-round-input.dto";
+} from "../../types.generated";
+import { ScheduleRoundInput } from "../../dto/round/round-input.dto";
+import { JoinRoundInput } from "../../dto/round/join-round-input.dto";
+import { ScoreService } from "../score/score.service";
+import { EditRoundInput } from "../../dto/round/edit-round-input.dto";
 
 @Injectable()
 export class RoundService {
@@ -58,7 +58,7 @@ export class RoundService {
       scores: JSON.stringify([]),
       finalized: false,
       creatorID: input.creatorID, // Use creatorID directly
-      state: RoundState.Upcoming,
+      state: "UPCOMING",
     };
 
     const [round] = await this.db
@@ -77,7 +77,7 @@ export class RoundService {
     const round = await this.getRound(roundID);
     if (!round) throw new Error("Round not found");
 
-    if (round.state !== RoundState.Upcoming) {
+    if (round.state !== "UPCOMING") {
       throw new Error("You can only join rounds that are upcoming");
     }
 
@@ -107,7 +107,7 @@ export class RoundService {
     const round = await this.getRound(roundID);
     if (!round) throw new Error("Round not found");
 
-    if (round.state !== RoundState.InProgress) {
+    if (round.state !== "IN_PROGRESS") {
       throw new Error(
         "Scores can only be submitted for rounds that are in progress"
       );
@@ -142,12 +142,12 @@ export class RoundService {
     // Call ScoreService to process the scores for the round
     await scoreService.processScores(roundID, round.scores);
 
-    round.state = RoundState.Finalized;
+    round.state = "FINALIZED";
     round.finalized = true;
 
     await this.db
       .update(RoundModel)
-      .set({ state: RoundState.Finalized, finalized: true })
+      .set({ state: "FINALIZED", finalized: true })
       .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
 
     return round;

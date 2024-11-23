@@ -1,6 +1,6 @@
 // src/db/models/User.ts
 import { pgTable, varchar, integer } from "drizzle-orm/pg-core";
-import { timestamps } from "./timetamps.helpers";
+import { timestamps } from "../../db/helpers/timetamps.helpers";
 
 export const users = pgTable("users", {
   name: varchar(),

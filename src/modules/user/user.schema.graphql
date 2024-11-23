@@ -33,7 +33,7 @@ input UpdateUserInput {
 
 # Enum for user roles
 enum UserRole {
-  RATTLER
-  EDITOR
   ADMIN
+  EDITOR
+  RATTLER
 }

@@ -1,10 +1,10 @@
 import { plainToClass } from "class-transformer";
 import { validate } from "class-validator";
-import { RoundService } from "../services/RoundService";
-import { JoinRoundInput } from "../dto/join-round-input.dto";
-import { ScheduleRoundInput } from "../dto/round-input.dto";
-import { RoundState, Response } from "../types.generated";
-import { EditRoundInput } from "../dto/edit-round-input.dto";
+import { RoundService } from "./round.service";
+import { JoinRoundInput } from "../../dto/round/join-round-input.dto";
+import { ScheduleRoundInput } from "../../dto/round/round-input.dto";
+import { RoundState, Response } from "../../types.generated";
+import { EditRoundInput } from "../../dto/round/edit-round-input.dto";
 
 type ID = string; // Define ID as a string type
 
@@ -71,7 +71,7 @@ export const RoundResolver = {
         throw new Error("Round not found");
       }
 
-      if (round.state !== RoundState.Upcoming) {
+      if (round.state !== "UPCOMING") {
         throw new Error("You can only join rounds that are upcoming");
       }
 
@@ -133,7 +133,7 @@ export const RoundResolver = {
       }
 
       // Ensure the round is in progress
-      if (round.state !== RoundState.InProgress) {
+      if (round.state !== "IN_PROGRESS") {
         throw new Error(
           "Scores can only be submitted for rounds that are in progress"
         );

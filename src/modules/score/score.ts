@@ -1,5 +1,5 @@
 import { integer, pgTable, varchar } from "drizzle-orm/pg-core";
-import { timestamps } from "./timetamps.helpers";
+import { timestamps } from "../helpers/timetamps.helpers";
 
 // Define the Score table
 export const scores = pgTable("scores", {

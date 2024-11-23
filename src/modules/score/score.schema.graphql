@@ -1,8 +1,14 @@
 # Additional types for handling scores and logs
 type Score {
-  discordID: ID!
+  discordID: String!
   score: Int!
   tagNumber: Int
+}
+
+# Query type for fetching scores
+extend type Query {
+  getUserScore(discordID: String!, roundID: String!): Score!
+  getScoresForRound(roundID: String!): [Score!]!
 }
 
 # Updated mutation for processing scores

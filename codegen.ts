@@ -1,5 +1,6 @@
 // codegen.ts
 import { CodegenConfig } from "@graphql-codegen/cli";
+import { defineConfig } from "@eddeee888/gcg-typescript-resolver-files";
 
 const config: CodegenConfig = {
   schema: "./src/schema/**/*.graphql", // Path to your GraphQL schema files
@@ -10,6 +11,10 @@ const config: CodegenConfig = {
         avoidOptionals: false, // Allow optional fields to be generated as nullable
       },
     },
+
+    "./src/": defineConfig({
+      resolverGeneration: "disabled",
+    }),
   },
 };
 
