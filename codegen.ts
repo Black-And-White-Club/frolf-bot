@@ -3,7 +3,7 @@ import { CodegenConfig } from "@graphql-codegen/cli";
 import { defineConfig } from "@eddeee888/gcg-typescript-resolver-files";
 
 const config: CodegenConfig = {
-  schema: "./src/schema/**/*.graphql", // Path to your GraphQL schema files
+  schema: "./src/modules/**/*schema.graphql", // Updated path to point to module schemas
   generates: {
     "./src/types.generated.ts": {
       plugins: ["typescript", "typescript-resolvers"],

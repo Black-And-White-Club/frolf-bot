@@ -1,21 +1,15 @@
-import "reflect-metadata"; // Import reflect-metadata at the top of your test file
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ScoreResolver } from "../../resolvers/ScoreResolver"; // Adjust the path as necessary
-import { ScoreService } from "../../services/ScoreService"; // Adjust the path as necessary
-import { validate } from "class-validator"; // Assuming you're using class-validator for validation
-
-// Define the Score type
-interface Score {
-  discordID: string;
-  score: number;
-  tagNumber: number;
-  __typename: "Score"; // Assuming __typename is a literal type
-}
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { ScoreResolver } from "../../modules/score/score.resolver";
+import { ScoreService } from "../../modules/score/score.service";
+import { validate } from "class-validator";
+import { UpdateScoreDto } from "../../dto/score/update-score.dto"; // Adjust the path as necessary
+import { ProcessScoresDto } from "../../dto/score/process-scores.dto"; // Adjust the path as necessary
 
 vi.mock("class-validator");
 
 describe("ScoreResolver", () => {
   let scoreService: ScoreService;
+  let scoreResolver: ScoreResolver;
 
   beforeEach(() => {
     // Mock ScoreService methods
@@ -28,26 +22,25 @@ describe("ScoreResolver", () => {
 
     // Default mock behavior: no validation errors
     vi.mocked(validate).mockResolvedValue([]);
+    scoreResolver = new ScoreResolver(scoreService); // Create an instance of ScoreResolver
   });
 
-  describe("getUser Score", () => {
+  describe("getUserScore", () => {
     it("should return a score for the given discordID and roundID", async () => {
       const discordID = "user1";
       const roundID = "round-id";
-      const expectedScore: Score = {
+      const expectedScore = {
         discordID,
         score: -5,
         tagNumber: 123,
-        __typename: "Score",
+        __typename: "Score" as const, // Ensure __typename is a literal type
       };
 
       vi.mocked(scoreService.getUserScore).mockResolvedValue(expectedScore);
 
-      const result = await ScoreResolver.Query.getUserScore(
-        null,
-        { discordID, roundID },
-        { scoreService }
-      );
+      const result = await scoreResolver.getUserScore(discordID, roundID, {
+        scoreService,
+      });
 
       expect(result).toEqual(expectedScore);
       expect(scoreService.getUserScore).toHaveBeenCalledWith(
@@ -63,11 +56,7 @@ describe("ScoreResolver", () => {
       vi.mocked(scoreService.getUserScore).mockResolvedValue(null);
 
       await expect(
-        ScoreResolver.Query.getUserScore(
-          null,
-          { discordID, roundID },
-          { scoreService }
-        )
+        scoreResolver.getUserScore(discordID, roundID, { scoreService })
       ).rejects.toThrow(
         "Score not found for the provided discordID and roundID"
       );
@@ -77,20 +66,28 @@ describe("ScoreResolver", () => {
   describe("getScoresForRound", () => {
     it("should return scores for the given roundID", async () => {
       const roundID = "round-id";
-      const expectedScores: Score[] = [
-        { discordID: "user1", score: +5, tagNumber: 123, __typename: "Score" },
-        { discordID: "user2", score: -3, tagNumber: 456, __typename: "Score" },
+      const expectedScores = [
+        {
+          discordID: "user1",
+          score: +5,
+          tagNumber: 123,
+          __typename: "Score" as const,
+        },
+        {
+          discordID: "user2",
+          score: -3,
+          tagNumber: 456,
+          __typename: "Score" as const,
+        },
       ];
 
       vi.mocked(scoreService.getScoresForRound).mockResolvedValue(
         expectedScores
       );
 
-      const result = await ScoreResolver.Query.getScoresForRound(
-        null,
-        { roundID },
-        { scoreService }
-      );
+      const result = await scoreResolver.getScoresForRound(roundID, {
+        scoreService,
+      });
 
       expect(result).toEqual(expectedScores);
       expect(scoreService.getScoresForRound).toHaveBeenCalledWith(roundID);
@@ -99,22 +96,18 @@ describe("ScoreResolver", () => {
 
   describe("updateScore", () => {
     it("should update an existing score", async () => {
-      const input = {
+      const input: UpdateScoreDto = {
         roundID: "round-id",
         discordID: "user1",
         score: +9,
         tagNumber: 123,
       };
 
-      const updatedScore: Score = { ...input, __typename: "Score" };
+      const updatedScore = { ...input, __typename: "Score" as const };
 
       vi.mocked(scoreService.updateScore).mockResolvedValue(updatedScore);
 
-      const result = await ScoreResolver.Mutation.updateScore(
-        null,
-        { input },
-        { scoreService }
-      );
+      const result = await scoreResolver.updateScore(input); // Pass input directly
 
       expect(result).toEqual(updatedScore);
       expect(scoreService.updateScore).toHaveBeenCalledWith(
@@ -126,7 +119,7 @@ describe("ScoreResolver", () => {
     });
 
     it("should throw an error when updating a non-existing score", async () => {
-      const input = {
+      const input: UpdateScoreDto = {
         roundID: "round-id",
         discordID: "user1",
         score: +32,
@@ -138,14 +131,14 @@ describe("ScoreResolver", () => {
       );
 
       await expect(
-        ScoreResolver.Mutation.updateScore(null, { input }, { scoreService })
+        scoreResolver.updateScore(input) // Pass input directly
       ).rejects.toThrow("Score not found");
     });
   });
 
   describe("processScores", () => {
     it("should process scores successfully", async () => {
-      const input = {
+      const input: ProcessScoresDto = {
         roundID: "round-id",
         scores: [
           { discordID: "user1", score: 100, tagNumber: 123 },
@@ -153,36 +146,37 @@ describe("ScoreResolver", () => {
         ],
       };
 
-      const expectedScores: Score[] = [
+      const expectedScores = [
         {
           discordID: "user1",
           score: 100,
           tagNumber: 123,
-          __typename: "Score",
+          __typename: "Score" as const,
         },
-        { discordID: "user2", score: -20, tagNumber: 456, __typename: "Score" },
+        {
+          discordID: "user2",
+          score: -20,
+          tagNumber: 456,
+          __typename: "Score" as const,
+        },
       ];
 
       vi.mocked(scoreService.processScores).mockResolvedValue(expectedScores);
 
-      const result = await ScoreResolver.Mutation.processScores(
-        null,
-        { input },
-        { scoreService }
-      );
+      const result = await scoreResolver.processScores(input); // Pass input directly
 
       expect(result).toEqual(expectedScores);
       expect(scoreService.processScores).toHaveBeenCalledWith(
         input.roundID,
         input.scores.map((score) => ({
           ...score,
-          score: score.score,
+          score: parseInt(score.score.toString(), 10), // Ensure score is an integer
         }))
       );
     });
 
     it("should throw an error on validation failure", async () => {
-      const input = {
+      const input: ProcessScoresDto = {
         roundID: "round-id",
         scores: [{ discordID: "user1", score: -10, tagNumber: null }],
       };
@@ -195,8 +189,8 @@ describe("ScoreResolver", () => {
       ]);
 
       await expect(
-        ScoreResolver.Mutation.processScores(null, { input }, { scoreService })
-      ).rejects.toThrow("Validation failed!");
+        scoreResolver.processScores(input) // Pass input directly
+      ).rejects.toThrow("Validation failed:");
     });
   });
 });

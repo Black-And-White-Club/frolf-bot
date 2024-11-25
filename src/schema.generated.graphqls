@@ -125,10 +125,13 @@ input UpdateUserInput {
 }
 
 type User {
+  createdAt: String!
+  deletedAt: String
   discordID: String!
   name: String!
   role: UserRole!
   tagNumber: Int
+  updatedAt: String!
 }
 
 input UserInput {

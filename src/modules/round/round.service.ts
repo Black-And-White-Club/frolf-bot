@@ -74,6 +74,12 @@ export class RoundService {
   ): Promise<GraphQLRound> {
     const { roundID, discordID, response, tagNumber } = input;
 
+    // Validate that the response is one of the allowed string values
+    const validResponses = ["ACCEPT", "TENTATIVE", "DECLINE"];
+    if (!validResponses.includes(response)) {
+      throw new Error(`Invalid response value: ${response}`);
+    }
+
     const round = await this.getRound(roundID);
     if (!round) throw new Error("Round not found");
 

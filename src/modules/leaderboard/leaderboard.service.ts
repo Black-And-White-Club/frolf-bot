@@ -1,7 +1,7 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { leaderboard as LeaderboardModel } from "../db/models/Leaderboard";
+import { leaderboard as LeaderboardModel } from "./leaderboard.model";
 import { eq, asc } from "drizzle-orm"; // Changed from 'desc' to 'asc' for golf scores
-import { TagNumber } from "../types.generated";
+import { TagNumber } from "../../types.generated";
 import { drizzle } from "drizzle-orm/node-postgres";
 
 @Injectable()

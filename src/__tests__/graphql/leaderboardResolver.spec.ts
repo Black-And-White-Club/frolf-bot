@@ -1,11 +1,12 @@
 import "reflect-metadata";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { LeaderboardResolver } from "../../resolvers/LeaderboardResolver";
-import { LeaderboardService } from "../../services/LeaderboardService";
+import { LeaderboardResolver } from "../../modules/leaderboard/leaderboard.resolver";
+import { LeaderboardService } from "../../modules/leaderboard/leaderboard.service";
 import { TagNumber } from "../../types.generated"; // Adjust the import based on your actual structure
 
 describe("LeaderboardResolver", () => {
   let leaderboardService: LeaderboardService;
+  let leaderboardResolver: LeaderboardResolver;
 
   beforeEach(() => {
     // Initialize the mock leaderboardService
@@ -15,6 +16,8 @@ describe("LeaderboardResolver", () => {
       updateTag: vi.fn(),
       processScores: vi.fn(),
     } as unknown) as LeaderboardService;
+
+    leaderboardResolver = new LeaderboardResolver(leaderboardService); // Instantiate the resolver
   });
 
   describe("getLeaderboard", () => {
@@ -38,17 +41,13 @@ describe("LeaderboardResolver", () => {
         },
       ];
 
-      leaderboardService.getLeaderboard = vi
-        .fn()
-        .mockResolvedValue({ users: mockUsers });
+      leaderboardService.getLeaderboard = vi.fn().mockResolvedValue(mockUsers);
 
-      const result = await LeaderboardResolver.Query.getLeaderboard(
-        null,
-        { page, limit },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.getLeaderboard(page, limit, {
+        leaderboardService,
+      });
 
-      expect(result).toEqual({ users: mockUsers });
+      expect(result).toEqual(mockUsers);
       expect(leaderboardService.getLeaderboard).toHaveBeenCalledWith(
         page,
         limit
@@ -69,11 +68,9 @@ describe("LeaderboardResolver", () => {
 
       leaderboardService.getUserTag = vi.fn().mockResolvedValue(mockTag);
 
-      const result = await LeaderboardResolver.Query.getUserTag(
-        null,
-        { discordID },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.getUserTag(discordID, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(mockTag);
       expect(leaderboardService.getUserTag).toHaveBeenCalledWith(discordID);
@@ -85,11 +82,7 @@ describe("LeaderboardResolver", () => {
       leaderboardService.getUserTag = vi.fn().mockResolvedValue(null);
 
       await expect(
-        LeaderboardResolver.Query.getUserTag(
-          null,
-          { discordID },
-          { leaderboardService }
-        )
+        leaderboardResolver.getUserTag(discordID, { leaderboardService })
       ).rejects.toThrow("Tag not found for the provided discordID");
     });
   });
@@ -108,11 +101,9 @@ describe("LeaderboardResolver", () => {
 
       leaderboardService.updateTag = vi.fn().mockResolvedValue(mockTag);
 
-      const result = await LeaderboardResolver.Mutation.updateTag(
-        null,
-        { discordID, tagNumber },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.updateTag(discordID, tagNumber, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(mockTag);
       expect(leaderboardService.updateTag).toHaveBeenCalledWith(
@@ -126,11 +117,9 @@ describe("LeaderboardResolver", () => {
       const tagNumber = -1; // Assuming negative numbers are invalid
 
       await expect(
-        LeaderboardResolver.Mutation.updateTag(
-          null,
-          { discordID, tagNumber },
-          { leaderboardService }
-        )
+        leaderboardResolver.updateTag(discordID, tagNumber, {
+          leaderboardService,
+        })
       ).rejects.toThrow("Validation failed!");
     });
   });
@@ -141,7 +130,7 @@ describe("LeaderboardResolver", () => {
         { discordID: "user1", score: -5, tagNumber: 1 },
         { discordID: "user2", score: -7, tagNumber: 2 },
       ];
-      const processedTags = [
+      const processedTags: TagNumber[] = [
         {
           __typename: "TagNumber",
           discordID: "user1",
@@ -162,11 +151,9 @@ describe("LeaderboardResolver", () => {
         .fn()
         .mockResolvedValue(processedTags);
 
-      const result = await LeaderboardResolver.Mutation.receiveScores(
-        null,
-        { scores },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.receiveScores(scores, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(processedTags);
       expect(leaderboardService.processScores).toHaveBeenCalledWith(scores);
@@ -177,7 +164,7 @@ describe("LeaderboardResolver", () => {
         { discordID: "user1", score: 10, tagNumber: 1 },
         { discordID: "user2", score: 20, tagNumber: 2 },
       ];
-      const processedTags = [
+      const processedTags: TagNumber[] = [
         {
           __typename: "TagNumber",
           discordID: "user1",
@@ -198,11 +185,9 @@ describe("LeaderboardResolver", () => {
         .fn()
         .mockResolvedValue(processedTags);
 
-      const result = await LeaderboardResolver.Mutation.receiveScores(
-        null,
-        { scores },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.receiveScores(scores, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(processedTags);
       expect(leaderboardService.processScores).toHaveBeenCalledWith(scores);
@@ -213,7 +198,7 @@ describe("LeaderboardResolver", () => {
         { discordID: "user1", score: -5, tagNumber: 1 },
         { discordID: "user2", score: 0 }, // No tagNumber provided
       ];
-      const processedTags = [
+      const processedTags: TagNumber[] = [
         {
           __typename: "TagNumber",
           discordID: "user1",
@@ -227,11 +212,9 @@ describe("LeaderboardResolver", () => {
         .fn()
         .mockResolvedValue(processedTags);
 
-      const result = await LeaderboardResolver.Mutation.receiveScores(
-        null,
-        { scores },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.receiveScores(scores, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(processedTags);
       expect(leaderboardService.processScores).toHaveBeenCalledWith(scores);
@@ -252,10 +235,12 @@ describe("LeaderboardResolver", () => {
 
       leaderboardService.updateTag = vi.fn().mockResolvedValue(mockTag);
 
-      const result = await LeaderboardResolver.Mutation.manualTagUpdate(
-        null,
-        { discordID, newTagNumber },
-        { leaderboardService }
+      const result = await leaderboardResolver.manualTagUpdate(
+        discordID,
+        newTagNumber,
+        {
+          leaderboardService,
+        }
       );
 
       expect(result).toEqual(mockTag);
@@ -270,11 +255,9 @@ describe("LeaderboardResolver", () => {
       const newTagNumber = -1; // Assuming negative numbers are invalid
 
       await expect(
-        LeaderboardResolver.Mutation.manualTagUpdate(
-          null,
-          { discordID, newTagNumber },
-          { leaderboardService }
-        )
+        leaderboardResolver.manualTagUpdate(discordID, newTagNumber, {
+          leaderboardService,
+        })
       ).rejects.toThrow("Validation failed!");
     });
   });
@@ -285,7 +268,7 @@ describe("LeaderboardResolver", () => {
         { discordID: "user1", score: 10, tagNumber: 1 },
         { discordID: "user2", score: 10, tagNumber: 2 },
       ];
-      const processedTags = [
+      const processedTags: TagNumber[] = [
         {
           __typename: "TagNumber",
           discordID: "user1",
@@ -306,11 +289,9 @@ describe("LeaderboardResolver", () => {
         .fn()
         .mockResolvedValue(processedTags);
 
-      const result = await LeaderboardResolver.Mutation.receiveScores(
-        null,
-        { scores },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.receiveScores(scores, {
+        leaderboardService,
+      });
 
       expect(result).toEqual(processedTags);
       expect(leaderboardService.processScores).toHaveBeenCalledWith(scores);
@@ -325,11 +306,9 @@ describe("LeaderboardResolver", () => {
 
       leaderboardService.processScores = vi.fn().mockResolvedValue([]);
 
-      const result = await LeaderboardResolver.Mutation.receiveScores(
-        null,
-        { scores },
-        { leaderboardService }
-      );
+      const result = await leaderboardResolver.receiveScores(scores, {
+        leaderboardService,
+      });
 
       expect(result).toEqual([]);
       expect(leaderboardService.processScores).toHaveBeenCalledWith(scores);

@@ -1,5 +1,5 @@
 import { expect, describe, it, beforeAll, afterAll, beforeEach } from "vitest";
-import { LeaderboardService } from "../../services/LeaderboardService";
+import { LeaderboardService } from "../../modules/leaderboard/leaderboard.service";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   PostgreSqlContainer,

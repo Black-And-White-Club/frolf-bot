@@ -1,10 +1,9 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, OnModuleInit } from "@nestjs/common";
 import { users as UserModel } from "./user.model"; // Ensure this import is correct
 import { eq } from "drizzle-orm";
 import { User as GraphQLUser } from "../../types.generated"; // Importing the GraphQL types
 import { drizzle } from "drizzle-orm/node-postgres";
 import { UserRole } from "../../enums/user-role.enum";
-import { LoggingService } from "../../utils/logger"; // Import the LoggingService
 
 interface UpdateUserInput {
   discordID: string;
@@ -21,14 +20,16 @@ interface UserData {
 }
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   constructor(
     @Inject("DATABASE_CONNECTION")
-    private readonly db: ReturnType<typeof drizzle>,
-    private readonly loggingService: LoggingService // Inject LoggingService
-  ) {
-    console.log("Injected DB instance:", db);
-    this.loggingService.logInfo("User Service initialized");
+    private readonly db: ReturnType<typeof drizzle>
+  ) {}
+
+  // OnModuleInit ensures this runs after the module has been fully initialized
+  onModuleInit() {
+    console.log("User Service initialized");
+    console.log("Injected DB instance:", this.db);
   }
 
   // Type guard to check if a string is a valid UserRole
@@ -37,7 +38,6 @@ export class UserService {
   }
 
   async getUserByDiscordID(discordID: string): Promise<GraphQLUser | null> {
-    this.loggingService.logInfo(`Fetching user by discordID: ${discordID}`);
     try {
       const users = await this.db
         .select()
@@ -47,7 +47,6 @@ export class UserService {
 
       if (users.length > 0) {
         const user = users[0];
-        this.loggingService.logInfo(`User  found: ${JSON.stringify(user)}`);
         return {
           __typename: "User", // Ensure this matches your GraphQL type
           discordID: user.discordID!,
@@ -57,23 +56,18 @@ export class UserService {
             user.role && this.isValidUserRole(user.role)
               ? user.role
               : "RATTLER", // Provide a default role instead of null
+          createdAt: user.createdAt.toISOString(), // Include createdAt
+          updatedAt: user.updatedAt.toISOString(), // Include updatedAt
         };
       }
 
-      this.loggingService.logWarn(`User not found for discordID: ${discordID}`);
       return null; // No user found
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      this.loggingService.logError(
-        `Error fetching user by discordID: ${errorMessage}`
-      );
       throw new Error("Failed to fetch user");
     }
   }
 
   async getUserByTagNumber(tagNumber: number): Promise<GraphQLUser | null> {
-    this.loggingService.logInfo(`Fetching user by tagNumber: ${tagNumber}`);
     try {
       const users = await this.db
         .select()
@@ -86,63 +80,66 @@ export class UserService {
 
         // Ensure the role is valid before returning
         if (!this.isValidUserRole(user.role)) {
-          this.loggingService.logError(
-            `Invalid role for user with tag number ${tagNumber}`
-          );
           throw new Error(`Invalid role for user with tag number ${tagNumber}`);
         }
 
-        this.loggingService.logInfo(`User found: ${JSON.stringify(user)}`);
         return {
           __typename: "User", // Ensure this matches your GraphQL type
           discordID: user.discordID!,
           name: user.name!,
-          tagNumber: user.tagNumber,
+          tagNumber: user.tagNumber!,
           role: user.role, // Return the valid role directly
+          createdAt: user.createdAt.toISOString(), // Include createdAt
+          updatedAt: user.updatedAt.toISOString(), // Include updatedAt
         };
       }
 
-      this.loggingService.logWarn(`User not found for tagNumber: ${tagNumber}`);
       return null; // No user found
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      this.loggingService.logError(
-        `Error fetching user by tagNumber: ${errorMessage}`
-      );
       throw new Error("Failed to fetch user");
     }
   }
 
-  async createUser(userData: UserData) {
-    this.loggingService.logInfo(
-      `Creating user with data: ${JSON.stringify(userData)}`
-    );
+  // Create user method
+  async createUser(userData: UserData): Promise<GraphQLUser> {
     try {
+      // Validate role
+      if (!this.isValidUserRole(userData.role)) {
+        throw new Error("Invalid user role");
+      }
+
       // Construct the new user object with correct types
       const newUser = {
         name: userData.name,
         discordID: userData.discordID,
-        tagNumber: userData.tagNumber,
-        role: "RATTLER", // Cast to string if necessary
+        tagNumber: userData.tagNumber || null,
+        role: userData.role, // Use the role provided in userData
       };
 
       // Insert into the database
       const result = await this.db
         .insert(UserModel)
-        .values(newUser) // Pass the constructed newUser  object
+        .values(newUser) // Pass the constructed newUser object
         .returning();
 
       const insertedUser = result[0]; // Get the first inserted user
-      this.loggingService.logInfo(
-        `User created successfully: ${JSON.stringify(insertedUser)}`
-      );
-      return insertedUser; // Return the inserted user
+
+      // Transform the inserted user into the GraphQL User format
+      return {
+        __typename: "User", // Ensure this matches your GraphQL type
+        discordID: insertedUser.discordID!,
+        name: insertedUser.name!,
+        tagNumber: insertedUser.tagNumber,
+        role: insertedUser.role as UserRole, // Cast the role to UserRole
+        createdAt: insertedUser.createdAt.toISOString(),
+        updatedAt: insertedUser.updatedAt.toISOString(),
+      };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      this.loggingService.logError(`Error creating user: ${errorMessage}`);
-      throw new Error("Failed to create user");
+      // Handle error when type is unknown
+      if (error instanceof Error) {
+        throw new Error(`Failed to create user: ${error.message}`);
+      }
+      throw new Error("Failed to create user: Unknown error");
     }
   }
 
@@ -151,15 +148,9 @@ export class UserService {
     input: UpdateUserInput,
     requesterRole: UserRole
   ): Promise<GraphQLUser> {
-    this.loggingService.logInfo(
-      `Updating user with discordID: ${input.discordID}`
-    );
     try {
       const user = await this.getUserByDiscordID(input.discordID);
       if (!user) {
-        this.loggingService.logWarn(
-          `User not found for update: ${input.discordID}`
-        );
         throw new Error("User not found");
       }
 
@@ -168,9 +159,6 @@ export class UserService {
         (input.role === UserRole.ADMIN || input.role === UserRole.EDITOR) &&
         requesterRole !== UserRole.ADMIN
       ) {
-        this.loggingService.logError(
-          `Unauthorized role change attempt by ${requesterRole}`
-        );
         throw new Error("Only ADMIN can change roles to ADMIN or EDITOR");
       }
 
@@ -185,20 +173,20 @@ export class UserService {
         .where(eq(UserModel.discordID, input.discordID))
         .execute();
 
-      this.loggingService.logInfo(
-        `User updated successfully: ${input.discordID}`
-      );
       return {
+        __typename: "User",
         discordID: user.discordID,
         name: input.name !== undefined ? input.name : user.name,
         tagNumber:
           input.tagNumber !== undefined ? input.tagNumber : user.tagNumber,
         role: input.role !== undefined ? input.role : user.role, // Directly use the string enum value
+        createdAt: user.createdAt,
+        updatedAt: new Date().toISOString(), // Use current timestamp for updatedAt
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      this.loggingService.logError(`Error updating user: ${errorMessage}`);
+      if (error instanceof Error && error.message === "User not found") {
+        throw new Error("User not found");
+      }
       throw new Error("Failed to update user");
     }
   }

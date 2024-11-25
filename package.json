@@ -15,6 +15,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@graphql-codegen/typescript": "^4.1.2",
+    "@graphql-codegen/typescript-graphql-files-modules": "^3.0.0",
+    "@graphql-codegen/typescript-resolvers": "^4.4.1",
     "@graphql-tools/load-files": "^7.0.0",
     "@graphql-tools/merge": "^9.0.9",
     "@graphql-tools/schema": "^10.0.8",
@@ -33,7 +36,6 @@
     "graphql-yoga": "^5.10.3",
     "pg": "^8.13.1",
     "type-graphql": "2.0.0-rc.2",
-    "winston": "^3.17.0",
     "yoga": "^0.0.20"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { scores as ScoreModel } from "../db/models/Score"; // Ensure this import is correct
+import { scores as ScoreModel } from "./score.model"; // Ensure this import is correct
 import { eq, and } from "drizzle-orm"; // Import and for combining conditions
-import { Score as GraphQLScore } from "../types.generated"; // Importing the GraphQL types
+import { Score as GraphQLScore } from "../../types.generated"; // Importing the GraphQL types
 import { drizzle } from "drizzle-orm/node-postgres";
 
 @Injectable()

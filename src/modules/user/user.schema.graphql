@@ -10,25 +10,28 @@ extend type Mutation {
 
 # User type definition
 type User {
-  name: String!
-  discordID: String!
-  tagNumber: Int
-  role: UserRole!
+  name: String! # Server-specific username
+  discordID: String! # Discord username with discriminator
+  tagNumber: Int # Optional tag number for identification
+  role: UserRole! # User role
+  createdAt: String! # Timestamp of when the user was created
+  updatedAt: String! # Timestamp of when the user was last updated
+  deletedAt: String # Optional timestamp for soft deletes
 }
 
 # Input types for creating and updating users
 input UserInput {
-  name: String!
-  discordID: String!
-  tagNumber: Int
-  role: UserRole!
+  name: String! # Required for user creation
+  discordID: String! # Required for user creation
+  tagNumber: Int # Optional, can be set during creation
+  role: UserRole! # Required for user creation
 }
 
 input UpdateUserInput {
-  discordID: String
-  name: String
-  tagNumber: Int
-  role: UserRole
+  discordID: String # Optional, but often used to identify the user
+  name: String # Optional, allows users to update their server username
+  tagNumber: Int # Optional, can be updated
+  role: UserRole # Optional, allows role changes
 }
 
 # Enum for user roles

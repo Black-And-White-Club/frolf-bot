@@ -1,6 +1,6 @@
 import { expect, describe, it, beforeAll, afterAll } from "vitest";
-import { ScoreService } from "../../services/ScoreService";
-import { scores } from "../../db/models/Score";
+import { ScoreService } from "../../modules/score/score.service";
+import { scores } from "../../modules/score/score.model";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, and } from "drizzle-orm";
 import {

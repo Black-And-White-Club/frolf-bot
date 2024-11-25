@@ -5,8 +5,8 @@ import { Pool } from "pg";
 // Import User model
 import { users } from "../modules/user/user.model";
 import { RoundModel } from "../modules/round/round.model";
-import { leaderboard } from "./models/Leaderboard";
-import { scores } from "./models/Score";
+import { leaderboard } from "../modules/leaderboard/leaderboard.model";
+import { scores } from "../modules/score/score.model";
 export { users, RoundModel, leaderboard, scores };
 
 // Function to create a new database connection

@@ -1,6 +1,6 @@
-import { expect, describe, it, beforeAll, afterAll, afterEach } from "vitest";
-import { RoundService } from "../../services/RoundService";
-import { RoundModel } from "../../db/models/Round";
+import { expect, describe, it, beforeAll, afterAll } from "vitest";
+import { RoundService } from "../../modules/round/round.service";
+import { RoundModel } from "../../modules/round/round.model";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import {
@@ -9,9 +9,8 @@ import {
 } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { Test, TestingModule } from "@nestjs/testing";
-import { RoundState } from "../../types.generated";
-import { ScoreService } from "../../services/ScoreService";
-import { Response } from "../../types.generated"; // Assuming Response is an enum or type you define elsewhere
+import { ScoreService } from "../../modules/score/score.service";
+import { Response } from "../../enums/round-enum"; // Assuming Response is an enum you define elsewhere
 
 describe("Round Service", () => {
   let service: RoundService;
@@ -114,7 +113,7 @@ describe("Round Service", () => {
         scores: [], // Change from "[]" to []
         finalized: false,
         creatorID: input.creatorID, // Ensure creatorID is set correctly
-        state: RoundState.Upcoming,
+        state: "UPCOMING",
       })
     );
   });
@@ -134,9 +133,9 @@ describe("Round Service", () => {
     const round = await service.scheduleRound(input);
 
     const joinInput = {
-      roundID: round.roundID,
+      roundID: String(round.roundID), // Ensure roundID is a string
       discordID: "user-id",
-      response: Response.Accept,
+      response: Response.ACCEPT, // Use enum value directly
       tagNumber: 1,
     };
 
@@ -162,20 +161,20 @@ describe("Round Service", () => {
 
     // Simulate joining the round
     await service.joinRound({
-      roundID: round.roundID,
+      roundID: String(round.roundID), // Ensure roundID is a string
       discordID: "user-id",
-      response: Response.Accept,
+      response: Response.ACCEPT, // Use enum value directly
       tagNumber: 1,
     });
 
     // Finalize the round
     const finalizedRound = await service.finalizeAndProcessScores(
-      round.roundID,
+      String(round.roundID), // Ensure roundID is a string
       scoreService
     );
 
     // Check that the round is finalized
-    expect(finalizedRound.state).toBe(RoundState.Finalized);
+    expect(finalizedRound.state).toBe("FINALIZED");
     expect(finalizedRound.finalized).toBe(true);
   });
 
@@ -191,12 +190,12 @@ describe("Round Service", () => {
     };
 
     const round = await service.scheduleRound(input);
-    await service.finalizeAndProcessScores(round.roundID, scoreService);
+    await service.finalizeAndProcessScores(String(round.roundID), scoreService);
 
     const joinInput = {
-      roundID: round.roundID,
+      roundID: String(round.roundID), // Ensure roundID is a string
       discordID: "user-id",
-      response: Response.Accept,
+      response: Response.ACCEPT, // Use enum value directly
       tagNumber: 1,
     };
 
@@ -217,10 +216,10 @@ describe("Round Service", () => {
     };
 
     const round = await service.scheduleRound(input);
-    await service.finalizeAndProcessScores(round.roundID, scoreService);
+    await service.finalizeAndProcessScores(String(round.roundID), scoreService);
 
     await expect(
-      service.finalizeAndProcessScores(round.roundID, scoreService)
+      service.finalizeAndProcessScores(String(round.roundID), scoreService)
     ).rejects.toThrow("Round has already been finalized");
   });
 
@@ -237,14 +236,14 @@ describe("Round Service", () => {
 
     const round = await service.scheduleRound(input);
     const deleteResult = await service.deleteRound(
-      round.roundID,
+      String(round.roundID), // Ensure roundID is a string
       input.creatorID
     );
 
     expect(deleteResult).toBe(true);
 
     // Verify that the round has been deleted
-    const deletedRound = await service.getRound(round.roundID);
+    const deletedRound = await service.getRound(String(round.roundID)); // Ensure roundID is a string
     expect(deletedRound).toBeNull();
   });
 
@@ -262,7 +261,7 @@ describe("Round Service", () => {
     const round = await service.scheduleRound(input);
 
     await expect(
-      service.deleteRound(round.roundID, "non-creator-id")
+      service.deleteRound(String(round.roundID), "non-creator-id") // Ensure roundID is a string
     ).rejects.toThrow("Only the creator can delete the round");
   });
 });
