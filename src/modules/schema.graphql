@@ -1,0 +1,8 @@
+# Base schema for root types
+type Query {
+  _empty: String # Placeholder field, required to make the type valid
+}
+
+type Mutation {
+  _empty: String # Placeholder field for Mutation type
+}

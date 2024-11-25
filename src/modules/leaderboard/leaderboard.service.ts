@@ -1,6 +1,7 @@
+// leaderboard.service.ts
 import { Injectable, Inject } from "@nestjs/common";
 import { leaderboard as LeaderboardModel } from "./leaderboard.model";
-import { eq, asc } from "drizzle-orm"; // Changed from 'desc' to 'asc' for golf scores
+import { eq, asc } from "drizzle-orm";
 import { TagNumber } from "../../types.generated";
 import { drizzle } from "drizzle-orm/node-postgres";
 
@@ -10,6 +11,7 @@ export class LeaderboardService {
     @Inject("DATABASE_CONNECTION")
     private readonly db: ReturnType<typeof drizzle>
   ) {
+    console.log("LeaderboardService db:", this.db);
     console.log("Injected DB instance:", db);
   }
 
@@ -23,7 +25,7 @@ export class LeaderboardService {
       const leaderboardEntries = await this.db
         .select()
         .from(LeaderboardModel)
-        .orderBy(asc(LeaderboardModel.tagNumber)) // Use ascending order for golf scores
+        .orderBy(asc(LeaderboardModel.tagNumber))
         .limit(limit)
         .offset(offset)
         .execute();
@@ -48,23 +50,19 @@ export class LeaderboardService {
       throw new Error("discordID cannot be empty.");
     }
 
-    // Check if the tag number is already taken
     const existingTag = await this.getUserByTagNumber(newTagNumber);
     if (existingTag) {
       throw new Error(`Tag number ${newTagNumber} is already taken.`);
     }
 
-    // Check if the user already has a tag
     const existingUserTag = await this.getUserTag(discordID);
     if (existingUserTag) {
-      // Update the existing tag
       await this.db
         .update(LeaderboardModel)
         .set({ tagNumber: newTagNumber, lastPlayed: new Date().toISOString() })
         .where(eq(LeaderboardModel.discordID, discordID))
         .execute();
     } else {
-      // Insert a new tag for the user
       await this.db
         .insert(LeaderboardModel)
         .values({
@@ -76,7 +74,6 @@ export class LeaderboardService {
         .execute();
     }
 
-    // Return the linked tag without fetching it again
     return {
       __typename: "TagNumber",
       discordID,
@@ -103,7 +100,7 @@ export class LeaderboardService {
           discordID: entry.discordID,
           tagNumber: entry.tagNumber,
           lastPlayed: entry.lastPlayed || "",
-          durationHeld: entry.durationHeld ?? 0, // Default to 0 if null
+          durationHeld: entry.durationHeld ?? 0,
         };
       }
 
@@ -133,7 +130,7 @@ export class LeaderboardService {
           discordID: entry.discordID,
           tagNumber: entry.tagNumber,
           lastPlayed: entry.lastPlayed || "",
-          durationHeld: entry.durationHeld ?? 0, // Default to 0 if null
+          durationHeld: entry.durationHeld ?? 0,
         };
       }
 
@@ -197,19 +194,18 @@ export class LeaderboardService {
         const existingTag = await this.getUserTag(scoreInput.discordID);
 
         if (existingTag) {
-          // Only update the tag if the new score is better (lower) than the existing tag number
           if (scoreInput.score < existingTag.tagNumber) {
             await this.updateTag(
               scoreInput.discordID,
-              scoreInput.tagNumber || scoreInput.score // Use the new score as the tag number
+              scoreInput.tagNumber || scoreInput.score
             );
 
             processedTags.push({
               __typename: "TagNumber",
               discordID: scoreInput.discordID,
               tagNumber: scoreInput.tagNumber || scoreInput.score,
-              lastPlayed: new Date().toISOString(), // Update last played
-              durationHeld: existingTag.durationHeld, // Keep the existing duration held
+              lastPlayed: new Date().toISOString(),
+              durationHeld: existingTag.durationHeld,
             });
           } else {
             console.warn(

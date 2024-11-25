@@ -1,84 +1,71 @@
-import { Resolver, Query, Mutation, Args, Context } from "@nestjs/graphql";
+import { Resolver, Query, Mutation, Args } from "@nestjs/graphql";
 import { UserService } from "./user.service";
 import { CreateUserDto } from "../../dto/user/create-user.dto";
 import { UpdateUserDto } from "../../dto/user/update-user.dto";
 import { UserRole } from "../../enums/user-role.enum";
 import { validate } from "class-validator";
-import { GraphQLResolveInfo } from "graphql";
+import { User } from "src/types.generated";
 
-@Resolver()
+@Resolver("User")
 export class UserResolver {
-  static Mutation: any;
-  static Query: any;
-  constructor(
-    private readonly userService: UserService // Access instance-specific service (userService)
-  ) {}
+  constructor(private readonly userService: UserService) {
+    console.log("UserResolver userService:", this.userService);
+  }
 
-  @Query(() => String)
+  @Query(() => String, { nullable: true })
   async getUser(
     @Args("discordID", { nullable: true }) discordID?: string,
-    @Args("tagNumber", { nullable: true }) tagNumber?: number,
-    info?: GraphQLResolveInfo
-  ): Promise<any> {
+    @Args("tagNumber", { nullable: true }) tagNumber?: number
+  ): Promise<User | null> {
     try {
-      let user: any = null;
-
       if (discordID) {
-        user = await this.userService.getUserByDiscordID(discordID);
+        const user = await this.userService.getUserByDiscordID(discordID);
+        if (!user) {
+          throw new Error(`User not found with discordID: ${discordID}`);
+        }
+        return user;
       } else if (tagNumber) {
-        user = await this.userService.getUserByTagNumber(tagNumber);
+        const user = await this.userService.getUserByTagNumber(tagNumber);
+        if (!user) {
+          throw new Error(`User not found with tagNumber: ${tagNumber}`);
+        }
+        return user;
       } else {
         throw new Error("Please provide either discordID or tagNumber");
       }
-
-      if (!user) {
-        throw new Error(`User not found: ${discordID || tagNumber}`);
-      }
-
-      return user;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : JSON.stringify(error);
-      throw new Error(`Could not fetch user: ${errorMessage}`);
+      console.error("Error fetching user:", error);
+      if (error instanceof Error) {
+        // Type guard
+        throw new Error(`Could not fetch user: ${error.message}`);
+      } else {
+        throw new Error(`Could not fetch user: ${error}`);
+      }
     }
   }
 
   @Mutation(() => String)
-  async createUser(@Args("input") input: CreateUserDto): Promise<any> {
+  async createUser(@Args("input") input: CreateUserDto): Promise<User> {
     try {
-      const existingUser = await this.userService.getUserByDiscordID(
-        input.discordID
-      );
-      if (existingUser) {
-        throw new Error("User with this Discord ID already exists.");
-      }
+      console.log("createUser called with input:", input);
 
-      if (input.tagNumber !== null && input.tagNumber !== undefined) {
-        const existingTagUser = await this.userService.getUserByTagNumber(
-          input.tagNumber
-        );
-        if (existingTagUser) {
-          throw new Error("User with this tag number already exists.");
-        }
-      }
-
-      const userDto = new CreateUserDto();
-      Object.assign(userDto, input, {
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const errors = await validate(userDto);
+      const errors = await validate(input);
       if (errors.length > 0) {
         throw new Error("Validation failed: " + JSON.stringify(errors));
       }
 
-      const user = await this.userService.createUser(userDto);
+      const user = await this.userService.createUser(input);
+
+      console.log("User created:", user);
       return user;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      throw new Error("Could not create user: " + errorMessage);
+      console.error("Error creating user:", error);
+      if (error instanceof Error) {
+        // Type guard
+        throw new Error(`Could not create user: ${error.message}`);
+      } else {
+        throw new Error(`Could not create user: ${error}`);
+      }
     }
   }
 
@@ -86,34 +73,22 @@ export class UserResolver {
   async updateUser(
     @Args("input") input: UpdateUserDto,
     @Args("requesterRole") requesterRole: UserRole
-  ): Promise<any> {
-    // Check if discordID is provided
-    if (!input.discordID) {
-      throw new Error("Discord ID is required");
-    }
-
+  ): Promise<User> {
     try {
+      const errors = await validate(input);
+      if (errors.length > 0) {
+        throw new Error("Validation failed: " + JSON.stringify(errors));
+      }
+
+      if (!input.discordID) {
+        throw new Error("Discord ID is required");
+      }
+
       const currentUser = await this.userService.getUserByDiscordID(
         input.discordID
       );
-
       if (!currentUser) {
         throw new Error("User not found");
-      }
-
-      const updateUserDto: UpdateUserDto = {
-        discordID: input.discordID,
-        role: input.role ?? currentUser.role,
-        name: input.name ?? currentUser.name,
-        tagNumber:
-          input.tagNumber === undefined
-            ? currentUser.tagNumber
-            : input.tagNumber,
-      };
-
-      const errors = await validate(updateUserDto);
-      if (errors.length > 0) {
-        throw new Error("Validation failed!");
       }
 
       if (
@@ -125,14 +100,18 @@ export class UserResolver {
       }
 
       const updatedUser = await this.userService.updateUser(
-        updateUserDto,
+        input,
         requesterRole
       );
       return updatedUser;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      throw new Error("Could not update user: " + errorMessage);
+      console.error("Error updating user:", error);
+      if (error instanceof Error) {
+        // Type guard
+        throw new Error(`Could not update user: ${error.message}`);
+      } else {
+        throw new Error(`Could not update user: ${error}`);
+      }
     }
   }
 }

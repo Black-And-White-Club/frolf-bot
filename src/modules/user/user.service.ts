@@ -1,43 +1,41 @@
-import { Injectable, Inject, OnModuleInit } from "@nestjs/common";
-import { users as UserModel } from "./user.model"; // Ensure this import is correct
+import { Injectable } from "@nestjs/common";
+import { users as UserModel } from "./user.model";
 import { eq } from "drizzle-orm";
-import { User as GraphQLUser } from "../../types.generated"; // Importing the GraphQL types
+import { User } from "../../types.generated";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { UserRole } from "../../enums/user-role.enum";
+import { createDbClient } from "../../db";
 
 interface UpdateUserInput {
   discordID: string;
-  name?: string; // Optional
-  tagNumber?: number | null; // Optional
-  role?: UserRole; // Optional
+  name?: string;
+  tagNumber?: number | null;
+  role?: UserRole;
 }
 
 interface UserData {
   name: string;
   discordID: string;
   tagNumber: number | null;
-  role: UserRole; // This should be a valid UserRole string
+  role: UserRole;
 }
 
 @Injectable()
-export class UserService implements OnModuleInit {
-  constructor(
-    @Inject("DATABASE_CONNECTION")
-    private readonly db: ReturnType<typeof drizzle>
-  ) {}
+export class UserService {
+  private readonly db: ReturnType<typeof drizzle>;
 
-  // OnModuleInit ensures this runs after the module has been fully initialized
-  onModuleInit() {
-    console.log("User Service initialized");
-    console.log("Injected DB instance:", this.db);
+  constructor(db: ReturnType<typeof drizzle>) {
+    // Accept db as a parameter
+    this.db = db;
+    console.log("UserService initialized");
+    console.log("Database connection established");
   }
 
-  // Type guard to check if a string is a valid UserRole
   private isValidUserRole(role: any): role is UserRole {
     return Object.values(UserRole).includes(role);
   }
 
-  async getUserByDiscordID(discordID: string): Promise<GraphQLUser | null> {
+  async getUserByDiscordID(discordID: string): Promise<User | null> {
     try {
       const users = await this.db
         .select()
@@ -48,26 +46,24 @@ export class UserService implements OnModuleInit {
       if (users.length > 0) {
         const user = users[0];
         return {
-          __typename: "User", // Ensure this matches your GraphQL type
-          discordID: user.discordID!,
+          __typename: "User",
+          discordID: user.discordID,
           name: user.name!,
           tagNumber: user.tagNumber,
-          role:
-            user.role && this.isValidUserRole(user.role)
-              ? user.role
-              : "RATTLER", // Provide a default role instead of null
-          createdAt: user.createdAt.toISOString(), // Include createdAt
-          updatedAt: user.updatedAt.toISOString(), // Include updatedAt
+          role: user.role as UserRole,
+          createdAt: user.createdAt.toISOString(),
+          updatedAt: user.updatedAt.toISOString(),
         };
       }
 
-      return null; // No user found
+      return null;
     } catch (error) {
+      console.error("Error fetching user by Discord ID:", error);
       throw new Error("Failed to fetch user");
     }
   }
 
-  async getUserByTagNumber(tagNumber: number): Promise<GraphQLUser | null> {
+  async getUserByTagNumber(tagNumber: number): Promise<User | null> {
     try {
       const users = await this.db
         .select()
@@ -78,64 +74,59 @@ export class UserService implements OnModuleInit {
       if (users.length > 0) {
         const user = users[0];
 
-        // Ensure the role is valid before returning
         if (!this.isValidUserRole(user.role)) {
           throw new Error(`Invalid role for user with tag number ${tagNumber}`);
         }
 
         return {
-          __typename: "User", // Ensure this matches your GraphQL type
-          discordID: user.discordID!,
+          __typename: "User",
+          discordID: user.discordID,
           name: user.name!,
-          tagNumber: user.tagNumber!,
-          role: user.role, // Return the valid role directly
-          createdAt: user.createdAt.toISOString(), // Include createdAt
-          updatedAt: user.updatedAt.toISOString(), // Include updatedAt
+          tagNumber: user.tagNumber,
+          role: user.role,
+          createdAt: user.createdAt.toISOString(),
+          updatedAt: user.updatedAt.toISOString(),
         };
       }
 
-      return null; // No user found
+      return null;
     } catch (error) {
+      console.error("Error fetching user by tag number:", error);
       throw new Error("Failed to fetch user");
     }
   }
 
-  // Create user method
-  async createUser(userData: UserData): Promise<GraphQLUser> {
+  async createUser(userData: UserData): Promise<User> {
     try {
-      // Validate role
       if (!this.isValidUserRole(userData.role)) {
         throw new Error("Invalid user role");
       }
 
-      // Construct the new user object with correct types
       const newUser = {
         name: userData.name,
         discordID: userData.discordID,
         tagNumber: userData.tagNumber || null,
-        role: userData.role, // Use the role provided in userData
+        role: userData.role,
       };
 
-      // Insert into the database
       const result = await this.db
         .insert(UserModel)
-        .values(newUser) // Pass the constructed newUser object
+        .values(newUser)
         .returning();
 
-      const insertedUser = result[0]; // Get the first inserted user
+      const insertedUser = result[0];
 
-      // Transform the inserted user into the GraphQL User format
       return {
-        __typename: "User", // Ensure this matches your GraphQL type
-        discordID: insertedUser.discordID!,
+        __typename: "User",
+        discordID: insertedUser.discordID,
         name: insertedUser.name!,
         tagNumber: insertedUser.tagNumber,
-        role: insertedUser.role as UserRole, // Cast the role to UserRole
+        role: insertedUser.role as UserRole,
         createdAt: insertedUser.createdAt.toISOString(),
         updatedAt: insertedUser.updatedAt.toISOString(),
       };
     } catch (error) {
-      // Handle error when type is unknown
+      console.error("Error creating user:", error);
       if (error instanceof Error) {
         throw new Error(`Failed to create user: ${error.message}`);
       }
@@ -143,11 +134,10 @@ export class UserService implements OnModuleInit {
     }
   }
 
-  // Update user function
   async updateUser(
     input: UpdateUserInput,
     requesterRole: UserRole
-  ): Promise<GraphQLUser> {
+  ): Promise<User> {
     try {
       const user = await this.getUserByDiscordID(input.discordID);
       if (!user) {
@@ -168,7 +158,7 @@ export class UserService implements OnModuleInit {
           name: input.name !== undefined ? input.name : user.name,
           tagNumber:
             input.tagNumber !== undefined ? input.tagNumber : user.tagNumber,
-          role: input.role !== undefined ? input.role : user.role, // Directly use the string enum value
+          role: input.role !== undefined ? input.role : user.role,
         })
         .where(eq(UserModel.discordID, input.discordID))
         .execute();
@@ -179,11 +169,12 @@ export class UserService implements OnModuleInit {
         name: input.name !== undefined ? input.name : user.name,
         tagNumber:
           input.tagNumber !== undefined ? input.tagNumber : user.tagNumber,
-        role: input.role !== undefined ? input.role : user.role, // Directly use the string enum value
-        createdAt: user.createdAt,
-        updatedAt: new Date().toISOString(), // Use current timestamp for updatedAt
+        role: input.role !== undefined ? input.role : user.role,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
     } catch (error) {
+      console.error("Error updating user:", error);
       if (error instanceof Error && error.message === "User not found") {
         throw new Error("User not found");
       }

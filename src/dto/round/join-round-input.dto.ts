@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import { Response } from "../../types.generated"; // Assuming you have this enum defined
 
 export class JoinRoundInput {
@@ -11,5 +11,9 @@ export class JoinRoundInput {
   discordID!: string; // Include discordID
 
   @IsNotEmpty()
+  @IsEnum(Response, {
+    message:
+      "Response must be one of the predefined values: ACCEPT, TENTATIVE, DECLINE",
+  })
   response!: Response; // Use the Response enum
 }

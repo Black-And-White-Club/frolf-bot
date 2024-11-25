@@ -18,6 +18,7 @@ type Leaderboard {
 }
 
 type Mutation {
+  _empty: String
   createUser(input: UserInput!): User!
   deleteRound(roundID: ID!): Boolean!
   editRound(input: EditRoundInput!, roundID: ID!): Round!
@@ -47,6 +48,7 @@ input ProcessScoresInput {
 }
 
 type Query {
+  _empty: String
   getLeaderboard(limit: Int, page: Int): Leaderboard!
   getRound(roundID: ID!): Round!
   getRounds(limit: Int, offset: Int): [Round!]!

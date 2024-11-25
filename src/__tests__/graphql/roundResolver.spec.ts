@@ -2,11 +2,10 @@ import "reflect-metadata";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { RoundResolver } from "../../modules/round/round.resolver";
 import { RoundService } from "../../modules/round/round.service";
-import { RoundState, Response } from "../../types.generated"; // Ensure Response is imported correctly
+import { RoundState, Response } from "../../types.generated";
 
-// Define the base Round type (without `tagNumber`)
 interface Round {
-  roundID: string; // Use roundID instead of id
+  roundID: string;
   title: string;
   location: string;
   date: string;
@@ -20,9 +19,22 @@ interface Round {
   __typename: "Round";
 }
 
-// Mock leaderboardService to return a tagNumber
-const leaderboardService = {
-  getTagNumber: vi.fn().mockResolvedValue(5), // Mock the tag number for the user
+// Mock LeaderboardService (including all its methods)
+const leaderboardService: any = {
+  // Use 'any' type for the mock object
+  getLeaderboard: vi.fn(),
+  linkTag: vi.fn(),
+  getUserTag: vi.fn().mockResolvedValue({
+    __typename: "TagNumber",
+    discordID: "discord-id",
+    tagNumber: 5,
+    lastPlayed: "",
+    durationHeld: 0,
+  }),
+  getUserByTagNumber: vi.fn(),
+  updateTag: vi.fn(),
+  processScores: vi.fn(),
+  // ... add other methods from LeaderboardService if needed
 };
 
 vi.mock("class-validator");
@@ -43,7 +55,7 @@ describe("RoundResolver", () => {
       updateParticipantResponse: vi.fn(),
     } as unknown) as RoundService;
 
-    roundResolver = new RoundResolver(roundService, leaderboardService); // Instantiate the resolver
+    roundResolver = new RoundResolver(roundService, leaderboardService);
   });
 
   describe("joinRound", () => {
@@ -55,7 +67,7 @@ describe("RoundResolver", () => {
       } = {
         roundID: "round-1",
         discordID: "discord-id",
-        response: "ACCEPT", // Ensure this matches the Response type
+        response: "ACCEPT",
       };
 
       const round: Round = {
@@ -82,9 +94,11 @@ describe("RoundResolver", () => {
       vi.mocked(roundService.getRound).mockResolvedValue(round);
       vi.mocked(roundService.joinRound).mockResolvedValue(joinRoundResponse);
 
-      const result = await roundResolver.joinRound(input, {
-        roundService,
+      const result = await roundResolver.joinRound({
+        // Updated call
+        roundID: "round-1",
         discordID: "discord-id",
+        response: "ACCEPT",
       });
 
       expect(result).toEqual({
@@ -102,7 +116,7 @@ describe("RoundResolver", () => {
       } = {
         roundID: "round-1",
         discordID: "discord-id",
-        response: "ACCEPT", // Ensure this matches the Response type
+        response: "ACCEPT",
       };
 
       const round: Round = {
@@ -113,7 +127,7 @@ describe("RoundResolver", () => {
         time: "10:00",
         participants: [],
         scores: [],
-        state: "FINALIZED", // Invalid state for joining
+        state: "FINALIZED",
         creatorID: "discord-id",
         discordID: "discord-id",
         finalized: true,
@@ -123,9 +137,11 @@ describe("RoundResolver", () => {
       vi.mocked(roundService.getRound).mockResolvedValue(round);
 
       await expect(
-        roundResolver.joinRound(input, {
-          roundService,
+        roundResolver.joinRound({
+          // Updated call
+          roundID: "round-1",
           discordID: "discord-id",
+          response: "ACCEPT",
         })
       ).rejects.toThrow("You can only join rounds that are upcoming");
     });
@@ -138,7 +154,7 @@ describe("RoundResolver", () => {
       } = {
         roundID: "round-1",
         discordID: "discord-id",
-        response: "ACCEPT", // Ensure this matches the Response type
+        response: "ACCEPT",
       };
 
       const round: Round = {
@@ -147,7 +163,7 @@ describe("RoundResolver", () => {
         location: "New York",
         date: "2024-12-01",
         time: "10:00",
-        participants: [{ discordID: "discord-id" }], // User already joined
+        participants: [{ discordID: "discord-id" }],
         scores: [],
         state: "UPCOMING",
         creatorID: "discord-id",
@@ -159,9 +175,11 @@ describe("RoundResolver", () => {
       vi.mocked(roundService.getRound).mockResolvedValue(round);
 
       await expect(
-        roundResolver.joinRound(input, {
-          roundService,
+        roundResolver.joinRound({
+          // Updated call
+          roundID: "round-1",
           discordID: "discord-id",
+          response: "ACCEPT",
         })
       ).rejects.toThrow("You have already joined this round");
     });
@@ -194,11 +212,9 @@ describe("RoundResolver", () => {
       vi.mocked(roundService.submitScore).mockResolvedValue(round);
 
       const result = await roundResolver.submitScore(
-        {
-          roundService,
-          discordID: "discord-id",
-        },
+        // Updated call
         input.roundID,
+        "discord-id",
         input.score,
         input.tagNumber
       );
@@ -231,12 +247,10 @@ describe("RoundResolver", () => {
       vi.mocked(roundService.submitScore).mockResolvedValue(round);
 
       const result = await roundResolver.submitScore(
-        {
-          roundService,
-          discordID: "discord-id",
-        }, // This is the context
-        input.roundID, // This is the roundID
-        input.score // This is the score
+        // Updated call
+        input.roundID,
+        "discord-id",
+        input.score
       );
 
       expect(result).toEqual(round);
@@ -244,7 +258,7 @@ describe("RoundResolver", () => {
         "round-1",
         "discord-id",
         100,
-        null // Null tagNumber passed
+        null
       );
     });
   });

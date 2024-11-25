@@ -1,21 +1,19 @@
-import { Resolver, Query, Mutation, Args, Context } from "@nestjs/graphql";
+// score.resolver.ts
+import { Resolver, Query, Args, Mutation } from "@nestjs/graphql";
 import { ScoreService } from "./score.service";
-import { UpdateScoreDto } from "../../dto/score/update-score.dto"; // DTO for updating scores
-import { ProcessScoresDto } from "../../dto/score/process-scores.dto"; // DTO for processing scores
+import { UpdateScoreDto } from "../../dto/score/update-score.dto";
+import { ProcessScoresDto } from "../../dto/score/process-scores.dto";
 import { plainToClass } from "class-transformer";
 import { validate } from "class-validator";
-import { GraphQLResolveInfo } from "graphql";
 
 @Resolver()
 export class ScoreResolver {
   constructor(private readonly scoreService: ScoreService) {}
 
-  @Query(() => String) // Adjust the return type as needed
+  @Query(() => String)
   async getUserScore(
     @Args("discordID") discordID: string,
-    @Args("roundID") roundID: string,
-    @Context() context: { scoreService: ScoreService },
-    info?: GraphQLResolveInfo
+    @Args("roundID") roundID: string
   ): Promise<any> {
     const score = await this.scoreService.getUserScore(discordID, roundID);
     if (score === null) {
@@ -24,16 +22,12 @@ export class ScoreResolver {
     return score;
   }
 
-  @Query(() => [String]) // Adjust the return type as needed
-  async getScoresForRound(
-    @Args("roundID") roundID: string,
-    @Context() context: { scoreService: ScoreService },
-    info?: GraphQLResolveInfo
-  ): Promise<any[]> {
+  @Query(() => [String])
+  async getScoresForRound(@Args("roundID") roundID: string): Promise<any[]> {
     return await this.scoreService.getScoresForRound(roundID);
   }
 
-  @Mutation(() => String) // Adjust the return type as needed
+  @Mutation(() => String)
   async updateScore(@Args("input") input: UpdateScoreDto): Promise<any> {
     const updateScoreDto = plainToClass(UpdateScoreDto, input);
     const errors = await validate(updateScoreDto);
@@ -48,7 +42,7 @@ export class ScoreResolver {
     );
   }
 
-  @Mutation(() => String) // Adjust the return type as needed
+  @Mutation(() => String)
   async processScores(@Args("input") input: ProcessScoresDto): Promise<any> {
     const processScoresDto = plainToClass(ProcessScoresDto, input);
     const errors = await validate(processScoresDto);
@@ -59,7 +53,7 @@ export class ScoreResolver {
       processScoresDto.roundID,
       processScoresDto.scores.map((score) => ({
         ...score,
-        score: parseInt(score.score.toString(), 10), // Ensure score is an integer
+        score: parseInt(score.score.toString(), 10),
       }))
     );
   }

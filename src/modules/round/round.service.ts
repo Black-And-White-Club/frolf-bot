@@ -1,4 +1,5 @@
-import { Injectable, Inject } from "@nestjs/common";
+// round.service.ts
+import { Inject, Injectable } from "@nestjs/common";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { RoundModel } from "./round.model";
@@ -12,13 +13,16 @@ import { ScheduleRoundInput } from "../../dto/round/round-input.dto";
 import { JoinRoundInput } from "../../dto/round/join-round-input.dto";
 import { ScoreService } from "../score/score.service";
 import { EditRoundInput } from "../../dto/round/edit-round-input.dto";
+import { validate } from "class-validator";
 
 @Injectable()
 export class RoundService {
   constructor(
     @Inject("DATABASE_CONNECTION")
     private readonly db: ReturnType<typeof drizzle>
-  ) {}
+  ) {
+    console.log("RoundService db:", this.db);
+  }
 
   async getRounds(
     limit: number = 10,
@@ -37,7 +41,7 @@ export class RoundService {
     const rounds = await this.db
       .select()
       .from(RoundModel)
-      .where(eq(RoundModel.roundID, Number(roundID))); // Convert roundID to number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     if (rounds.length > 0) {
       return this.mapRoundToGraphQL(rounds[0]);
@@ -45,36 +49,45 @@ export class RoundService {
     return null;
   }
 
-  async scheduleRound(
-    input: ScheduleRoundInput // This now includes creatorID
-  ): Promise<GraphQLRound> {
-    const roundData = {
-      title: input.title,
-      location: input.location,
-      eventType: input.eventType || null,
-      date: input.date,
-      time: input.time,
-      participants: JSON.stringify([]),
-      scores: JSON.stringify([]),
-      finalized: false,
-      creatorID: input.creatorID, // Use creatorID directly
-      state: "UPCOMING",
-    };
+  async scheduleRound(input: ScheduleRoundInput): Promise<GraphQLRound> {
+    try {
+      // Add try...catch block here
+      const errors = await validate(input);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
 
-    const [round] = await this.db
-      .insert(RoundModel)
-      .values(roundData)
-      .returning();
+      const roundData = {
+        title: input.title,
+        location: input.location,
+        eventType: input.eventType || null,
+        date: input.date,
+        time: input.time,
+        participants: JSON.stringify([]),
+        scores: JSON.stringify([]),
+        finalized: false,
+        creatorID: input.creatorID,
+        state: "UPCOMING",
+      };
 
-    return this.mapRoundToGraphQL(round);
+      const [round] = await this.db
+        .insert(RoundModel)
+        .values(roundData)
+        .returning();
+
+      return this.mapRoundToGraphQL(round);
+    } catch (error) {
+      // Handle the error appropriately (e.g., log it, re-throw it)
+      console.error("Error during validation or database operation:", error);
+      throw error;
+    }
   }
 
   async joinRound(
-    input: JoinRoundInput & { tagNumber: number }
+    input: JoinRoundInput & { tagNumber: number | null }
   ): Promise<GraphQLRound> {
     const { roundID, discordID, response, tagNumber } = input;
 
-    // Validate that the response is one of the allowed string values
     const validResponses = ["ACCEPT", "TENTATIVE", "DECLINE"];
     if (!validResponses.includes(response)) {
       throw new Error(`Invalid response value: ${response}`);
@@ -95,11 +108,10 @@ export class RoundService {
     const participant: GraphQLParticipant = { discordID, response, tagNumber };
     participants.push(participant);
 
-    // Update the participants in the DB
     await this.db
       .update(RoundModel)
       .set({ participants: JSON.stringify(participants) })
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     return { ...round, participants };
   }
@@ -129,7 +141,7 @@ export class RoundService {
     await this.db
       .update(RoundModel)
       .set({ scores: JSON.stringify(scores) })
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     return { ...round, scores };
   }
@@ -145,7 +157,6 @@ export class RoundService {
       throw new Error("Round has already been finalized");
     }
 
-    // Call ScoreService to process the scores for the round
     await scoreService.processScores(roundID, round.scores);
 
     round.state = "FINALIZED";
@@ -154,7 +165,7 @@ export class RoundService {
     await this.db
       .update(RoundModel)
       .set({ state: "FINALIZED", finalized: true })
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     return round;
   }
@@ -166,13 +177,12 @@ export class RoundService {
     const round = await this.getRound(roundID);
     if (!round) throw new Error("Round not found");
 
-    // Exclude roundID from updated data
     const { roundID: _, ...updatedRoundData } = { ...round, ...input };
 
     await this.db
       .update(RoundModel)
       .set(updatedRoundData)
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     return this.mapRoundToGraphQL(updatedRoundData);
   }
@@ -185,7 +195,7 @@ export class RoundService {
 
     await this.db
       .delete(RoundModel)
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
     return true;
   }
 
@@ -206,7 +216,7 @@ export class RoundService {
     await this.db
       .update(RoundModel)
       .set({ participants: JSON.stringify(participants) })
-      .where(eq(RoundModel.roundID, Number(roundID))); // Ensure roundID is a number
+      .where(eq(RoundModel.roundID, Number(roundID)));
 
     return { ...round, participants };
   }

@@ -54,6 +54,7 @@ export type Leaderboard = {
 
 export type Mutation = {
   __typename?: "Mutation";
+  _empty?: Maybe<Scalars["String"]["output"]>;
   createUser: User;
   deleteRound: Scalars["Boolean"]["output"];
   editRound: Round;
@@ -155,6 +156,7 @@ export type ProcessScoresInput = {
 
 export type Query = {
   __typename?: "Query";
+  _empty?: Maybe<Scalars["String"]["output"]>;
   getLeaderboard: Leaderboard;
   getRound: Round;
   getRounds: Array<Round>;
@@ -467,6 +469,7 @@ export type MutationResolvers<
   ContextType = any,
   ParentType extends ResolversParentTypes["Mutation"] = ResolversParentTypes["Mutation"]
 > = {
+  _empty?: Resolver<Maybe<ResolversTypes["String"]>, ParentType, ContextType>;
   createUser?: Resolver<
     ResolversTypes["User"],
     ParentType,
@@ -573,6 +576,7 @@ export type QueryResolvers<
   ContextType = any,
   ParentType extends ResolversParentTypes["Query"] = ResolversParentTypes["Query"]
 > = {
+  _empty?: Resolver<Maybe<ResolversTypes["String"]>, ParentType, ContextType>;
   getLeaderboard?: Resolver<
     ResolversTypes["Leaderboard"],
     ParentType,
