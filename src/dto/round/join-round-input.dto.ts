@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
-import { Response } from "../../types.generated"; // Assuming you have this enum defined
+import { Response } from "../../enums/round-enum"; // Assuming you have this enum defined
 
 export class JoinRoundInput {
   @IsNotEmpty()

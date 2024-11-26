@@ -1,3 +1,4 @@
+// src/dto/round/round-input.dto.ts
 import {
   IsNotEmpty,
   IsString,
@@ -16,7 +17,7 @@ export class ScheduleRoundInput {
 
   @IsOptional()
   @IsString()
-  eventType?: string;
+  eventType: string = "Round";
 
   @IsNotEmpty()
   @IsDateString({}, { message: "Date must be in valid format (YYYY-MM-DD)" })
@@ -24,7 +25,7 @@ export class ScheduleRoundInput {
 
   @IsNotEmpty()
   @IsString()
-  time!: string; // Ensure proper time format if needed, i.e. "HH:mm"
+  time!: string;
 
   @IsNotEmpty()
   @IsString()

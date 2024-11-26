@@ -1,10 +1,10 @@
 # Round-related types, queries, and mutations
-extend type Query {
+type Query {
   getRounds(limit: Int, offset: Int): [Round!]!
   getRound(roundID: ID!): Round! # Query to get details of a specific round
 }
 
-extend type Mutation {
+type Mutation {
   scheduleRound(input: ScheduleRoundInput!): Round!
   joinRound(input: JoinRoundInput!): Round!
   submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round! # Updated to include tag

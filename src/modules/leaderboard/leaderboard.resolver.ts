@@ -1,5 +1,5 @@
-// leaderboard.resolver.ts
-import { Resolver, Query, Mutation, Args } from "@nestjs/graphql";
+// src/modules/leaderboard/leaderboard.resolver.ts
+import { Injectable } from "@nestjs/common";
 import { LeaderboardService } from "./leaderboard.service";
 import { UpdateTagDto } from "../../dto/leaderboard/update-tag.dto";
 import { ReceiveScoresDto } from "../../dto/leaderboard/receive-scores.dto";
@@ -7,88 +7,108 @@ import { LinkTagDto } from "../../dto/leaderboard/link-tag.dto";
 import { plainToClass } from "class-transformer";
 import { validate } from "class-validator";
 
-@Resolver()
+@Injectable()
 export class LeaderboardResolver {
   constructor(private readonly leaderboardService: LeaderboardService) {}
 
-  @Query(() => [String])
-  async getLeaderboard(
-    @Args("page", { defaultValue: 1 }) page: number,
-    @Args("limit", { defaultValue: 50 }) limit: number
-  ) {
-    return await this.leaderboardService.getLeaderboard(page, limit);
-  }
+  async getLeaderboard(page: any = 1, limit: any = 50) {
+    const numericPage = parseInt(page, 10) || 1; // Default to 1 if parseInt fails or is NaN
+    const numericLimit = parseInt(limit, 10) || 50; // Default to 50 if parseInt fails or is NaN
 
-  @Query(() => String)
-  async getUserTag(@Args("discordID") discordID: string) {
-    const tag = await this.leaderboardService.getUserTag(discordID);
-    if (!tag) {
-      throw new Error("Tag not found for the provided discordID");
+    console.log("Converted page:", numericPage, "Type:", typeof numericPage);
+    console.log("Converted limit:", numericLimit, "Type:", typeof numericLimit);
+
+    // Validate numbers
+    if (numericPage <= 0 || numericLimit <= 0) {
+      throw new Error("Page and limit must be positive numbers");
     }
-    return tag;
+
+    // Call the service with valid values
+    return this.leaderboardService.getLeaderboard(numericPage, numericLimit);
   }
 
-  @Mutation(() => String)
-  async updateTag(
-    @Args("discordID") discordID: string,
-    @Args("tagNumber") tagNumber: number
-  ) {
-    const updateTagDto = plainToClass(UpdateTagDto, { discordID, tagNumber });
-    const errors = await validate(updateTagDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!");
+  async getUserTag(discordID: string) {
+    try {
+      const tag = await this.leaderboardService.getUserTag(discordID);
+      if (!tag) {
+        throw new Error("Tag not found for the provided discordID");
+      }
+      return tag;
+    } catch (error) {
+      console.error("Error fetching user tag:", error);
+      throw new Error("Failed to fetch user tag");
     }
-    return await this.leaderboardService.updateTag(
-      updateTagDto.discordID,
-      updateTagDto.tagNumber
-    );
   }
 
-  @Mutation(() => String)
+  async updateTag(discordID: string, tagNumber: number) {
+    try {
+      const updateTagDto = plainToClass(UpdateTagDto, { discordID, tagNumber });
+      const errors = await validate(updateTagDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+      return await this.leaderboardService.updateTag(
+        updateTagDto.discordID,
+        updateTagDto.tagNumber
+      );
+    } catch (error) {
+      console.error("Error updating tag:", error);
+      throw new Error("Failed to update tag");
+    }
+  }
+
   async receiveScores(
-    @Args("scores")
     scores: Array<{ score: number; discordID: string; tagNumber?: number }>
   ) {
-    const receiveScoresDto = plainToClass(ReceiveScoresDto, { scores });
-    const errors = await validate(receiveScoresDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!");
+    try {
+      const receiveScoresDto = plainToClass(ReceiveScoresDto, { scores });
+      const errors = await validate(receiveScoresDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+      return await this.leaderboardService.processScores(
+        receiveScoresDto.scores
+      );
+    } catch (error) {
+      console.error("Error receiving scores:", error);
+      throw new Error("Failed to receive scores");
     }
-    return await this.leaderboardService.processScores(receiveScoresDto.scores);
   }
 
-  @Mutation(() => String)
-  async manualTagUpdate(
-    @Args("discordID") discordID: string,
-    @Args("newTagNumber") newTagNumber: number
-  ) {
-    const updateTagDto = plainToClass(UpdateTagDto, {
-      discordID,
-      tagNumber: newTagNumber,
-    });
-    const errors = await validate(updateTagDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!");
+  async manualTagUpdate(discordID: string, newTagNumber: number) {
+    try {
+      const updateTagDto = plainToClass(UpdateTagDto, {
+        discordID,
+        tagNumber: newTagNumber,
+      });
+      const errors = await validate(updateTagDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+      return await this.leaderboardService.updateTag(
+        updateTagDto.discordID,
+        updateTagDto.tagNumber
+      );
+    } catch (error) {
+      console.error("Error during manual tag update:", error);
+      throw new Error("Failed to update tag manually");
     }
-    return await this.leaderboardService.updateTag(
-      updateTagDto.discordID,
-      updateTagDto.tagNumber
-    );
   }
 
-  @Mutation(() => String)
-  async linkTag(
-    @Args("discordID") discordID: string,
-    @Args("newTagNumber") newTagNumber: number
-  ) {
-    const linkTagDto = plainToClass(LinkTagDto, { discordID, newTagNumber });
-    const errors = await validate(linkTagDto);
-    if (errors.length > 0) {
-      throw new Error("Validation failed!");
+  async linkTag(discordID: string, newTagNumber: number) {
+    try {
+      const linkTagDto = plainToClass(LinkTagDto, { discordID, newTagNumber });
+      const errors = await validate(linkTagDto);
+      if (errors.length > 0) {
+        throw new Error("Validation failed!");
+      }
+      return await this.leaderboardService.linkTag(
+        linkTagDto.discordID,
+        linkTagDto.newTagNumber
+      );
+    } catch (error) {
+      console.error("Error linking tag:", error);
+      throw new Error("Failed to link tag");
     }
-    return await this.leaderboardService.linkTag(
-      linkTagDto.discordID,
-      linkTagDto.newTagNumber
-    );
   }
 }

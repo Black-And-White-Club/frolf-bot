@@ -16,8 +16,12 @@ export const RoundModel = pgTable("rounds", {
   eventType: varchar(),
   date: date().notNull(),
   time: time().notNull(),
-  participants: json().notNull(),
-  scores: json().notNull(),
+  participants: json()
+    .notNull()
+    .default(JSON.stringify([])),
+  scores: json()
+    .notNull()
+    .default(JSON.stringify([])),
   finalized: boolean().default(false),
   creatorID: varchar().notNull(),
   state: varchar().notNull(),

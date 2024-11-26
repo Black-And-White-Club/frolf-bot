@@ -6,13 +6,13 @@ type Score {
 }
 
 # Query type for fetching scores
-extend type Query {
+type Query {
   getUserScore(discordID: String!, roundID: String!): Score!
   getScoresForRound(roundID: String!): [Score!]!
 }
 
 # Updated mutation for processing scores
-extend type Mutation {
+type Mutation {
   updateScore(
     roundID: ID!
     discordID: String!

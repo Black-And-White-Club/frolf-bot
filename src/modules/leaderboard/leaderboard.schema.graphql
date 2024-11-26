@@ -1,6 +1,6 @@
 # Leaderboard-related queries
-extend type Query {
-  getLeaderboard(page: Int, limit: Int): Leaderboard! # Pagination for the leaderboard
+type Query {
+  getLeaderboard(page: Int = 2, limit: Int = 50): Leaderboard! # Pagination for the leaderboard
   getUserTag(discordID: ID!): TagNumber # Query to get a specific user's tag by discordID
 }
 
@@ -17,7 +17,7 @@ type TagNumber {
 }
 
 # Mutation to update leaderboard
-extend type Mutation {
+type Mutation {
   updateTag(discordID: ID!, tagNumber: Int!): TagNumber! # Update a user's tag
   receiveScores(scores: [ScoreData!]!): Leaderboard! # Receive scores from the score module and update leaderboard
   manualTagUpdate(discordID: ID!, newTagNumber: Int!): TagNumber! # Admin or Editor can manually update a user's tag

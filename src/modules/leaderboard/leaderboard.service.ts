@@ -1,86 +1,88 @@
-// leaderboard.service.ts
-import { Injectable, Inject } from "@nestjs/common";
-import { leaderboard as LeaderboardModel } from "./leaderboard.model";
+// src/modules/leaderboard/leaderboard.service.ts
+import { Inject, Injectable } from "@nestjs/common";
+import { leaderboard as LeaderboardModel } from "../../schema";
 import { eq, asc } from "drizzle-orm";
 import { TagNumber } from "../../types.generated";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 @Injectable()
 export class LeaderboardService {
-  constructor(
-    @Inject("DATABASE_CONNECTION")
-    private readonly db: ReturnType<typeof drizzle>
-  ) {
-    console.log("LeaderboardService db:", this.db);
-    console.log("Injected DB instance:", db);
-  }
+  constructor(@Inject("DATABASE_CONNECTION") private db: NodePgDatabase) {}
 
   async getLeaderboard(
     page: number,
     limit: number
   ): Promise<{ users: TagNumber[] }> {
-    const offset = (page - 1) * limit;
-
     try {
+      console.log("Service received page:", page, "limit:", limit);
+      if (typeof page !== "number" || typeof limit !== "number") {
+        throw new Error("Page and limit must be numbers");
+      }
+      const offset = (page - 1) * limit;
+
       const leaderboardEntries = await this.db
         .select()
         .from(LeaderboardModel)
         .orderBy(asc(LeaderboardModel.tagNumber))
         .limit(limit)
-        .offset(offset)
-        .execute();
+        .offset(offset);
 
       const users: TagNumber[] = leaderboardEntries.map((entry) => ({
-        __typename: "TagNumber" as const,
-        discordID: entry.discordID,
-        tagNumber: entry.tagNumber,
-        lastPlayed: entry.lastPlayed || "",
-        durationHeld: entry.durationHeld || 0,
+        ...entry,
+        lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
+        durationHeld: entry.durationHeld ?? 0,
       }));
 
       return { users };
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
-      throw new Error("Could not fetch leaderboard");
+      throw new Error("Failed to fetch leaderboard");
     }
   }
 
   async linkTag(discordID: string, newTagNumber: number): Promise<TagNumber> {
-    if (!discordID) {
-      throw new Error("discordID cannot be empty.");
-    }
+    try {
+      if (!discordID) {
+        throw new Error("discordID cannot be empty.");
+      }
 
-    const existingTag = await this.getUserByTagNumber(newTagNumber);
-    if (existingTag) {
-      throw new Error(`Tag number ${newTagNumber} is already taken.`);
-    }
+      const existingTag = await this.getUserByTagNumber(newTagNumber);
+      if (existingTag) {
+        throw new Error(`Tag number ${newTagNumber} is already taken.`);
+      }
 
-    const existingUserTag = await this.getUserTag(discordID);
-    if (existingUserTag) {
-      await this.db
-        .update(LeaderboardModel)
-        .set({ tagNumber: newTagNumber, lastPlayed: new Date().toISOString() })
-        .where(eq(LeaderboardModel.discordID, discordID))
-        .execute();
-    } else {
-      await this.db
-        .insert(LeaderboardModel)
-        .values({
-          discordID,
-          tagNumber: newTagNumber,
-          lastPlayed: new Date().toISOString(),
-          durationHeld: 0,
-        })
-        .execute();
-    }
+      const existingUserTag = await this.getUserTag(discordID);
+      if (existingUserTag) {
+        await this.db
+          .update(LeaderboardModel)
+          .set({
+            tagNumber: newTagNumber,
+            lastPlayed: new Date().toISOString(),
+          })
+          .where(eq(LeaderboardModel.discordID, discordID))
+          .execute();
+      } else {
+        await this.db
+          .insert(LeaderboardModel)
+          .values({
+            discordID,
+            tagNumber: newTagNumber,
+            lastPlayed: new Date().toISOString(),
+            durationHeld: 0,
+          })
+          .execute();
+      }
 
-    return {
-      __typename: "TagNumber",
-      discordID,
-      tagNumber: newTagNumber,
-      lastPlayed: new Date().toISOString(),
-      durationHeld: 0,
-    };
+      return {
+        discordID,
+        tagNumber: newTagNumber,
+        lastPlayed: new Date().toISOString(),
+        durationHeld: 0,
+      };
+    } catch (error) {
+      console.error("Error linking tag:", error);
+      throw new Error("Failed to link tag");
+    }
   }
 
   async getUserTag(discordID: string): Promise<TagNumber | null> {
@@ -96,10 +98,9 @@ export class LeaderboardService {
       if (tagEntry.length > 0) {
         const entry = tagEntry[0];
         return {
-          __typename: "TagNumber",
           discordID: entry.discordID,
           tagNumber: entry.tagNumber,
-          lastPlayed: entry.lastPlayed || "",
+          lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
           durationHeld: entry.durationHeld ?? 0,
         };
       }
@@ -126,10 +127,9 @@ export class LeaderboardService {
       if (tagEntry.length > 0) {
         const entry = tagEntry[0];
         return {
-          __typename: "TagNumber",
           discordID: entry.discordID,
           tagNumber: entry.tagNumber,
-          lastPlayed: entry.lastPlayed || "",
+          lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
           durationHeld: entry.durationHeld ?? 0,
         };
       }
@@ -163,7 +163,6 @@ export class LeaderboardService {
       }
 
       return {
-        __typename: "TagNumber",
         discordID,
         tagNumber,
         lastPlayed: new Date().toISOString(),
@@ -187,10 +186,10 @@ export class LeaderboardService {
   async processScores(
     scores: { discordID: string; score: number; tagNumber?: number | null }[]
   ): Promise<TagNumber[]> {
-    const processedTags: TagNumber[] = [];
+    try {
+      const processedTags: TagNumber[] = [];
 
-    for (const scoreInput of scores) {
-      try {
+      for (const scoreInput of scores) {
         const existingTag = await this.getUserTag(scoreInput.discordID);
 
         if (existingTag) {
@@ -201,7 +200,6 @@ export class LeaderboardService {
             );
 
             processedTags.push({
-              __typename: "TagNumber",
               discordID: scoreInput.discordID,
               tagNumber: scoreInput.tagNumber || scoreInput.score,
               lastPlayed: new Date().toISOString(),
@@ -217,15 +215,12 @@ export class LeaderboardService {
             `No tag found for discordID: ${scoreInput.discordID}. Skipping update.`
           );
         }
-      } catch (error) {
-        console.error(
-          `Error processing score for ${scoreInput.discordID}:`,
-          error
-        );
-        throw new Error(`Could not process score for ${scoreInput.discordID}`);
       }
-    }
 
-    return processedTags;
+      return processedTags;
+    } catch (error) {
+      console.error("Error processing scores:", error);
+      throw new Error("Failed to process scores");
+    }
   }
 }

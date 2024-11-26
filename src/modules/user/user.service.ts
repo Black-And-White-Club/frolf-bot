@@ -1,10 +1,10 @@
-import { Injectable } from "@nestjs/common";
-import { users as UserModel } from "./user.model";
+// src/users/users.service.ts
+import { Inject, Injectable } from "@nestjs/common";
+import { users as UserModel } from "../../schema";
 import { eq } from "drizzle-orm";
-import { User } from "../../types.generated";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { UserRole } from "../../enums/user-role.enum";
-import { createDbClient } from "../../db";
+import { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { User } from "src/types.generated";
 
 interface UpdateUserInput {
   discordID: string;
@@ -13,23 +13,9 @@ interface UpdateUserInput {
   role?: UserRole;
 }
 
-interface UserData {
-  name: string;
-  discordID: string;
-  tagNumber: number | null;
-  role: UserRole;
-}
-
 @Injectable()
 export class UserService {
-  private readonly db: ReturnType<typeof drizzle>;
-
-  constructor(db: ReturnType<typeof drizzle>) {
-    // Accept db as a parameter
-    this.db = db;
-    console.log("UserService initialized");
-    console.log("Database connection established");
-  }
+  constructor(@Inject("DATABASE_CONNECTION") private db: NodePgDatabase) {}
 
   private isValidUserRole(role: any): role is UserRole {
     return Object.values(UserRole).includes(role);
@@ -37,22 +23,21 @@ export class UserService {
 
   async getUserByDiscordID(discordID: string): Promise<User | null> {
     try {
-      const users = await this.db
+      const result = await this.db
         .select()
         .from(UserModel)
-        .where(eq(UserModel.discordID, discordID))
-        .execute();
+        .where(eq(UserModel.discordID, discordID));
 
-      if (users.length > 0) {
-        const user = users[0];
+      if (result.length > 0) {
+        const user = result[0];
         return {
-          __typename: "User",
-          discordID: user.discordID,
-          name: user.name!,
-          tagNumber: user.tagNumber,
+          ...user,
+          name: user.name ?? "",
           role: user.role as UserRole,
           createdAt: user.createdAt.toISOString(),
-          updatedAt: user.updatedAt.toISOString(),
+          updatedAt: user.updatedAt!.toISOString(),
+          deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
+          tagNumber: user.tagNumber ?? undefined, // Adjust tagNumber
         };
       }
 
@@ -65,27 +50,26 @@ export class UserService {
 
   async getUserByTagNumber(tagNumber: number): Promise<User | null> {
     try {
-      const users = await this.db
+      const result = await this.db
         .select()
         .from(UserModel)
-        .where(eq(UserModel.tagNumber, tagNumber))
-        .execute();
+        .where(eq(UserModel.tagNumber, tagNumber));
 
-      if (users.length > 0) {
-        const user = users[0];
+      if (result.length > 0) {
+        const user = result[0];
 
         if (!this.isValidUserRole(user.role)) {
           throw new Error(`Invalid role for user with tag number ${tagNumber}`);
         }
 
         return {
-          __typename: "User",
-          discordID: user.discordID,
-          name: user.name!,
-          tagNumber: user.tagNumber,
-          role: user.role,
+          ...user,
+          name: user.name ?? "", // Provide default for name
+          role: user.role as UserRole,
           createdAt: user.createdAt.toISOString(),
-          updatedAt: user.updatedAt.toISOString(),
+          updatedAt: user.updatedAt!.toISOString(), // Non-null assertion
+          deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
+          tagNumber: user.tagNumber ?? undefined, // Adjust tagNumber
         };
       }
 
@@ -96,7 +80,7 @@ export class UserService {
     }
   }
 
-  async createUser(userData: UserData): Promise<User> {
+  async createUser(userData: User): Promise<User> {
     try {
       if (!this.isValidUserRole(userData.role)) {
         throw new Error("Invalid user role");
@@ -117,13 +101,15 @@ export class UserService {
       const insertedUser = result[0];
 
       return {
-        __typename: "User",
-        discordID: insertedUser.discordID,
-        name: insertedUser.name!,
-        tagNumber: insertedUser.tagNumber,
+        ...insertedUser,
+        name: insertedUser.name ?? "", // Provide default for name
         role: insertedUser.role as UserRole,
         createdAt: insertedUser.createdAt.toISOString(),
-        updatedAt: insertedUser.updatedAt.toISOString(),
+        updatedAt: insertedUser.updatedAt!.toISOString(),
+        deletedAt: insertedUser.deletedAt
+          ? insertedUser.deletedAt.toISOString()
+          : undefined,
+        tagNumber: insertedUser.tagNumber ?? undefined, // Adjust tagNumber
       };
     } catch (error) {
       console.error("Error creating user:", error);
@@ -152,26 +138,33 @@ export class UserService {
         throw new Error("Only ADMIN can change roles to ADMIN or EDITOR");
       }
 
-      await this.db
+      const updatedUser = await this.db // Assign the result to a variable
         .update(UserModel)
         .set({
           name: input.name !== undefined ? input.name : user.name,
           tagNumber:
-            input.tagNumber !== undefined ? input.tagNumber : user.tagNumber,
+            input.tagNumber !== undefined
+              ? input.tagNumber
+              : user.tagNumber ?? undefined,
           role: input.role !== undefined ? input.role : user.role,
         })
         .where(eq(UserModel.discordID, input.discordID))
+        .returning()
         .execute();
 
+      // Access the first element of the updatedUser array
+      const returnedUser = updatedUser[0];
+
       return {
-        __typename: "User",
-        discordID: user.discordID,
-        name: input.name !== undefined ? input.name : user.name,
-        tagNumber:
-          input.tagNumber !== undefined ? input.tagNumber : user.tagNumber,
-        role: input.role !== undefined ? input.role : user.role,
-        createdAt: new Date().toISOString(),
+        ...returnedUser,
+        name: returnedUser.name ?? "",
+        tagNumber: returnedUser.tagNumber ?? undefined,
+        role: returnedUser.role as UserRole,
         updatedAt: new Date().toISOString(),
+        createdAt: returnedUser.createdAt.toISOString(),
+        deletedAt: returnedUser.deletedAt
+          ? returnedUser.deletedAt.toISOString()
+          : undefined,
       };
     } catch (error) {
       console.error("Error updating user:", error);

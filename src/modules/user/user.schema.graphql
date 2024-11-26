@@ -1,9 +1,9 @@
 # User-related types, queries, and mutations
-extend type Query {
+type Query {
   getUser(discordID: String!): User
 }
 
-extend type Mutation {
+type Mutation {
   createUser(input: UserInput!): User!
   updateUser(input: UpdateUserInput!): User!
 }

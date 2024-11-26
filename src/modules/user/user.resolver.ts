@@ -1,33 +1,39 @@
-import { Resolver, Query, Mutation, Args } from "@nestjs/graphql";
+// src/users/users.resolver.ts
+import { Injectable } from "@nestjs/common";
 import { UserService } from "./user.service";
-import { CreateUserDto } from "../../dto/user/create-user.dto";
-import { UpdateUserDto } from "../../dto/user/update-user.dto";
+import { CreateUserDto } from "src/dto/user/create-user.dto";
+import { UpdateUserDto } from "src/dto/user/update-user.dto";
 import { UserRole } from "../../enums/user-role.enum";
 import { validate } from "class-validator";
 import { User } from "src/types.generated";
 
-@Resolver("User")
+@Injectable()
 export class UserResolver {
-  constructor(private readonly userService: UserService) {
-    console.log("UserResolver userService:", this.userService);
-  }
+  constructor(private readonly userService: UserService) {}
 
-  @Query(() => String, { nullable: true })
-  async getUser(
-    @Args("discordID", { nullable: true }) discordID?: string,
-    @Args("tagNumber", { nullable: true }) tagNumber?: number
-  ): Promise<User | null> {
+  async getUser(reference: {
+    discordID?: string;
+    tagNumber?: number;
+  }): Promise<User | null> {
     try {
-      if (discordID) {
-        const user = await this.userService.getUserByDiscordID(discordID);
+      if (reference.discordID) {
+        const user = await this.userService.getUserByDiscordID(
+          reference.discordID
+        );
         if (!user) {
-          throw new Error(`User not found with discordID: ${discordID}`);
+          throw new Error(
+            `User not found with discordID: ${reference.discordID}`
+          );
         }
         return user;
-      } else if (tagNumber) {
-        const user = await this.userService.getUserByTagNumber(tagNumber);
+      } else if (reference.tagNumber) {
+        const user = await this.userService.getUserByTagNumber(
+          reference.tagNumber
+        );
         if (!user) {
-          throw new Error(`User not found with tagNumber: ${tagNumber}`);
+          throw new Error(
+            `User not found with tagNumber: ${reference.tagNumber}`
+          );
         }
         return user;
       } else {
@@ -36,7 +42,6 @@ export class UserResolver {
     } catch (error) {
       console.error("Error fetching user:", error);
       if (error instanceof Error) {
-        // Type guard
         throw new Error(`Could not fetch user: ${error.message}`);
       } else {
         throw new Error(`Could not fetch user: ${error}`);
@@ -44,24 +49,25 @@ export class UserResolver {
     }
   }
 
-  @Mutation(() => String)
-  async createUser(@Args("input") input: CreateUserDto): Promise<User> {
+  async createUser(input: CreateUserDto): Promise<User> {
     try {
-      console.log("createUser called with input:", input);
-
       const errors = await validate(input);
       if (errors.length > 0) {
         throw new Error("Validation failed: " + JSON.stringify(errors));
       }
 
-      const user = await this.userService.createUser(input);
-
-      console.log("User created:", user);
+      const user = await this.userService.createUser({
+        ...input,
+        tagNumber: input.tagNumber ?? undefined,
+        createdAt: input.createdAt
+          ? input.createdAt.toISOString()
+          : new Date().toISOString(), // Convert or use current date
+        updatedAt: input.updatedAt?.toISOString() ?? new Date().toISOString(), // Convert or use current date
+      });
       return user;
     } catch (error) {
       console.error("Error creating user:", error);
       if (error instanceof Error) {
-        // Type guard
         throw new Error(`Could not create user: ${error.message}`);
       } else {
         throw new Error(`Could not create user: ${error}`);
@@ -69,10 +75,9 @@ export class UserResolver {
     }
   }
 
-  @Mutation(() => String)
   async updateUser(
-    @Args("input") input: UpdateUserDto,
-    @Args("requesterRole") requesterRole: UserRole
+    input: UpdateUserDto,
+    requesterRole: UserRole
   ): Promise<User> {
     try {
       const errors = await validate(input);
@@ -107,7 +112,6 @@ export class UserResolver {
     } catch (error) {
       console.error("Error updating user:", error);
       if (error instanceof Error) {
-        // Type guard
         throw new Error(`Could not update user: ${error.message}`);
       } else {
         throw new Error(`Could not update user: ${error}`);
