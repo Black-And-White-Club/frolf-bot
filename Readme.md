@@ -26,7 +26,29 @@ This project is a GraphQL-based application that manages rounds of events, score
 
 ## Folder Structure
 
-src/ ├── tests/ │ ├── db/ │ ├── graphql/ │ └── ... ├── db/ │ ├── models/ │ └── ... ├── dto/ ├── resolvers/ │ ├── LeaderboardResolver.ts │ ├── RoundResolver.ts │ └── UserResolver.ts ├── services/ │ ├── LeaderboardService.ts │ ├── RoundService.ts │ ├── ScoreService.ts │ └── UserService.ts ├── types.generated.ts └── server.ts
+```bash
+.
+└── src
+    ├── __tests__
+    │   ├── db
+    │   └── graphql
+    ├── db
+    │   ├── helpers
+    │   └── migrations
+    ├── dto
+    │   ├── leaderboard
+    │   ├── round
+    │   ├── score
+    │   └── user
+    ├── enums
+    ├── middleware
+    └── modules
+        ├── leaderboard
+        ├── round
+        ├── score
+        └── user
+
+```
 
 ## Key Components
 
