@@ -6,6 +6,7 @@ import { ReceiveScoresDto } from "../../dto/leaderboard/receive-scores.dto";
 import { LinkTagDto } from "../../dto/leaderboard/link-tag.dto";
 import { plainToClass } from "class-transformer";
 import { validate } from "class-validator";
+import { TagNumber } from "../../types.generated";
 
 @Injectable()
 export class LeaderboardResolver {
@@ -40,17 +41,17 @@ export class LeaderboardResolver {
     }
   }
 
-  async updateTag(discordID: string, tagNumber: number) {
+  async updateTag(discordID: string, tagNumber: number): Promise<TagNumber> {
     try {
+      // 1. Validate the input using the UpdateTagDto
       const updateTagDto = plainToClass(UpdateTagDto, { discordID, tagNumber });
       const errors = await validate(updateTagDto);
       if (errors.length > 0) {
         throw new Error("Validation failed!");
       }
-      return await this.leaderboardService.updateTag(
-        updateTagDto.discordID,
-        updateTagDto.tagNumber
-      );
+
+      // 2. Call the service to update the tag
+      return await this.leaderboardService.updateTag(discordID, tagNumber);
     } catch (error) {
       console.error("Error updating tag:", error);
       throw new Error("Failed to update tag");
@@ -75,37 +76,32 @@ export class LeaderboardResolver {
     }
   }
 
-  async manualTagUpdate(discordID: string, newTagNumber: number) {
+  async manualTagUpdate(
+    discordID: string,
+    newTagNumber: number
+  ): Promise<TagNumber> {
     try {
-      const updateTagDto = plainToClass(UpdateTagDto, {
-        discordID,
-        tagNumber: newTagNumber,
-      });
-      const errors = await validate(updateTagDto);
-      if (errors.length > 0) {
-        throw new Error("Validation failed!");
-      }
-      return await this.leaderboardService.updateTag(
-        updateTagDto.discordID,
-        updateTagDto.tagNumber
-      );
+      // 1. Validate the input (you might have a ManualTagUpdateDto)
+
+      // 2. Call updateTag to handle the update
+      return await this.updateTag(discordID, newTagNumber);
     } catch (error) {
       console.error("Error during manual tag update:", error);
       throw new Error("Failed to update tag manually");
     }
   }
 
-  async linkTag(discordID: string, newTagNumber: number) {
+  async linkTag(discordID: string, newTagNumber: number): Promise<TagNumber> {
     try {
+      // 1. Validate the input using LinkTagDto
       const linkTagDto = plainToClass(LinkTagDto, { discordID, newTagNumber });
-      const errors = await validate(linkTagDto);
+      const errors = await validate(LinkTagDto);
       if (errors.length > 0) {
         throw new Error("Validation failed!");
       }
-      return await this.leaderboardService.linkTag(
-        linkTagDto.discordID,
-        linkTagDto.newTagNumber
-      );
+
+      // 2. Call updateTag to handle the update
+      return await this.updateTag(discordID, newTagNumber);
     } catch (error) {
       console.error("Error linking tag:", error);
       throw new Error("Failed to link tag");

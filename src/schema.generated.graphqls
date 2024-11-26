@@ -30,7 +30,12 @@ type Mutation {
   scheduleRound(input: ScheduleRoundInput!): Round!
   submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round!
   updateParticipantResponse(response: Response!, roundID: ID!): Round!
-  updateScore(discordID: String!, roundID: ID!, score: Int!, tagNumber: Int): Score!
+  updateScore(
+    discordID: String!
+    roundID: ID!
+    score: Int!
+    tagNumber: Int
+  ): Score!
   updateTag(discordID: ID!, tagNumber: Int!): TagNumber!
   updateUser(input: UpdateUserInput!): User!
 }

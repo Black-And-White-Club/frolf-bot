@@ -1,15 +1,30 @@
 // src/db/database.module.ts
-import { Module, Global } from "@nestjs/common";
-import { db } from "src/database"; // Assuming you have a database.ts file
 
-@Global() // Make it globally available
-@Module({
-  providers: [
-    {
-      provide: "DATABASE_CONNECTION",
-      useValue: db,
-    },
-  ],
-  exports: ["DATABASE_CONNECTION"],
-})
-export class DatabaseModule {}
+import { Module, DynamicModule, Provider } from "@nestjs/common";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import * as schema from "src/schema"; // Import the combined schema
+
+const connectionString =
+  process.env.DATABASE_URL ||
+  "postgres://postgres:mypassword@localhost:5432/test";
+const pool = new Pool({ connectionString });
+
+@Module({})
+export class DatabaseModule {
+  static forFeature(
+    schema: any, // Pass the specific schema for the module
+    providerName: string // Provide a unique provider name
+  ): DynamicModule {
+    const dbProvider: Provider = {
+      provide: providerName,
+      useValue: drizzle(pool, { schema }),
+    };
+
+    return {
+      module: DatabaseModule,
+      providers: [dbProvider],
+      exports: [dbProvider],
+    };
+  }
+}

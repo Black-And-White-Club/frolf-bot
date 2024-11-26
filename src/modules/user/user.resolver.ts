@@ -6,11 +6,12 @@ import { UpdateUserDto } from "src/dto/user/update-user.dto";
 import { UserRole } from "../../enums/user-role.enum";
 import { validate } from "class-validator";
 import { User } from "src/types.generated";
+import { LeaderboardResolver } from "../leaderboard/leaderboard.resolver";
 
 @Injectable()
 export class UserResolver {
   constructor(private readonly userService: UserService) {}
-
+  private readonly leaderboardResolver!: LeaderboardResolver; // Inject LeaderboardResolver,
   async getUser(reference: {
     discordID?: string;
     tagNumber?: number;
@@ -64,6 +65,15 @@ export class UserResolver {
           : new Date().toISOString(), // Convert or use current date
         updatedAt: input.updatedAt?.toISOString() ?? new Date().toISOString(), // Convert or use current date
       });
+
+      // Call updateTag in LeaderboardResolver after creating the user
+      if (input.tagNumber) {
+        await this.leaderboardResolver.updateTag(
+          user.discordID,
+          input.tagNumber
+        );
+      }
+
       return user;
     } catch (error) {
       console.error("Error creating user:", error);

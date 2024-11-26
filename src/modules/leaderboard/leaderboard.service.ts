@@ -143,31 +143,37 @@ export class LeaderboardService {
 
   async updateTag(discordID: string, tagNumber: number): Promise<TagNumber> {
     try {
+      // 1. Check if a tag entry exists for the discordID
       const existingTag = await this.getUserTag(discordID);
+
       if (existingTag) {
+        // 2. If exists, update the existing entry
         await this.db
           .update(LeaderboardModel)
           .set({ tagNumber })
           .where(eq(LeaderboardModel.discordID, discordID))
           .execute();
+
+        // 3. Update the existingTag object with the new tagNumber for return
+        existingTag.tagNumber = tagNumber;
+        return existingTag;
       } else {
+        // 3. If not exists, create a new tag entry
+        const newTag = {
+          discordID,
+          tagNumber,
+          lastPlayed: new Date().toISOString(),
+          durationHeld: 0,
+        };
+
         await this.db
           .insert(LeaderboardModel)
-          .values({
-            discordID,
-            tagNumber,
-            lastPlayed: new Date().toISOString(),
-            durationHeld: 0,
-          })
+          .values(newTag)
           .execute();
-      }
 
-      return {
-        discordID,
-        tagNumber,
-        lastPlayed: new Date().toISOString(),
-        durationHeld: 0,
-      };
+        // 4. Return the newly created tag
+        return newTag;
+      }
     } catch (error) {
       if (error instanceof Error) {
         console.error("Error updating tag:", error);

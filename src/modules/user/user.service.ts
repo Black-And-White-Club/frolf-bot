@@ -1,9 +1,8 @@
-// src/users/users.service.ts
+// src/modules/user/user.service.ts
 import { Inject, Injectable } from "@nestjs/common";
 import { users as UserModel } from "../../schema";
 import { eq } from "drizzle-orm";
 import { UserRole } from "../../enums/user-role.enum";
-import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { User } from "src/types.generated";
 
 interface UpdateUserInput {
@@ -15,7 +14,7 @@ interface UpdateUserInput {
 
 @Injectable()
 export class UserService {
-  constructor(@Inject("DATABASE_CONNECTION") private db: NodePgDatabase) {}
+  constructor(@Inject("USER_DATABASE_CONNECTION") private db: any) {} // Inject module-specific db connection
 
   private isValidUserRole(role: any): role is UserRole {
     return Object.values(UserRole).includes(role);
@@ -37,7 +36,7 @@ export class UserService {
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt!.toISOString(),
           deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
-          tagNumber: user.tagNumber ?? undefined, // Adjust tagNumber
+          tagNumber: user.tagNumber ?? undefined,
         };
       }
 
@@ -64,12 +63,12 @@ export class UserService {
 
         return {
           ...user,
-          name: user.name ?? "", // Provide default for name
+          name: user.name ?? "",
           role: user.role as UserRole,
           createdAt: user.createdAt.toISOString(),
-          updatedAt: user.updatedAt!.toISOString(), // Non-null assertion
+          updatedAt: user.updatedAt!.toISOString(),
           deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
-          tagNumber: user.tagNumber ?? undefined, // Adjust tagNumber
+          tagNumber: user.tagNumber ?? undefined,
         };
       }
 
@@ -102,14 +101,14 @@ export class UserService {
 
       return {
         ...insertedUser,
-        name: insertedUser.name ?? "", // Provide default for name
+        name: insertedUser.name ?? "",
         role: insertedUser.role as UserRole,
         createdAt: insertedUser.createdAt.toISOString(),
         updatedAt: insertedUser.updatedAt!.toISOString(),
         deletedAt: insertedUser.deletedAt
           ? insertedUser.deletedAt.toISOString()
           : undefined,
-        tagNumber: insertedUser.tagNumber ?? undefined, // Adjust tagNumber
+        tagNumber: insertedUser.tagNumber ?? undefined,
       };
     } catch (error) {
       console.error("Error creating user:", error);
@@ -138,7 +137,7 @@ export class UserService {
         throw new Error("Only ADMIN can change roles to ADMIN or EDITOR");
       }
 
-      const updatedUser = await this.db // Assign the result to a variable
+      const updatedUser = await this.db
         .update(UserModel)
         .set({
           name: input.name !== undefined ? input.name : user.name,
@@ -152,7 +151,6 @@ export class UserService {
         .returning()
         .execute();
 
-      // Access the first element of the updatedUser array
       const returnedUser = updatedUser[0];
 
       return {
