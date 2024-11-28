@@ -1,9 +1,14 @@
 // src/modules/user/user.service.ts
 import { Inject, Injectable } from "@nestjs/common";
-import { users as UserModel } from "../../schema";
+import { users as UserModel } from "src/schema";
 import { eq } from "drizzle-orm";
-import { UserRole } from "../../enums/user-role.enum";
-import { User } from "src/types.generated";
+import { UserRole } from "src/enums/user-role.enum";
+import {
+  User,
+  CreateUserResponse,
+  UpdateUserResponse,
+} from "src/types.generated";
+import { publishMessage } from "src/rabbitmq/publisher";
 
 interface UpdateUserInput {
   discordID: string;
@@ -14,7 +19,7 @@ interface UpdateUserInput {
 
 @Injectable()
 export class UserService {
-  constructor(@Inject("USER_DATABASE_CONNECTION") private db: any) {} // Inject module-specific db connection
+  constructor(@Inject("USER_DATABASE_CONNECTION") private db: any) {}
 
   private isValidUserRole(role: any): role is UserRole {
     return Object.values(UserRole).includes(role);
@@ -36,7 +41,6 @@ export class UserService {
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt!.toISOString(),
           deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
-          tagNumber: user.tagNumber ?? undefined,
         };
       }
 
@@ -47,40 +51,11 @@ export class UserService {
     }
   }
 
-  async getUserByTagNumber(tagNumber: number): Promise<User | null> {
+  async createUser(userData: User): Promise<CreateUserResponse> {
     try {
-      const result = await this.db
-        .select()
-        .from(UserModel)
-        .where(eq(UserModel.tagNumber, tagNumber));
+      // Default to RATTLER role
+      userData.role = UserRole.RATTLER as UserRole;
 
-      if (result.length > 0) {
-        const user = result[0];
-
-        if (!this.isValidUserRole(user.role)) {
-          throw new Error(`Invalid role for user with tag number ${tagNumber}`);
-        }
-
-        return {
-          ...user,
-          name: user.name ?? "",
-          role: user.role as UserRole,
-          createdAt: user.createdAt.toISOString(),
-          updatedAt: user.updatedAt!.toISOString(),
-          deletedAt: user.deletedAt ? user.deletedAt.toISOString() : undefined,
-          tagNumber: user.tagNumber ?? undefined,
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error("Error fetching user by tag number:", error);
-      throw new Error("Failed to fetch user");
-    }
-  }
-
-  async createUser(userData: User): Promise<User> {
-    try {
       if (!this.isValidUserRole(userData.role)) {
         throw new Error("Invalid user role");
       }
@@ -88,7 +63,6 @@ export class UserService {
       const newUser = {
         name: userData.name,
         discordID: userData.discordID,
-        tagNumber: userData.tagNumber || null,
         role: userData.role,
       };
 
@@ -96,41 +70,61 @@ export class UserService {
         .insert(UserModel)
         .values(newUser)
         .returning();
-
       const insertedUser = result[0];
 
+      // Publish a message to RabbitMQ for tagNumber assignment (if provided)
+      if (userData.tagNumber) {
+        await publishMessage("tagNumberAssignmentRequest", {
+          discordID: insertedUser.discordID,
+          tagNumber: userData.tagNumber,
+        });
+      }
+
       return {
-        ...insertedUser,
-        name: insertedUser.name ?? "",
-        role: insertedUser.role as UserRole,
-        createdAt: insertedUser.createdAt.toISOString(),
-        updatedAt: insertedUser.updatedAt!.toISOString(),
-        deletedAt: insertedUser.deletedAt
-          ? insertedUser.deletedAt.toISOString()
-          : undefined,
-        tagNumber: insertedUser.tagNumber ?? undefined,
+        success: true,
+        user: {
+          ...insertedUser,
+          name: insertedUser.name ?? "",
+          role: insertedUser.role as UserRole,
+          createdAt: insertedUser.createdAt.toISOString(),
+          updatedAt: insertedUser.updatedAt!.toISOString(),
+          deletedAt: insertedUser.deletedAt
+            ? insertedUser.deletedAt.toISOString()
+            : undefined,
+        },
       };
     } catch (error) {
       console.error("Error creating user:", error);
+
       if (error instanceof Error) {
-        throw new Error(`Failed to create user: ${error.message}`);
+        if (
+          error.message.includes(
+            "duplicate key value violates unique constraint"
+          )
+        ) {
+          throw new Error("User with this Discord ID already exists.");
+        } else {
+          throw new Error(`Failed to create user: ${error.message}`);
+        }
+      } else {
+        throw new Error("Failed to create user: Unknown error");
       }
-      throw new Error("Failed to create user: Unknown error");
     }
   }
 
   async updateUser(
     input: UpdateUserInput,
     requesterRole: UserRole
-  ): Promise<User> {
+  ): Promise<UpdateUserResponse> {
     try {
       const user = await this.getUserByDiscordID(input.discordID);
       if (!user) {
         throw new Error("User not found");
       }
 
+      // Early return for unauthorized role updates
       if (
-        input.role !== undefined &&
+        input.role &&
         (input.role === UserRole.ADMIN || input.role === UserRole.EDITOR) &&
         requesterRole !== UserRole.ADMIN
       ) {
@@ -141,10 +135,6 @@ export class UserService {
         .update(UserModel)
         .set({
           name: input.name !== undefined ? input.name : user.name,
-          tagNumber:
-            input.tagNumber !== undefined
-              ? input.tagNumber
-              : user.tagNumber ?? undefined,
           role: input.role !== undefined ? input.role : user.role,
         })
         .where(eq(UserModel.discordID, input.discordID))
@@ -153,16 +143,26 @@ export class UserService {
 
       const returnedUser = updatedUser[0];
 
+      // Publish a message to RabbitMQ for tagNumber update (if provided)
+      if (input.tagNumber !== undefined) {
+        await publishMessage("tagNumberUpdateRequest", {
+          discordID: returnedUser.discordID,
+          tagNumber: input.tagNumber,
+        });
+      }
+
       return {
-        ...returnedUser,
-        name: returnedUser.name ?? "",
-        tagNumber: returnedUser.tagNumber ?? undefined,
-        role: returnedUser.role as UserRole,
-        updatedAt: new Date().toISOString(),
-        createdAt: returnedUser.createdAt.toISOString(),
-        deletedAt: returnedUser.deletedAt
-          ? returnedUser.deletedAt.toISOString()
-          : undefined,
+        success: true,
+        user: {
+          ...returnedUser,
+          name: returnedUser.name ?? "",
+          role: returnedUser.role as UserRole,
+          updatedAt: new Date().toISOString(),
+          createdAt: returnedUser.createdAt.toISOString(),
+          deletedAt: returnedUser.deletedAt
+            ? returnedUser.deletedAt.toISOString()
+            : undefined,
+        },
       };
     } catch (error) {
       console.error("Error updating user:", error);

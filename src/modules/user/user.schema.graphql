@@ -4,34 +4,33 @@ type Query {
 }
 
 type Mutation {
-  createUser(input: UserInput!): User!
-  updateUser(input: UpdateUserInput!): User!
+  createUser(input: UserInput!): CreateUserResponse!
+  updateUser(input: UpdateUserInput!): UpdateUserResponse!
 }
 
 # User type definition
 type User {
-  name: String! # Server-specific username
-  discordID: String! # Discord username with discriminator
-  tagNumber: Int # Optional tag number for identification
-  role: UserRole! # User role
-  createdAt: String! # Timestamp of when the user was created
-  updatedAt: String! # Timestamp of when the user was last updated
-  deletedAt: String # Optional timestamp for soft deletes
+  name: String!
+  discordID: String!
+  role: UserRole!
+  tagNumber: Int
+  createdAt: String!
+  updatedAt: String!
+  deletedAt: String
 }
 
 # Input types for creating and updating users
 input UserInput {
-  name: String! # Required for user creation
-  discordID: String! # Required for user creation
-  tagNumber: Int # Optional, can be set during creation
-  role: UserRole! # Required for user creation
+  name: String!
+  discordID: String!
+  tagNumber: Int # Keep tagNumber in the input type
 }
 
 input UpdateUserInput {
-  discordID: String # Optional, but often used to identify the user
-  name: String # Optional, allows users to update their server username
-  tagNumber: Int # Optional, can be updated
-  role: UserRole # Optional, allows role changes
+  discordID: String
+  name: String
+  tagNumber: Int # Keep tagNumber in the input type
+  role: UserRole
 }
 
 # Enum for user roles
@@ -39,4 +38,17 @@ enum UserRole {
   ADMIN
   EDITOR
   RATTLER
+}
+
+# Response types for mutations
+type CreateUserResponse {
+  success: Boolean!
+  user: User
+  error: String
+}
+
+type UpdateUserResponse {
+  success: Boolean!
+  user: User
+  error: String
 }

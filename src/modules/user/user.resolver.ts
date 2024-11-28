@@ -1,22 +1,30 @@
 // src/users/users.resolver.ts
+
 import { Injectable } from "@nestjs/common";
 import { UserService } from "./user.service";
 import { CreateUserDto } from "src/dto/user/create-user.dto";
 import { UpdateUserDto } from "src/dto/user/update-user.dto";
-import { UserRole } from "../../enums/user-role.enum";
+import { UserRole } from "src/enums/user-role.enum";
 import { validate } from "class-validator";
-import { User } from "src/types.generated";
-import { LeaderboardResolver } from "../leaderboard/leaderboard.resolver";
+import {
+  User,
+  CreateUserResponse,
+  UpdateUserResponse,
+} from "src/types.generated";
 
 @Injectable()
 export class UserResolver {
   constructor(private readonly userService: UserService) {}
-  private readonly leaderboardResolver!: LeaderboardResolver; // Inject LeaderboardResolver,
+
   async getUser(reference: {
     discordID?: string;
     tagNumber?: number;
   }): Promise<User | null> {
     try {
+      if (!reference.discordID && !reference.tagNumber) {
+        throw new Error("Please provide either discordID or tagNumber");
+      }
+
       if (reference.discordID) {
         const user = await this.userService.getUserByDiscordID(
           reference.discordID
@@ -27,19 +35,9 @@ export class UserResolver {
           );
         }
         return user;
-      } else if (reference.tagNumber) {
-        const user = await this.userService.getUserByTagNumber(
-          reference.tagNumber
-        );
-        if (!user) {
-          throw new Error(
-            `User not found with tagNumber: ${reference.tagNumber}`
-          );
-        }
-        return user;
-      } else {
-        throw new Error("Please provide either discordID or tagNumber");
       }
+
+      throw new Error("Please provide discordID");
     } catch (error) {
       console.error("Error fetching user:", error);
       if (error instanceof Error) {
@@ -50,31 +48,26 @@ export class UserResolver {
     }
   }
 
-  async createUser(input: CreateUserDto): Promise<User> {
+  async createUser(input: CreateUserDto): Promise<CreateUserResponse> {
     try {
       const errors = await validate(input);
       if (errors.length > 0) {
         throw new Error("Validation failed: " + JSON.stringify(errors));
       }
 
-      const user = await this.userService.createUser({
+      const response = await this.userService.createUser({
         ...input,
-        tagNumber: input.tagNumber ?? undefined,
-        createdAt: input.createdAt
-          ? input.createdAt.toISOString()
-          : new Date().toISOString(), // Convert or use current date
-        updatedAt: input.updatedAt?.toISOString() ?? new Date().toISOString(), // Convert or use current date
+        tagNumber: input.tagNumber, // Include tagNumber in the request
+        createdAt: input.createdAt?.toISOString() ?? new Date().toISOString(),
+        updatedAt: input.updatedAt?.toISOString() ?? new Date().toISOString(),
       });
 
-      // Call updateTag in LeaderboardResolver after creating the user
-      if (input.tagNumber) {
-        await this.leaderboardResolver.updateTag(
-          user.discordID,
-          input.tagNumber
-        );
+      // Check if the createUser method returned an error
+      if (!response.success) {
+        throw new Error(response.error || "Failed to create user.");
       }
 
-      return user;
+      return response; // Return the CreateUserResponse object
     } catch (error) {
       console.error("Error creating user:", error);
       if (error instanceof Error) {
@@ -85,10 +78,21 @@ export class UserResolver {
     }
   }
 
+  private isRoleUpdateAuthorized(
+    input: UpdateUserDto,
+    requesterRole: UserRole
+  ): boolean {
+    return (
+      !input.role ||
+      ![UserRole.ADMIN, UserRole.EDITOR].some((role) => input.role === role) ||
+      requesterRole === UserRole.ADMIN
+    );
+  }
+
   async updateUser(
     input: UpdateUserDto,
     requesterRole: UserRole
-  ): Promise<User> {
+  ): Promise<UpdateUserResponse> {
     try {
       const errors = await validate(input);
       if (errors.length > 0) {
@@ -106,19 +110,24 @@ export class UserResolver {
         throw new Error("User not found");
       }
 
-      if (
-        input.role &&
-        (input.role === UserRole.ADMIN || input.role === UserRole.EDITOR) &&
-        requesterRole !== UserRole.ADMIN
-      ) {
+      if (!this.isRoleUpdateAuthorized(input, requesterRole)) {
         throw new Error("Only ADMIN can change roles to ADMIN or EDITOR");
       }
 
       const updatedUser = await this.userService.updateUser(
-        input,
+        {
+          ...input,
+          tagNumber: input.tagNumber, // Include tagNumber in the request
+        },
         requesterRole
       );
-      return updatedUser;
+
+      // Check if the updateUser method returned an error
+      if (!updatedUser.success) {
+        throw new Error(updatedUser.error || "Failed to update user.");
+      }
+
+      return updatedUser; // Return the UpdateUserResponse object
     } catch (error) {
       console.error("Error updating user:", error);
       if (error instanceof Error) {

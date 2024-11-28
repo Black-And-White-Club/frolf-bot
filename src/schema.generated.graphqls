@@ -1,3 +1,9 @@
+type CreateUserResponse {
+  error: String
+  success: Boolean!
+  user: User
+}
+
 input EditRoundInput {
   date: String
   eventType: String
@@ -18,7 +24,7 @@ type Leaderboard {
 }
 
 type Mutation {
-  createUser(input: UserInput!): User!
+  createUser(input: UserInput!): CreateUserResponse!
   deleteRound(roundID: ID!): Boolean!
   editRound(input: EditRoundInput!, roundID: ID!): Round!
   finalizeAndProcessScores(roundID: ID!): Round!
@@ -30,14 +36,9 @@ type Mutation {
   scheduleRound(input: ScheduleRoundInput!): Round!
   submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round!
   updateParticipantResponse(response: Response!, roundID: ID!): Round!
-  updateScore(
-    discordID: String!
-    roundID: ID!
-    score: Int!
-    tagNumber: Int
-  ): Score!
+  updateScore(discordID: String!, roundID: ID!, score: Int!, tagNumber: Int): Score!
   updateTag(discordID: ID!, tagNumber: Int!): TagNumber!
-  updateUser(input: UpdateUserInput!): User!
+  updateUser(input: UpdateUserInput!): UpdateUserResponse!
 }
 
 type Participant {
@@ -129,6 +130,12 @@ input UpdateUserInput {
   tagNumber: Int
 }
 
+type UpdateUserResponse {
+  error: String
+  success: Boolean!
+  user: User
+}
+
 type User {
   createdAt: String!
   deletedAt: String
@@ -142,7 +149,6 @@ type User {
 input UserInput {
   discordID: String!
   name: String!
-  role: UserRole!
   tagNumber: Int
 }
 
