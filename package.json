@@ -16,6 +16,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@apollo/composition": "^2.9.3",
+    "@apollo/rover": "^0.26.2",
+    "@graphql-hive/gateway": "^1.5.3",
+    "@graphql-tools/federation": "^2.2.31",
     "@graphql-yoga/nestjs": "^3.10.3",
     "@graphql-yoga/nestjs-federation": "^3.10.3",
     "@nestjs/common": "^10.4.9",
@@ -29,6 +33,7 @@
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
     "graphql": "^16.9.0",
+    "graphql-yoga": "^5.10.3",
     "pg": "^8.13.1",
     "postgres": "^3.4.5"
   },

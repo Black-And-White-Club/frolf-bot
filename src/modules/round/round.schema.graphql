@@ -14,7 +14,7 @@ type Mutation {
   updateParticipantResponse(roundID: ID!, response: Response!): Round! # Update participant response
 }
 
-type Round {
+type Round @key(fields: "roundID") {
   roundID: ID!
   title: String!
   location: String!
@@ -22,7 +22,7 @@ type Round {
   date: String!
   time: String!
   participants: [Participant!]!
-  scores: [Score!]!
+  scores: [RoundScore!]!
   finalized: Boolean!
   creatorID: String!
   state: RoundState!
@@ -71,7 +71,7 @@ enum Response {
 }
 
 # Additional types for handling scores and logs
-type Score {
+type RoundScore {
   score: Int!
   tagNumber: Int # Added tag field to Score
 }

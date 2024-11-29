@@ -1,0 +1,263 @@
+schema
+  @link(url: "https://specs.apollo.dev/link/v1.0")
+  @link(url: "https://specs.apollo.dev/join/v0.3", for: EXECUTION)
+{
+  query: Query
+  mutation: Mutation
+}
+
+directive @join__enumValue(graph: join__Graph!) repeatable on ENUM_VALUE
+
+directive @join__field(graph: join__Graph, requires: join__FieldSet, provides: join__FieldSet, type: String, external: Boolean, override: String, usedOverridden: Boolean) repeatable on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @join__graph(name: String!, url: String!) on ENUM_VALUE
+
+directive @join__implements(graph: join__Graph!, interface: String!) repeatable on OBJECT | INTERFACE
+
+directive @join__type(graph: join__Graph!, key: join__FieldSet, extension: Boolean! = false, resolvable: Boolean! = true, isInterfaceObject: Boolean! = false) repeatable on OBJECT | INTERFACE | UNION | ENUM | INPUT_OBJECT | SCALAR
+
+directive @join__unionMember(graph: join__Graph!, member: String!) repeatable on UNION
+
+directive @link(url: String, as: String, for: link__Purpose, import: [link__Import]) repeatable on SCHEMA
+
+type CreateUserResponse
+  @join__type(graph: USER)
+{
+  success: Boolean!
+  user: User
+  error: String
+}
+
+input EditRoundInput
+  @join__type(graph: ROUND)
+{
+  title: String
+  location: String
+  eventType: String
+  date: String
+  time: String
+}
+
+scalar join__FieldSet
+
+enum join__Graph {
+  LEADERBOARD @join__graph(name: "leaderboard", url: "http://localhost:4000/graphql")
+  ROUND @join__graph(name: "round", url: "http://localhost:4000/graphql")
+  SCORE @join__graph(name: "score", url: "http://localhost:4000/graphql")
+  USER @join__graph(name: "user", url: "http://localhost:4000/graphql")
+}
+
+input JoinRoundInput
+  @join__type(graph: ROUND)
+{
+  roundID: ID!
+  discordID: String!
+  response: Response!
+}
+
+type Leaderboard
+  @join__type(graph: LEADERBOARD, key: "leaderboardData { discordID tagNumber }")
+{
+  leaderboardData: [LeaderboardEntry!]!
+}
+
+type LeaderboardEntry
+  @join__type(graph: LEADERBOARD)
+{
+  discordID: ID!
+  tagNumber: Int!
+}
+
+scalar link__Import
+
+enum link__Purpose {
+  """
+  `SECURITY` features provide metadata necessary to securely resolve fields.
+  """
+  SECURITY
+
+  """
+  `EXECUTION` features provide metadata necessary for operation execution.
+  """
+  EXECUTION
+}
+
+type Mutation
+  @join__type(graph: LEADERBOARD)
+  @join__type(graph: ROUND)
+  @join__type(graph: SCORE)
+  @join__type(graph: USER)
+{
+  updateTag(discordID: ID!, tagNumber: Int!): TagNumber! @join__field(graph: LEADERBOARD)
+  receiveScores(scores: [ScoreData!]!): Leaderboard! @join__field(graph: LEADERBOARD)
+  scheduleRound(input: ScheduleRoundInput!): Round! @join__field(graph: ROUND)
+  joinRound(input: JoinRoundInput!): Round! @join__field(graph: ROUND)
+  submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round! @join__field(graph: ROUND)
+  finalizeAndProcessScores(roundID: ID!): Round! @join__field(graph: ROUND)
+  editRound(roundID: ID!, input: EditRoundInput!): Round! @join__field(graph: ROUND)
+  deleteRound(roundID: ID!): Boolean! @join__field(graph: ROUND)
+  updateParticipantResponse(roundID: ID!, response: Response!): Round! @join__field(graph: ROUND)
+  updateScore(roundID: ID!, discordID: String!, score: Int!, tagNumber: Int): Score! @join__field(graph: SCORE)
+  processScores(input: ProcessScoresInput!): [Score!]! @join__field(graph: SCORE)
+  createUser(input: UserInput!): CreateUserResponse! @join__field(graph: USER)
+  updateUser(input: UpdateUserInput!): UpdateUserResponse! @join__field(graph: USER)
+}
+
+type Participant
+  @join__type(graph: ROUND)
+{
+  discordID: String!
+  response: Response!
+  tagNumber: Int
+}
+
+input ProcessScoresInput
+  @join__type(graph: SCORE)
+{
+  roundID: ID!
+  scores: [ScoreInput!]!
+}
+
+type Query
+  @join__type(graph: LEADERBOARD)
+  @join__type(graph: ROUND)
+  @join__type(graph: SCORE)
+  @join__type(graph: USER)
+{
+  getLeaderboard: Leaderboard! @join__field(graph: LEADERBOARD)
+  getUserTag(discordID: ID!): TagNumber @join__field(graph: LEADERBOARD)
+  getRounds(limit: Int, offset: Int): [Round!]! @join__field(graph: ROUND)
+  getRound(roundID: ID!): Round! @join__field(graph: ROUND)
+  getUserScore(discordID: String!, roundID: String!): Score! @join__field(graph: SCORE)
+  getScoresForRound(roundID: String!): [Score!]! @join__field(graph: SCORE)
+  getUser(discordID: String!): User @join__field(graph: USER)
+}
+
+enum Response
+  @join__type(graph: ROUND)
+{
+  ACCEPT @join__enumValue(graph: ROUND)
+  TENTATIVE @join__enumValue(graph: ROUND)
+  DECLINE @join__enumValue(graph: ROUND)
+}
+
+type Round
+  @join__type(graph: ROUND, key: "roundID")
+{
+  roundID: ID!
+  title: String!
+  location: String!
+  eventType: String
+  date: String!
+  time: String!
+  participants: [Participant!]!
+  scores: [RoundScore!]!
+  finalized: Boolean!
+  creatorID: String!
+  state: RoundState!
+}
+
+type RoundScore
+  @join__type(graph: ROUND)
+{
+  score: Int!
+  tagNumber: Int
+}
+
+enum RoundState
+  @join__type(graph: ROUND)
+{
+  UPCOMING @join__enumValue(graph: ROUND)
+  IN_PROGRESS @join__enumValue(graph: ROUND)
+  FINALIZED @join__enumValue(graph: ROUND)
+  DELETED @join__enumValue(graph: ROUND)
+}
+
+input ScheduleRoundInput
+  @join__type(graph: ROUND)
+{
+  title: String!
+  location: String!
+  eventType: String
+  date: String!
+  time: String!
+  creatorID: String!
+}
+
+type Score
+  @join__type(graph: SCORE, key: "discordID")
+{
+  discordID: String!
+  score: Int!
+  tagNumber: Int
+}
+
+input ScoreData
+  @join__type(graph: LEADERBOARD)
+{
+  score: Int!
+  discordID: ID!
+  tagNumber: Int
+}
+
+input ScoreInput
+  @join__type(graph: SCORE)
+{
+  discordID: String!
+  score: Int!
+  tagNumber: Int
+}
+
+type TagNumber
+  @join__type(graph: LEADERBOARD)
+{
+  tagNumber: Int!
+  lastPlayed: String!
+  durationHeld: Int!
+  discordID: ID!
+}
+
+input UpdateUserInput
+  @join__type(graph: USER)
+{
+  discordID: String
+  name: String
+  tagNumber: Int
+  role: UserRole
+}
+
+type UpdateUserResponse
+  @join__type(graph: USER)
+{
+  success: Boolean!
+  user: User
+  error: String
+}
+
+type User
+  @join__type(graph: USER, key: "discordID")
+{
+  name: String!
+  discordID: String!
+  role: UserRole!
+  tagNumber: Int
+  createdAt: String!
+  updatedAt: String!
+  deletedAt: String
+}
+
+input UserInput
+  @join__type(graph: USER)
+{
+  name: String!
+  discordID: String!
+  tagNumber: Int
+}
+
+enum UserRole
+  @join__type(graph: USER)
+{
+  ADMIN @join__enumValue(graph: USER)
+  EDITOR @join__enumValue(graph: USER)
+  RATTLER @join__enumValue(graph: USER)
+}

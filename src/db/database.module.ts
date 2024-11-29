@@ -2,23 +2,23 @@
 
 import { Module, DynamicModule, Provider } from "@nestjs/common";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "src/schema"; // Import the combined schema
+import pg from "pg";
 
 const connectionString =
   process.env.DATABASE_URL ||
   "postgres://postgres:mypassword@localhost:5432/test";
-const pool = new Pool({ connectionString });
 
 @Module({})
 export class DatabaseModule {
-  static forFeature(
-    schema: any, // Pass the specific schema for the module
-    providerName: string // Provide a unique provider name
-  ): DynamicModule {
+  static forFeature(schema: any, providerName: string): DynamicModule {
     const dbProvider: Provider = {
       provide: providerName,
-      useValue: drizzle(pool, { schema }),
+      useFactory: () => {
+        // Use a factory function
+        const pool = new pg.Pool({ connectionString });
+        return drizzle(pool, { schema });
+      },
+      inject: [],
     };
 
     return {

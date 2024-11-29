@@ -1,112 +1,54 @@
 // src/modules/leaderboard/leaderboard.service.ts
 import { Inject, Injectable } from "@nestjs/common";
-import { leaderboard as LeaderboardModel } from "../../schema";
-import { eq, asc } from "drizzle-orm";
-import { TagNumber } from "../../types.generated";
+import { leaderboard as LeaderboardModel } from "src/schema";
+import { asc, eq } from "drizzle-orm";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 @Injectable()
 export class LeaderboardService {
-  constructor(@Inject("DATABASE_CONNECTION") private db: NodePgDatabase) {}
+  constructor(
+    @Inject("LEADERBOARD_DATABASE_CONNECTION") private db: NodePgDatabase
+  ) {}
 
-  async getLeaderboard(
-    page: number,
-    limit: number
-  ): Promise<{ users: TagNumber[] }> {
+  async getLeaderboard(): Promise<{
+    leaderboardData: Array<{ discordID: string; tagNumber: number }>;
+  }> {
     try {
-      console.log("Service received page:", page, "limit:", limit);
-      if (typeof page !== "number" || typeof limit !== "number") {
-        throw new Error("Page and limit must be numbers");
-      }
-      const offset = (page - 1) * limit;
-
-      const leaderboardEntries = await this.db
+      const leaderboardEntry = await this.db
         .select()
         .from(LeaderboardModel)
-        .orderBy(asc(LeaderboardModel.tagNumber))
-        .limit(limit)
-        .offset(offset);
+        .orderBy(asc(LeaderboardModel.leaderboardID))
+        .limit(1)
+        .execute();
 
-      const users: TagNumber[] = leaderboardEntries.map((entry) => ({
-        ...entry,
-        lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
-        durationHeld: entry.durationHeld ?? 0,
-      }));
-
-      return { users };
+      if (leaderboardEntry.length > 0) {
+        const leaderboard = leaderboardEntry[0];
+        return {
+          leaderboardData: leaderboard.leaderboardData || [],
+        };
+      } else {
+        const initialLeaderboard = { leaderboardData: [] };
+        await this.db
+          .insert(LeaderboardModel)
+          .values(initialLeaderboard)
+          .execute();
+        return initialLeaderboard;
+      }
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
       throw new Error("Failed to fetch leaderboard");
     }
   }
 
-  async linkTag(discordID: string, newTagNumber: number): Promise<TagNumber> {
+  async getUserTag(
+    discordID: string
+  ): Promise<{ discordID: string; tagNumber: number } | null> {
     try {
-      if (!discordID) {
-        throw new Error("discordID cannot be empty.");
-      }
-
-      const existingTag = await this.getUserByTagNumber(newTagNumber);
-      if (existingTag) {
-        throw new Error(`Tag number ${newTagNumber} is already taken.`);
-      }
-
-      const existingUserTag = await this.getUserTag(discordID);
-      if (existingUserTag) {
-        await this.db
-          .update(LeaderboardModel)
-          .set({
-            tagNumber: newTagNumber,
-            lastPlayed: new Date().toISOString(),
-          })
-          .where(eq(LeaderboardModel.discordID, discordID))
-          .execute();
-      } else {
-        await this.db
-          .insert(LeaderboardModel)
-          .values({
-            discordID,
-            tagNumber: newTagNumber,
-            lastPlayed: new Date().toISOString(),
-            durationHeld: 0,
-          })
-          .execute();
-      }
-
-      return {
-        discordID,
-        tagNumber: newTagNumber,
-        lastPlayed: new Date().toISOString(),
-        durationHeld: 0,
-      };
-    } catch (error) {
-      console.error("Error linking tag:", error);
-      throw new Error("Failed to link tag");
-    }
-  }
-
-  async getUserTag(discordID: string): Promise<TagNumber | null> {
-    try {
-      console.log(`Fetching tag for discordID: ${discordID}`);
-
-      const tagEntry = await this.db
-        .select()
-        .from(LeaderboardModel)
-        .where(eq(LeaderboardModel.discordID, discordID))
-        .execute();
-
-      if (tagEntry.length > 0) {
-        const entry = tagEntry[0];
-        return {
-          discordID: entry.discordID,
-          tagNumber: entry.tagNumber,
-          lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
-          durationHeld: entry.durationHeld ?? 0,
-        };
-      }
-
-      console.warn(`No tag found for discordID: ${discordID}`);
-      return null;
+      const leaderboard = await this.getLeaderboard();
+      const tagEntry = leaderboard.leaderboardData.find(
+        (entry) => entry.discordID === discordID
+      );
+      return tagEntry || null;
     } catch (error) {
       console.error(
         `Error fetching user tag for discordID ${discordID}:`,
@@ -116,114 +58,79 @@ export class LeaderboardService {
     }
   }
 
-  async getUserByTagNumber(tagNumber: number): Promise<TagNumber | null> {
+  async updateTag(
+    discordID: string,
+    tagNumber: number
+  ): Promise<{ discordID: string; tagNumber: number }> {
     try {
-      const tagEntry = await this.db
-        .select()
-        .from(LeaderboardModel)
-        .where(eq(LeaderboardModel.tagNumber, tagNumber))
+      const currentLeaderboard = await this.getLeaderboard();
+      const existingTagIndex = currentLeaderboard.leaderboardData.findIndex(
+        (entry) => entry.discordID === discordID
+      );
+
+      if (existingTagIndex !== -1) {
+        currentLeaderboard.leaderboardData[existingTagIndex].tagNumber =
+          tagNumber;
+      } else {
+        currentLeaderboard.leaderboardData.push({ discordID, tagNumber });
+      }
+
+      await this.db
+        .update(LeaderboardModel)
+        .set({ leaderboardData: currentLeaderboard.leaderboardData })
+        .where(
+          eq(
+            LeaderboardModel.leaderboardID,
+            (
+              await this.db
+                .select({ id: LeaderboardModel.leaderboardID })
+                .from(LeaderboardModel)
+                .orderBy(asc(LeaderboardModel.leaderboardID))
+                .limit(1)
+            )[0].id
+          )
+        )
         .execute();
 
-      if (tagEntry.length > 0) {
-        const entry = tagEntry[0];
-        return {
-          discordID: entry.discordID,
-          tagNumber: entry.tagNumber,
-          lastPlayed: entry.lastPlayed ? entry.lastPlayed.toString() : "",
-          durationHeld: entry.durationHeld ?? 0,
-        };
-      }
-
-      return null;
+      return { discordID, tagNumber };
     } catch (error) {
-      console.error(`Error fetching user by tagNumber ${tagNumber}:`, error);
-      throw new Error(`Could not fetch user by tagNumber ${tagNumber}`);
-    }
-  }
-
-  async updateTag(discordID: string, tagNumber: number): Promise<TagNumber> {
-    try {
-      // 1. Check if a tag entry exists for the discordID
-      const existingTag = await this.getUserTag(discordID);
-
-      if (existingTag) {
-        // 2. If exists, update the existing entry
-        await this.db
-          .update(LeaderboardModel)
-          .set({ tagNumber })
-          .where(eq(LeaderboardModel.discordID, discordID))
-          .execute();
-
-        // 3. Update the existingTag object with the new tagNumber for return
-        existingTag.tagNumber = tagNumber;
-        return existingTag;
-      } else {
-        // 3. If not exists, create a new tag entry
-        const newTag = {
-          discordID,
-          tagNumber,
-          lastPlayed: new Date().toISOString(),
-          durationHeld: 0,
-        };
-
-        await this.db
-          .insert(LeaderboardModel)
-          .values(newTag)
-          .execute();
-
-        // 4. Return the newly created tag
-        return newTag;
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error updating tag:", error);
-        throw new Error(
-          `Could not update tag for discordID ${discordID}: ${error.message}`
-        );
-      } else {
-        console.error("Unknown error updating tag:", error);
-        throw new Error(
-          `Could not update tag for discordID ${discordID}: Unknown error`
-        );
-      }
+      console.error("Error updating tag:", error);
+      throw new Error("Failed to update tag");
     }
   }
 
   async processScores(
-    scores: { discordID: string; score: number; tagNumber?: number | null }[]
-  ): Promise<TagNumber[]> {
+    scores: { discordID: string; score: number; tagNumber?: number }[]
+  ): Promise<void> {
     try {
-      const processedTags: TagNumber[] = [];
-
-      for (const scoreInput of scores) {
-        const existingTag = await this.getUserTag(scoreInput.discordID);
-
-        if (existingTag) {
-          if (scoreInput.score < existingTag.tagNumber) {
-            await this.updateTag(
-              scoreInput.discordID,
-              scoreInput.tagNumber || scoreInput.score
-            );
-
-            processedTags.push({
-              discordID: scoreInput.discordID,
-              tagNumber: scoreInput.tagNumber || scoreInput.score,
-              lastPlayed: new Date().toISOString(),
-              durationHeld: existingTag.durationHeld,
-            });
-          } else {
-            console.warn(
-              `New score (${scoreInput.score}) is not better than existing tag (${existingTag.tagNumber}) for discordID: ${scoreInput.discordID}. Skipping update.`
-            );
-          }
-        } else {
-          console.warn(
-            `No tag found for discordID: ${scoreInput.discordID}. Skipping update.`
-          );
+      scores.sort((a, b) => {
+        if (a.score === b.score) {
+          return (a.tagNumber || 0) - (b.tagNumber || 0);
         }
-      }
+        return a.score - b.score;
+      });
 
-      return processedTags;
+      const leaderboardData = scores.map((score) => ({
+        discordID: score.discordID,
+        tagNumber: score.tagNumber || score.score,
+      }));
+
+      await this.db
+        .update(LeaderboardModel)
+        .set({ leaderboardData })
+        .where(
+          eq(
+            LeaderboardModel.leaderboardID,
+            (
+              await this.db
+                .select({ id: LeaderboardModel.leaderboardID })
+                .from(LeaderboardModel)
+                .orderBy(asc(LeaderboardModel.leaderboardID))
+                .limit(1)
+            )[0].id
+          )
+        )
+        .execute();
     } catch (error) {
       console.error("Error processing scores:", error);
       throw new Error("Failed to process scores");

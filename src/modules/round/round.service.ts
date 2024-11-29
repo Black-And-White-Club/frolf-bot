@@ -18,7 +18,7 @@ import { NodePgDatabase } from "drizzle-orm/node-postgres";
 @Injectable()
 export class RoundService {
   constructor(
-    @Inject("DATABASE_CONNECTION") private readonly db: NodePgDatabase
+    @Inject("ROUND_DATABASE_CONNECTION") private readonly db: NodePgDatabase
   ) {}
 
   async getRounds(

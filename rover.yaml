@@ -1,0 +1,23 @@
+federation_version: v2.9.0
+
+subgraphs:
+  user:
+    name: user
+    routing_url: http://localhost:4000/graphql
+    schema:
+      file: src/modules/user/user.schema.graphql
+  leaderboard:
+    name: leaderboard
+    routing_url: http://localhost:4000/graphql
+    schema:
+      file: src/modules/leaderboard/leaderboard.schema.graphql
+  round:
+    name: round
+    routing_url: http://localhost:4000/graphql
+    schema:
+      file: src/modules/round/round.schema.graphql
+  score:
+    name: score
+    routing_url: http://localhost:4000/graphql
+    schema:
+      file: src/modules/score/score.schema.graphql

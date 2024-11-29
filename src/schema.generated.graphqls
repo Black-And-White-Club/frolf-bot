@@ -19,8 +19,12 @@ input JoinRoundInput {
 }
 
 type Leaderboard {
-  placements: [TagNumber!]!
-  users: [User!]!
+  leaderboardData: [LeaderboardEntry!]!
+}
+
+type LeaderboardEntry {
+  discordID: ID!
+  tagNumber: Int!
 }
 
 type Mutation {
@@ -29,9 +33,7 @@ type Mutation {
   editRound(input: EditRoundInput!, roundID: ID!): Round!
   finalizeAndProcessScores(roundID: ID!): Round!
   joinRound(input: JoinRoundInput!): Round!
-  linkTag(discordID: ID!, newTagNumber: Int!): TagNumber!
-  manualTagUpdate(discordID: ID!, newTagNumber: Int!): TagNumber!
-  processScores(input: ProcessScoresInput!): Leaderboard!
+  processScores(input: ProcessScoresInput!): [Score!]!
   receiveScores(scores: [ScoreData!]!): Leaderboard!
   scheduleRound(input: ScheduleRoundInput!): Round!
   submitScore(roundID: ID!, score: Int!, tagNumber: Int): Round!
@@ -53,7 +55,7 @@ input ProcessScoresInput {
 }
 
 type Query {
-  getLeaderboard(limit: Int = 50, page: Int = 2): Leaderboard!
+  getLeaderboard: Leaderboard!
   getRound(roundID: ID!): Round!
   getRounds(limit: Int, offset: Int): [Round!]!
   getScoresForRound(roundID: String!): [Score!]!
@@ -76,10 +78,15 @@ type Round {
   location: String!
   participants: [Participant!]!
   roundID: ID!
-  scores: [Score!]!
+  scores: [RoundScore!]!
   state: RoundState!
   time: String!
   title: String!
+}
+
+type RoundScore {
+  score: Int!
+  tagNumber: Int
 }
 
 enum RoundState {

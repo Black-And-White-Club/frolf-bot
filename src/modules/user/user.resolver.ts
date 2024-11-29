@@ -11,10 +11,14 @@ import {
   CreateUserResponse,
   UpdateUserResponse,
 } from "src/types.generated";
+import { GraphQLContext } from "src/context/graphql-context.provider"; // Import the context
 
 @Injectable()
 export class UserResolver {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly graphQLContext: GraphQLContext // Inject the context
+  ) {}
 
   async getUser(reference: {
     discordID?: string;
@@ -49,25 +53,32 @@ export class UserResolver {
   }
 
   async createUser(input: CreateUserDto): Promise<CreateUserResponse> {
+    console.log("Hey, createUser Resolver here.");
     try {
+      console.log("Context in createUser resolver:", this.graphQLContext); // Access context here
+      console.log("createUser resolver called with input:", input);
       const errors = await validate(input);
       if (errors.length > 0) {
         throw new Error("Validation failed: " + JSON.stringify(errors));
       }
 
+      // Ensure the discordID is a string
+      const discordID = input.discordID.toString();
+
       const response = await this.userService.createUser({
         ...input,
-        tagNumber: input.tagNumber, // Include tagNumber in the request
+        discordID, // Use the converted discordID
+        tagNumber: input.tagNumber,
         createdAt: input.createdAt?.toISOString() ?? new Date().toISOString(),
         updatedAt: input.updatedAt?.toISOString() ?? new Date().toISOString(),
       });
 
-      // Check if the createUser method returned an error
       if (!response.success) {
+        console.error("Failed to create user:", response.error);
         throw new Error(response.error || "Failed to create user.");
       }
 
-      return response; // Return the CreateUserResponse object
+      return response;
     } catch (error) {
       console.error("Error creating user:", error);
       if (error instanceof Error) {

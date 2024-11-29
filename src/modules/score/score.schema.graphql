@@ -1,5 +1,5 @@
 # Additional types for handling scores and logs
-type Score {
+type Score @key(fields: "discordID") {
   discordID: String!
   score: Int!
   tagNumber: Int
@@ -20,14 +20,13 @@ type Mutation {
     tagNumber: Int
   ): Score!
 
-  # Updated to include input type
-  processScores(input: ProcessScoresInput!): Leaderboard!
+  processScores(input: ProcessScoresInput!): [Score!]!
 }
 
 # Input type for processing scores
 input ProcessScoresInput {
   roundID: ID!
-  scores: [ScoreInput!]! # Array of scores to process
+  scores: [ScoreInput!]!
 }
 
 # Input type for score details

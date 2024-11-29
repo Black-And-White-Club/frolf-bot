@@ -9,7 +9,7 @@ type Mutation {
 }
 
 # User type definition
-type User {
+type User @key(fields: "discordID") {
   name: String!
   discordID: String!
   role: UserRole!
@@ -23,13 +23,13 @@ type User {
 input UserInput {
   name: String!
   discordID: String!
-  tagNumber: Int # Keep tagNumber in the input type
+  tagNumber: Int
 }
 
 input UpdateUserInput {
   discordID: String
   name: String
-  tagNumber: Int # Keep tagNumber in the input type
+  tagNumber: Int
   role: UserRole
 }
 

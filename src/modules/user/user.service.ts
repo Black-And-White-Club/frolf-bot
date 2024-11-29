@@ -51,8 +51,17 @@ export class UserService {
     }
   }
 
-  async createUser(userData: User): Promise<CreateUserResponse> {
+  async createUser(userData: any): Promise<CreateUserResponse> {
     try {
+      console.log("Creating user with data:", userData);
+      console.log(`userService.createUser called (reqId: ${userData.req.id})`);
+
+      if (userData.req.myCustomProperty) {
+        console.log("myCustomProperty found:", userData.req.myCustomProperty);
+      } else {
+        console.log("myCustomProperty NOT found");
+      }
+
       // Default to RATTLER role
       userData.role = UserRole.RATTLER as UserRole;
 
@@ -64,6 +73,8 @@ export class UserService {
         name: userData.name,
         discordID: userData.discordID,
         role: userData.role,
+        // Add tagNumber to newUser if provided
+        ...(userData.tagNumber && { tagNumber: userData.tagNumber }),
       };
 
       const result = await this.db
@@ -72,7 +83,8 @@ export class UserService {
         .returning();
       const insertedUser = result[0];
 
-      // Publish a message to RabbitMQ for tagNumber assignment (if provided)
+      console.log("User created successfully:", insertedUser);
+
       if (userData.tagNumber) {
         await publishMessage("tagNumberAssignmentRequest", {
           discordID: insertedUser.discordID,
@@ -117,6 +129,7 @@ export class UserService {
     requesterRole: UserRole
   ): Promise<UpdateUserResponse> {
     try {
+      console.log("Updating user with data:", input);
       const user = await this.getUserByDiscordID(input.discordID);
       if (!user) {
         throw new Error("User not found");

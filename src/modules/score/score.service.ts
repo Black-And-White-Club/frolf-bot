@@ -7,7 +7,9 @@ import { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 @Injectable()
 export class ScoreService {
-  constructor(@Inject("DATABASE_CONNECTION") private db: NodePgDatabase) {}
+  constructor(
+    @Inject("SCORE_DATABASE_CONNECTION") private db: NodePgDatabase
+  ) {}
 
   async getUserScore(
     discordID: string,

@@ -1,6 +1,7 @@
 // src/modules/api-gateway/api-gateway.service.ts
 import { Injectable } from "@nestjs/common";
 import { UserService, LeaderboardService, ScoreService } from "src/modules";
+import { ActionHandler } from "./request-handlers/action.handler";
 
 @Injectable()
 export class ApiGatewayService {
@@ -10,29 +11,36 @@ export class ApiGatewayService {
     private readonly leaderboardService: LeaderboardService
   ) {}
 
-  async handleRequest(discordID: string, action: string, requestData: any) {
-    const userRole = await this.userService.getUserByDiscordID(discordID)?.role;
+  async handleRequest(
+    discordID: string,
+    action: string,
+    requestData: any,
+    req: any
+  ) {
+    try {
+      console.log(`handleRequest called (reqId: ${req.id})`);
 
-    // Routing and authorization logic
-    switch (action) {
-      case "updateLeaderboard": {
-        const enrichedRequest = { ...requestData, userRole };
-        return this.leaderboardService.handleAction(enrichedRequest);
-      }
-      case "createUser": {
-        return this.userService.createUser(requestData);
-      }
-      case "updateUser": {
-        const { role, ...userInput } = requestData;
-        return this.userService.updateUser(userInput, role);
-      }
-      case "updateScore": {
-        const enrichedRequest = { ...requestData, userRole };
-        return this.scoreService.handleAction(enrichedRequest);
-      }
-      // ... handle other actions and modules ...
-      default:
-        throw new Error(`Unknown action: ${action}`);
+      // --- Add a custom property to the req object ---
+      req.myCustomProperty = "test-value";
+
+      const actionHandler = new ActionHandler(
+        this.userService,
+        this.leaderboardService,
+        this.scoreService
+      );
+
+      console.log(`req passed to ActionHandler (reqId: ${req.id})`);
+      const result = await actionHandler.handle({
+        discordID,
+        action,
+        requestData,
+        req, // Pass req explicitly to ActionHandler
+      });
+
+      return result;
+    } catch (error) {
+      console.error(`Error handling action ${action}:`, error);
+      throw new Error(`Failed to handle action: ${action}`);
     }
   }
 }
