@@ -2,31 +2,25 @@ import {
   IsString,
   IsOptional,
   IsInt,
-  IsEnum,
+  IsNumber,
   IsNotEmpty,
-  IsDate,
-  IsEmpty,
+  IsEnum,
 } from "class-validator";
-import { UserRole } from "../../enums/user-role.enum";
+import { UserRole } from "src/enums/user-role.enum";
 
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  discordID!: string;
+  name!: string;
 
   @IsString()
-  name!: string;
+  @IsNotEmpty()
+  discordID!: string;
 
   @IsInt()
   @IsOptional()
-  tagNumber: number | null = null; // Adjust this to allow null
+  tagNumber?: number;
 
   @IsEnum(UserRole)
-  role!: UserRole;
-
-  @IsDate()
-  createdAt!: Date;
-
-  @IsDate()
-  updatedAt?: Date;
+  role: UserRole = UserRole.RATTLER;
 }

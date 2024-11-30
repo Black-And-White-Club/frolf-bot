@@ -1,7 +1,7 @@
 // src/modules/leaderboard/leaderboard.module.ts
 import { Module } from "@nestjs/common";
 import { LeaderboardService } from "./leaderboard.service";
-import { LeaderboardResolver } from "./leaderboard.resolver";
+import { LeaderboardController } from "./leaderboard.controller"; // Import LeaderboardController
 import { DatabaseModule } from "src/db/database.module";
 import * as schema from "src/schema";
 
@@ -9,7 +9,7 @@ import * as schema from "src/schema";
   imports: [
     DatabaseModule.forFeature(schema, "LEADERBOARD_DATABASE_CONNECTION"),
   ],
-  providers: [LeaderboardResolver, LeaderboardService],
+  providers: [LeaderboardController, LeaderboardService], // Provide LeaderboardController
   exports: [LeaderboardService],
 })
 export class LeaderboardModule {}

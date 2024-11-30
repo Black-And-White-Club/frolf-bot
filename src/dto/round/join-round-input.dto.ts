@@ -1,5 +1,11 @@
-import { IsNotEmpty, IsString, IsEnum } from "class-validator";
-import { Response } from "../../enums/round-enum"; // Assuming you have this enum defined
+import {
+  IsNotEmpty,
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsNumber,
+} from "class-validator";
+import { Response } from "src/enums";
 
 export class JoinRoundInput {
   @IsNotEmpty()
@@ -8,12 +14,16 @@ export class JoinRoundInput {
 
   @IsNotEmpty()
   @IsString()
-  discordID!: string; // Include discordID
+  discordID!: string;
 
   @IsNotEmpty()
   @IsEnum(Response, {
     message:
       "Response must be one of the predefined values: ACCEPT, TENTATIVE, DECLINE",
   })
-  response!: Response; // Use the Response enum
+  response!: Response;
+
+  @IsOptional()
+  @IsNumber()
+  tagNumber?: number; // Make tagNumber optional
 }

@@ -1,37 +1,72 @@
-// src/amqp/publisher.ts
+// src/rabbitmq/publisher.ts
 
-import * as amqp from "amqplib";
+import { Injectable, Inject } from "@nestjs/common";
+import { AmqpConnection } from "@golevelup/nestjs-rabbitmq";
 
-const connectionString = process.env.RABBITMQ_URL || "amqp://localhost:5672";
-const maxRetries = 3; // Maximum number of retries
+@Injectable()
+export class Publisher {
+  constructor(
+    @Inject("AMQP_CONNECTION") private readonly amqpConnection: AmqpConnection
+  ) {}
 
-export async function publishMessage(queue: string, message: any) {
-  let retries = 0;
-  while (retries < maxRetries) {
-    try {
-      const connection = await amqp.connect(connectionString);
-      const channel = await connection.createChannel();
+  async publishMessage(queue: string, message: any) {
+    const maxRetries = 3;
+    let retries = 0;
 
-      await channel.assertQueue(queue, { durable: true });
+    while (retries < maxRetries) {
+      try {
+        await this.amqpConnection.publish("", queue, message, {
+          persistent: true,
+        });
 
-      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
-        persistent: true,
-      });
-
-      console.log("Message sent to queue:", queue);
-
-      await channel.close();
-      await connection.close();
-
-      return; // Message published successfully, exit the loop
-    } catch (error) {
-      console.error("Error publishing message:", error);
-      retries++;
-      console.log(`Retrying... Attempt ${retries} of ${maxRetries}`);
-      // You can add a delay here before retrying (e.g., using setTimeout)
+        console.log("Message sent to queue:", queue);
+        return;
+      } catch (error) {
+        console.error("Error publishing message:", error);
+        retries++;
+        console.log(`Retrying... Attempt ${retries} of ${maxRetries}`);
+      }
     }
+
+    console.error(`Failed to publish message after ${maxRetries} retries.`);
   }
 
-  console.error(`Failed to publish message after ${maxRetries} retries.`);
-  // Handle the final failure appropriately (e.g., log to a service, alert, etc.)
+  async publishAndGetResponse(
+    queue: string,
+    message: any,
+    responseQueue?: string,
+    consumerName?: string
+  ): Promise<any> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const correlationId = Math.random().toString();
+
+        const responseQueueName = responseQueue || "responses";
+        const consumerNameToUse = consumerName || "responseConsumer";
+
+        await this.amqpConnection.createSubscriber(
+          async (responseMessage: any) => {
+            if (responseMessage.properties.correlationId === correlationId) {
+              resolve(JSON.parse(responseMessage.content.toString()));
+            }
+            return;
+          },
+          {
+            exchange: "",
+            queue: responseQueueName,
+          },
+          consumerNameToUse
+        );
+
+        await this.amqpConnection.publish("", queue, message, {
+          persistent: true,
+          correlationId,
+          replyTo: responseQueueName,
+        });
+      } catch (error) {
+        console.error("Error in publishAndGetResponse:", error);
+        reject(error);
+      }
+    });
+  }
 }

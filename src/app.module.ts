@@ -1,29 +1,25 @@
 // src/app.module.ts
+
 import { Module } from "@nestjs/common";
-import { RouterModule } from "@nestjs/core";
-import { UserModule } from "./modules/user/user.module";
-import { RoundModule } from "./modules/round/round.module";
-import { ScoreModule } from "./modules/score/score.module";
-import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
-import { ApiGatewayModule } from "./modules/api-gateway/api-gateway.module";
+import { RabbitMQModule } from "@golevelup/nestjs-rabbitmq";
+import { Publisher } from "./rabbitmq/publisher";
+import { Consumer } from "./rabbitmq/consumer";
+import * as modules from "./modules";
 
 @Module({
   imports: [
-    RouterModule.register([
-      {
-        path: "/v1/user",
-        module: UserModule,
-      },
-      {
-        path: "/v1/gateway",
-        module: ApiGatewayModule,
-      },
-    ]),
-    ApiGatewayModule,
-    UserModule,
-    RoundModule,
-    ScoreModule,
-    LeaderboardModule,
+    modules.UserModule,
+    modules.RoundModule,
+    modules.ScoreModule,
+    modules.LeaderboardModule,
+    RabbitMQModule.forRoot(RabbitMQModule, {
+      exchanges: [
+        // ... your exchange configuration ...
+      ],
+      uri: "amqp://localhost:5672",
+      connectionInitOptions: { wait: false },
+    }),
   ],
+  providers: [Publisher, Consumer],
 })
 export class AppModule {}

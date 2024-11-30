@@ -1,33 +1,41 @@
-import * as amqp from "amqplib";
+// src/rabbitmq/consumer.ts
 
-const connectionString = process.env.RABBITMQ_URL || "amqp://localhost:5672"; // Use environment variable or default
+import { Injectable, Inject } from "@nestjs/common";
+import { AmqpConnection } from "@golevelup/nestjs-rabbitmq";
 
-export async function consumeMessages(
-  queue: string,
-  callback: (message: any) => Promise<void>
-) {
-  try {
-    const connection = await amqp.connect(connectionString);
-    const channel = await connection.createChannel();
-    await channel.assertQueue(queue, { durable: true });
+@Injectable()
+export class Consumer {
+  constructor(
+    @Inject("AMQP_CONNECTION") private readonly amqpConnection: AmqpConnection
+  ) {}
 
-    channel.consume(queue, async (message) => {
-      if (message !== null) {
-        try {
-          const content = JSON.parse(message.content.toString());
-          await callback(content);
-        } catch (error) {
-          console.error("Error processing message:", error);
-          // Handle the error appropriately, e.g., requeue the message or send it to a dead-letter queue
-        } finally {
-          channel.ack(message);
-        }
-      }
-    });
+  async consumeMessages(
+    queue: string,
+    callback: (message: any) => Promise<void>,
+    consumerName: string
+  ) {
+    try {
+      await this.amqpConnection.createSubscriber(
+        async (message: any) => {
+          try {
+            const content = JSON.parse(message.content.toString());
+            await callback(content);
+          } catch (error) {
+            console.error("Error processing message:", error);
+            // Handle the error appropriately
+          }
+        },
+        {
+          exchange: "",
+          queue,
+        },
+        consumerName
+      );
 
-    console.log("Consuming messages from queue:", queue);
-  } catch (error) {
-    console.error("Error consuming messages:", error);
-    // Handle the error appropriately, e.g., retry the connection
+      console.log("Consuming messages from queue:", queue);
+    } catch (error) {
+      console.error("Error consuming messages:", error);
+      // Handle the error appropriately
+    }
   }
 }

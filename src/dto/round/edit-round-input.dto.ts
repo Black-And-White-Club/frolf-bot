@@ -19,5 +19,5 @@ export class EditRoundInput {
 
   @IsOptional()
   @IsString()
-  time?: string; // Ensure proper time format if needed, i.e. "HH:mm"
+  time?: string;
 }

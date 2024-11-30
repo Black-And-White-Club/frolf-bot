@@ -1,22 +1,25 @@
 // src/modules/score/score.service.ts
+
 import { Inject, Injectable } from "@nestjs/common";
-import { scores as ScoreModel } from "../../schema";
+import { scores as ScoreModel } from "./score.model";
 import { eq, and } from "drizzle-orm";
-import { Score as GraphQLScore } from "../../types.generated";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { Score } from "./score.entity";
+import { Publisher } from "src/rabbitmq/publisher";
 
 @Injectable()
 export class ScoreService {
   constructor(
-    @Inject("SCORE_DATABASE_CONNECTION") private db: NodePgDatabase
+    @Inject("SCORE_DATABASE_CONNECTION") private db: NodePgDatabase,
+    private readonly publisher: Publisher
   ) {}
 
   async getUserScore(
     discordID: string,
     roundID: string
-  ): Promise<GraphQLScore | null> {
+  ): Promise<Score | null> {
     try {
-      const scores = await this.db
+      const scoreData = await this.db
         .select()
         .from(ScoreModel)
         .where(
@@ -24,14 +27,11 @@ export class ScoreService {
             eq(ScoreModel.discordID, discordID),
             eq(ScoreModel.roundID, roundID)
           )
-        );
+        )
+        .execute();
 
-      if (scores.length > 0) {
-        const score = scores[0];
-        return {
-          ...score,
-          tagNumber: score.tagNumber ?? null,
-        };
+      if (scoreData.length > 0) {
+        return this.mapScoreToEntity(scoreData[0]);
       }
 
       return null;
@@ -41,17 +41,14 @@ export class ScoreService {
     }
   }
 
-  async getScoresForRound(roundID: string): Promise<GraphQLScore[]> {
+  async getScoresForRound(roundID: string): Promise<Score[]> {
     try {
-      const scores = await this.db
+      const scoreData = await this.db
         .select()
         .from(ScoreModel)
         .where(eq(ScoreModel.roundID, roundID));
 
-      return scores.map((score) => ({
-        ...score,
-        tagNumber: score.tagNumber ?? null,
-      }));
+      return scoreData.map((score) => this.mapScoreToEntity(score));
     } catch (error) {
       console.error("Error fetching scores for round:", error);
       throw new Error("Failed to fetch scores for round");
@@ -60,38 +57,59 @@ export class ScoreService {
 
   async processScores(
     roundID: string,
-    scores: { discordID: string; score: number; tagNumber?: number | null }[]
-  ): Promise<GraphQLScore[]> {
+    scores:
+      | { discordID: string; score: number; tagNumber?: number | null }[]
+      | { discordID: string; score: number; tagNumber?: number | null }
+  ): Promise<void> {
     try {
-      const processedScores: GraphQLScore[] = [];
+      const scoresArray = Array.isArray(scores) ? scores : [scores];
 
-      for (const scoreInput of scores) {
-        const existingScore = await this.getUserScore(
-          scoreInput.discordID,
-          roundID
-        );
+      await this.db.transaction(async (tx) => {
+        const processedScores = [];
 
-        if (existingScore) {
-          throw new Error(
-            "Score for this Discord ID already exists for the given round"
+        for (const scoreInput of scoresArray) {
+          const existingScore = await this.getUserScore(
+            scoreInput.discordID,
+            roundID
           );
-        } else {
-          const newScore = await this.db
-            .insert(ScoreModel)
-            .values({
+          if (existingScore) {
+            await tx
+              .update(ScoreModel)
+              .set({
+                score: scoreInput.score,
+                tagNumber: scoreInput.tagNumber || null,
+              })
+              .where(
+                and(
+                  eq(ScoreModel.discordID, scoreInput.discordID),
+                  eq(ScoreModel.roundID, roundID)
+                )
+              );
+          } else {
+            await tx.insert(ScoreModel).values({
               discordID: scoreInput.discordID,
               roundID: roundID,
               score: scoreInput.score,
               tagNumber: scoreInput.tagNumber || null,
-            })
-            .returning()
-            .execute();
+            });
+          }
 
-          processedScores.push(newScore[0]);
+          processedScores.push({
+            discordID: scoreInput.discordID,
+            score: scoreInput.score,
+            tagNumber: scoreInput.tagNumber,
+          });
         }
-      }
 
-      return processedScores;
+        const scoresForLeaderboard = processedScores.filter(
+          (score) => score.tagNumber !== null && score.tagNumber !== undefined
+        );
+
+        await this.publisher.publishMessage("update_leaderboard", {
+          roundID,
+          scores: scoresForLeaderboard,
+        });
+      });
     } catch (error) {
       console.error("Error processing scores:", error);
       throw new Error("Failed to process scores");
@@ -103,19 +121,16 @@ export class ScoreService {
     discordID: string,
     score: number,
     tagNumber?: number | null
-  ): Promise<GraphQLScore> {
+  ): Promise<Score> {
     try {
       const existingScore = await this.getUserScore(discordID, roundID);
       if (!existingScore) {
         throw new Error("Score not found");
       }
 
-      const updatedScore = await this.db
+      const updatedScoreData = await this.db
         .update(ScoreModel)
-        .set({
-          score: score,
-          tagNumber: tagNumber || null,
-        })
+        .set({ score, tagNumber: tagNumber || null })
         .where(
           and(
             eq(ScoreModel.discordID, discordID),
@@ -125,10 +140,25 @@ export class ScoreService {
         .returning()
         .execute();
 
-      return updatedScore[0];
+      await this.publisher.publishMessage("update_leaderboard", {
+        roundID,
+      });
+
+      return this.mapScoreToEntity(updatedScoreData[0]);
     } catch (error) {
       console.error("Error updating score:", error);
       throw new Error("Failed to update score");
     }
+  }
+
+  private mapScoreToEntity(scoreData: any): Score {
+    const score = new Score();
+    score.discordID = scoreData.discordID;
+    score.roundID = scoreData.roundID;
+    score.score = scoreData.score;
+    score.tagNumber = scoreData.tagNumber;
+    score.createdAt = scoreData.createdAt;
+    score.updatedAt = scoreData.updatedAt;
+    return score;
   }
 }
