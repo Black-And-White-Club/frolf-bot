@@ -1,5 +1,3 @@
-// src/rabbitmq/queue.service.ts
-
 import { Injectable, Inject } from "@nestjs/common";
 import { AmqpConnection } from "@golevelup/nestjs-rabbitmq";
 import { LeaderboardService } from "src/modules/leaderboard/leaderboard.service";
@@ -94,7 +92,7 @@ export class QueueService {
     });
   }
 
-  async publishMessage(queueName: string, message: any): Promise<void> {
+  async publishTagSwapRequest(queueName: string, message: any): Promise<void> {
     await this.amqpConnection.publish("", queueName, message, {
       persistent: true,
     });

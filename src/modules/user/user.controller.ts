@@ -18,12 +18,16 @@ import { AuthGuard } from "src/middleware/auth.guard";
 import { User } from "src/modules/user/user.entity";
 
 @Controller("users")
-@UseGuards(AuthGuard)
+// @UseGuards(AuthGuard)
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) {
+    console.log("UserController constructor called", this.userService);
+  }
 
   @Post()
   async createUser(@Body() createUserDto: CreateUserDto): Promise<User> {
+    console.log("Received createUserDto:", createUserDto);
+
     const user = new User();
     user.name = createUserDto.name;
     user.discordID = createUserDto.discordID;
@@ -31,7 +35,16 @@ export class UserController {
     if (createUserDto.tagNumber !== undefined) {
       user.tagNumber = createUserDto.tagNumber;
     }
-    return this.userService.createUser(user);
+
+    console.log("Calling userService.createUser with:", user);
+    try {
+      const result = await this.userService.createUser(user);
+      console.log("userService.createUser result:", result);
+      return result;
+    } catch (error) {
+      console.error("Error in createUser:", error);
+      throw error;
+    }
   }
 
   @Get(":discordID")

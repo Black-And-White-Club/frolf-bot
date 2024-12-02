@@ -25,5 +25,5 @@ export class JoinRoundInput {
 
   @IsOptional()
   @IsNumber()
-  tagNumber?: number; // Make tagNumber optional
+  tagNumber?: number | null; // Allow null here
 }

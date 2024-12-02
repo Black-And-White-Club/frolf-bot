@@ -1,72 +1,81 @@
-// src/rabbitmq/publisher.ts
-
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { AmqpConnection } from "@golevelup/nestjs-rabbitmq";
+import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
 export class Publisher {
-  constructor(
-    @Inject("AMQP_CONNECTION") private readonly amqpConnection: AmqpConnection
-  ) {}
+  constructor(private readonly amqpConnection: AmqpConnection) {}
 
-  async publishMessage(queue: string, message: any) {
-    const maxRetries = 3;
-    let retries = 0;
-
-    while (retries < maxRetries) {
-      try {
-        await this.amqpConnection.publish("", queue, message, {
-          persistent: true,
-        });
-
-        console.log("Message sent to queue:", queue);
-        return;
-      } catch (error) {
-        console.error("Error publishing message:", error);
-        retries++;
-        console.log(`Retrying... Attempt ${retries} of ${maxRetries}`);
-      }
+  async publishMessage(
+    routingKey: string,
+    message: any,
+    options?: { correlationId?: string }
+  ): Promise<void> {
+    try {
+      await this.amqpConnection.publish(
+        "main_exchange",
+        routingKey,
+        message,
+        options
+      );
+    } catch (error) {
+      console.error("Error publishing message:", error);
     }
-
-    console.error(`Failed to publish message after ${maxRetries} retries.`);
   }
 
-  async publishAndGetResponse(
-    queue: string,
-    message: any,
-    responseQueue?: string,
-    consumerName?: string
-  ): Promise<any> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const correlationId = Math.random().toString();
+  private generateCorrelationId(): string {
+    return uuidv4();
+  }
 
-        const responseQueueName = responseQueue || "responses";
-        const consumerNameToUse = consumerName || "responseConsumer";
+  async publishAndGetResponse<T>(
+    exchange: string,
+    routingKey: string,
+    message: any
+  ): Promise<{ tagExists: boolean }> {
+    return new Promise((resolve, reject) => {
+      const correlationId = this.generateCorrelationId();
 
-        await this.amqpConnection.createSubscriber(
-          async (responseMessage: any) => {
-            if (responseMessage.properties.correlationId === correlationId) {
-              resolve(JSON.parse(responseMessage.content.toString()));
+      const queue = "response_queue";
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout waiting for response"));
+      }, 10000);
+
+      this.amqpConnection.publish(exchange, routingKey, message, {
+        correlationId,
+        replyTo: queue,
+      });
+
+      type SubscribeResponse = number;
+
+      this.amqpConnection.createSubscriber(
+        async (response: any): Promise<void> => {
+          return new Promise<void>((resolve, reject) => {
+            try {
+              if (response.properties.correlationId === correlationId) {
+                clearTimeout(timeout);
+
+                const tagNumber =
+                  typeof response.content === "number"
+                    ? response.content
+                    : undefined;
+
+                if (tagNumber === undefined) {
+                  reject(
+                    new Error("Invalid response content: expected number")
+                  );
+                } else {
+                  resolve();
+                }
+              }
+            } catch (error) {
+              reject(error);
             }
-            return;
-          },
-          {
-            exchange: "",
-            queue: responseQueueName,
-          },
-          consumerNameToUse
-        );
-
-        await this.amqpConnection.publish("", queue, message, {
-          persistent: true,
-          correlationId,
-          replyTo: responseQueueName,
-        });
-      } catch (error) {
-        console.error("Error in publishAndGetResponse:", error);
-        reject(error);
-      }
+          });
+        },
+        { queue },
+        "roundTagConsumerHandler",
+        {}
+      );
     });
   }
 }

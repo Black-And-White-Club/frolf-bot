@@ -3,30 +3,26 @@
 import {
   Controller,
   Get,
-  Post,
+  Put,
   Body,
   Param,
-  Put,
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
 import { ScoreService } from "./score.service";
 import { UpdateScoreDto } from "../../dto/score/update-score.dto";
-import { Consumer } from "src/rabbitmq/consumer";
 import { validate } from "class-validator";
+import { OnModuleInit } from "@nestjs/common";
+
+// Import ConsumerService from the correct path
+import { ConsumerService } from "src/rabbitmq/consumer"; // Make sure this is correct
 
 @Controller("scores")
 export class ScoreController {
   constructor(
     private readonly scoreService: ScoreService,
-    private readonly consumer: Consumer
-  ) {
-    this.consumer.consumeMessages(
-      "process_scores",
-      this.handleProcessScores,
-      "processScoresConsumer"
-    );
-  }
+    private readonly consumerService: ConsumerService // Inject ConsumerService
+  ) {}
 
   @Get(":roundId/:discordId")
   async getUserScore(
@@ -88,10 +84,15 @@ export class ScoreController {
     }
   }
 
+  /**
+   * Handler for processing scores from the `process_scores` queue.
+   * This method will be triggered by incoming messages.
+   */
   private async handleProcessScores(message: any) {
     try {
       const { roundID, scores } = message;
       console.log("Processing scores for round:", roundID);
+      // Process the scores in the service
       await this.scoreService.processScores(roundID, scores);
     } catch (error) {
       console.error("Error processing scores:", error);

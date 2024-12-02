@@ -6,7 +6,7 @@ import {
   IsNotEmpty,
   IsEnum,
 } from "class-validator";
-import { UserRole } from "src/enums/user-role.enum";
+import { UserRole } from "src/enums";
 
 export class CreateUserDto {
   @IsString()
@@ -22,5 +22,6 @@ export class CreateUserDto {
   tagNumber?: number;
 
   @IsEnum(UserRole)
-  role: UserRole = UserRole.RATTLER;
+  @IsNotEmpty() // Ensure the role is provided
+  role!: UserRole; // Make role non-optional, as it seems required
 }

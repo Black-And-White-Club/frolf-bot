@@ -5,7 +5,7 @@ import {
   IsEnum,
   IsNotEmpty,
 } from "class-validator";
-import { UserRole } from "src/enums/user-role.enum";
+import { UserRole } from "src/enums";
 
 export class UpdateUserDto {
   @IsOptional() // Make name optional for updates

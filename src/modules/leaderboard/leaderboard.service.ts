@@ -2,18 +2,21 @@
 
 import { Inject, Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { leaderboard as LeaderboardModel } from "./leaderboard.model";
-import { eq } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Leaderboard } from "./leaderboard.entity";
 import { QueueService } from "src/rabbitmq/queue.service";
 import { UpdateTagSource } from "src/enums";
+import { Publisher } from "src/rabbitmq/publisher";
+import { RabbitSubscribe } from "@golevelup/nestjs-rabbitmq";
 
 @Injectable()
 export class LeaderboardService {
   constructor(
     @Inject("LEADERBOARD_DATABASE_CONNECTION")
     private db: NodePgDatabase,
-    private readonly queueService: QueueService
+    private readonly queueService: QueueService,
+    private readonly publisher: Publisher
   ) {}
 
   async getLeaderboard(): Promise<Leaderboard> {
@@ -88,7 +91,7 @@ export class LeaderboardService {
           if (tagExists) {
             return {
               discordID,
-              tagNumber: 0,
+              tagNumber: 0, // Or handle the tag conflict differently
               tagExists: true,
               message: "Tag is taken, but account can be created without it.",
             };
@@ -114,13 +117,9 @@ export class LeaderboardService {
     discordID: string,
     tagNumber: number
   ): Promise<string> {
-    const existingSwapId = await this.queueService.getActiveSwapId();
-
-    let swapId = existingSwapId;
-    if (!swapId) {
-      swapId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-    }
-
+    const swapId = `${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 15)}`;
     const queueGroupName = `tag-swap-${swapId}`;
 
     try {
@@ -128,10 +127,24 @@ export class LeaderboardService {
         `Manual tag swap initiated with ID: ${swapId} for discordID: ${discordID}, tagNumber: ${tagNumber}`
       );
 
-      const result = await this.queueService.processTagSwapRequest(
-        queueGroupName,
-        UpdateTagSource.Manual
-      );
+      await this.queueService.publishTagSwapRequest(queueGroupName, {
+        discordID,
+        tagNumber,
+      });
+
+      // Simulate waiting for a response (replace with actual logic)
+      const result: {
+        success: boolean;
+        successfulSwaps?: { discordID: string; tagNumber: number }[];
+        unmatchedUsers?: string[];
+      } = await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            success: true,
+            successfulSwaps: [{ discordID, tagNumber }],
+          });
+        }, 1000);
+      });
 
       if (result.success) {
         if (result.successfulSwaps) {
@@ -147,7 +160,6 @@ export class LeaderboardService {
           "Tag swap timed out. Unmatched users:",
           result.unmatchedUsers
         );
-        // Implement your notification logic here if needed
       }
 
       return swapId;
@@ -228,5 +240,48 @@ export class LeaderboardService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  // RabbitMQ Consumer for Check-Tag Messages
+  @RabbitSubscribe({
+    exchange: "main_exchange",
+    routingKey: "check-tag",
+    queue: "check-tag-queue",
+  })
+  async handleCheckTagMessage(message: any) {
+    try {
+      const { discordID, tagNumber } = message.content;
+      console.log("Received check-tag message:", message.content);
+
+      // Check if the tag already exists in the leaderboard
+      const tagExists = await this.checkTagExists(discordID, tagNumber);
+
+      // Publish the response with the correlation ID (access from message.properties)
+      await this.publisher.publishMessage(
+        "check-tag-responses",
+        {
+          discordID,
+          tagExists,
+        },
+        { correlationId: message.properties.correlationId }
+      );
+
+      console.log("Published tag existence response:", {
+        discordID,
+        tagExists,
+      });
+    } catch (error) {
+      console.error("Error processing check-tag message:", error);
+    }
+  }
+
+  private async checkTagExists(
+    discordID: string,
+    tagNumber: number
+  ): Promise<boolean> {
+    const leaderboard = await this.getLeaderboard();
+    return leaderboard.leaderboardData.some(
+      (entry) => entry.tagNumber === tagNumber && entry.discordID !== discordID
+    );
   }
 }

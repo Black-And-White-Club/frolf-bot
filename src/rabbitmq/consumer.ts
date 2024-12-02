@@ -1,41 +1,38 @@
-// src/rabbitmq/consumer.ts
-
-import { Injectable, Inject } from "@nestjs/common";
-import { AmqpConnection } from "@golevelup/nestjs-rabbitmq";
+import { Injectable } from "@nestjs/common";
+import { RabbitSubscribe } from "@golevelup/nestjs-rabbitmq";
+import { LeaderboardService } from "../modules/leaderboard/leaderboard.service"; // Adjust the path if needed
 
 @Injectable()
-export class Consumer {
-  constructor(
-    @Inject("AMQP_CONNECTION") private readonly amqpConnection: AmqpConnection
-  ) {}
+export class ConsumerService {
+  constructor(private readonly leaderboardService: LeaderboardService) {} // Inject LeaderboardService
 
-  async consumeMessages(
+  @RabbitSubscribe({
+    exchange: "main_exchange",
+    routingKey: "queue.routing.key",
+    queue: "example_queue",
+  })
+  async handleIncomingMessage(
+    message: any,
+    routingKey: string,
     queue: string,
-    callback: (message: any) => Promise<void>,
-    consumerName: string
+    correlationId: string | null = null,
+    resolve: ((value: any) => void) | null = null
   ) {
     try {
-      await this.amqpConnection.createSubscriber(
-        async (message: any) => {
-          try {
-            const content = JSON.parse(message.content.toString());
-            await callback(content);
-          } catch (error) {
-            console.error("Error processing message:", error);
-            // Handle the error appropriately
-          }
-        },
-        {
-          exchange: "",
-          queue,
-        },
-        consumerName
-      );
+      console.log(`Message received on ${queue}:`, message);
 
-      console.log("Consuming messages from queue:", queue);
+      if (correlationId && resolve) {
+        // This is a response to a request, resolve the Promise
+        resolve({ tagExists: message.content.tagExists });
+      } else {
+        // Call the appropriate handler based on the routing key
+        if (routingKey === "check-tag") {
+          this.leaderboardService.handleCheckTagMessage(message);
+        }
+        // Add other routing key checks for different handlers as needed
+      }
     } catch (error) {
-      console.error("Error consuming messages:", error);
-      // Handle the error appropriately
+      console.error("Error processing message:", error);
     }
   }
 }

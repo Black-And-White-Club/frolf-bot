@@ -9,7 +9,7 @@
     "skipLibCheck": true, // Skip type checking of declaration files
     "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased references to the same file
     "outDir": "./dist", // Redirect output structure to the directory
-    "rootDir": "./", // Specify the root directory of input files
+    "rootDir": "./src", // Specify the root directory of input files
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "resolveJsonModule": true,

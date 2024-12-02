@@ -1,19 +1,33 @@
 // src/modules/user/user.service.ts
 
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { User } from "src/modules/user/user.entity";
-import { Publisher } from "src/rabbitmq/publisher"; // Import the Publisher service
+import { Publisher } from "src/rabbitmq/publisher";
 import { eq } from "drizzle-orm";
 import { users as UserModel } from "./user.model";
+import { ConsumerService } from "src/rabbitmq/consumer";
+import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   constructor(
     @Inject("USER_DATABASE_CONNECTION") private db: any,
-    private readonly publisher: Publisher // Inject the Publisher service
-  ) {}
+    private readonly publisher: Publisher,
+    private readonly consumerService: ConsumerService
+  ) {
+    console.log("UserService constructor called with db:", db);
+    console.log("UserService constructor called");
+    console.log("Publisher instance:", publisher);
+    console.log("ConsumerService instance:", consumerService);
+  }
+
+  async onModuleInit() {
+    // This will be called after the service is initialized
+    console.log("UserService initialized");
+  }
 
   async getUserByDiscordID(discordID: string): Promise<User | null> {
+    console.log("getUserByDiscordID called with discordID:", discordID);
     try {
       const result = await this.db
         .select()
@@ -32,6 +46,8 @@ export class UserService {
   }
 
   async createUser(userData: User): Promise<User> {
+    console.log("UserService.createUser called with:", userData);
+
     try {
       console.log("Creating user with data:", userData);
 
@@ -42,21 +58,58 @@ export class UserService {
         ...(userData.tagNumber && { tagNumber: userData.tagNumber }),
       };
 
-      const result = await this.db
-        .insert(UserModel)
-        .values(newUser)
-        .returning();
-      const insertedUser = result[0];
+      console.log("About to publish message to RabbitMQ");
 
-      console.log("User created successfully:", insertedUser);
+      const correlationId = uuidv4();
 
-      // Publish RabbitMQ message for leaderboard update
-      await this.publisher.publishMessage("userCreated", insertedUser);
+      await this.publisher.publishMessage(
+        "check-tag",
+        {
+          discordID: newUser.discordID,
+          tagNumber: newUser.tagNumber,
+        },
+        { correlationId: correlationId }
+      );
 
-      return insertedUser;
+      const tagNumberCheckResult: { tagExists: boolean } = await new Promise(
+        (resolve) => {
+          this.consumerService.handleIncomingMessage(
+            null,
+            "check-tag-responses",
+            "check-tag-responses-queue",
+            correlationId,
+            resolve
+          );
+        }
+      );
+
+      if (tagNumberCheckResult.tagExists) {
+        console.error("Tag number already exists. User creation failed.");
+        throw new Error("Tag number is already in use.");
+      } else {
+        console.log("Tag number is available");
+
+        const result = await this.db
+          .insert(UserModel)
+          .values(newUser)
+          .returning();
+        const insertedUser = result[0];
+
+        console.log("User created successfully:", insertedUser);
+
+        await this.publisher.publishMessage("userCreated", insertedUser);
+
+        return insertedUser;
+      }
     } catch (error) {
       console.error("Error creating user:", error);
-      throw error;
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack trace:", error.stack);
+      } else {
+        console.error("Error object:", error);
+      }
+      return {} as User;
     }
   }
 
@@ -78,7 +131,6 @@ export class UserService {
 
       console.log("User updated successfully:", updatedUser);
 
-      // Publish RabbitMQ message for leaderboard update if role or tagNumber changed
       if (updates.role || updates.tagNumber !== undefined) {
         await this.publisher.publishMessage("userUpdated", updatedUser);
       }

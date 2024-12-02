@@ -6,12 +6,15 @@ import { eq, and } from "drizzle-orm";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Score } from "./score.entity";
 import { Publisher } from "src/rabbitmq/publisher";
+import { ConsumerService } from "src/rabbitmq/consumer";
+import { RabbitSubscribe } from "@golevelup/nestjs-rabbitmq";
 
 @Injectable()
 export class ScoreService {
   constructor(
     @Inject("SCORE_DATABASE_CONNECTION") private db: NodePgDatabase,
-    private readonly publisher: Publisher
+    private readonly publisher: Publisher,
+    private readonly consumerService: ConsumerService
   ) {}
 
   async getUserScore(
@@ -160,5 +163,18 @@ export class ScoreService {
     score.createdAt = scoreData.createdAt;
     score.updatedAt = scoreData.updatedAt;
     return score;
+  }
+
+  @RabbitSubscribe({
+    exchange: "main_exchange",
+    routingKey: "process_scores",
+    queue: "process_scores",
+  })
+  async handleScoreMessage(message: any) {
+    return this.consumerService.handleIncomingMessage(
+      message,
+      "process_scores",
+      "process_scores"
+    );
   }
 }

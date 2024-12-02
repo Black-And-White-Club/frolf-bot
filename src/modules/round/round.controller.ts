@@ -57,15 +57,18 @@ export class RoundController {
     try {
       const { roundID, discordID, response } = input;
 
+      // Get the round details
       const round = await this.roundService.getRound(roundID);
       if (!round) {
         throw new Error("Round not found");
       }
 
+      // Check if the round is in the correct state
       if (round.state !== "UPCOMING") {
         throw new Error("You can only join rounds that are upcoming");
       }
 
+      // Check if the user is already a participant
       const existingParticipant = round.participants.find(
         (participant) => participant.discordID === discordID
       );
@@ -73,18 +76,22 @@ export class RoundController {
         throw new Error("You have already joined this round");
       }
 
+      // Fetch the tag number using the publisher
       const tagNumber = await this.publisher.publishAndGetResponse(
-        "get-tag",
-        { discordID },
-        "round_responses",
-        "roundTagConsumer"
+        "get-tag", // exchange
+        "round_responses", // routing key
+        { discordID } // message
       );
 
+      // Ensure tagNumber is a valid number or null
+      const validTagNumber = typeof tagNumber === "number" ? tagNumber : null;
+
+      // Join the round
       await this.roundService.joinRound({
         roundID,
         discordID,
         response,
-        tagNumber: tagNumber || null,
+        tagNumber: validTagNumber, // Safely handle tagNumber being null
       });
 
       return {
