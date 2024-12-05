@@ -30,6 +30,7 @@ var UserService *services.UserService
 
 // CreateUser creates a new user.
 func CreateUser(w http.ResponseWriter, r *http.Request) {
+	log.Println("CreateUser handler - Entering handler") // Add this line
 	var user models.User
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		log.Printf("CreateUser handler - failed to decode request body: %v", err)
@@ -40,6 +41,8 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	log.Printf("CreateUser handler - received user: %+v", user)
 
 	tagNumber, _ := strconv.Atoi(r.URL.Query().Get("tagNumber"))
+
+	log.Printf("CreateUser handler - received tag: %+v", tagNumber)
 
 	if err := UserService.CreateUser(r.Context(), &user, tagNumber); err != nil {
 		log.Printf("CreateUser handler - failed to create user: %v", err)

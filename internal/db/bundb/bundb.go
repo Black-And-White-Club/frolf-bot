@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/Black-And-White-Club/tcr-bot/app/models"
-	"github.com/Black-And-White-Club/tcr-bot/internal/db" // Ensure this import is correct
+	"github.com/Black-And-White-Club/tcr-bot/internal/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -16,10 +16,10 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	User        db.UserDB        // Ensure this is the correct interface type
-	Leaderboard db.LeaderboardDB // Ensure this is the correct interface type
-	Round       db.RoundDB       // Ensure this is the correct interface type
-	Score       db.ScoreDB       // Ensure this is the correct interface type
+	User        db.UserDB
+	Leaderboard db.LeaderboardDB
+	Round       db.RoundDB
+	Score       db.ScoreDB
 	db          *bun.DB
 }
 

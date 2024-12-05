@@ -23,7 +23,7 @@ func main() {
 	db := app.DB()
 
 	// Access the DSN from the App struct
-	fmt.Println("Database URL:", app.Cfg.DSN) // Access DSN from app.cfg
+	fmt.Println("Database URL:", app.Cfg.DSN)
 
 	// Create a new migrator
 	migrator := migrate.NewMigrator(db.GetDB(), migrations.Migrations)

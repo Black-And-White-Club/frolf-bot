@@ -32,31 +32,71 @@ func (s *UserService) GetUser(ctx context.Context, discordID string) (*models.Us
 }
 
 func (s *UserService) CreateUser(ctx context.Context, user *models.User, tagNumber int) error {
-	// Check dependencies
-	if s.db == nil {
-		log.Println("UserService.db is nil")
-		return errors.New("database connection is not initialized")
-	}
-
 	// Validate input
 	if user == nil {
-		log.Println("CreateUser - user is nil")
 		return errors.New("user cannot be nil")
 	}
 
 	if user.DiscordID == "" || user.Name == "" || user.Role == "" {
-		log.Printf("CreateUser - invalid user data: %+v", user)
 		return errors.New("user has invalid or missing fields")
 	}
 
-	// Debug log user object
-	userData, _ := json.MarshalIndent(user, "", "  ")
-	log.Printf("Saving user to database: %s", string(userData))
+	// Handle tag number logic with a switch statement
+	switch {
+	case tagNumber != 0: // Tag number provided
+		// 1. Prepare the request data for the leaderboard module
+		checkTagEvent := &nats.CheckTagAvailabilityEvent{
+			TagNumber: tagNumber,
+			ReplyTo:   "user.check-tag-availability-response",
+		}
 
-	// Save the user
+		// 2. Send the request to the leaderboard module
+		responseData, err := s.natsConnectionPool.Request(ctx, "check-tag-availability", checkTagEvent, 5)
+		if err != nil {
+			return fmt.Errorf("failed to check tag availability: %w", err)
+		}
+
+		// 3. Unmarshal the response from the leaderboard module
+		var tagAvailabilityResponse nats.TagAvailabilityResponse
+		err = json.Unmarshal(responseData, &tagAvailabilityResponse)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal tag availability response: %w", err)
+		}
+
+		// 4. If the tag is not available, return an error
+		if !tagAvailabilityResponse.IsAvailable {
+			return fmt.Errorf("tag number %d is already taken", tagNumber)
+		}
+
+		// 5. If the tag is available, proceed with user creation and publish event
+		if err := s.createUserAndPublishEvent(ctx, user, tagNumber); err != nil {
+			return err
+		}
+
+		return nil
+
+	default: // No tag number provided
+		// Create the user without a tag
+		if err := s.db.CreateUser(ctx, user); err != nil {
+			return fmt.Errorf("failed to create user: %w", err)
+		}
+
+		return nil
+	}
+}
+
+// Helper function to create user and publish event
+func (s *UserService) createUserAndPublishEvent(ctx context.Context, user *models.User, tagNumber int) error {
 	if err := s.db.CreateUser(ctx, user); err != nil {
-		log.Printf("CreateUser - failed to save user: %v", err)
 		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	userCreatedEvent := &nats.UserCreatedEvent{
+		DiscordID: user.DiscordID,
+		TagNumber: tagNumber,
+	}
+	if err := s.natsConnectionPool.Publish("user.created", userCreatedEvent); err != nil {
+		return fmt.Errorf("failed to publish user.created event: %w", err)
 	}
 
 	return nil

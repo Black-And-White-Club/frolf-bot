@@ -17,8 +17,14 @@ type userDB struct {
 	db *bun.DB
 }
 
+func (db *userDB) Ping(ctx context.Context) error {
+	return db.db.Ping() // Assuming db.db is your *bun.DB instance
+}
+
 // GetUser retrieves a user by Discord ID.
 func (db *userDB) GetUser(ctx context.Context, discordID string) (*models.User, error) {
+	log.Printf("userDB.GetUser - Trying to fetch user with discordID: %s", discordID) // Logging added
+
 	var user models.User
 	err := db.db.NewSelect().
 		Model(&user).

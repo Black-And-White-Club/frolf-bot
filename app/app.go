@@ -22,7 +22,7 @@ type App struct {
 }
 
 // NewApp initializes the application with the necessary services and configuration.
-func NewApp(ctx context.Context) (*App, error) {
+func NewApp(ctx context.Context) (*App, *services.UserService, error) {
 	cfg := config.NewConfig(ctx)
 	dsn := cfg.DSN
 	natsURL := cfg.NATS.URL
@@ -30,21 +30,21 @@ func NewApp(ctx context.Context) (*App, error) {
 	// Initialize the database service
 	dbService, err := bundb.NewBunDBService(ctx, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database service: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize database service: %w", err)
 	}
 
 	// Initialize NATS connection pool
 	natsConnectionPool, err := nats.NewNatsConnectionPool(natsURL, 10)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize NATS connection pool: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize NATS connection pool: %w", err)
 	}
 
-	log.Printf("NATS connection pool initialized with URL: %s", natsURL) // Log the NATS URL
+	log.Printf("NATS connection pool initialized with URL: %s", natsURL)
 
 	// Initialize services with the correct types
 	leaderboardService := services.NewLeaderboardService(dbService.Leaderboard, natsConnectionPool)
 	userService := services.NewUserService(dbService.User, natsConnectionPool)
-	roundService := services.NewRoundService(dbService.Round, natsConnectionPool) // Removed leaderboardService
+	roundService := services.NewRoundService(dbService.Round, natsConnectionPool)
 	scoreService := services.NewScoreService(dbService.Score, natsConnectionPool)
 
 	return &App{
@@ -55,7 +55,7 @@ func NewApp(ctx context.Context) (*App, error) {
 		UserService:        userService,
 		RoundService:       roundService,
 		ScoreService:       scoreService,
-	}, nil
+	}, userService, nil // Return userService
 }
 
 // DB returns the database service.

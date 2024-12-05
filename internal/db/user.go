@@ -13,4 +13,5 @@ type UserDB interface {
 	GetUser(ctx context.Context, discordID string) (*models.User, error)
 	CreateUser(ctx context.Context, user *models.User) error
 	UpdateUser(ctx context.Context, discordID string, updates *models.User) error
+	Ping(ctx context.Context) error
 }
