@@ -8,14 +8,16 @@ import (
 	"strings"
 
 	"github.com/Black-And-White-Club/tcr-bot/app"
-	"github.com/Black-And-White-Club/tcr-bot/internal/db/bundb/migrations"
+	"github.com/Black-And-White-Club/tcr-bot/db/bundb/migrations"
 	"github.com/uptrace/bun/migrate"
 	"github.com/urfave/cli/v2"
 )
 
 func main() {
-	// Use the app package to get the database connection
+	// Declare ctx first
 	ctx := context.Background()
+
+	// Use the app package to get the database connection
 	app, err := app.NewApp(ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
@@ -32,7 +34,7 @@ func main() {
 		Name: "bun",
 
 		Commands: []*cli.Command{
-			newDBCommand(migrator),
+			newDBCommand(migrator), // Removed ctx from here
 		},
 	}
 	if err := cliApp.Run(os.Args); err != nil {
