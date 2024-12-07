@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Black-And-White-Club/tcr-bot/api/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

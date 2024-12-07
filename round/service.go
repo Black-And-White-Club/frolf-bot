@@ -1,78 +1,127 @@
-// api/services/round_service.go
-package services
+// round/service.go
+
+package round
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/api/structs"
 	"github.com/Black-And-White-Club/tcr-bot/db"
-	"github.com/Black-And-White-Club/tcr-bot/models"
+	"github.com/Black-And-White-Club/tcr-bot/events"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
+	subscribers "github.com/Black-And-White-Club/tcr-bot/round/subs"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // RoundService handles round-related logic and database interactions.
 type RoundService struct {
-	db                 db.RoundDB
-	natsConnectionPool *nats.NatsConnectionPool
+	roundDB            db.RoundDB
+	converter          RoundConverter
+	publisher          message.Publisher
+	natsConnectionPool *nats.NatsConnectionPool // Add this field
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(db db.RoundDB, natsConnectionPool *nats.NatsConnectionPool) *RoundService {
+func NewRoundService(roundDB db.RoundDB, natsConnectionPool *nats.NatsConnectionPool, publisher message.Publisher) *RoundService {
 	return &RoundService{
-		db:                 db,
-		natsConnectionPool: natsConnectionPool,
+		roundDB:            roundDB,
+		converter:          &DefaultRoundConverter{},
+		publisher:          publisher,
+		natsConnectionPool: natsConnectionPool, // Initialize the field
 	}
 }
 
 // GetRounds retrieves all rounds.
-func (s *RoundService) GetRounds(ctx context.Context) ([]*structs.Round, error) {
-	modelRounds, err := s.db.GetRounds(ctx)
+func (s *RoundService) GetRounds(ctx context.Context) ([]*Round, error) {
+	modelRounds, err := s.roundDB.GetRounds(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rounds: %w", err)
 	}
 
-	var apiRounds []*structs.Round
+	var apiRounds []*Round
 	for _, modelRound := range modelRounds {
-		apiRounds = append(apiRounds, convertModelRoundToStructRound(modelRound))
+		apiRounds = append(apiRounds, s.converter.ConvertModelRoundToStructRound(modelRound))
 	}
 
 	return apiRounds, nil
 }
 
 // GetRound retrieves a specific round by ID.
-func (s *RoundService) GetRound(ctx context.Context, roundID int64) (*structs.Round, error) {
-	modelRound, err := s.db.GetRound(ctx, roundID)
+func (s *RoundService) GetRound(ctx context.Context, roundID int64) (*Round, error) {
+	modelRound, err := s.roundDB.GetRound(ctx, roundID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get round: %w", err)
 	}
 
-	return convertModelRoundToStructRound(modelRound), nil
+	return s.converter.ConvertModelRoundToStructRound(modelRound), nil
+}
+
+func (s *RoundService) HasActiveRounds(ctx context.Context) (bool, error) {
+	// 1. Check for upcoming rounds within the next hour
+	now := time.Now()
+	oneHourFromNow := now.Add(time.Hour)
+	upcomingRounds, err := s.roundDB.GetUpcomingRounds(ctx, now, oneHourFromNow)
+	if err != nil {
+		return false, fmt.Errorf("failed to get upcoming rounds: %w", err)
+	}
+	if len(upcomingRounds) > 0 {
+		return true, nil // There are upcoming rounds
+	}
+
+	// 2. If no upcoming rounds, check for rounds in progress
+	rounds, err := s.GetRounds(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get rounds: %w", err)
+	}
+	for _, round := range rounds {
+		if round.State == RoundStateInProgress {
+			return true, nil // There's a round in progress
+		}
+	}
+
+	// 3. No active rounds found
+	return false, nil
 }
 
 // ScheduleRound schedules a new round.
-func (s *RoundService) ScheduleRound(ctx context.Context, input structs.ScheduleRoundInput) (*structs.Round, error) {
-	// Perform any necessary validations here
+func (s *RoundService) ScheduleRound(ctx context.Context, input ScheduleRoundInput) (*Round, error) {
 	if input.Title == "" {
 		return nil, errors.New("title is required")
 	}
 
-	// Call the database layer to create the round
-	modelRound, err := s.db.CreateRound(ctx, input)
+	// Convert round.ScheduleRoundInput to models.ScheduleRoundInput using the converter
+	modelInput := s.converter.ConvertScheduleRoundInputToModel(input)
+
+	round, err := s.roundDB.CreateRound(ctx, modelInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round: %w", err)
 	}
 
-	return convertModelRoundToStructRound(modelRound), nil
+	return s.converter.ConvertModelRoundToStructRound(round), nil
+}
+
+// UpdateParticipant updates a participant's response in a round.
+func (s *RoundService) UpdateParticipant(ctx context.Context, input UpdateParticipantResponseInput) (*Round, error) {
+	// Use the converter to create the models.Participant
+	participant := s.converter.ConvertUpdateParticipantInputToParticipant(input)
+
+	err := s.roundDB.UpdateParticipant(ctx, input.RoundID, participant)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update participant response: %w", err)
+	}
+
+	return s.GetRound(ctx, input.RoundID)
 }
 
 // JoinRound adds a participant to a round.
-func (s *RoundService) JoinRound(ctx context.Context, input structs.JoinRoundInput) (*structs.Round, error) {
+func (s *RoundService) JoinRound(ctx context.Context, input JoinRoundInput) (*Round, error) {
 	switch input.Response {
-	case structs.ResponseAccept, structs.ResponseTentative:
+	case ResponseAccept, ResponseTentative:
 		// Valid response, proceed
 	default:
 		return nil, errors.New("invalid response value")
@@ -80,49 +129,14 @@ func (s *RoundService) JoinRound(ctx context.Context, input structs.JoinRoundInp
 
 	round, err := s.GetRound(ctx, input.RoundID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get round: %w", err)
 	}
 	if round == nil {
 		return nil, errors.New("round not found")
 	}
 
 	if round.Finalized {
-		// Check if the user is an admin
-		conn, err := s.natsConnectionPool.GetConnection()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get NATS connection from pool: %w", err)
-		}
-		defer s.natsConnectionPool.ReleaseConnection(conn)
-
-		replyTo := conn.NewInbox()
-		err = s.natsConnectionPool.Publish("user.get_role", &nats.UserGetRoleEvent{
-			DiscordID: input.DiscordID,
-			ReplyTo:   replyTo,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to publish user.get_role event: %w", err)
-		}
-
-		sub, err := conn.SubscribeSync(replyTo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to subscribe to reply inbox: %w", err)
-		}
-		defer sub.Unsubscribe()
-
-		msg, err := sub.NextMsgWithContext(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to receive user role response: %w", err)
-		}
-
-		var response nats.UserGetRoleResponse
-		err = json.Unmarshal(msg.Data, &response)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal user role response: %w", err)
-		}
-
-		if response.Role != "ADMIN" {
-			return nil, errors.New("only admins can add participants to a finalized round")
-		}
+		return nil, errors.New("cannot join a finalized round")
 	}
 
 	// Check if the user is already a participant
@@ -132,101 +146,102 @@ func (s *RoundService) JoinRound(ctx context.Context, input structs.JoinRoundInp
 		}
 	}
 
-	// Get the tag number from the leaderboard service using NATS
-	conn, err := s.natsConnectionPool.GetConnection()
+	// --- Publish TagNumberRequestedEvent ---
+	if err := s.publisher.Publish(TagNumberRequestedEvent{}.Topic(), message.NewMessage(watermill.NewUUID(), []byte(input.DiscordID))); err != nil {
+		log.Printf("Error publishing TagNumberRequestedEvent: %v", err)
+		return nil, fmt.Errorf("failed to publish TagNumberRequestedEvent: %w", err)
+	}
+
+	// --- Add participant to the round ---
+	modelParticipant := s.converter.ConvertJoinRoundInputToModelParticipant(input) // Direct conversion
+	// Set a default tag number (e.g., 0 or nil) if no tag is returned
+	// The event handler will update this if a tag is found
+	var tagNumber int // Or *int if you prefer a pointer
+	modelParticipant.TagNumber = &tagNumber
+
+	err = s.roundDB.UpdateParticipant(ctx, input.RoundID, modelParticipant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get NATS connection from pool: %w", err)
-	}
-	defer s.natsConnectionPool.ReleaseConnection(conn)
-
-	replyTo := conn.NewInbox()
-	err = s.natsConnectionPool.Publish("leaderboard.get_tag_number", &nats.LeaderboardGetTagNumberEvent{
-		DiscordID: input.DiscordID,
-		ReplyTo:   replyTo,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to publish leaderboard.get_tag_number event: %w", err)
+		return nil, fmt.Errorf("failed to add participant: %w", err)
 	}
 
-	sub, err := conn.SubscribeSync(replyTo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to reply inbox: %w", err)
-	}
-	defer sub.Unsubscribe()
-
-	msg, err := sub.NextMsgWithContext(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to receive tag number response: %w", err)
-	}
-
-	var response nats.LeaderboardGetTagNumberResponse
-	err = json.Unmarshal(msg.Data, &response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal tag number response: %w", err)
-	}
-
-	tagNumber := response.TagNumber // This can be nil if the user doesn't have a tag
-
-	// Create a new participant
-	newParticipant := structs.Participant{
-		DiscordID: input.DiscordID,
-		Response:  input.Response,
-		TagNumber: tagNumber, // This can be nil if the user doesn't have a tag
-	}
-
-	// Add the new participant to the round's Participants slice
-	round.Participants = append(round.Participants, newParticipant)
-
-	// Update the round in the database
-	if err := s.db.UpdateRound(ctx, round); err != nil {
-		return nil, fmt.Errorf("failed to update round: %w", err)
-	}
-
-	return round, nil
+	return s.GetRound(ctx, input.RoundID)
 }
 
 // SubmitScore submits a score for a participant in a round.
-func (s *RoundService) SubmitScore(ctx context.Context, input structs.SubmitScoreInput) (*structs.Round, error) {
+func (s *RoundService) SubmitScore(ctx context.Context, input SubmitScoreInput) error {
 	round, err := s.GetRound(ctx, input.RoundID)
 	if err != nil {
-		return nil, err
+		return err // Corrected return statement
 	}
 	if round == nil {
-		return nil, errors.New("round not found")
+		return errors.New("round not found") // Corrected return statement
 	}
 
-	if round.State == structs.RoundStateFinalized {
-		return nil, errors.New("cannot submit score for a finalized round")
+	if round.State == RoundStateFinalized {
+		return errors.New("cannot submit score for a finalized round") // Corrected return statement
 	}
 
-	// Check if the participant exists in the round
-	participant, err := s.db.FindParticipant(ctx, round.ID, input.DiscordID)
+	// --- Publish ScoreSubmittedEvent ---
+	event := ScoreSubmittedEvent{
+		RoundID: input.RoundID,
+		UserID:  input.DiscordID,
+		Score:   input.Score,
+	}
+
+	payload, err := json.Marshal(event) // Marshal the event into a JSON payload
 	if err != nil {
-		return nil, fmt.Errorf("failed to find participant: %w", err)
-	}
-	if participant == nil {
-		return nil, errors.New("participant not found")
+		return fmt.Errorf("failed to marshal ScoreSubmittedEvent: %w", err)
 	}
 
-	// Update the score in the Scores map
-	if round.Scores == nil {
-		round.Scores = make(map[string]int)
-	}
-	round.Scores[input.DiscordID] = input.Score
-
-	// Update the round in the database
-	if err := s.db.UpdateRound(ctx, round); err != nil {
-		return nil, fmt.Errorf("failed to update round: %w", err)
+	if err := s.publisher.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish ScoreSubmittedEvent: %w", err)
 	}
 
-	return round, nil
+	return nil
+}
+
+// ProcessScoreSubmission handles the logic for processing a submitted score.
+func (s *RoundService) ProcessScoreSubmission(ctx context.Context, event ScoreSubmittedEvent) error {
+	// Fetch the round
+	modelRound, err := s.roundDB.GetRound(ctx, event.RoundID)
+	if err != nil {
+		return fmt.Errorf("failed to get round: %w", err)
+	}
+	if modelRound == nil {
+		return errors.New("round not found")
+	}
+
+	// Update the score in the Round struct
+	modelRound.Scores[event.UserID] = event.Score
+
+	// Update the score in the database
+	if err := s.roundDB.SubmitScore(ctx, event.RoundID, event.UserID, event.Score); err != nil {
+		log.Printf("Error updating scores in ProcessScoreSubmission: %v", err)
+		return fmt.Errorf("failed to update scores: %w", err)
+	}
+
+	// Check if all scores are submitted
+	if len(modelRound.Scores) == len(modelRound.Participants) {
+		// Trigger FinalizeAndProcessScores asynchronously
+		go func() {
+			if _, err := s.FinalizeAndProcessScores(context.Background(), event.RoundID); err != nil {
+				log.Printf("Error automatically finalizing round: %v", err)
+				// Consider more robust error handling here, e.g.,
+				// - Publish an error event
+				// - Retry finalization later
+				// - Send a notification to an admin
+			}
+		}()
+	}
+
+	return nil
 }
 
 // FinalizeAndProcessScores finalizes a round and processes the scores.
-func (s *RoundService) FinalizeAndProcessScores(ctx context.Context, roundID int64) (*structs.Round, error) {
+func (s *RoundService) FinalizeAndProcessScores(ctx context.Context, roundID int64) (*Round, error) {
 	round, err := s.GetRound(ctx, roundID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get round: %w", err)
 	}
 	if round == nil {
 		return nil, errors.New("round not found")
@@ -236,26 +251,42 @@ func (s *RoundService) FinalizeAndProcessScores(ctx context.Context, roundID int
 		return round, nil // Return early if already finalized
 	}
 
-	round.State = structs.RoundStateFinalized
-	round.Finalized = true
-
-	if err := s.db.UpdateRound(ctx, round); err != nil {
-		return nil, fmt.Errorf("failed to update round: %w", err)
+	// --- Construct ParticipantScores ---
+	var participantsWithScores []ParticipantScore
+	for _, participant := range round.Participants {
+		score, ok := round.Scores[participant.DiscordID]
+		if !ok {
+			// Handle missing score for a participant (e.g., set a default score)
+			score = 0 // Or any other default value
+		}
+		participantsWithScores = append(participantsWithScores, ParticipantScore{
+			DiscordID: participant.DiscordID,
+			TagNumber: *participant.TagNumber, // Assuming TagNumber is always present at this point
+			Score:     score,
+		})
 	}
 
-	// Publish RoundFinalizedEvent to the score module
-	err = s.natsConnectionPool.Publish("round.finalized", &nats.RoundFinalizedEvent{
-		RoundID: roundID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to publish round.finalized event: %w", err)
+	// --- Publish RoundFinalizedEvent ---
+	event := RoundFinalizedEvent{
+		RoundID:      roundID,
+		Participants: participantsWithScores,
 	}
 
-	return round, nil
+	if err := s.publisher.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), event.Marshal())); err != nil {
+		// Handle the publishing error, e.g., log and return an error
+		return nil, fmt.Errorf("failed to publish RoundFinalizedEvent: %w", err)
+	}
+
+	// --- Update round state ---
+	if err := s.roundDB.UpdateRoundState(ctx, roundID, s.converter.ConvertRoundStateToModelRoundState(RoundStateFinalized)); err != nil {
+		return nil, fmt.Errorf("failed to update round state: %w", err)
+	}
+
+	return s.GetRound(ctx, roundID)
 }
 
 // EditRound updates an existing round.
-func (s *RoundService) EditRound(ctx context.Context, roundID int64, userID string, input structs.EditRoundInput) (*structs.Round, error) {
+func (s *RoundService) EditRound(ctx context.Context, roundID int64, discordID string, input EditRoundInput) (*Round, error) {
 	round, err := s.GetRound(ctx, roundID)
 	if err != nil {
 		return nil, err
@@ -264,61 +295,19 @@ func (s *RoundService) EditRound(ctx context.Context, roundID int64, userID stri
 		return nil, errors.New("round not found")
 	}
 
-	// Check if the user is authorized to edit
-	if round.CreatorID != userID {
-		// Check if the user is an admin
-		conn, err := s.natsConnectionPool.GetConnection()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get NATS connection from pool: %w", err)
-		}
-		defer s.natsConnectionPool.ReleaseConnection(conn)
+	// Convert the input to models.EditRoundInput using your RoundConverter
+	modelInput := s.converter.ConvertEditRoundInputToModel(input)
 
-		replyTo := conn.NewInbox()
-		err = s.natsConnectionPool.Publish("user.get_role", &nats.UserGetRoleEvent{
-			DiscordID: userID,
-			ReplyTo:   replyTo,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to publish user.get_role event: %w", err)
-		}
-
-		sub, err := conn.SubscribeSync(replyTo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to subscribe to reply inbox: %w", err)
-		}
-		defer sub.Unsubscribe()
-
-		msg, err := sub.NextMsgWithContext(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to receive user role response: %w", err)
-		}
-
-		var response nats.UserGetRoleResponse
-		err = json.Unmarshal(msg.Data, &response)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal user role response: %w", err)
-		}
-
-		if response.Role != "ADMIN" {
-			return nil, errors.New("only the round creator or an admin can edit the round")
-		}
-	}
-
-	round.Title = input.Title
-	round.Location = input.Location
-	round.EventType = input.EventType
-	round.Date = input.Date
-	round.Time = input.Time
-
-	if err := s.db.UpdateRound(ctx, round); err != nil {
+	err = s.roundDB.UpdateRound(ctx, roundID, modelInput)
+	if err != nil {
 		return nil, fmt.Errorf("failed to update round: %w", err)
 	}
 
-	return round, nil
+	return s.GetRound(ctx, roundID)
 }
 
 // DeleteRound deletes a round by ID.
-func (s *RoundService) DeleteRound(ctx context.Context, roundID int64, userID string) error {
+func (s *RoundService) DeleteRound(ctx context.Context, roundID int64) error { // No userID parameter
 	round, err := s.GetRound(ctx, roundID)
 	if err != nil {
 		return err
@@ -327,61 +316,12 @@ func (s *RoundService) DeleteRound(ctx context.Context, roundID int64, userID st
 		return errors.New("round not found")
 	}
 
-	// Check if the user is authorized to delete
-	if round.CreatorID != userID {
-		// Check if the user is an admin
-		conn, err := s.natsConnectionPool.GetConnection()
-		if err != nil {
-			return fmt.Errorf("failed to get NATS connection from pool: %w", err)
-		}
-		defer s.natsConnectionPool.ReleaseConnection(conn)
-
-		replyTo := conn.NewInbox()
-		err = s.natsConnectionPool.Publish("user.get_role", &nats.UserGetRoleEvent{
-			DiscordID: userID,
-			ReplyTo:   replyTo,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to publish user.get_role event: %w", err)
-		}
-
-		sub, err := conn.SubscribeSync(replyTo)
-		if err != nil {
-			return fmt.Errorf("failed to subscribe to reply inbox: %w", err)
-		}
-		defer sub.Unsubscribe()
-
-		msg, err := sub.NextMsgWithContext(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to receive user role response: %w", err)
-		}
-
-		var response nats.UserGetRoleResponse
-		err = json.Unmarshal(msg.Data, &response)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal user role response: %w", err)
-		}
-
-		if response.Role != "ADMIN" {
-			return errors.New("only the round creator or an admin can delete the round")
-		}
-	}
-
-	return s.db.DeleteRound(ctx, roundID, userID)
-}
-
-// UpdateParticipantResponse updates a participant's response in a round.
-func (s *RoundService) UpdateParticipantResponse(ctx context.Context, input structs.UpdateParticipantResponseInput) (*structs.Round, error) {
-	modelRound, err := s.db.UpdateParticipantResponse(ctx, input.RoundID, input.DiscordID, input.Response)
+	err = s.roundDB.DeleteRound(ctx, roundID) // Now matches the db layer signature
 	if err != nil {
-		return nil, fmt.Errorf("failed to update participant response: %w", err)
+		return fmt.Errorf("failed to delete round: %w", err)
 	}
-	return convertModelRoundToStructRound(modelRound), nil
-}
 
-// UpdateRoundState updates the state of a round.
-func (s *RoundService) UpdateRoundState(ctx context.Context, roundID int64, state structs.RoundState) error {
-	return s.db.UpdateRoundState(ctx, roundID, state)
+	return nil
 }
 
 // CheckForUpcomingRounds checks for upcoming rounds and sends notifications.
@@ -389,14 +329,14 @@ func (s *RoundService) CheckForUpcomingRounds(ctx context.Context) error {
 	now := time.Now()
 	oneHourFromNow := now.Add(time.Hour)
 
-	modelRounds, err := s.db.GetUpcomingRounds(ctx, now, oneHourFromNow)
+	modelRounds, err := s.roundDB.GetUpcomingRounds(ctx, now, oneHourFromNow)
 	if err != nil {
 		return fmt.Errorf("failed to fetch upcoming rounds: %w", err)
 	}
 
-	var rounds []*structs.Round
+	var rounds []*Round
 	for _, modelRound := range modelRounds {
-		rounds = append(rounds, convertModelRoundToStructRound(modelRound))
+		rounds = append(rounds, s.converter.ConvertModelRoundToStructRound(modelRound))
 	}
 
 	for _, round := range rounds {
@@ -407,18 +347,29 @@ func (s *RoundService) CheckForUpcomingRounds(ctx context.Context) error {
 
 		startTime := time.Date(round.Date.Year(), round.Date.Month(), round.Date.Day(), roundTime.Hour(), roundTime.Minute(), 0, 0, time.UTC)
 		oneHourBefore := startTime.Add(-time.Hour)
+		thirtyMinutesBefore := startTime.Add(-30 * time.Minute)
 
-		if now.After(oneHourBefore) && now.Before(startTime) {
-			// Send 1-hour notification
-			fmt.Printf("Sending 1-hour notification for round %d\n", round.ID)
+		if now.After(oneHourBefore) && now.Before(thirtyMinutesBefore) {
+			msg := message.NewMessage(watermill.NewUUID(), nil)
+			err := s.publisher.Publish("round_starting_one_hour", msg)
+			if err != nil {
+				return fmt.Errorf("failed to publish RoundStartingOneHourEvent: %w", err)
+			}
+		}
+
+		if now.After(thirtyMinutesBefore) && now.Before(startTime) {
+			msg := message.NewMessage(watermill.NewUUID(), nil)
+			err := s.publisher.Publish("round_starting_thirty_minutes", msg)
+			if err != nil {
+				return fmt.Errorf("failed to publish RoundStartingThirtyMinutesEvent: %w", err)
+			}
 		}
 
 		if now.After(startTime) {
-			// Send round start notification
-			fmt.Printf("Sending round start notification for round %d\n", round.ID)
-
-			if err := s.UpdateRoundState(ctx, round.ID, structs.RoundStateInProgress); err != nil {
-				return fmt.Errorf("failed to update round state: %w", err)
+			msg := message.NewMessage(watermill.NewUUID(), nil)
+			err := s.publisher.Publish("round_started", msg)
+			if err != nil {
+				return fmt.Errorf("failed to publish RoundStartedEvent: %w", err)
 			}
 		}
 	}
@@ -426,23 +377,38 @@ func (s *RoundService) CheckForUpcomingRounds(ctx context.Context) error {
 	return nil
 }
 
-// Helper function to convert between model and struct types
-func convertModelRoundToStructRound(modelRound *models.Round) *structs.Round {
-	if modelRound == nil {
-		return nil
+// UpdateRoundState updates the state of a round.
+func (s *RoundService) UpdateRoundState(ctx context.Context, roundID int64, state RoundState) error {
+	// Convert the RoundState to models.RoundState
+	modelState := s.converter.ConvertRoundStateToModelRoundState(state)
+
+	err := s.roundDB.UpdateRoundState(ctx, roundID, modelState)
+	if err != nil {
+		return fmt.Errorf("failed to update round state in DB: %w", err)
+	}
+	return nil
+}
+
+func (s *RoundService) StartNATSSubscribers(ctx context.Context, handler *RoundEventHandler) error {
+	subscriber, err := events.NewSubscriber(s.natsConnectionPool.GetURL(), watermill.NewStdLogger(false, false)) // Use s.natsConnectionPool.url
+	if err != nil {
+		return fmt.Errorf("failed to create subscriber: %w", err)
 	}
 
-	return &structs.Round{
-		ID:           modelRound.ID,
-		Title:        modelRound.Title,
-		Location:     modelRound.Location,
-		EventType:    modelRound.EventType,
-		Date:         modelRound.Date,
-		Time:         modelRound.Time,
-		Finalized:    modelRound.Finalized,
-		CreatorID:    modelRound.CreatorID,
-		State:        modelRound.State, // No conversion needed
-		Participants: modelRound.Participants,
-		Scores:       modelRound.Scores,
+	// Subscribe to round events
+	if err := subscribers.SubscribeToRoundEvents(ctx, subscriber, handler); err != nil {
+		return fmt.Errorf("failed to subscribe to round events: %w", err)
 	}
+
+	// Subscribe to participant events
+	if err := subscribers.SubscribeToParticipantEvents(ctx, subscriber, handler); err != nil {
+		return fmt.Errorf("failed to subscribe to participant events: %w", err)
+	}
+
+	// Subscribe to score events
+	if err := subscribers.SubscribeToScoreEvents(ctx, subscriber, handler); err != nil {
+		return fmt.Errorf("failed to subscribe to score events: %w", err)
+	}
+
+	return nil
 }

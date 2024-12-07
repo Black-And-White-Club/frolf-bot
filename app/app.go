@@ -8,7 +8,10 @@ import (
 	"github.com/Black-And-White-Club/tcr-bot/api/services"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
+	"github.com/Black-And-White-Club/tcr-bot/events"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type App struct {
@@ -19,6 +22,7 @@ type App struct {
 	UserService        *services.UserService
 	RoundService       *services.RoundService
 	ScoreService       *services.ScoreService
+	messagePublisher   message.Publisher
 }
 
 // NewApp initializes the application with the necessary services and configuration.
@@ -41,25 +45,17 @@ func NewApp(ctx context.Context) (*App, error) {
 
 	log.Printf("NATS connection pool initialized with URL: %s", natsURL)
 
-	// Initialize services with the correct types
-	leaderboardService := services.NewLeaderboardService(dbService.Leaderboard, natsConnectionPool)
-	userService := services.NewUserService(dbService.User, natsConnectionPool)
-	roundService := services.NewRoundService(dbService.Round, natsConnectionPool)
-	scoreService := services.NewScoreService(dbService.Score, natsConnectionPool)
+	// Create the publisher
+	publisher, err := events.NewPublisher(natsURL, watermill.NewStdLogger(false, false))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NATS publisher: %w", err)
+	}
 
-	// Start the NATS subscribers for each service
-	if err := leaderboardService.StartNATSSubscribers(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start NATS subscribers for LeaderboardService: %w", err)
-	}
-	if err := userService.StartNATSSubscribers(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start NATS subscribers for UserService: %w", err)
-	}
-	// if err := roundService.StartNATSSubscribers(ctx); err != nil {
-	//   return nil, fmt.Errorf("failed to start NATS subscribers for RoundService: %w", err)
-	// }
-	// if err := scoreService.StartNATSSubscribers(ctx); err != nil {
-	//   return nil, fmt.Errorf("failed to start NATS subscribers for ScoreService: %w", err)
-	// }
+	// Initialize services with the correct types (pass publisher to services)
+	leaderboardService := services.NewLeaderboardService(dbService.Leaderboard, natsConnectionPool, publisher)
+	userService := services.NewUserService(dbService.User, natsConnectionPool, publisher)
+	roundService := services.NewRoundService(dbService.Round, natsConnectionPool, publisher)
+	scoreService := services.NewScoreService(dbService.Score, natsConnectionPool, publisher)
 
 	return &App{
 		Cfg:                cfg,
@@ -69,10 +65,16 @@ func NewApp(ctx context.Context) (*App, error) {
 		UserService:        userService,
 		RoundService:       roundService,
 		ScoreService:       scoreService,
+		messagePublisher:   publisher,
 	}, nil
 }
 
 // DB returns the database service.
 func (app *App) DB() *bundb.DBService {
 	return app.db
+}
+
+// Publisher returns the publisher.
+func (app *App) Publisher() message.Publisher {
+	return app.messagePublisher
 }

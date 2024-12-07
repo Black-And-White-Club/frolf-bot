@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/nats-io/nats.go"
 )
 
@@ -14,6 +15,10 @@ type NatsConnectionPool struct {
 	url      string
 	poolSize int
 	mu       sync.Mutex
+}
+
+func (ncp *NatsConnectionPool) GetURL() string {
+	return ncp.url
 }
 
 // NewNatsConnectionPool creates a new NatsConnectionPool.

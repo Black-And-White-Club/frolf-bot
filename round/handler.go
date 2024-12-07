@@ -1,4 +1,4 @@
-package handlers
+package round
 
 import (
 	"encoding/json"
@@ -6,13 +6,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Black-And-White-Club/tcr-bot/api/services"
 	"github.com/Black-And-White-Club/tcr-bot/app/models"
 	"github.com/go-chi/chi/v5"
 )
 
 // RoundService is the service responsible for managing rounds.
-var RoundService *services.RoundService
 
 // GetRounds retrieves all rounds.
 func GetRounds(w http.ResponseWriter, r *http.Request) {
