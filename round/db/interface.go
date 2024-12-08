@@ -17,7 +17,7 @@ type RoundDB interface {
 	GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*Round, error)
 	SubmitScore(ctx context.Context, roundID int64, discordID string, score int) error
 	IsRoundFinalized(ctx context.Context, roundID int64) (bool, error)
-	IsUserParticipant(ctx context.Context, roundID int64, userID string) (bool, error)
+	IsUserParticipant(ctx context.Context, roundID int64, DiscordID string) (bool, error)
 	GetRoundState(ctx context.Context, roundID int64) (RoundState, error)
 	RoundExists(ctx context.Context, roundID int64) (bool, error)
 }

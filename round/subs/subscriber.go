@@ -15,12 +15,12 @@ import (
 )
 
 type RoundSubscriber struct {
-	commandService     *commands.RoundCommandService
+	commandService     commands.CommandService
 	queryService       *queries.RoundQueryService
 	natsConnectionPool *nats.NatsConnectionPool
 }
 
-func NewRoundSubscriber(commandService *commands.RoundCommandService, queryService *queries.RoundQueryService, natsConnectionPool *nats.NatsConnectionPool) *RoundSubscriber {
+func NewRoundSubscriber(commandService commands.CommandService, queryService *queries.RoundQueryService, natsConnectionPool *nats.NatsConnectionPool) *RoundSubscriber {
 	return &RoundSubscriber{
 		commandService:     commandService,
 		queryService:       queryService,

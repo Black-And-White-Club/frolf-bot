@@ -7,7 +7,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/Black-And-White-Club/tcr-bot/round"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -18,7 +17,7 @@ var (
 )
 
 // SubscribeToScoreEvents subscribes to score-related events.
-func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, handler round.RoundEventHandler) error { // Changed handler type
+func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, handler *roundevents.RoundEventHandlerImpl) error { // Changed handler type
 	var err error
 	scoreSubscriberOnce.Do(func() {
 		scoreSubscriber = subscriber
@@ -35,7 +34,7 @@ func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, 
 	return err
 }
 
-func handleScoreSubmittedEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) { // Changed handler type
+func handleScoreSubmittedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.ScoreSubmittedEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -44,7 +43,7 @@ func handleScoreSubmittedEvents(ctx context.Context, msgChan <-chan *message.Mes
 			continue
 		}
 
-		if err := handler.HandleScoreSubmitted(ctx, &evt); err != nil {
+		if err := handler.HandleScoreSubmitted(ctx, evt); err != nil { // Pass evt directly
 			log.Printf("Failed to handle ScoreSubmittedEvent: %v", err)
 			msg.Nack()
 			continue

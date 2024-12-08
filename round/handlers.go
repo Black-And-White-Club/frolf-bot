@@ -124,9 +124,9 @@ func (h *RoundHandlers) EditRound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.Context().Value("userID").(string)
+	DiscordID := r.Context().Value("DiscordID").(string)
 
-	round, err := h.commandService.EditRound(r.Context(), roundID, userID, input)
+	round, err := h.commandService.EditRound(r.Context(), roundID, DiscordID, input)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to edit round: %v", err), http.StatusInternalServerError)
 		return

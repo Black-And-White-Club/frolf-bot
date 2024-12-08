@@ -27,13 +27,13 @@ type RoundEventHandler interface {
 // ScoreSubmissionEvent defines the interface for score submission events.
 type ScoreSubmissionEvent interface {
 	GetRoundID() int64
-	GetUserID() string
+	GetDiscordID() string
 	GetScore() int
 }
 
 // RoundCreateEvent defines the interface for round creation events.
 type RoundCreateEvent interface {
-	GetUserID() string
+	GetDiscordID() string
 	GetDate() time.Time
 	GetCourse() string
 	GetInitialPlayers() []string

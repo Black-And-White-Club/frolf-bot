@@ -7,7 +7,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/Black-And-White-Club/tcr-bot/round"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -18,7 +17,7 @@ var (
 )
 
 // SubscribeToRoundEvents subscribes to round-related events.
-func SubscribeToRoundEvents(ctx context.Context, subscriber message.Subscriber, handler round.RoundEventHandler) error {
+func SubscribeToRoundEvents(ctx context.Context, subscriber message.Subscriber, handler *roundevents.RoundEventHandlerImpl) error {
 	var err error
 	roundSubscriberOnce.Do(func() {
 		roundSubscriber = subscriber
@@ -82,7 +81,7 @@ func SubscribeToRoundEvents(ctx context.Context, subscriber message.Subscriber, 
 	return err
 }
 
-func handleRoundStartedEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundStartedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) { // Changed handler type
 	for msg := range msgChan {
 		var evt roundevents.RoundStartedEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -101,7 +100,7 @@ func handleRoundStartedEvents(ctx context.Context, msgChan <-chan *message.Messa
 	}
 }
 
-func handleRoundStartingOneHourEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundStartingOneHourEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundStartingOneHourEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -120,7 +119,7 @@ func handleRoundStartingOneHourEvents(ctx context.Context, msgChan <-chan *messa
 	}
 }
 
-func handleRoundStartingThirtyMinutesEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundStartingThirtyMinutesEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundStartingThirtyMinutesEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -139,7 +138,7 @@ func handleRoundStartingThirtyMinutesEvents(ctx context.Context, msgChan <-chan 
 	}
 }
 
-func handleRoundCreateEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundCreateEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundCreateEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -158,7 +157,7 @@ func handleRoundCreateEvents(ctx context.Context, msgChan <-chan *message.Messag
 	}
 }
 
-func handleRoundUpdatedEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundUpdatedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundUpdatedEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -177,7 +176,7 @@ func handleRoundUpdatedEvents(ctx context.Context, msgChan <-chan *message.Messa
 	}
 }
 
-func handleRoundDeletedEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundDeletedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundDeletedEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
@@ -196,7 +195,7 @@ func handleRoundDeletedEvents(ctx context.Context, msgChan <-chan *message.Messa
 	}
 }
 
-func handleRoundFinalizedEvents(ctx context.Context, msgChan <-chan *message.Message, handler round.RoundEventHandler) {
+func handleRoundFinalizedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
 		var evt roundevents.RoundFinalizedEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {

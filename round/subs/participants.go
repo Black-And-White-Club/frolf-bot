@@ -19,7 +19,7 @@ var (
 )
 
 // SubscribeToParticipantEvents subscribes to participant-related events.
-func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscriber, handler round.RoundEventHandler) error { // Use roundevents.RoundEventHandler
+func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscriber, handler round.RoundEventHandler) error {
 	var err error
 	participantSubscriberOnce.Do(func() {
 		participantSubscriber = subscriber

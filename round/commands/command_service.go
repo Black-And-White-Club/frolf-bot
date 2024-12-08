@@ -123,10 +123,11 @@ func (s *RoundCommandService) SubmitScore(ctx context.Context, input apimodels.S
 		return errors.New("cannot submit score for a finalized round")
 	}
 
+	// Create a ScoreSubmittedEvent directly
 	event := roundevents.ScoreSubmittedEvent{
-		RoundID: input.RoundID,
-		UserID:  input.DiscordID,
-		Score:   input.Score,
+		RoundID:   input.RoundID,
+		DiscordID: input.DiscordID,
+		Score:     input.Score,
 	}
 
 	payload, err := json.Marshal(event)
@@ -151,9 +152,9 @@ func (s *RoundCommandService) ProcessScoreSubmission(ctx context.Context, event 
 		return errors.New("round not found")
 	}
 
-	modelRound.Scores[event.UserID] = event.Score
+	modelRound.Scores[event.DiscordID] = event.Score
 
-	if err := s.roundDB.SubmitScore(ctx, event.RoundID, event.UserID, event.Score); err != nil {
+	if err := s.roundDB.SubmitScore(ctx, event.RoundID, event.DiscordID, event.Score); err != nil {
 		log.Printf("Error updating scores in ProcessScoreSubmission: %v", err)
 		return fmt.Errorf("failed to update scores: %w", err)
 	}

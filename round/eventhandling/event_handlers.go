@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Black-And-White-Club/tcr-bot/round"
 	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 	"github.com/ThreeDotsLabs/watermill"
@@ -30,24 +31,24 @@ func NewRoundEventHandler(roundService roundapi.CommandService, publisher messag
 }
 
 // HandleRoundCreate implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundCreate(ctx context.Context, event *RoundCreateEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundCreate(ctx context.Context, event round.RoundCreateEvent) error {
 	// No need to unmarshal here, event is already provided
 
 	fmt.Printf("Received RoundCreateEvent: %+v\n", event)
 
 	// --- Input validation ---
-	if event.Course == "" || event.Date.IsZero() || event.Time == "" || event.UserID == "" {
+	if event.GetCourse() == "" || event.GetDate().IsZero() || event.GetTime() == "" || event.GetDiscordID() == "" { // Use GetDiscordID()
 		log.Printf("Invalid RoundCreateEvent: missing required fields")
 		return errors.New("invalid RoundCreateEvent")
 	}
 
 	// --- Create a new round using RoundService ---
 	input := apimodels.ScheduleRoundInput{
-		Title:     fmt.Sprintf("Round created by %s", event.UserID),
-		Location:  event.Course,
-		Date:      event.Date,
-		Time:      event.Time,
-		DiscordID: event.UserID,
+		Title:     fmt.Sprintf("Round created by %s", event.GetDiscordID()), // Use GetDiscordID()
+		Location:  event.GetCourse(),                                        // Use GetCourse() to access the course
+		Date:      event.GetDate(),                                          // Use GetDate() to access the date
+		Time:      event.GetTime(),                                          // Use GetTime() to access the time
+		DiscordID: event.GetDiscordID(),                                     // Use GetDiscordID()
 	}
 
 	if _, err := h.roundService.ScheduleRound(ctx, input); err != nil {
@@ -85,7 +86,7 @@ func (h *RoundEventHandlerImpl) HandleTagNumberRetrieved(ctx context.Context, ms
 		// Create UpdateParticipantResponseInput from the event data
 		input := apimodels.UpdateParticipantResponseInput{
 			RoundID:   evt.RoundID,
-			DiscordID: evt.UserID,
+			DiscordID: evt.DiscordID,
 		}
 
 		if _, err := h.roundService.UpdateParticipant(ctx, input); err != nil { // Pass the context here
@@ -100,10 +101,18 @@ func (h *RoundEventHandlerImpl) HandleTagNumberRetrieved(ctx context.Context, ms
 //       TagNumberRequestedEvent and TagNumberRetrievedEvent.
 
 // HandleScoreSubmitted implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleScoreSubmitted(ctx context.Context, event *ScoreSubmittedEvent) error {
+func (h *RoundEventHandlerImpl) HandleScoreSubmitted(ctx context.Context, event round.ScoreSubmissionEvent) error {
+	// No need to dereference event here since it's already of the interface type
+
+	// You'll need to construct a SubmitScoreInput
+	input := apimodels.SubmitScoreInput{
+		RoundID:   event.GetRoundID(),   // Use the interface method to get the RoundID
+		DiscordID: event.GetDiscordID(), // Use GetUserID() to get the DiscordID
+		Score:     event.GetScore(),     // Use the interface method to get the Score
+	}
 
 	// Call the service layer to handle the score submission
-	if err := h.roundService.ProcessScoreSubmission(ctx, *event); err != nil { // Use *event here
+	if err := h.roundService.ProcessScoreSubmission(ctx, event, input); err != nil {
 		return fmt.Errorf("failed to process score submission: %w", err)
 	}
 
@@ -111,9 +120,9 @@ func (h *RoundEventHandlerImpl) HandleScoreSubmitted(ctx context.Context, event 
 }
 
 // HandleRoundStarted implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundStarted(ctx context.Context, event *RoundStartedEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundStarted(ctx context.Context, event round.RoundStartedEvent) error {
 	// Update the round state to "IN_PROGRESS" using your service layer's RoundState
-	err := h.roundService.UpdateRoundState(ctx, event.RoundID, apimodels.RoundStateInProgress)
+	err := h.roundService.UpdateRoundState(ctx, event.GetRoundID(), apimodels.RoundStateInProgress) // Use GetRoundID()
 	if err != nil {
 		return fmt.Errorf("failed to update round state: %w", err)
 	}
@@ -122,7 +131,7 @@ func (h *RoundEventHandlerImpl) HandleRoundStarted(ctx context.Context, event *R
 }
 
 // HandleRoundStartingOneHour implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundStartingOneHour(ctx context.Context, event *RoundStartingOneHourEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundStartingOneHour(ctx context.Context, event round.RoundStartingOneHourEvent) error {
 	// Implement logic to send a 1-hour notification for the round
 	// ... (e.g., send a Discord message) ...
 
@@ -130,7 +139,7 @@ func (h *RoundEventHandlerImpl) HandleRoundStartingOneHour(ctx context.Context, 
 }
 
 // HandleRoundStartingThirtyMinutes implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundStartingThirtyMinutes(ctx context.Context, event *RoundStartingThirtyMinutesEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundStartingThirtyMinutes(ctx context.Context, event round.RoundStartingThirtyMinutesEvent) error {
 	// Implement logic to send a 30-minute notification for the round
 	// ... (e.g., send a Discord message) ...
 
@@ -138,7 +147,7 @@ func (h *RoundEventHandlerImpl) HandleRoundStartingThirtyMinutes(ctx context.Con
 }
 
 // HandleRoundUpdated implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundUpdated(ctx context.Context, event *RoundUpdatedEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundUpdated(ctx context.Context, event round.RoundUpdatedEvent) error {
 	// Implement logic to handle round updates (if needed)
 	// ...
 
@@ -146,7 +155,7 @@ func (h *RoundEventHandlerImpl) HandleRoundUpdated(ctx context.Context, event *R
 }
 
 // HandleRoundDeleted implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundDeleted(ctx context.Context, event *RoundDeletedEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundDeleted(ctx context.Context, event round.RoundDeletedEvent) error {
 	// Implement logic to handle round deletions (if needed)
 	// ...
 
@@ -154,7 +163,7 @@ func (h *RoundEventHandlerImpl) HandleRoundDeleted(ctx context.Context, event *R
 }
 
 // HandleRoundFinalized implements RoundEventHandler interface.
-func (h *RoundEventHandlerImpl) HandleRoundFinalized(ctx context.Context, event *RoundFinalizedEvent) error {
+func (h *RoundEventHandlerImpl) HandleRoundFinalized(ctx context.Context, event round.RoundFinalizedEvent) error {
 	// Implement logic to handle round finalization (if needed)
 	// ...
 

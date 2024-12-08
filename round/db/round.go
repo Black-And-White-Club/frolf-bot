@@ -86,7 +86,7 @@ func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, input Edit
 }
 
 // DeleteRound deletes a round by ID.
-func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID int64) error { // No userID parameter
+func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID int64) error {
 	_, err := r.DB.NewDelete().
 		Model((*Round)(nil)).
 		Where("id = ?", roundID).
@@ -208,12 +208,12 @@ func (r *RoundDBImpl) IsRoundFinalized(ctx context.Context, roundID int64) (bool
 }
 
 // IsUserParticipant checks if a user is a participant in a round.
-func (r *RoundDBImpl) IsUserParticipant(ctx context.Context, roundID int64, userID string) (bool, error) {
+func (r *RoundDBImpl) IsUserParticipant(ctx context.Context, roundID int64, discordID string) (bool, error) {
 	// Assuming your Participant struct has a DiscordID field
 	var participant Participant
 	err := r.DB.NewSelect().
 		Model(&participant).
-		Where("jsonb_exists(participants, ?) AND participants->>? = ?", userID, "discord_id", userID). // Adjust the query based on your JSON structure
+		Where("jsonb_exists(participants, ?) AND participants->>? = ?", discordID, "discord_id", discordID). // Adjust the query based on your JSON structure
 		Scan(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check participant status: %w", err)

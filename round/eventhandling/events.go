@@ -9,21 +9,36 @@ import (
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 )
 
-// RoundCreateEvent is triggered when a user creates a new round.
+// RoundCreateEvent is triggered when a user creates a new round.// RoundCreateEvent is triggered when a user creates a new round.
 type RoundCreateEvent struct {
-	UserID         string    `json:"user_id"`
+	DiscordID      string    `json:"discord_id"`
 	Date           time.Time `json:"date"`
 	Course         string    `json:"course"`
 	InitialPlayers []string  `json:"initial_players"`
 	Time           string    `json:"time"`
 }
 
+// GetDate implements round.RoundCreateEvent.
+func (e *RoundCreateEvent) GetDate() time.Time {
+	panic("unimplemented")
+}
+
+// GetInitialPlayers implements round.RoundCreateEvent.
+func (e *RoundCreateEvent) GetInitialPlayers() []string {
+	panic("unimplemented")
+}
+
+// GetTime implements round.RoundCreateEvent.
+func (e *RoundCreateEvent) GetTime() string {
+	panic("unimplemented")
+}
+
 // Topic returns the topic name for the RoundCreateEvent.
 func (e RoundCreateEvent) Topic() string {
 	return "round_create"
 }
-func (e RoundCreateEvent) GetUserID() string {
-	return e.UserID
+func (e RoundCreateEvent) GetDiscordID() string {
+	return e.DiscordID
 }
 
 // RoundUpdatedEvent is triggered when a round is updated.
@@ -52,9 +67,9 @@ func (e RoundDeletedEvent) Topic() string {
 
 // PlayerAddedToRoundEvent is triggered when a player is added to a round.
 type PlayerAddedToRoundEvent struct {
-	RoundID  int64              `json:"round_id"`
-	UserID   string             `json:"user_id"`
-	Response apimodels.Response `json:"response"`
+	RoundID   int64              `json:"round_id"`
+	DiscordID string             `json:"discord_id"`
+	Response  apimodels.Response `json:"response"`
 }
 
 // Topic returns the topic name for the PlayerAddedToRoundEvent.
@@ -64,8 +79,8 @@ func (e PlayerAddedToRoundEvent) Topic() string {
 
 // PlayerRemovedFromRoundEvent is triggered when a player is removed from a round.
 type PlayerRemovedFromRoundEvent struct {
-	RoundID int64  `json:"round_id"`
-	UserID  string `json:"user_id"`
+	RoundID   int64  `json:"round_id"`
+	DiscordID string `json:"discord_id"`
 }
 
 // Topic returns the topic name for the PlayerRemovedFromRoundEvent.
@@ -75,9 +90,9 @@ func (e PlayerRemovedFromRoundEvent) Topic() string {
 
 // ScoreSubmittedEvent is triggered when a player submits their score for a round.
 type ScoreSubmittedEvent struct {
-	RoundID int64  `json:"round_id"`
-	UserID  string `json:"user_id"`
-	Score   int    `json:"score"`
+	RoundID   int64  `json:"round_id"`
+	DiscordID string `json:"discord_id"`
+	Score     int    `json:"score"`
 }
 
 // Topic returns the topic name for the ScoreSubmittedEvent.
@@ -88,8 +103,8 @@ func (e ScoreSubmittedEvent) Topic() string {
 // TagNumberRequestedEvent is triggered when a player is added to a round
 // and their tag number is needed.
 type TagNumberRequestedEvent struct {
-	UserID  string `json:"user_id"`
-	RoundID int64  `json:"round_id"`
+	DiscordID string `json:"discord_id"`
+	RoundID   int64  `json:"round_id"`
 }
 
 // Topic returns the topic name for the TagNumberRequestedEvent.
@@ -99,7 +114,7 @@ func (e TagNumberRequestedEvent) Topic() string {
 
 // TagNumberRetrievedEvent is triggered when a player's tag number is retrieved.
 type TagNumberRetrievedEvent struct {
-	UserID    string `json:"user_id"`
+	DiscordID string `json:"discord_id"`
 	RoundID   int64  `json:"round_id"`
 	TagNumber int    `json:"tag_number"`
 }
@@ -161,9 +176,9 @@ func (e ScoreSubmittedEvent) GetRoundID() int64 {
 	return e.RoundID
 }
 
-// GetUserID implements the ScoreSubmissionEvent interface.
-func (e ScoreSubmittedEvent) GetUserID() string {
-	return e.UserID
+// GetDiscordID implements the ScoreSubmissionEvent interface.
+func (e ScoreSubmittedEvent) GetDiscordID() string {
+	return e.DiscordID
 }
 
 // GetScore implements the ScoreSubmissionEvent interface.
@@ -224,4 +239,9 @@ func (e RoundFinalizedEvent) GetRoundID() int64 {
 // GetParticipants implements the RoundFinalizedEvent interface.
 func (e RoundFinalizedEvent) GetParticipants() []apimodels.ParticipantScore {
 	return e.Participants
+}
+
+// GetCourse implements the round.RoundCreateEvent interface.
+func (e RoundCreateEvent) GetCourse() string {
+	return e.Course
 }
