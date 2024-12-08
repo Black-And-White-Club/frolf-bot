@@ -1,5 +1,9 @@
 package db
 
+import (
+	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
+)
+
 const (
 	// DBTypePostgres represents an underlying POSTGRES database type.
 	DatabaseTypePostgres string = "POSTGRES"
@@ -8,7 +12,7 @@ const (
 // DB provides methods for interacting with an underlying database or other storage mechanism.
 type Database interface {
 	LeaderboardDB
-	RoundDB
+	rounddb.RoundDB
 	ScoreDB
 	UserDB
 }

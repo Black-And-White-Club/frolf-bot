@@ -8,7 +8,7 @@ import (
 	"github.com/Black-And-White-Club/tcr-bot/api/services"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	"github.com/Black-And-White-Club/tcr-bot/events"
+	events "github.com/Black-And-White-Club/tcr-bot/event_bus"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"

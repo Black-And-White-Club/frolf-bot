@@ -15,12 +15,12 @@ import (
 
 // RoundEventHandler handles events related to rounds.
 type RoundEventHandler struct {
-	roundService *RoundService
+	roundService *RoundCommandService
 	publisher    message.Publisher
 }
 
 // NewRoundEventHandler creates a new RoundEventHandler.
-func NewRoundEventHandler(roundService *RoundService, publisher message.Publisher) *RoundEventHandler { // Add publisher as argument
+func NewRoundEventHandler(roundService *RoundCommandService, publisher message.Publisher) *RoundEventHandler { // Add publisher as argument
 	return &RoundEventHandler{
 		roundService: roundService,
 		publisher:    publisher,

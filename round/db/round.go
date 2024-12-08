@@ -1,27 +1,30 @@
 // db/round.go
 
-package db
+package rounddb
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/models"
 	"github.com/uptrace/bun"
 )
 
 // RoundDB is the interface for interacting with the rounds database.
 type RoundDB interface {
-	GetRounds(ctx context.Context) ([]*models.Round, error)
-	GetRound(ctx context.Context, roundID int64) (*models.Round, error)
-	CreateRound(ctx context.Context, round models.ScheduleRoundInput) (*models.Round, error)
-	UpdateRound(ctx context.Context, roundID int64, input models.EditRoundInput) error
+	GetRounds(ctx context.Context) ([]*Round, error)
+	GetRound(ctx context.Context, roundID int64) (*Round, error)
+	CreateRound(ctx context.Context, round ScheduleRoundInput) (*Round, error)
+	UpdateRound(ctx context.Context, roundID int64, input EditRoundInput) error
 	DeleteRound(ctx context.Context, roundID int64) error
-	UpdateParticipant(ctx context.Context, roundID int64, participant models.Participant) error
-	UpdateRoundState(ctx context.Context, roundID int64, state models.RoundState) error
-	GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*models.Round, error)
+	UpdateParticipant(ctx context.Context, roundID int64, participant Participant) error
+	UpdateRoundState(ctx context.Context, roundID int64, state RoundState) error
+	GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*Round, error)
 	SubmitScore(ctx context.Context, roundID int64, discordID string, score int) error
+	IsRoundFinalized(ctx context.Context, roundID int64) (bool, error)
+	IsUserParticipant(ctx context.Context, roundID int64, userID string) (bool, error)
+	GetRoundState(ctx context.Context, roundID int64) (RoundState, error)
+	RoundExists(ctx context.Context, roundID int64) (bool, error)
 }
 
 // RoundDBImpl is the concrete implementation of the RoundDB interface using bun.
@@ -30,8 +33,8 @@ type RoundDBImpl struct {
 }
 
 // GetRounds retrieves all rounds.
-func (r *RoundDBImpl) GetRounds(ctx context.Context) ([]*models.Round, error) {
-	var rounds []*models.Round
+func (r *RoundDBImpl) GetRounds(ctx context.Context) ([]*Round, error) {
+	var rounds []*Round
 	err := r.DB.NewSelect().
 		Model(&rounds).
 		Relation("Participants").
@@ -43,8 +46,8 @@ func (r *RoundDBImpl) GetRounds(ctx context.Context) ([]*models.Round, error) {
 }
 
 // GetRound retrieves a specific round by ID.
-func (r *RoundDBImpl) GetRound(ctx context.Context, roundID int64) (*models.Round, error) {
-	var round models.Round
+func (r *RoundDBImpl) GetRound(ctx context.Context, roundID int64) (*Round, error) {
+	var round Round
 	err := r.DB.NewSelect().
 		Model(&round).
 		Where("id = ?", roundID).
@@ -57,15 +60,15 @@ func (r *RoundDBImpl) GetRound(ctx context.Context, roundID int64) (*models.Roun
 }
 
 // CreateRound creates a new round in the database.
-func (r *RoundDBImpl) CreateRound(ctx context.Context, input models.ScheduleRoundInput) (*models.Round, error) {
-	round := &models.Round{
+func (r *RoundDBImpl) CreateRound(ctx context.Context, input ScheduleRoundInput) (*Round, error) {
+	round := &Round{
 		Title:     input.Title,
 		Location:  input.Location,
 		EventType: input.EventType,
 		Date:      input.Date,
 		Time:      input.Time,
 		CreatorID: input.DiscordID,
-		State:     models.RoundStateUpcoming, // Set initial state to "UPCOMING"
+		State:     RoundStateUpcoming, // Set initial state to "UPCOMING"
 	}
 	_, err := r.DB.NewInsert().
 		Model(round).
@@ -77,8 +80,8 @@ func (r *RoundDBImpl) CreateRound(ctx context.Context, input models.ScheduleRoun
 }
 
 // UpdateRound updates an existing round in the database.
-func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, input models.EditRoundInput) error {
-	round := &models.Round{
+func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, input EditRoundInput) error {
+	round := &Round{
 		ID:        roundID,
 		Title:     input.Title,
 		Location:  input.Location,
@@ -102,7 +105,7 @@ func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, input mode
 // DeleteRound deletes a round by ID.
 func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID int64) error { // No userID parameter
 	_, err := r.DB.NewDelete().
-		Model((*models.Round)(nil)).
+		Model((*Round)(nil)).
 		Where("id = ?", roundID).
 		Exec(ctx)
 	if err != nil {
@@ -113,7 +116,7 @@ func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID int64) error { //
 
 // SubmitScore updates the scores map for a round in the database.
 func (r *RoundDBImpl) SubmitScore(ctx context.Context, roundID int64, discordID string, score int) error {
-	var round models.Round
+	var round Round
 	err := r.DB.NewSelect().
 		Model(&round).
 		Where("id = ?", roundID).
@@ -140,8 +143,8 @@ func (r *RoundDBImpl) SubmitScore(ctx context.Context, roundID int64, discordID 
 }
 
 // UpdateParticipantResponse updates a participant's response or tag number in a round.
-func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID int64, participant models.Participant) error {
-	var round models.Round
+func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID int64, participant Participant) error {
+	var round Round
 	err := r.DB.NewSelect().
 		Model(&round).
 		Where("id = ?", roundID).
@@ -182,9 +185,9 @@ func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID int64, part
 }
 
 // UpdateRoundState updates the state of a round.
-func (r *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID int64, state models.RoundState) error {
+func (r *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID int64, state RoundState) error {
 	_, err := r.DB.NewUpdate().
-		Model((*models.Round)(nil)).
+		Model((*Round)(nil)).
 		Set("state = ?", state).
 		Where("id = ?", roundID).
 		Exec(ctx)
@@ -195,14 +198,68 @@ func (r *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID int64, state
 }
 
 // GetUpcomingRounds retrieves rounds that are upcoming within the given time range.
-func (r *RoundDBImpl) GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*models.Round, error) {
-	var rounds []*models.Round
+func (r *RoundDBImpl) GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*Round, error) {
+	var rounds []*Round
 	err := r.DB.NewSelect().
 		Model(&rounds).
-		Where("state = ? AND date = ? AND time BETWEEN ? AND ?", models.RoundStateUpcoming, now.Format("2006-01-02"), now.Format("15:04"), oneHourFromNow.Format("15:04")).
+		Where("state = ? AND date = ? AND time BETWEEN ? AND ?", RoundStateUpcoming, now.Format("2006-01-02"), now.Format("15:04"), oneHourFromNow.Format("15:04")).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch upcoming rounds: %w", err)
 	}
 	return rounds, nil
+}
+
+// IsRoundFinalized checks if a round is finalized.
+func (r *RoundDBImpl) IsRoundFinalized(ctx context.Context, roundID int64) (bool, error) {
+	var round Round
+	err := r.DB.NewSelect().
+		Model(&round).
+		Column("finalized").
+		Where("id = ?", roundID).
+		Scan(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check round finalized status: %w", err)
+	}
+	return round.Finalized, nil
+}
+
+// IsUserParticipant checks if a user is a participant in a round.
+func (r *RoundDBImpl) IsUserParticipant(ctx context.Context, roundID int64, userID string) (bool, error) {
+	// Assuming your Participant struct has a DiscordID field
+	var participant Participant
+	err := r.DB.NewSelect().
+		Model(&participant).
+		Where("jsonb_exists(participants, ?) AND participants->>? = ?", userID, "discord_id", userID). // Adjust the query based on your JSON structure
+		Scan(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check participant status: %w", err)
+	}
+	return true, nil // If no error, the user is a participant
+}
+
+// GetRoundState retrieves the state of a round.
+func (r *RoundDBImpl) GetRoundState(ctx context.Context, roundID int64) (RoundState, error) {
+	var round Round
+	err := r.DB.NewSelect().
+		Model(&round).
+		Column("state").
+		Where("id = ?", roundID).
+		Scan(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get round state: %w", err)
+	}
+	return round.State, nil
+}
+
+// RoundExists checks if a round with the given ID exists.
+func (r *RoundDBImpl) RoundExists(ctx context.Context, roundID int64) (bool, error) {
+	exists, err := r.DB.NewSelect().
+		Model((*Round)(nil)).
+		Where("id = ?", roundID).
+		Exists(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if round exists: %w", err)
+	}
+	return exists, nil
 }

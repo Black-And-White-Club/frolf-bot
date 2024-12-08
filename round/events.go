@@ -2,9 +2,62 @@
 package round
 
 import (
+	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/ThreeDotsLabs/watermill/message"
 )
+
+// PlayerAddedToRoundEventHandler handles PlayerAddedToRoundEvent.
+type PlayerAddedToRoundEventHandler interface {
+	HandlePlayerAddedToRound(ctx context.Context, msg *message.Message) error
+}
+
+// TagNumberRetrievedEventHandler handles TagNumberRetrievedEvent.
+type TagNumberRetrievedEventHandler interface {
+	HandleTagNumberRetrieved(ctx context.Context, msg *message.Message) error
+}
+
+// RoundStartedEventHandler handles RoundStartedEvent.
+type RoundStartedEventHandler interface {
+	HandleRoundStarted(ctx context.Context, event *RoundStartedEvent) error
+}
+
+// RoundStartingOneHourEventHandler handles RoundStartingOneHourEvent.
+type RoundStartingOneHourEventHandler interface {
+	HandleRoundStartingOneHour(ctx context.Context, event *RoundStartingOneHourEvent) error
+}
+
+// RoundStartingThirtyMinutesEventHandler handles RoundStartingThirtyMinutesEvent.
+type RoundStartingThirtyMinutesEventHandler interface {
+	HandleRoundStartingThirtyMinutes(ctx context.Context, event *RoundStartingThirtyMinutesEvent) error
+}
+
+// RoundUpdatedEventHandler handles RoundUpdatedEvent.
+type RoundUpdatedEventHandler interface {
+	HandleRoundUpdated(ctx context.Context, event *RoundUpdatedEvent) error
+}
+
+// RoundDeletedEventHandler handles RoundDeletedEvent.
+type RoundDeletedEventHandler interface {
+	HandleRoundDeleted(ctx context.Context, event *RoundDeletedEvent) error
+}
+
+// RoundFinalizedEventHandler handles RoundFinalizedEvent.
+type RoundFinalizedEventHandler interface {
+	HandleRoundFinalized(ctx context.Context, event *RoundFinalizedEvent) error
+}
+
+// ScoreSubmittedEventHandler handles ScoreSubmittedEvent.
+type ScoreSubmittedEventHandler interface {
+	HandleScoreSubmitted(ctx context.Context, event *ScoreSubmittedEvent) error
+}
+
+// RoundCreateEventHandler handles RoundCreateEvent.
+type RoundCreateEventHandler interface {
+	HandleRoundCreate(ctx context.Context, event *RoundCreateEvent) error
+}
 
 // RoundCreateEvent is triggered when a user creates a new round.
 type RoundCreateEvent struct {

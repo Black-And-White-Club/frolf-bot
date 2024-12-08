@@ -3,26 +3,26 @@
 package round
 
 import (
-	"github.com/Black-And-White-Club/tcr-bot/models"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 )
 
-// RoundConverter defines the interface for converting between models.Round and round.Round.
+// RoundConverter defines the interface for converting between rounddb.Round and round.Round.
 type RoundConverter interface {
 	ConvertJoinRoundInputToParticipant(input JoinRoundInput) Participant
-	ConvertModelRoundToStructRound(modelRound *models.Round) *Round
-	ConvertStructRoundToModelRound(structRound *Round) *models.Round
-	ConvertScheduleRoundInputToModel(input ScheduleRoundInput) models.ScheduleRoundInput
-	ConvertUpdateParticipantInputToParticipant(input UpdateParticipantResponseInput) models.Participant
-	ConvertJoinRoundInputToModelParticipant(input JoinRoundInput) models.Participant
-	ConvertRoundStateToModelRoundState(state RoundState) models.RoundState
-	ConvertEditRoundInputToModel(input EditRoundInput) models.EditRoundInput
+	ConvertModelRoundToStructRound(modelRound *rounddb.Round) *Round
+	ConvertStructRoundToModelRound(structRound *Round) *rounddb.Round
+	ConvertScheduleRoundInputToModel(input ScheduleRoundInput) rounddb.ScheduleRoundInput
+	ConvertUpdateParticipantInputToParticipant(input UpdateParticipantResponseInput) rounddb.Participant
+	ConvertJoinRoundInputToModelParticipant(input JoinRoundInput) rounddb.Participant
+	ConvertRoundStateToModelRoundState(state RoundState) rounddb.RoundState
+	ConvertEditRoundInputToModel(input EditRoundInput) rounddb.EditRoundInput
 }
 
 // DefaultRoundConverter is the default implementation of the RoundConverter interface.
 type DefaultRoundConverter struct{}
 
-// ConvertModelRoundToStructRound converts a models.Round to a round.Round.
-func (c *DefaultRoundConverter) ConvertModelRoundToStructRound(modelRound *models.Round) *Round {
+// ConvertModelRoundToStructRound converts a rounddb.Round to a round.Round.
+func (c *DefaultRoundConverter) ConvertModelRoundToStructRound(modelRound *rounddb.Round) *Round {
 	if modelRound == nil {
 		return nil
 	}
@@ -33,11 +33,11 @@ func (c *DefaultRoundConverter) ConvertModelRoundToStructRound(modelRound *model
 		participants[i] = Participant{
 			DiscordID: p.DiscordID,
 			TagNumber: p.TagNumber,
-			Response:  Response(p.Response), // Convert models.Response to round.Response
+			Response:  Response(p.Response),
 		}
 	}
 
-	return &Round{
+	return &Round{ // This should now be the Round struct from round/models.go (or round/api_models.go)
 		ID:           modelRound.ID,
 		Title:        modelRound.Title,
 		Location:     modelRound.Location,
@@ -46,29 +46,29 @@ func (c *DefaultRoundConverter) ConvertModelRoundToStructRound(modelRound *model
 		Time:         modelRound.Time,
 		Finalized:    modelRound.Finalized,
 		CreatorID:    modelRound.CreatorID,
-		State:        RoundState(modelRound.State), // Convert models.RoundState to round.RoundState
+		State:        RoundState(modelRound.State),
 		Participants: participants,
 		Scores:       modelRound.Scores,
 	}
 }
 
-// ConvertStructRoundToModelRound converts a round.Round to a models.Round.
-func (c *DefaultRoundConverter) ConvertStructRoundToModelRound(structRound *Round) *models.Round {
+// ConvertStructRoundToModelRound converts a round.Round to a rounddb.Round.
+func (c *DefaultRoundConverter) ConvertStructRoundToModelRound(structRound *Round) *rounddb.Round {
 	if structRound == nil {
 		return nil
 	}
 
 	// Convert participants
-	participants := make([]models.Participant, len(structRound.Participants))
+	participants := make([]rounddb.Participant, len(structRound.Participants))
 	for i, p := range structRound.Participants {
-		participants[i] = models.Participant{
+		participants[i] = rounddb.Participant{
 			DiscordID: p.DiscordID,
 			TagNumber: p.TagNumber,
-			Response:  models.Response(p.Response), // Convert round.Response to models.Response
+			Response:  rounddb.Response(p.Response), // Convert round.Response to rounddb.Response
 		}
 	}
 
-	return &models.Round{
+	return &rounddb.Round{
 		ID:           structRound.ID,
 		Title:        structRound.Title,
 		Location:     structRound.Location,
@@ -77,15 +77,15 @@ func (c *DefaultRoundConverter) ConvertStructRoundToModelRound(structRound *Roun
 		Time:         structRound.Time,
 		Finalized:    structRound.Finalized,
 		CreatorID:    structRound.CreatorID,
-		State:        models.RoundState(structRound.State),
+		State:        rounddb.RoundState(structRound.State),
 		Participants: participants,
 		Scores:       structRound.Scores,
 	}
 }
 
-// ConvertScheduleRoundInputToModel converts round.ScheduleRoundInput to models.ScheduleRoundInput.
-func (c *DefaultRoundConverter) ConvertScheduleRoundInputToModel(input ScheduleRoundInput) models.ScheduleRoundInput {
-	return models.ScheduleRoundInput{
+// ConvertScheduleRoundInputToModel converts round.ScheduleRoundInput to rounddb.ScheduleRoundInput.
+func (c *DefaultRoundConverter) ConvertScheduleRoundInputToModel(input ScheduleRoundInput) rounddb.ScheduleRoundInput {
+	return rounddb.ScheduleRoundInput{
 		Title:     input.Title,
 		Location:  input.Location,
 		EventType: input.EventType,
@@ -95,10 +95,10 @@ func (c *DefaultRoundConverter) ConvertScheduleRoundInputToModel(input ScheduleR
 	}
 }
 
-func (c *DefaultRoundConverter) ConvertUpdateParticipantInputToParticipant(input UpdateParticipantResponseInput) models.Participant {
-	return models.Participant{
+func (c *DefaultRoundConverter) ConvertUpdateParticipantInputToParticipant(input UpdateParticipantResponseInput) rounddb.Participant {
+	return rounddb.Participant{
 		DiscordID: input.DiscordID,
-		Response:  models.Response(input.Response),
+		Response:  rounddb.Response(input.Response),
 	}
 }
 
@@ -112,22 +112,22 @@ func (c *DefaultRoundConverter) ConvertJoinRoundInputToParticipant(input JoinRou
 	}
 }
 
-func (c *DefaultRoundConverter) ConvertJoinRoundInputToModelParticipant(input JoinRoundInput) models.Participant {
+func (c *DefaultRoundConverter) ConvertJoinRoundInputToModelParticipant(input JoinRoundInput) rounddb.Participant {
 	// Implement the conversion logic here
-	return models.Participant{
+	return rounddb.Participant{
 		DiscordID: input.DiscordID,
-		Response:  models.Response(input.Response), // Assuming Response is an enum
+		Response:  rounddb.Response(input.Response), // Assuming Response is an enum
 		// ... other fields as needed ...
 	}
 }
 
-// ConvertRoundStateToModelRoundState converts round.RoundState to models.RoundState.
-func (c *DefaultRoundConverter) ConvertRoundStateToModelRoundState(state RoundState) models.RoundState {
-	return models.RoundState(state)
+// ConvertRoundStateToModelRoundState converts round.RoundState to rounddb.RoundState.
+func (c *DefaultRoundConverter) ConvertRoundStateToModelRoundState(state RoundState) rounddb.RoundState {
+	return rounddb.RoundState(state)
 }
 
-func (c *DefaultRoundConverter) ConvertEditRoundInputToModel(input EditRoundInput) models.EditRoundInput {
-	return models.EditRoundInput{
+func (c *DefaultRoundConverter) ConvertEditRoundInputToModel(input EditRoundInput) rounddb.EditRoundInput {
+	return rounddb.EditRoundInput{
 		Title:     input.Title,
 		Location:  input.Location,
 		EventType: input.EventType,

@@ -1,5 +1,5 @@
 // models/round.go
-package models
+package rounddb
 
 import (
 	"time"
