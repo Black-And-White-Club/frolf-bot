@@ -1,36 +1,39 @@
 // round/query_service.go
-package round
+package roundqueries
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
+	roundhelper "github.com/Black-And-White-Club/tcr-bot/round/helpers"
+	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 )
 
 // RoundQueryService handles query-related logic for rounds.
 type RoundQueryService struct {
 	roundDB   rounddb.RoundDB
-	converter RoundConverter
+	converter converter.DefaultRoundConverter
 }
 
 // NewRoundQueryService creates a new RoundQueryService.
 func NewRoundQueryService(roundDB rounddb.RoundDB) *RoundQueryService {
 	return &RoundQueryService{
 		roundDB:   roundDB,
-		converter: &DefaultRoundConverter{},
+		converter: converter.DefaultRoundConverter{},
 	}
 }
 
 // GetRounds retrieves all rounds.
-func (s *RoundQueryService) GetRounds(ctx context.Context) ([]*Round, error) {
+func (s *RoundQueryService) GetRounds(ctx context.Context) ([]*apimodels.Round, error) {
 	modelRounds, err := s.roundDB.GetRounds(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rounds: %w", err)
 	}
 
-	var apiRounds []*Round
+	var apiRounds []*apimodels.Round
 	for _, modelRound := range modelRounds {
 		apiRounds = append(apiRounds, s.converter.ConvertModelRoundToStructRound(modelRound))
 	}
@@ -39,8 +42,8 @@ func (s *RoundQueryService) GetRounds(ctx context.Context) ([]*Round, error) {
 }
 
 // GetRound retrieves a specific round by ID.
-func (s *RoundQueryService) GetRound(ctx context.Context, roundID int64) (*Round, error) {
-	return getRound(ctx, s.roundDB, s.converter, roundID)
+func (s *RoundQueryService) GetRound(ctx context.Context, roundID int64) (*apimodels.Round, error) {
+	return roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID)
 }
 
 // HasActiveRounds checks if there are any active rounds.
@@ -62,7 +65,7 @@ func (s *RoundQueryService) HasActiveRounds(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("failed to get rounds: %w", err)
 	}
 	for _, round := range rounds {
-		if round.State == RoundStateInProgress {
+		if round.State == apimodels.RoundStateInProgress {
 			return true, nil // There's a round in progress
 		}
 	}

@@ -10,6 +10,10 @@ import (
 	nc "github.com/nats-io/nats.go"
 )
 
+var (
+	globalPublisher message.Publisher
+)
+
 // NewPublisher creates a new NATS JetStream publisher.
 func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publisher, error) {
 	marshaler := &nats.GobMarshaler{}
@@ -40,4 +44,13 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publi
 	}
 
 	return Publisher, nil // Return 'Publisher'
+}
+
+func GetPublisher() message.Publisher {
+	return globalPublisher
+}
+
+// InitPublisher initializes the global publisher.
+func InitPublisher(publisher message.Publisher) {
+	globalPublisher = publisher
 }

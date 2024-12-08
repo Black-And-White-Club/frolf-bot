@@ -1,6 +1,6 @@
-// round/event_handlers.go
+// eventhandling/event_handlers.go
 
-package round
+package roundevents
 
 import (
 	"context"
@@ -9,25 +9,28 @@ import (
 	"fmt"
 	"log"
 
+	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // RoundEventHandler handles events related to rounds.
-type RoundEventHandler struct {
-	roundService *RoundCommandService
+type RoundEventHandlerImpl struct {
+	roundService roundapi.CommandService // Use roundapi.CommandService
 	publisher    message.Publisher
 }
 
 // NewRoundEventHandler creates a new RoundEventHandler.
-func NewRoundEventHandler(roundService *RoundCommandService, publisher message.Publisher) *RoundEventHandler { // Add publisher as argument
-	return &RoundEventHandler{
+func NewRoundEventHandler(roundService roundapi.CommandService, publisher message.Publisher) *RoundEventHandlerImpl {
+	return &RoundEventHandlerImpl{
 		roundService: roundService,
 		publisher:    publisher,
 	}
 }
 
-func (h *RoundEventHandler) HandleRoundCreate(ctx context.Context, event *RoundCreateEvent) error {
+// HandleRoundCreate implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundCreate(ctx context.Context, event *RoundCreateEvent) error {
 	// No need to unmarshal here, event is already provided
 
 	fmt.Printf("Received RoundCreateEvent: %+v\n", event)
@@ -39,7 +42,7 @@ func (h *RoundEventHandler) HandleRoundCreate(ctx context.Context, event *RoundC
 	}
 
 	// --- Create a new round using RoundService ---
-	input := ScheduleRoundInput{
+	input := apimodels.ScheduleRoundInput{
 		Title:     fmt.Sprintf("Round created by %s", event.UserID),
 		Location:  event.Course,
 		Date:      event.Date,
@@ -55,7 +58,8 @@ func (h *RoundEventHandler) HandleRoundCreate(ctx context.Context, event *RoundC
 	return nil
 }
 
-func (h *RoundEventHandler) HandlePlayerAddedToRound(ctx context.Context, msg *message.Message) error {
+// HandlePlayerAddedToRound implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandlePlayerAddedToRound(ctx context.Context, msg *message.Message) error {
 	var evt PlayerAddedToRoundEvent // No need for round. prefix
 	if err := json.Unmarshal(msg.Payload, &evt); err != nil {
 		return fmt.Errorf("failed to unmarshal PlayerAddedToRoundEvent: %w", err)
@@ -69,7 +73,8 @@ func (h *RoundEventHandler) HandlePlayerAddedToRound(ctx context.Context, msg *m
 	return nil
 }
 
-func (h *RoundEventHandler) HandleTagNumberRetrieved(ctx context.Context, msg *message.Message) error {
+// HandleTagNumberRetrieved implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleTagNumberRetrieved(ctx context.Context, msg *message.Message) error {
 	var evt TagNumberRetrievedEvent
 	if err := json.Unmarshal(msg.Payload, &evt); err != nil {
 		return fmt.Errorf("failed to unmarshal TagNumberRetrievedEvent: %w", err)
@@ -78,12 +83,12 @@ func (h *RoundEventHandler) HandleTagNumberRetrieved(ctx context.Context, msg *m
 	// --- Asynchronously call the service layer to update the participant ---
 	go func() {
 		// Create UpdateParticipantResponseInput from the event data
-		input := UpdateParticipantResponseInput{
+		input := apimodels.UpdateParticipantResponseInput{
 			RoundID:   evt.RoundID,
 			DiscordID: evt.UserID,
 		}
 
-		if _, err := h.roundService.UpdateParticipant(context.Background(), input); err != nil {
+		if _, err := h.roundService.UpdateParticipant(ctx, input); err != nil { // Pass the context here
 			log.Printf("Error updating participant tag number: %v", err)
 		}
 	}()
@@ -94,8 +99,8 @@ func (h *RoundEventHandler) HandleTagNumberRetrieved(ctx context.Context, msg *m
 // TODO: Add corresponding event handlers to the leaderboard domain for
 //       TagNumberRequestedEvent and TagNumberRetrievedEvent.
 
-// ScoreSubmittedEventHandler handles ScoreSubmittedEvent.
-func (h *RoundEventHandler) HandleScoreSubmitted(ctx context.Context, event *ScoreSubmittedEvent) error {
+// HandleScoreSubmitted implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleScoreSubmitted(ctx context.Context, event *ScoreSubmittedEvent) error {
 
 	// Call the service layer to handle the score submission
 	if err := h.roundService.ProcessScoreSubmission(ctx, *event); err != nil { // Use *event here
@@ -105,9 +110,10 @@ func (h *RoundEventHandler) HandleScoreSubmitted(ctx context.Context, event *Sco
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundStarted(ctx context.Context, event *RoundStartedEvent) error {
+// HandleRoundStarted implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundStarted(ctx context.Context, event *RoundStartedEvent) error {
 	// Update the round state to "IN_PROGRESS" using your service layer's RoundState
-	err := h.roundService.UpdateRoundState(ctx, event.RoundID, RoundStateInProgress)
+	err := h.roundService.UpdateRoundState(ctx, event.RoundID, apimodels.RoundStateInProgress)
 	if err != nil {
 		return fmt.Errorf("failed to update round state: %w", err)
 	}
@@ -115,35 +121,40 @@ func (h *RoundEventHandler) HandleRoundStarted(ctx context.Context, event *Round
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundStartingOneHour(ctx context.Context, event *RoundStartingOneHourEvent) error {
+// HandleRoundStartingOneHour implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundStartingOneHour(ctx context.Context, event *RoundStartingOneHourEvent) error {
 	// Implement logic to send a 1-hour notification for the round
 	// ... (e.g., send a Discord message) ...
 
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundStartingThirtyMinutes(ctx context.Context, event *RoundStartingThirtyMinutesEvent) error {
+// HandleRoundStartingThirtyMinutes implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundStartingThirtyMinutes(ctx context.Context, event *RoundStartingThirtyMinutesEvent) error {
 	// Implement logic to send a 30-minute notification for the round
 	// ... (e.g., send a Discord message) ...
 
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundUpdated(ctx context.Context, event *RoundUpdatedEvent) error {
+// HandleRoundUpdated implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundUpdated(ctx context.Context, event *RoundUpdatedEvent) error {
 	// Implement logic to handle round updates (if needed)
 	// ...
 
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundDeleted(ctx context.Context, event *RoundDeletedEvent) error {
+// HandleRoundDeleted implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundDeleted(ctx context.Context, event *RoundDeletedEvent) error {
 	// Implement logic to handle round deletions (if needed)
 	// ...
 
 	return nil
 }
 
-func (h *RoundEventHandler) HandleRoundFinalized(ctx context.Context, event *RoundFinalizedEvent) error {
+// HandleRoundFinalized implements RoundEventHandler interface.
+func (h *RoundEventHandlerImpl) HandleRoundFinalized(ctx context.Context, event *RoundFinalizedEvent) error {
 	// Implement logic to handle round finalization (if needed)
 	// ...
 

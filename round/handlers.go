@@ -6,17 +6,20 @@ import (
 	"net/http"
 	"strconv"
 
+	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
+	queries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/go-chi/chi/v5"
 )
 
 // RoundHandlers handles HTTP requests for rounds.
 type RoundHandlers struct {
-	commandService *RoundCommandService
-	queryService   *RoundQueryService
+	commandService roundapi.CommandService
+	queryService   queries.RoundQueryService
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
-func NewRoundHandlers(commandService *RoundCommandService, queryService *RoundQueryService) *RoundHandlers {
+func NewRoundHandlers(commandService roundapi.CommandService, queryService queries.RoundQueryService) *RoundHandlers {
 	return &RoundHandlers{
 		commandService: commandService,
 		queryService:   queryService,
@@ -66,7 +69,7 @@ func (h *RoundHandlers) GetRound(w http.ResponseWriter, r *http.Request) {
 
 // ScheduleRound schedules a new round.
 func (h *RoundHandlers) ScheduleRound(w http.ResponseWriter, r *http.Request) {
-	var input ScheduleRoundInput // Use the API model from round/models.go
+	var input apimodels.ScheduleRoundInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
@@ -87,7 +90,7 @@ func (h *RoundHandlers) ScheduleRound(w http.ResponseWriter, r *http.Request) {
 
 // JoinRound adds a participant to a round.
 func (h *RoundHandlers) JoinRound(w http.ResponseWriter, r *http.Request) {
-	var input JoinRoundInput // Use the API model from round/models.go
+	var input apimodels.JoinRoundInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
@@ -115,13 +118,13 @@ func (h *RoundHandlers) EditRound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input EditRoundInput // Use the API model from round/models.go
+	var input apimodels.EditRoundInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	userID := r.Context().Value("userID").(string) // Get the user ID from the context
+	userID := r.Context().Value("userID").(string)
 
 	round, err := h.commandService.EditRound(r.Context(), roundID, userID, input)
 	if err != nil {
@@ -162,13 +165,13 @@ func (h *RoundHandlers) SubmitScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input SubmitScoreInput // Use the API model from round/models.go
+	var input apimodels.SubmitScoreInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	err = h.commandService.SubmitScore(r.Context(), SubmitScoreInput{
+	err = h.commandService.SubmitScore(r.Context(), apimodels.SubmitScoreInput{
 		RoundID:   roundID,
 		DiscordID: input.DiscordID,
 		Score:     input.Score,
@@ -200,7 +203,7 @@ func (h *RoundHandlers) FinalizeRound(w http.ResponseWriter, r *http.Request) {
 }
 
 // RoundRoutes sets up the routes for the round controller.
-func RoundRoutes(handlers *RoundHandlers) chi.Router {
+func RoundRoutes(handlers RoundHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", handlers.GetRounds)
 	r.Get("/{roundID}", handlers.GetRound)

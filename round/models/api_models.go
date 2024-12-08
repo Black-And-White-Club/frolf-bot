@@ -1,4 +1,4 @@
-package round
+package apimodels
 
 import (
 	"time"

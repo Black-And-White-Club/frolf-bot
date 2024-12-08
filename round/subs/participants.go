@@ -7,7 +7,9 @@ import (
 	"log"
 	"sync"
 
-	roundEventHandler "github.com/Black-And-White-Club/tcr-bot/round"
+	"github.com/Black-And-White-Club/tcr-bot/round"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
+	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -17,21 +19,21 @@ var (
 )
 
 // SubscribeToParticipantEvents subscribes to participant-related events.
-func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscriber, handler *roundEventHandler.RoundEventHandler) error {
-	var err error // Declare err variable outside the closure
+func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscriber, handler round.RoundEventHandler) error { // Use roundevents.RoundEventHandler
+	var err error
 	participantSubscriberOnce.Do(func() {
-		participantSubscriber = subscriber // Store the subscriber for later use
+		participantSubscriber = subscriber
 
 		// Subscribe to PlayerAddedToRoundEvent
-		msgChan, err := subscriber.Subscribe(ctx, roundEventHandler.PlayerAddedToRoundEvent{}.Topic())
+		msgChan, err := subscriber.Subscribe(ctx, roundevents.PlayerAddedToRoundEvent{}.Topic()) // Use roundevents.PlayerAddedToRoundEvent
 		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundEventHandler.PlayerAddedToRoundEvent{}.Topic(), err)
+			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.PlayerAddedToRoundEvent{}.Topic(), err) // Use roundevents.PlayerAddedToRoundEvent
 			return
 		}
 
 		go func() {
 			for msg := range msgChan {
-				var evt roundEventHandler.PlayerAddedToRoundEvent
+				var evt roundevents.PlayerAddedToRoundEvent // Use roundevents.PlayerAddedToRoundEvent
 				if err := json.Unmarshal(msg.Payload, &evt); err != nil {
 					log.Printf("Failed to unmarshal PlayerAddedToRoundEvent: %v", err)
 					msg.Nack()
@@ -49,15 +51,15 @@ func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscr
 		}()
 
 		// Subscribe to TagNumberRetrievedEvent
-		tagChan, err := subscriber.Subscribe(ctx, roundEventHandler.TagNumberRetrievedEvent{}.Topic())
+		tagChan, err := subscriber.Subscribe(ctx, roundevents.TagNumberRetrievedEvent{}.Topic()) // Use roundevents.TagNumberRetrievedEvent
 		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundEventHandler.TagNumberRetrievedEvent{}.Topic(), err)
+			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.TagNumberRetrievedEvent{}.Topic(), err) // Use roundevents.TagNumberRetrievedEvent
 			return
 		}
 
 		go func() {
 			for msg := range tagChan {
-				var evt roundEventHandler.TagNumberRetrievedEvent
+				var evt roundevents.TagNumberRetrievedEvent // Use roundevents.TagNumberRetrievedEvent
 				if err := json.Unmarshal(msg.Payload, &evt); err != nil {
 					log.Printf("Failed to unmarshal TagNumberRetrievedEvent: %v", err)
 					msg.Nack()
@@ -77,11 +79,11 @@ func SubscribeToParticipantEvents(ctx context.Context, subscriber message.Subscr
 		// ... add subscriptions for other participant-related events and start goroutines in the same way ...
 	})
 
-	return err // Return the error from the closure
+	return err
 }
 
 // StartParticipantSubscribers starts the participant subscribers if there are active rounds.
-func StartParticipantSubscribers(ctx context.Context, roundQueryService *roundEventHandler.RoundQueryService, handler *roundEventHandler.RoundEventHandler) error {
+func StartParticipantSubscribers(ctx context.Context, roundQueryService *roundqueries.RoundQueryService, handler round.RoundEventHandler) error { // Use roundevents.RoundEventHandler
 	// Check if there are any active rounds
 	hasActiveRounds, err := roundQueryService.HasActiveRounds(ctx)
 	if err != nil {
