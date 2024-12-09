@@ -11,7 +11,8 @@ import (
 
 	"github.com/Black-And-White-Club/tcr-bot/nats"
 	"github.com/Black-And-White-Club/tcr-bot/round"
-	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
+	common "github.com/Black-And-White-Club/tcr-bot/round/common"
+	roundconverter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	roundhelper "github.com/Black-And-White-Club/tcr-bot/round/helpers"
@@ -23,19 +24,21 @@ import (
 // RoundCommandService handles command-related logic for rounds.
 type RoundCommandService struct {
 	roundDB            rounddb.RoundDB
-	converter          converter.DefaultRoundConverter
+	converter          roundconverter.RoundConverter // Use the RoundConverter interface
 	publisher          message.Publisher
 	natsConnectionPool *nats.NatsConnectionPool
 	eventHandler       round.RoundEventHandler
+	helper             roundhelper.RoundHelper // Add the RoundHelper field
 }
 
 // NewRoundCommandService creates a new RoundCommandService.
-func NewRoundCommandService(roundDB rounddb.RoundDB, publisher message.Publisher, eventHandler round.RoundEventHandler) *RoundCommandService {
+func NewRoundCommandService(roundDB rounddb.RoundDB, converter roundconverter.RoundConverter, publisher message.Publisher, eventHandler round.RoundEventHandler) *RoundCommandService { // Inject converter
 	return &RoundCommandService{
 		roundDB:      roundDB,
-		converter:    converter.DefaultRoundConverter{},
+		converter:    converter, // Assign the injected converter
 		publisher:    publisher,
 		eventHandler: eventHandler,
+		helper:       &roundhelper.RoundHelperImpl{Converter: converter}, // Inject converter into the helper
 	}
 }
 
@@ -64,7 +67,7 @@ func (s *RoundCommandService) UpdateParticipant(ctx context.Context, input apimo
 		return nil, fmt.Errorf("failed to update participant response: %w", err)
 	}
 
-	return roundhelper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
+	return s.helper.GetRound(ctx, s.roundDB, s.converter, input.RoundID) // Add s.converter
 }
 
 // JoinRound implements the CommandService interface.
@@ -106,12 +109,12 @@ func (s *RoundCommandService) JoinRound(ctx context.Context, input apimodels.Joi
 		return nil, fmt.Errorf("failed to add participant: %w", err)
 	}
 
-	return roundhelper.GetRound(ctx, s.roundDB, s.converter, input.RoundID) // Use round.GetRound
+	return s.helper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
 }
 
 // SubmitScore implements the CommandService interface.
 func (s *RoundCommandService) SubmitScore(ctx context.Context, input apimodels.SubmitScoreInput) error {
-	round, err := roundhelper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
+	round, err := s.helper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
 	if err != nil {
 		return err
 	}
@@ -124,7 +127,7 @@ func (s *RoundCommandService) SubmitScore(ctx context.Context, input apimodels.S
 	}
 
 	// Create a ScoreSubmittedEvent directly
-	event := roundevents.ScoreSubmittedEvent{
+	event := roundevents.ScoreSubmissionEvent{
 		RoundID:   input.RoundID,
 		DiscordID: input.DiscordID,
 		Score:     input.Score,
@@ -142,9 +145,14 @@ func (s *RoundCommandService) SubmitScore(ctx context.Context, input apimodels.S
 	return nil
 }
 
+// SetEventHandler sets the RoundEventHandler for the service.
+func (s *RoundCommandService) SetEventHandler(handler round.RoundEventHandler) {
+	s.eventHandler = handler
+}
+
 // ProcessScoreSubmission implements the CommandService interface.
-func (s *RoundCommandService) ProcessScoreSubmission(ctx context.Context, event roundevents.ScoreSubmittedEvent, input apimodels.SubmitScoreInput) error {
-	modelRound, err := roundhelper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
+func (s *RoundCommandService) ProcessScoreSubmission(ctx context.Context, event common.ScoreSubmissionEvent, input apimodels.SubmitScoreInput) error {
+	modelRound, err := s.helper.GetRound(ctx, s.roundDB, s.converter, input.RoundID)
 	if err != nil {
 		return fmt.Errorf("failed to get round: %w", err)
 	}
@@ -152,16 +160,16 @@ func (s *RoundCommandService) ProcessScoreSubmission(ctx context.Context, event 
 		return errors.New("round not found")
 	}
 
-	modelRound.Scores[event.DiscordID] = event.Score
+	modelRound.Scores[event.GetDiscordID()] = event.GetScore()
 
-	if err := s.roundDB.SubmitScore(ctx, event.RoundID, event.DiscordID, event.Score); err != nil {
+	if err := s.roundDB.SubmitScore(ctx, event.GetRoundID(), event.GetDiscordID(), event.GetScore()); err != nil { // Use interface methods
 		log.Printf("Error updating scores in ProcessScoreSubmission: %v", err)
 		return fmt.Errorf("failed to update scores: %w", err)
 	}
 
 	if len(modelRound.Scores) == len(modelRound.Participants) {
 		go func() {
-			if _, err := s.FinalizeAndProcessScores(context.Background(), event.RoundID); err != nil {
+			if _, err := s.FinalizeAndProcessScores(context.Background(), event.GetRoundID()); err != nil {
 				log.Printf("Error automatically finalizing round: %v", err)
 			}
 		}()
@@ -172,7 +180,7 @@ func (s *RoundCommandService) ProcessScoreSubmission(ctx context.Context, event 
 
 // FinalizeAndProcessScores implements the CommandService interface.
 func (s *RoundCommandService) FinalizeAndProcessScores(ctx context.Context, roundID int64) (*apimodels.Round, error) {
-	round, err := roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID) // Use roundID here
+	round, err := s.helper.GetRound(ctx, s.roundDB, s.converter, roundID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get round: %w", err)
 	}
@@ -210,12 +218,12 @@ func (s *RoundCommandService) FinalizeAndProcessScores(ctx context.Context, roun
 		return nil, fmt.Errorf("failed to update round state: %w", err)
 	}
 
-	return roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID) // Use roundID here
+	return s.helper.GetRound(ctx, s.roundDB, s.converter, roundID)
 }
 
 // EditRound implements the CommandService interface.
 func (s *RoundCommandService) EditRound(ctx context.Context, roundID int64, discordID string, input apimodels.EditRoundInput) (*apimodels.Round, error) {
-	round, err := roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID)
+	round, err := s.helper.GetRound(ctx, s.roundDB, s.converter, roundID)
 	if err != nil {
 		return nil, err
 	}
@@ -230,12 +238,12 @@ func (s *RoundCommandService) EditRound(ctx context.Context, roundID int64, disc
 		return nil, fmt.Errorf("failed to update round: %w", err)
 	}
 
-	return roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID)
+	return s.helper.GetRound(ctx, s.roundDB, s.converter, roundID)
 }
 
 // DeleteRound implements the CommandService interface.
 func (s *RoundCommandService) DeleteRound(ctx context.Context, roundID int64) error {
-	round, err := roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID)
+	round, err := s.helper.GetRound(ctx, s.roundDB, s.converter, roundID)
 	if err != nil {
 		return err
 	}
@@ -252,8 +260,9 @@ func (s *RoundCommandService) DeleteRound(ctx context.Context, roundID int64) er
 }
 
 // UpdateRoundState implements the CommandService interface.
-func (s *RoundCommandService) UpdateRoundState(ctx context.Context, roundID int64, state apimodels.RoundState) error {
-	modelState := s.converter.ConvertRoundStateToModelRoundState(state)
+func (s *RoundCommandService) UpdateRoundState(ctx context.Context, roundID int64, state common.RoundState) error {
+	// Convert state to rounddb.RoundState
+	modelState := s.converter.ConvertCommonRoundStateToDB(state) // Use the converter
 
 	err := s.roundDB.UpdateRoundState(ctx, roundID, modelState)
 	if err != nil {

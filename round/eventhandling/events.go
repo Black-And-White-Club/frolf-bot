@@ -1,5 +1,3 @@
-// round/events.go
-
 package roundevents
 
 import (
@@ -9,7 +7,7 @@ import (
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 )
 
-// RoundCreateEvent is triggered when a user creates a new round.// RoundCreateEvent is triggered when a user creates a new round.
+// RoundCreateEvent is triggered when a user creates a new round.
 type RoundCreateEvent struct {
 	DiscordID      string    `json:"discord_id"`
 	Date           time.Time `json:"date"`
@@ -19,26 +17,32 @@ type RoundCreateEvent struct {
 }
 
 // GetDate implements round.RoundCreateEvent.
-func (e *RoundCreateEvent) GetDate() time.Time {
-	panic("unimplemented")
+func (e RoundCreateEvent) GetDate() time.Time {
+	return e.Date
 }
 
 // GetInitialPlayers implements round.RoundCreateEvent.
-func (e *RoundCreateEvent) GetInitialPlayers() []string {
-	panic("unimplemented")
+func (e RoundCreateEvent) GetInitialPlayers() []string {
+	return e.InitialPlayers
 }
 
 // GetTime implements round.RoundCreateEvent.
-func (e *RoundCreateEvent) GetTime() string {
-	panic("unimplemented")
+func (e RoundCreateEvent) GetTime() string {
+	return e.Time
 }
 
 // Topic returns the topic name for the RoundCreateEvent.
 func (e RoundCreateEvent) Topic() string {
 	return "round_create"
 }
+
 func (e RoundCreateEvent) GetDiscordID() string {
 	return e.DiscordID
+}
+
+// GetCourse implements the round.RoundCreateEvent interface.
+func (e RoundCreateEvent) GetCourse() string {
+	return e.Course
 }
 
 // RoundUpdatedEvent is triggered when a round is updated.
@@ -50,6 +54,31 @@ type RoundUpdatedEvent struct {
 	Time     string    `json:"time"`
 }
 
+// GetRoundID implements the RoundUpdatedEvent interface.
+func (e RoundUpdatedEvent) GetRoundID() int64 {
+	return e.RoundID
+}
+
+// GetTitle implements the RoundUpdatedEvent interface.
+func (e RoundUpdatedEvent) GetTitle() string {
+	return e.Title
+}
+
+// GetLocation implements the RoundUpdatedEvent interface.
+func (e RoundUpdatedEvent) GetLocation() string {
+	return e.Location
+}
+
+// GetDate implements the RoundUpdatedEvent interface.
+func (e RoundUpdatedEvent) GetDate() time.Time {
+	return e.Date
+}
+
+// GetTime implements the RoundUpdatedEvent interface.
+func (e RoundUpdatedEvent) GetTime() string {
+	return e.Time
+}
+
 // Topic returns the topic name for the RoundUpdatedEvent.
 func (e RoundUpdatedEvent) Topic() string {
 	return "round_updated"
@@ -58,6 +87,11 @@ func (e RoundUpdatedEvent) Topic() string {
 // RoundDeletedEvent is triggered when a round is deleted.
 type RoundDeletedEvent struct {
 	RoundID int64 `json:"round_id"`
+}
+
+// GetRoundID implements the RoundDeletedEvent interface.
+func (e RoundDeletedEvent) GetRoundID() int64 {
+	return e.RoundID
 }
 
 // Topic returns the topic name for the RoundDeletedEvent.
@@ -88,16 +122,31 @@ func (e PlayerRemovedFromRoundEvent) Topic() string {
 	return "player_removed_from_round"
 }
 
-// ScoreSubmittedEvent is triggered when a player submits their score for a round.
-type ScoreSubmittedEvent struct {
+// ScoreSubmissionEvent is triggered when a player submits their score for a round.
+type ScoreSubmissionEvent struct {
 	RoundID   int64  `json:"round_id"`
 	DiscordID string `json:"discord_id"`
 	Score     int    `json:"score"`
 }
 
-// Topic returns the topic name for the ScoreSubmittedEvent.
-func (e ScoreSubmittedEvent) Topic() string {
+// Topic returns the topic name for the ScoreSubmissionEvent.
+func (e ScoreSubmissionEvent) Topic() string {
 	return "score_submitted"
+}
+
+// GetRoundID implements the ScoreSubmissionEvent interface.
+func (e ScoreSubmissionEvent) GetRoundID() int64 {
+	return e.RoundID
+}
+
+// GetDiscordID implements the ScoreSubmissionEvent interface.
+func (e ScoreSubmissionEvent) GetDiscordID() string {
+	return e.DiscordID
+}
+
+// GetScore implements the ScoreSubmissionEvent interface.
+func (e ScoreSubmissionEvent) GetScore() int {
+	return e.Score
 }
 
 // TagNumberRequestedEvent is triggered when a player is added to a round
@@ -133,102 +182,7 @@ func (e RoundFinalizedEvent) Marshal() []byte {
 // RoundFinalizedEvent is triggered when a round is finalized.
 type RoundFinalizedEvent struct {
 	RoundID      int64                        `json:"round_id"`
-	Participants []apimodels.ParticipantScore `json:"participants"` // Corrected to a slice
-}
-
-// Topic returns the topic name for the RoundFinalizedEvent.
-func (e RoundFinalizedEvent) Topic() string {
-	return "round_finalized"
-}
-
-// RoundStartedEvent is triggered when a round is started.
-type RoundStartedEvent struct {
-	RoundID int64 `json:"round_id"`
-}
-
-// RoundStartingOneHourEvent is triggered one hour before a round starts.
-type RoundStartingOneHourEvent struct {
-	RoundID int64 `json:"round_id"`
-}
-
-// Topic returns the topic name for the RoundStartingOneHourEvent.
-func (e RoundStartingOneHourEvent) Topic() string {
-	return "round_starting_one_hour"
-}
-
-// RoundStartingThirtyMinutesEvent is triggered 30 minutes before a round starts.
-type RoundStartingThirtyMinutesEvent struct {
-	RoundID int64 `json:"round_id"`
-}
-
-// Topic returns the topic name for the RoundStartingThirtyMinutesEvent.
-func (e RoundStartingThirtyMinutesEvent) Topic() string {
-	return "round_starting_thirty_minutes"
-}
-
-// Topic returns the topic name for the RoundStartedEvent.
-func (e RoundStartedEvent) Topic() string {
-	return "round_started"
-}
-
-// GetRoundID implements the ScoreSubmissionEvent interface.
-func (e ScoreSubmittedEvent) GetRoundID() int64 {
-	return e.RoundID
-}
-
-// GetDiscordID implements the ScoreSubmissionEvent interface.
-func (e ScoreSubmittedEvent) GetDiscordID() string {
-	return e.DiscordID
-}
-
-// GetScore implements the ScoreSubmissionEvent interface.
-func (e ScoreSubmittedEvent) GetScore() int {
-	return e.Score
-}
-
-// GetRoundID implements the RoundStartedEvent interface.
-func (e RoundStartedEvent) GetRoundID() int64 {
-	return e.RoundID
-}
-
-// GetRoundID implements the RoundStartingOneHourEvent interface.
-func (e RoundStartingOneHourEvent) GetRoundID() int64 {
-	return e.RoundID
-}
-
-// GetRoundID implements the RoundStartingThirtyMinutesEvent interface.
-func (e RoundStartingThirtyMinutesEvent) GetRoundID() int64 {
-	return e.RoundID
-}
-
-// GetRoundID implements the RoundUpdatedEvent interface.
-func (e RoundUpdatedEvent) GetRoundID() int64 {
-	return e.RoundID
-}
-
-// GetTitle implements the RoundUpdatedEvent interface.
-func (e RoundUpdatedEvent) GetTitle() string {
-	return e.Title
-}
-
-// GetLocation implements the RoundUpdatedEvent interface.
-func (e RoundUpdatedEvent) GetLocation() string {
-	return e.Location
-}
-
-// GetDate implements the RoundUpdatedEvent interface.
-func (e RoundUpdatedEvent) GetDate() time.Time {
-	return e.Date
-}
-
-// GetTime implements the RoundUpdatedEvent interface.
-func (e RoundUpdatedEvent) GetTime() string {
-	return e.Time
-}
-
-// GetRoundID implements the RoundDeletedEvent interface.
-func (e RoundDeletedEvent) GetRoundID() int64 {
-	return e.RoundID
+	Participants []apimodels.ParticipantScore `json:"participants"`
 }
 
 // GetRoundID implements the RoundFinalizedEvent interface.
@@ -241,7 +195,52 @@ func (e RoundFinalizedEvent) GetParticipants() []apimodels.ParticipantScore {
 	return e.Participants
 }
 
-// GetCourse implements the round.RoundCreateEvent interface.
-func (e RoundCreateEvent) GetCourse() string {
-	return e.Course
+// Topic returns the topic name for the RoundFinalizedEvent.
+func (e RoundFinalizedEvent) Topic() string {
+	return "round_finalized"
+}
+
+// RoundStartedEvent is triggered when a round is started.
+type RoundStartedEvent struct {
+	RoundID int64 `json:"round_id"`
+}
+
+// GetRoundID implements the RoundStartedEvent interface.
+func (e RoundStartedEvent) GetRoundID() int64 {
+	return e.RoundID
+}
+
+// Topic returns the topic name for the RoundStartedEvent.
+func (e RoundStartedEvent) Topic() string {
+	return "round_started"
+}
+
+// RoundStartingOneHourEvent is triggered one hour before a round starts.
+type RoundStartingOneHourEvent struct {
+	RoundID int64 `json:"round_id"`
+}
+
+// GetRoundID implements the RoundStartingOneHourEvent interface.
+func (e RoundStartingOneHourEvent) GetRoundID() int64 {
+	return e.RoundID
+}
+
+// Topic returns the topic name for the RoundStartingOneHourEvent.
+func (e RoundStartingOneHourEvent) Topic() string {
+	return "round_starting_one_hour"
+}
+
+// RoundStartingThirtyMinutesEvent is triggered 30 minutes before a round starts.
+type RoundStartingThirtyMinutesEvent struct {
+	RoundID int64 `json:"round_id"`
+}
+
+// GetRoundID implements the RoundStartingThirtyMinutesEvent interface.
+func (e RoundStartingThirtyMinutesEvent) GetRoundID() int64 {
+	return e.RoundID
+}
+
+// Topic returns the topic name for the RoundStartingThirtyMinutesEvent.
+func (e RoundStartingThirtyMinutesEvent) Topic() string {
+	return "round_starting_thirty_minutes"
 }

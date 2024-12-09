@@ -1,4 +1,4 @@
-// internal/db/bundb/bundb.go
+// db/bundb/bundb.go
 package bundb
 
 import (
@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Black-And-White-Club/tcr-bot/db"
-	"github.com/Black-And-White-Club/tcr-bot/models"
+	// Import for db.RoundDB
+	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -16,11 +16,11 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	User        db.UserDB
-	Leaderboard db.LeaderboardDB
-	Round       db.RoundDB
-	Score       db.ScoreDB
-	db          *bun.DB
+	// User        db.UserDB       // Comment out until User module is refactored
+	// Leaderboard db.LeaderboardDB // Comment out until Leaderboard module is refactored
+	Round rounddb.RoundDB // Use the interface from round/db
+	// Score       db.ScoreDB     // Comment out until Score module is refactored
+	db *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -47,21 +47,21 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 
 	// Step 3: Initialize DBService
 	dbService := &DBService{
-		User:        &userDB{db: db},
-		Leaderboard: &leaderboardDB{db: db},
-		Round:       &roundDB{db: db},
-		Score:       &scoreDB{db: db},
-		db:          db,
+		// User:        &userDB{db: db},       // Comment out until User module is refactored
+		// Leaderboard: &leaderboardDB{db: db}, // Comment out until Leaderboard module is refactored
+		Round: &rounddb.RoundDBImpl{DB: db}, // Use uppercase DB
+		// Score:       &scoreDB{db: db},     // Comment out until Score module is refactored
+		db: db,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)
 
 	// Step 4: Register Models
 	log.Println("NewBunDBService - Registering models")
-	db.RegisterModel(&models.User{})
-	db.RegisterModel(&models.Leaderboard{})
-	db.RegisterModel(&models.Round{})
-	db.RegisterModel(&models.Score{})
+	// db.RegisterModel(&models.User{})                // Comment out until User module is refactored
+	// db.RegisterModel(&models.Leaderboard{})        // Comment out until Leaderboard module is refactored
+	db.RegisterModel(&rounddb.Round{}) // Use the Round model from round/db
+	// db.RegisterModel(&models.Score{})              // Comment out until Score module is refactored
 	log.Println("NewBunDBService - Models registered successfully")
 
 	return dbService, nil

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Black-And-White-Club/tcr-bot/round"
 	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	"github.com/Black-And-White-Club/tcr-bot/round/common"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -122,7 +123,7 @@ func (h *RoundEventHandlerImpl) HandleScoreSubmitted(ctx context.Context, event 
 // HandleRoundStarted implements RoundEventHandler interface.
 func (h *RoundEventHandlerImpl) HandleRoundStarted(ctx context.Context, event round.RoundStartedEvent) error {
 	// Update the round state to "IN_PROGRESS" using your service layer's RoundState
-	err := h.roundService.UpdateRoundState(ctx, event.GetRoundID(), apimodels.RoundStateInProgress) // Use GetRoundID()
+	err := h.roundService.UpdateRoundState(ctx, event.GetRoundID(), common.RoundStateInProgress)
 	if err != nil {
 		return fmt.Errorf("failed to update round state: %w", err)
 	}

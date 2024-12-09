@@ -7,22 +7,31 @@ import (
 	"strconv"
 
 	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
+	roundhelper "github.com/Black-And-White-Club/tcr-bot/round/helpers"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
-	queries "github.com/Black-And-White-Club/tcr-bot/round/queries"
+	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/go-chi/chi/v5"
 )
 
 // RoundHandlers handles HTTP requests for rounds.
 type RoundHandlers struct {
+	roundDB        rounddb.RoundDB
+	converter      converter.RoundConverter // Use the RoundConverter interface
 	commandService roundapi.CommandService
-	queryService   queries.RoundQueryService
+	queryService   roundqueries.QueryService
+	roundHelper    roundhelper.RoundHelper
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
-func NewRoundHandlers(commandService roundapi.CommandService, queryService queries.RoundQueryService) *RoundHandlers {
+func NewRoundHandlers(roundDB rounddb.RoundDB, converter converter.RoundConverter, commandService roundapi.CommandService, queryService roundqueries.QueryService) *RoundHandlers {
 	return &RoundHandlers{
+		roundDB:        roundDB,
+		converter:      converter,
 		commandService: commandService,
 		queryService:   queryService,
+		roundHelper:    &roundhelper.RoundHelperImpl{Converter: converter}, // Initialize with the concrete type
 	}
 }
 
@@ -50,7 +59,7 @@ func (h *RoundHandlers) GetRound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	round, err := h.queryService.GetRound(r.Context(), roundID)
+	round, err := h.roundHelper.GetRound(r.Context(), h.roundDB, h.converter, roundID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch round: %v", err), http.StatusInternalServerError)
 		return

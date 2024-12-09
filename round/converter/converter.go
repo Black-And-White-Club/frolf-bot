@@ -3,6 +3,7 @@
 package roundconverter
 
 import (
+	"github.com/Black-And-White-Club/tcr-bot/round/common"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 )
@@ -118,5 +119,34 @@ func (c *DefaultRoundConverter) ConvertEditRoundInputToModel(input apimodels.Edi
 		EventType: input.EventType,
 		Date:      input.Date,
 		Time:      input.Time,
+	}
+}
+
+// ConvertCommonRoundStateToAPI converts common.RoundState to apimodels.RoundState.
+func (c *DefaultRoundConverter) ConvertCommonRoundStateToAPI(state common.RoundState) apimodels.RoundState {
+	switch state {
+	case common.RoundStateUpcoming:
+		return apimodels.RoundStateUpcoming
+	case common.RoundStateInProgress:
+		return apimodels.RoundStateInProgress
+	case common.RoundStateFinalized:
+		return apimodels.RoundStateFinalized
+	default:
+		return apimodels.RoundStateUpcoming
+	}
+}
+
+// ConvertCommonRoundStateToDB converts common.RoundState to rounddb.RoundState.
+func (c *DefaultRoundConverter) ConvertCommonRoundStateToDB(state common.RoundState) rounddb.RoundState {
+	switch state {
+	case common.RoundStateUpcoming:
+		return rounddb.RoundStateUpcoming
+	case common.RoundStateInProgress:
+		return rounddb.RoundStateInProgress
+	case common.RoundStateFinalized:
+		return rounddb.RoundStateFinalized
+	default:
+		// Handle the default case appropriately (e.g., return an error or a default value)
+		return rounddb.RoundStateUpcoming // Or handle the error as needed
 	}
 }

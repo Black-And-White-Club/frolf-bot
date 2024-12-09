@@ -9,7 +9,12 @@ import (
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
 	eventbus "github.com/Black-And-White-Club/tcr-bot/eventbus"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
+	"github.com/Black-And-White-Club/tcr-bot/round"
+	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/round/commands"
+	roundconverter "github.com/Black-And-White-Club/tcr-bot/round/converter"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -21,10 +26,12 @@ type App struct {
 	NatsConnectionPool *nats.NatsConnectionPool
 	// LeaderboardService *leaderboard.LeaderboardService
 	// UserService        *user.UserService
-	RoundService      roundcommands.CommandService
-	RoundQueryService roundqueries.RoundQueryService
+	RoundService      roundapi.CommandService
+	RoundQueryService roundqueries.QueryService
 	// ScoreService       *score.ScoreService
-	messagePublisher message.Publisher
+	messagePublisher  message.Publisher
+	roundDB           rounddb.RoundDB
+	roundEventHandler round.RoundEventHandler
 }
 
 // NewApp initializes the application with the necessary services and configuration.
@@ -52,12 +59,16 @@ func NewApp(ctx context.Context) (*App, error) {
 
 	eventbus.InitPublisher(publisher)
 
-	// leaderboardService := leaderboard.NewLeaderboardService(dbService.Leaderboard, natsConnectionPool, publisher)
-	// userService := user.NewUserService(dbService.User, natsConnectionPool, publisher)
-	roundService := roundcommands.NewRoundCommandService(dbService.Round, publisher, eventHandler) // Pass the event handler to NewRoundCommandService
-	roundQueryService := roundqueries.NewRoundQueryService(dbService.Round)
+	// Initialize roundService with a nil roundEventHandler initially
+	roundService := roundcommands.NewRoundCommandService(dbService.Round, &roundconverter.DefaultRoundConverter{}, publisher, nil) // Inject the converter
 
-	// scoreService := score.NewScoreService(dbService.Score, natsConnectionPool, publisher)
+	// Initialize roundEventHandler
+	roundEventHandler := roundevents.NewRoundEventHandler(roundService, publisher)
+
+	// Assign the roundEventHandler to the roundService
+	roundService.SetEventHandler(roundEventHandler)
+
+	roundQueryService := roundqueries.NewRoundQueryService(dbService.Round, &roundconverter.DefaultRoundConverter{}) // Inject the converter
 
 	return &App{
 		Cfg:                cfg,
@@ -68,7 +79,9 @@ func NewApp(ctx context.Context) (*App, error) {
 		RoundService:      roundService,
 		RoundQueryService: roundQueryService,
 		// ScoreService:       scoreService,
-		messagePublisher: publisher,
+		messagePublisher:  publisher,
+		roundDB:           dbService.Round,
+		roundEventHandler: roundEventHandler,
 	}, nil
 }
 

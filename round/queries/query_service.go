@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
+	roundconverter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	roundhelper "github.com/Black-And-White-Club/tcr-bot/round/helpers"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
@@ -15,14 +15,16 @@ import (
 // RoundQueryService handles query-related logic for rounds.
 type RoundQueryService struct {
 	roundDB   rounddb.RoundDB
-	converter converter.DefaultRoundConverter
+	converter roundconverter.RoundConverter // Use the RoundConverter interface
+	helper    roundhelper.RoundHelper       // Add the RoundHelper field
 }
 
 // NewRoundQueryService creates a new RoundQueryService.
-func NewRoundQueryService(roundDB rounddb.RoundDB) *RoundQueryService {
+func NewRoundQueryService(roundDB rounddb.RoundDB, converter roundconverter.RoundConverter) QueryService { // Inject converter
 	return &RoundQueryService{
 		roundDB:   roundDB,
-		converter: converter.DefaultRoundConverter{},
+		converter: converter,                                          // Assign the injected converter
+		helper:    &roundhelper.RoundHelperImpl{Converter: converter}, // Inject converter into the helper
 	}
 }
 
@@ -43,7 +45,7 @@ func (s *RoundQueryService) GetRounds(ctx context.Context) ([]*apimodels.Round, 
 
 // GetRound retrieves a specific round by ID.
 func (s *RoundQueryService) GetRound(ctx context.Context, roundID int64) (*apimodels.Round, error) {
-	return roundhelper.GetRound(ctx, s.roundDB, s.converter, roundID)
+	return s.helper.GetRound(ctx, s.roundDB, s.converter, roundID) // Pass the converter
 }
 
 // HasActiveRounds checks if there are any active rounds.

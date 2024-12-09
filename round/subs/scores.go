@@ -22,9 +22,9 @@ func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, 
 	scoreSubscriberOnce.Do(func() {
 		scoreSubscriber = subscriber
 
-		scoreSubmittedChan, err := subscriber.Subscribe(ctx, roundevents.ScoreSubmittedEvent{}.Topic())
+		scoreSubmittedChan, err := subscriber.Subscribe(ctx, roundevents.ScoreSubmissionEvent{}.Topic())
 		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.ScoreSubmittedEvent{}.Topic(), err)
+			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.ScoreSubmissionEvent{}.Topic(), err)
 			return
 		}
 
@@ -36,7 +36,7 @@ func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, 
 
 func handleScoreSubmittedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {
 	for msg := range msgChan {
-		var evt roundevents.ScoreSubmittedEvent
+		var evt roundevents.ScoreSubmissionEvent
 		if err := json.Unmarshal(msg.Payload, &evt); err != nil {
 			log.Printf("Failed to unmarshal ScoreSubmittedEvent: %v", err)
 			msg.Nack()
