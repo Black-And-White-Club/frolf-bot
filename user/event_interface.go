@@ -4,11 +4,13 @@ package user
 import (
 	"context"
 
-	usereventhandler "github.com/Black-And-White-Club/tcr-bot/user/eventhandling"
+	"github.com/Black-And-White-Club/tcr-bot/user/eventhandling"
 )
 
 // UserEventHandler defines an interface for handling user events.
 type UserEventHandler interface {
-	HandleUserRegistered(ctx context.Context, event usereventhandler.UserRegisteredEvent) error
-	HandleUserRoleUpdated(ctx context.Context, event usereventhandler.UserRoleUpdatedEvent) error
+	HandleUserCreated(ctx context.Context, event eventhandling.UserCreatedEvent) error
+	HandleUserUpdated(ctx context.Context, event eventhandling.UserUpdatedEvent) error
+	HandleCheckTagAvailability(ctx context.Context, event eventhandling.CheckTagAvailabilityEvent) error
+	HandleGetUserRole(ctx context.Context, event eventhandling.GetUserRoleEvent) error
 }

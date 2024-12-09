@@ -1,23 +1,34 @@
-// user/eventhandling/events.go
 package usereventhandling
 
-// UserRegisteredEvent is triggered when a new user registers with the bot.
-type UserRegisteredEvent struct {
+// UserCreatedEvent represents an event triggered when a user is created.
+type UserCreatedEvent struct {
+	DiscordID string `json:"discord_id"`
+	TagNumber int    `json:"tag_number"`
+}
+
+// UserUpdatedEvent represents an event triggered when a user is updated.
+type UserUpdatedEvent struct {
+	DiscordID string `json:"discord_id"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+}
+
+// CheckTagAvailabilityEvent represents an event to check if a tag number is available.
+type CheckTagAvailabilityEvent struct {
+	TagNumber int `json:"tag_number"`
+}
+
+// TagAvailabilityResponseEvent represents an event indicating whether a tag is available.
+type TagAvailabilityResponseEvent struct {
+	IsAvailable bool `json:"is_available"`
+}
+
+// GetUserRoleEvent represents an event to retrieve the role of a user.
+type GetUserRoleEvent struct {
 	DiscordID string `json:"discord_id"`
 }
 
-// Topic returns the topic name for the UserRegisteredEvent.
-func (e UserRegisteredEvent) Topic() string {
-	return "user.registered"
-}
-
-// UserRoleUpdatedEvent is triggered when a user's role is updated.
-type UserRoleUpdatedEvent struct {
-	DiscordID string `json:"discord_id"`
-	NewRole   string `json:"new_role"`
-}
-
-// Topic returns the topic name for the UserRoleUpdatedEvent.
-func (e UserRoleUpdatedEvent) Topic() string {
-	return "user.role.updated"
+// UserRoleResponseEvent represents an event containing the role of a user.
+type UserRoleResponseEvent struct {
+	Role string `json:"role"`
 }

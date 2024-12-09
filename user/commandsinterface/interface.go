@@ -1,4 +1,4 @@
-// user/api/command_interface.go
+// user/commandsinterface/interface.go
 package usercmdsinterface
 
 import (
