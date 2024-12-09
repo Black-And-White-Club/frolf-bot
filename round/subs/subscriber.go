@@ -8,19 +8,19 @@ import (
 
 	events "github.com/Black-And-White-Club/tcr-bot/eventbus"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
-	commands "github.com/Black-And-White-Club/tcr-bot/round/api"
+	roundinterface "github.com/Black-And-White-Club/tcr-bot/round/commandsinterface"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	queries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/ThreeDotsLabs/watermill"
 )
 
 type RoundSubscriber struct {
-	commandService     commands.CommandService
+	commandService     roundinterface.CommandService
 	queryService       *queries.RoundQueryService
 	natsConnectionPool *nats.NatsConnectionPool
 }
 
-func NewRoundSubscriber(commandService commands.CommandService, queryService *queries.RoundQueryService, natsConnectionPool *nats.NatsConnectionPool) *RoundSubscriber {
+func NewRoundSubscriber(commandService roundinterface.CommandService, queryService *queries.RoundQueryService, natsConnectionPool *nats.NatsConnectionPool) *RoundSubscriber {
 	return &RoundSubscriber{
 		commandService:     commandService,
 		queryService:       queryService,

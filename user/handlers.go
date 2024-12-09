@@ -1,51 +1,46 @@
-package handlers
+// user/handlers.go
+package user
 
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/Black-And-White-Club/tcr-bot/api/services"
-	"github.com/Black-And-White-Club/tcr-bot/app/models"
 	"github.com/go-chi/chi/v5"
 )
 
-// CreateUserRequest represents the request body for creating a user.
-type CreateUserRequest struct {
-	Name      string `json:"name"`
-	DiscordID string `json:"discordID"`
-	Role      string `json:"role"`
+// UserHandlers defines the interface for user handlers.
+type UserHandlers struct {
+	commandService CommandService
+	queryService   QueryService
 }
 
-// UpdateUserRequest represents the request body for updating a user.
-type UpdateUserRequest struct {
-	Name string `json:"name"`
-	Role string `json:"role"`
+// NewUserHandlers creates a new UserHandlers instance.
+func NewUserHandlers(commandService CommandService, queryService QueryService) *UserHandlers {
+	return &UserHandlers{
+		commandService: commandService,
+		queryService:   queryService,
+	}
 }
-
-// Assuming 'userService' is a global variable or accessible within this package
-var UserService *services.UserService
 
 // CreateUser creates a new user.
-func CreateUser(w http.ResponseWriter, r *http.Request) {
-	log.Println("CreateUser handler - Entering handler") // Add this line
-	var user models.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		log.Printf("CreateUser handler - failed to decode request body: %v", err)
+func (h *UserHandlers) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateUserRequest // Use the moved type
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("CreateUser handler - received user: %+v", user)
-
 	tagNumber, _ := strconv.Atoi(r.URL.Query().Get("tagNumber"))
 
-	log.Printf("CreateUser handler - received tag: %+v", tagNumber)
+	user := db.User{
+		Name:      req.Name,
+		DiscordID: req.DiscordID,
+		Role:      models.UserRole(req.Role),
+	}
 
-	if err := UserService.CreateUser(r.Context(), &user, tagNumber); err != nil {
-		log.Printf("CreateUser handler - failed to create user: %v", err)
+	if err := h.commandService.CreateUser(r.Context(), &user, tagNumber); err != nil { // Use commandService
 		http.Error(w, "failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -54,10 +49,10 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetUser retrieves a user.
-func GetUser(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandlers) GetUser(w http.ResponseWriter, r *http.Request) {
 	discordID := chi.URLParam(r, "discordID")
 
-	user, err := UserService.GetUser(r.Context(), discordID)
+	user, err := h.queryService.GetUserByID(r.Context(), discordID) // Use queryService
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -76,17 +71,17 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateUser updates an existing user.
-func UpdateUser(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	discordID := chi.URLParam(r, "discordID")
 
-	var req UpdateUserRequest
+	var req models.UpdateUserRequest // Use the moved type
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
 	// Get the current user to check the role
-	currentUser, err := UserService.GetUser(r.Context(), discordID)
+	currentUser, err := h.queryService.GetUserByID(r.Context(), discordID) // Use queryService
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -105,7 +100,7 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = UserService.UpdateUser(r.Context(), discordID, &models.User{
+	err = h.commandService.UpdateUser(r.Context(), discordID, &db.User{
 		Name: req.Name,
 		Role: models.UserRole(req.Role),
 	})
@@ -115,13 +110,4 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-}
-
-// UserRoutes sets up the routes for user management.
-func UserRoutes() chi.Router {
-	r := chi.NewRouter()
-	r.Post("/", CreateUser)
-	r.Get("/{discordID}", GetUser)
-	r.Put("/{discordID}", UpdateUser)
-	return r
 }

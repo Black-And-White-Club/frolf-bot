@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	roundinterface "github.com/Black-And-White-Club/tcr-bot/round/commandsinterface"
 	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	roundhelper "github.com/Black-And-White-Club/tcr-bot/round/helpers"
@@ -19,13 +19,13 @@ import (
 type RoundHandlers struct {
 	roundDB        rounddb.RoundDB
 	converter      converter.RoundConverter // Use the RoundConverter interface
-	commandService roundapi.CommandService
+	commandService roundinterface.CommandService
 	queryService   roundqueries.QueryService
 	roundHelper    roundhelper.RoundHelper
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
-func NewRoundHandlers(roundDB rounddb.RoundDB, converter converter.RoundConverter, commandService roundapi.CommandService, queryService roundqueries.QueryService) *RoundHandlers {
+func NewRoundHandlers(roundDB rounddb.RoundDB, converter converter.RoundConverter, commandService roundinterface.CommandService, queryService roundqueries.QueryService) *RoundHandlers {
 	return &RoundHandlers{
 		roundDB:        roundDB,
 		converter:      converter,

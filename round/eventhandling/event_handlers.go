@@ -10,7 +10,7 @@ import (
 	"log"
 
 	"github.com/Black-And-White-Club/tcr-bot/round"
-	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
+	roundinterface "github.com/Black-And-White-Club/tcr-bot/round/commandsinterface"
 	"github.com/Black-And-White-Club/tcr-bot/round/common"
 	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
 	"github.com/ThreeDotsLabs/watermill"
@@ -19,12 +19,12 @@ import (
 
 // RoundEventHandler handles events related to rounds.
 type RoundEventHandlerImpl struct {
-	roundService roundapi.CommandService // Use roundapi.CommandService
+	roundService roundinterface.CommandService // Use roundapi.CommandService
 	publisher    message.Publisher
 }
 
 // NewRoundEventHandler creates a new RoundEventHandler.
-func NewRoundEventHandler(roundService roundapi.CommandService, publisher message.Publisher) *RoundEventHandlerImpl {
+func NewRoundEventHandler(roundService roundinterface.CommandService, publisher message.Publisher) *RoundEventHandlerImpl {
 	return &RoundEventHandlerImpl{
 		roundService: roundService,
 		publisher:    publisher,

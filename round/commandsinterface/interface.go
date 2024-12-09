@@ -1,4 +1,4 @@
-package roundapi
+package roundcmdsinterface
 
 import (
 	"context"
