@@ -18,6 +18,8 @@ import (
 	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type App struct {
@@ -83,6 +85,16 @@ func NewApp(ctx context.Context) (*App, error) {
 		roundDB:           dbService.Round,
 		roundEventHandler: roundEventHandler,
 	}, nil
+}
+
+func (app *App) applyMiddleware(r chi.Router) chi.Router {
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	// Add any other middleware you need here, like authentication, authorization, etc.
+
+	return r
 }
 
 // DB returns the database service.

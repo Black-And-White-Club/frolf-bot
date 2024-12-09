@@ -5,7 +5,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Black-And-White-Club/tcr-bot/round"
-	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/round/commands"
 	converter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
@@ -13,29 +12,25 @@ import (
 
 // Router sets up the main router for the application.
 func (app *App) Router() chi.Router {
-	var r chi.Router
-	r = chi.NewRouter()
+	r := chi.NewRouter()
 
 	// Apply middleware
-	r = app.applyMiddleware(r)
+	r = app.applyMiddleware(r).(*chi.Mux)
 
 	// Initialize RoundHandlers
-	var commandService roundapi.CommandService
-	commandService = roundcommands.NewRoundCommandService(
+	commandService := roundcommands.NewRoundCommandService(
 		app.roundDB,
 		&converter.DefaultRoundConverter{},
 		app.messagePublisher,
 		app.roundEventHandler,
 	)
 
-	var queryService roundqueries.QueryService
-	queryService = roundqueries.NewRoundQueryService(
+	queryService := roundqueries.NewRoundQueryService(
 		app.roundDB,
 		&converter.DefaultRoundConverter{},
 	)
 
-	var roundConverter converter.RoundConverter
-	roundConverter = &converter.DefaultRoundConverter{}
+	roundConverter := &converter.DefaultRoundConverter{}
 
 	roundHandler := round.NewRoundHandlers(app.roundDB, roundConverter, commandService, queryService)
 
