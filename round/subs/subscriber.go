@@ -6,8 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	events "github.com/Black-And-White-Club/tcr-bot/eventbus"
-	"github.com/Black-And-White-Club/tcr-bot/nats"
+	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
 	roundinterface "github.com/Black-And-White-Club/tcr-bot/round/commandsinterface"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	queries "github.com/Black-And-White-Club/tcr-bot/round/queries"
@@ -17,10 +16,10 @@ import (
 type RoundSubscriber struct {
 	commandService     roundinterface.CommandService
 	queryService       *queries.RoundQueryService
-	natsConnectionPool *nats.NatsConnectionPool
+	natsConnectionPool *natsjetstream.NatsConnectionPool
 }
 
-func NewRoundSubscriber(commandService roundinterface.CommandService, queryService *queries.RoundQueryService, natsConnectionPool *nats.NatsConnectionPool) *RoundSubscriber {
+func NewRoundSubscriber(commandService roundinterface.CommandService, queryService *queries.RoundQueryService, natsConnectionPool *natsjetstream.NatsConnectionPool) *RoundSubscriber {
 	return &RoundSubscriber{
 		commandService:     commandService,
 		queryService:       queryService,
@@ -29,13 +28,13 @@ func NewRoundSubscriber(commandService roundinterface.CommandService, queryServi
 }
 
 func (s *RoundSubscriber) Start(ctx context.Context) error {
-	subscriber, err := events.NewSubscriber(s.natsConnectionPool.GetURL(), watermill.NewStdLogger(false, false))
+	subscriber, err := natsjetstream.NewSubscriber(s.natsConnectionPool.GetURL(), watermill.NewStdLogger(false, false))
 	if err != nil {
 		return fmt.Errorf("failed to create subscriber: %w", err)
 	}
 
 	// Get the publisher from the eventbus package
-	publisher := events.GetPublisher()
+	publisher := natsjetstream.GetPublisher()
 
 	// Create an instance of the RoundEventHandler implementation
 	eventHandler := roundevents.NewRoundEventHandler(s.commandService, publisher)

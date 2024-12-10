@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Black-And-White-Club/tcr-bot/nats"
+	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
 	"github.com/Black-And-White-Club/tcr-bot/round"
 	common "github.com/Black-And-White-Club/tcr-bot/round/common"
 	roundconverter "github.com/Black-And-White-Club/tcr-bot/round/converter"
@@ -26,7 +26,7 @@ type RoundCommandService struct {
 	roundDB            rounddb.RoundDB
 	converter          roundconverter.RoundConverter // Use the RoundConverter interface
 	publisher          message.Publisher
-	natsConnectionPool *nats.NatsConnectionPool
+	natsConnectionPool *natsjetstream.NatsConnectionPool
 	eventHandler       round.RoundEventHandler
 	helper             roundhelper.RoundHelper // Add the RoundHelper field
 }

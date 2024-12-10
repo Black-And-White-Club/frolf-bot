@@ -5,33 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-var (
-	scoreSubscriber     message.Subscriber
-	scoreSubscriberOnce sync.Once
-)
-
 // SubscribeToScoreEvents subscribes to score-related events.
 func SubscribeToScoreEvents(ctx context.Context, subscriber message.Subscriber, handler *roundevents.RoundEventHandlerImpl) error { // Changed handler type
-	var err error
-	scoreSubscriberOnce.Do(func() {
-		scoreSubscriber = subscriber
+	scoreSubmittedChan, err := subscriber.Subscribe(ctx, roundevents.ScoreSubmissionEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.ScoreSubmissionEvent{}.Topic(), err)
+	}
 
-		scoreSubmittedChan, err := subscriber.Subscribe(ctx, roundevents.ScoreSubmissionEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.ScoreSubmissionEvent{}.Topic(), err)
-			return
-		}
+	go handleScoreSubmittedEvents(ctx, scoreSubmittedChan, handler)
 
-		go handleScoreSubmittedEvents(ctx, scoreSubmittedChan, handler)
-
-	})
-	return err
+	return nil // Return nil to indicate success
 }
 
 func handleScoreSubmittedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) {

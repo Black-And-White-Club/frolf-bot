@@ -5,80 +5,56 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-var (
-	roundSubscriber     message.Subscriber
-	roundSubscriberOnce sync.Once
-)
-
 // SubscribeToRoundEvents subscribes to round-related events.
 func SubscribeToRoundEvents(ctx context.Context, subscriber message.Subscriber, handler *roundevents.RoundEventHandlerImpl) error {
-	var err error
-	roundSubscriberOnce.Do(func() {
-		roundSubscriber = subscriber
+	roundStartedChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartedEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartedEvent{}.Topic(), err)
+	}
+	go handleRoundStartedEvents(ctx, roundStartedChan, handler)
 
-		roundStartedChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartedEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartedEvent{}.Topic(), err)
-			return
-		}
+	oneHourChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartingOneHourEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartingOneHourEvent{}.Topic(), err)
+	}
+	go handleRoundStartingOneHourEvents(ctx, oneHourChan, handler)
 
-		go handleRoundStartedEvents(ctx, roundStartedChan, handler)
+	thirtyMinutesChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartingThirtyMinutesEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartingThirtyMinutesEvent{}.Topic(), err)
+	}
+	go handleRoundStartingThirtyMinutesEvents(ctx, thirtyMinutesChan, handler)
 
-		oneHourChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartingOneHourEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartingOneHourEvent{}.Topic(), err)
-			return
-		}
+	roundCreateChan, err := subscriber.Subscribe(ctx, roundevents.RoundCreateEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundCreateEvent{}.Topic(), err)
+	}
+	go handleRoundCreateEvents(ctx, roundCreateChan, handler)
 
-		go handleRoundStartingOneHourEvents(ctx, oneHourChan, handler)
+	roundUpdatedChan, err := subscriber.Subscribe(ctx, roundevents.RoundUpdatedEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundUpdatedEvent{}.Topic(), err)
+	}
+	go handleRoundUpdatedEvents(ctx, roundUpdatedChan, handler)
 
-		thirtyMinutesChan, err := subscriber.Subscribe(ctx, roundevents.RoundStartingThirtyMinutesEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundStartingThirtyMinutesEvent{}.Topic(), err)
-			return
-		}
+	roundDeletedChan, err := subscriber.Subscribe(ctx, roundevents.RoundDeletedEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundDeletedEvent{}.Topic(), err)
+	}
+	go handleRoundDeletedEvents(ctx, roundDeletedChan, handler)
 
-		go handleRoundStartingThirtyMinutesEvents(ctx, thirtyMinutesChan, handler)
+	roundFinalizedChan, err := subscriber.Subscribe(ctx, roundevents.RoundFinalizedEvent{}.Topic())
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundFinalizedEvent{}.Topic(), err)
+	}
+	go handleRoundFinalizedEvents(ctx, roundFinalizedChan, handler)
 
-		roundCreateChan, err := subscriber.Subscribe(ctx, roundevents.RoundCreateEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundCreateEvent{}.Topic(), err)
-			return
-		}
-
-		go handleRoundCreateEvents(ctx, roundCreateChan, handler)
-
-		roundUpdatedChan, err := subscriber.Subscribe(ctx, roundevents.RoundUpdatedEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundUpdatedEvent{}.Topic(), err)
-			return
-		}
-
-		go handleRoundUpdatedEvents(ctx, roundUpdatedChan, handler)
-
-		roundDeletedChan, err := subscriber.Subscribe(ctx, roundevents.RoundDeletedEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundDeletedEvent{}.Topic(), err)
-			return
-		}
-
-		go handleRoundDeletedEvents(ctx, roundDeletedChan, handler)
-
-		roundFinalizedChan, err := subscriber.Subscribe(ctx, roundevents.RoundFinalizedEvent{}.Topic())
-		if err != nil {
-			err = fmt.Errorf("failed to subscribe to %s: %w", roundevents.RoundFinalizedEvent{}.Topic(), err)
-			return
-		}
-
-		go handleRoundFinalizedEvents(ctx, roundFinalizedChan, handler)
-	})
-	return err
+	return nil // Return nil to indicate success
 }
 
 func handleRoundStartedEvents(ctx context.Context, msgChan <-chan *message.Message, handler *roundevents.RoundEventHandlerImpl) { // Changed handler type

@@ -1,6 +1,8 @@
-package events
+package natsjetstream
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -44,6 +46,28 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publi
 	}
 
 	return Publisher, nil // Return 'Publisher'
+}
+
+// PublishEvent publishes an event to the NATS Jetstream event bus.
+func PublishEvent(ctx context.Context, event interface{}, topic string) error { // Add topic argument
+	// Get the publisher
+	publisher := GetPublisher()
+
+	// Marshal the event (you might need to adjust this based on your event types)
+	payload, err := json.Marshal(event) // Or use another marshaling method
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	// Create a Watermill message
+	msg := message.NewMessage(watermill.NewUUID(), payload)
+
+	// Publish the message to the specified topic
+	if err := publisher.Publish(topic, msg); err != nil { // Use topic in Publish call
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	return nil
 }
 
 func GetPublisher() message.Publisher {

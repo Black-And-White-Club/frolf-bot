@@ -7,17 +7,20 @@ import (
 	"net/http"
 	"strconv"
 
+	usercommands "github.com/Black-And-White-Club/tcr-bot/user/commands"
+	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
+	userqueries "github.com/Black-And-White-Club/tcr-bot/user/queries"
 	"github.com/go-chi/chi/v5"
 )
 
 // UserHandlers defines the interface for user handlers.
 type UserHandlers struct {
-	commandService CommandService
-	queryService   QueryService
+	commandService usercommands.CommandService
+	queryService   userqueries.QueryService
 }
 
 // NewUserHandlers creates a new UserHandlers instance.
-func NewUserHandlers(commandService CommandService, queryService QueryService) *UserHandlers {
+func NewUserHandlers(commandService usercommands.CommandService, queryService userqueries.QueryService) *UserHandlers {
 	return &UserHandlers{
 		commandService: commandService,
 		queryService:   queryService,
@@ -26,21 +29,15 @@ func NewUserHandlers(commandService CommandService, queryService QueryService) *
 
 // CreateUser creates a new user.
 func (h *UserHandlers) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var req models.CreateUserRequest // Use the moved type
+	var req userapimodels.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	tagNumber, _ := strconv.Atoi(r.URL.Query().Get("tagNumber"))
+	tagNumber, _ := strconv.Atoi(r.URL.Query().Get("tagNumber")) // We'll need to handle potential errors here later
 
-	user := db.User{
-		Name:      req.Name,
-		DiscordID: req.DiscordID,
-		Role:      models.UserRole(req.Role),
-	}
-
-	if err := h.commandService.CreateUser(r.Context(), &user, tagNumber); err != nil { // Use commandService
+	if err := h.commandService.CreateUser(r.Context(), req.DiscordID, req.Name, req.Role, tagNumber); err != nil {
 		http.Error(w, "failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -52,7 +49,7 @@ func (h *UserHandlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandlers) GetUser(w http.ResponseWriter, r *http.Request) {
 	discordID := chi.URLParam(r, "discordID")
 
-	user, err := h.queryService.GetUserByID(r.Context(), discordID) // Use queryService
+	user, err := h.queryService.GetUserByID(r.Context(), discordID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -74,14 +71,14 @@ func (h *UserHandlers) GetUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	discordID := chi.URLParam(r, "discordID")
 
-	var req models.UpdateUserRequest // Use the moved type
+	var req userapimodels.UpdateUserCommand // Use a regular UpdateUserRequest struct
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
 	// Get the current user to check the role
-	currentUser, err := h.queryService.GetUserByID(r.Context(), discordID) // Use queryService
+	currentUser, err := h.queryService.GetUserByID(r.Context(), discordID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -91,23 +88,49 @@ func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Assuming you have access to the authenticated user's ID
-	userID := r.Context().Value("userID").(string)
-
 	// Prevent non-admin users from updating the role to Editor or Admin
-	if (models.UserRole(req.Role) == models.UserRoleEditor || models.UserRole(req.Role) == models.UserRoleAdmin) && currentUser.Role != models.UserRoleAdmin && userID != discordID {
+	if (userapimodels.UserRole(req.Role) == userapimodels.UserRoleEditor || userapimodels.UserRole(req.Role) == userapimodels.UserRoleAdmin) &&
+		currentUser.Role != userapimodels.UserRoleAdmin && discordID != discordID {
 		http.Error(w, "Unauthorized to update role to Editor or Admin", http.StatusForbidden)
 		return
 	}
 
-	err = h.commandService.UpdateUser(r.Context(), discordID, &db.User{
-		Name: req.Name,
-		Role: models.UserRole(req.Role),
-	})
-	if err != nil {
+	// Use the UpdateUserCommand from your api_models package
+	cmd := userapimodels.UpdateUserCommand{
+		DiscordID: discordID,
+		Role:      req.Role,
+		TagNumber: req.TagNumber, // Assuming this is in your UpdateUserRequest
+		Updates:   req.Updates,   // Assuming this is in your UpdateUserRequest
+	}
+
+	if err := h.commandService.UpdateUser(r.Context(), cmd.DiscordID, cmd.Updates); err != nil { // Pass discordID and Updates
 		http.Error(w, fmt.Sprintf("Failed to update user: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// GetUserRole retrieves the role of a user.
+func (h *UserHandlers) GetUserRole(w http.ResponseWriter, r *http.Request) {
+	discordID := chi.URLParam(r, "discordID")
+
+	role, err := h.queryService.GetUserRole(r.Context(), discordID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get user role: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Assuming UserRole is a string, otherwise adjust accordingly
+	response := struct {
+		Role string `json:"role"`
+	}{
+		Role: role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
+		return
+	}
 }

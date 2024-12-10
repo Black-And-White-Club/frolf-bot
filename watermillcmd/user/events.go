@@ -1,4 +1,4 @@
-package usereventhandling
+package userhandlers
 
 // UserCreatedEvent represents an event triggered when a user is created.
 type UserCreatedEvent struct {

@@ -7,11 +7,10 @@ import (
 
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	eventbus "github.com/Black-And-White-Club/tcr-bot/eventbus"
-	"github.com/Black-And-White-Club/tcr-bot/nats"
+	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
 	"github.com/Black-And-White-Club/tcr-bot/round"
-	roundapi "github.com/Black-And-White-Club/tcr-bot/round/api"
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/round/commands"
+	roundapi "github.com/Black-And-White-Club/tcr-bot/round/commandsinterface"
 	roundconverter "github.com/Black-And-White-Club/tcr-bot/round/converter"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
@@ -25,7 +24,7 @@ import (
 type App struct {
 	Cfg                *config.Config
 	db                 *bundb.DBService
-	NatsConnectionPool *nats.NatsConnectionPool
+	NatsConnectionPool *natsjetstream.NatsConnectionPool
 	// LeaderboardService *leaderboard.LeaderboardService
 	// UserService        *user.UserService
 	RoundService      roundapi.CommandService
@@ -47,19 +46,19 @@ func NewApp(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database service: %w", err)
 	}
 
-	natsConnectionPool, err := nats.NewNatsConnectionPool(natsURL, 10)
+	natsConnectionPool, err := natsjetstream.NewNatsConnectionPool(natsURL, 10)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize NATS connection pool: %w", err)
 	}
 
 	log.Printf("NATS connection pool initialized with URL: %s", natsURL)
 
-	publisher, err := eventbus.NewPublisher(natsURL, watermill.NewStdLogger(false, false))
+	publisher, err := natsjetstream.NewPublisher(natsURL, watermill.NewStdLogger(false, false))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS publisher: %w", err)
 	}
 
-	eventbus.InitPublisher(publisher)
+	natsjetstream.InitPublisher(publisher)
 
 	// Initialize roundService with a nil roundEventHandler initially
 	roundService := roundcommands.NewRoundCommandService(dbService.Round, &roundconverter.DefaultRoundConverter{}, publisher, nil) // Inject the converter

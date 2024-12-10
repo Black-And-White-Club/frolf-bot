@@ -1,28 +1,35 @@
-// user/queries/query_service.go
-package queries
+package userqueries
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/Black-And-White-Club/tcr-bot/user/db"
+	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
+	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
+	userhandlers "github.com/Black-And-White-Club/tcr-bot/watermillcmd/user"
 )
 
 // UserQueryService implements the QueryService interface.
 type UserQueryService struct {
-	userDB db.UserDB
+	userDB   userdb.UserDB
+	eventBus watermillcmd.EventBus // Add an eventBus field
+}
+
+func (s *UserQueryService) EventBus() watermillcmd.EventBus {
+	return s.eventBus
 }
 
 // NewUserQueryService creates a new UserQueryService.
-func NewUserQueryService(userDB db.UserDB) QueryService {
+func NewUserQueryService(userDB userdb.UserDB, eventBus watermillcmd.EventBus) QueryService { // Add eventBus to the constructor
 	return &UserQueryService{
-		userDB: userDB,
+		userDB:   userDB,
+		eventBus: eventBus,
 	}
 }
 
 // GetUserByID retrieves a user by their ID.
-func (s *UserQueryService) GetUserByID(ctx context.Context, discordID string) (*db.User, error) {
+func (s *UserQueryService) GetUserByID(ctx context.Context, discordID string) (*userdb.User, error) {
 	user, err := s.userDB.GetUser(ctx, discordID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -42,5 +49,15 @@ func (s *UserQueryService) GetUserRole(ctx context.Context, discordID string) (s
 	if user == nil {
 		return "", errors.New("user not found")
 	}
-	return string(user.Role), nil
+
+	role := string(user.Role)
+
+	// Publish UserRoleResponseEvent
+	if err := s.eventBus.Publish(ctx, userhandlers.UserRoleResponseEvent{
+		Role: role,
+	}); err != nil {
+		// Handle the error (e.g., log it)
+	}
+
+	return role, nil
 }
