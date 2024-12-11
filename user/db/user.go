@@ -6,22 +6,18 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Black-And-White-Club/tcr-bot/models"
 	"github.com/uptrace/bun"
 )
 
 // userDBImpl is an implementation of the UserDB interface using bun.
-type userDBImpl struct {
-	db *bun.DB
-}
-
-// NewUserDB creates a new userDBImpl.
-func NewUserDB(db *bun.DB) UserDB {
-	return &userDBImpl{db: db}
+type UserDBImpl struct {
+	DB *bun.DB
 }
 
 // CreateUser creates a new user.
-func (db *userDBImpl) CreateUser(ctx context.Context, user *User) error {
-	if db.db == nil {
+func (db *UserDBImpl) CreateUser(ctx context.Context, user *models.User) error { // Use *models.User
+	if db.DB == nil {
 		return errors.New("database connection is not initialized")
 	}
 
@@ -29,7 +25,7 @@ func (db *userDBImpl) CreateUser(ctx context.Context, user *User) error {
 		return errors.New("user cannot be nil")
 	}
 
-	_, err := db.db.NewInsert().Model(user).Exec(ctx)
+	_, err := db.DB.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -37,9 +33,9 @@ func (db *userDBImpl) CreateUser(ctx context.Context, user *User) error {
 }
 
 // GetUser retrieves a user by Discord ID.
-func (db *userDBImpl) GetUser(ctx context.Context, discordID string) (*User, error) {
+func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID string) (*User, error) {
 	var user User
-	err := db.db.NewSelect().
+	err := db.DB.NewSelect().
 		Model(&user).
 		Where("discord_id = ?", discordID).
 		Scan(ctx)
@@ -50,8 +46,8 @@ func (db *userDBImpl) GetUser(ctx context.Context, discordID string) (*User, err
 }
 
 // UpdateUser updates an existing user.
-func (db *userDBImpl) UpdateUser(ctx context.Context, discordID string, updates *User) error {
-	_, err := db.db.NewUpdate().
+func (db *UserDBImpl) UpdateUser(ctx context.Context, discordID string, updates *User) error {
+	_, err := db.DB.NewUpdate().
 		Model(updates).
 		Column("name", "role").
 		Where("discord_id = ?", discordID).

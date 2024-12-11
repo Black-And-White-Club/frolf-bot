@@ -9,10 +9,10 @@ import (
 
 // QueryService defines the interface for user queries.
 type QueryService interface {
-	GetUserByID(ctx context.Context, discordID string) (*userdb.User, error)
+	GetUserByDiscordID(ctx context.Context, discordID string) (*userdb.User, error)
 	GetUserRole(ctx context.Context, discordID string) (string, error)
 	// Add other query methods as needed (e.g., GetAllUsers)
 
 	// Add the EventBus method
-	EventBus() watermillcmd.EventBus
+	EventBus() watermillcmd.MessageBus
 }

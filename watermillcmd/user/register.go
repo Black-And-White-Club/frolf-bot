@@ -3,7 +3,7 @@ package userhandlers
 import (
 	"context"
 
-	"github.com/Black-And-White-Club/tcr-bot/db"
+	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
 	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
 	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
 	"github.com/ThreeDotsLabs/watermill"
@@ -12,17 +12,22 @@ import (
 )
 
 // registerUserCommandHandlers registers all the command handlers for the user module.
-func registerUserCommandHandlers(commandBus *cqrs.CommandBus, userDB db.UserDB, eventBus watermillcmd.EventBus) {
-	router, err := cqrs.NewRouter(cqrs.RouterConfig{
-		GenerateHandlerFunctionName: cqrs.StructNameFromMessage,
-	}, commandBus)
+func RegisterUserCommandHandlers(
+	commandBus *cqrs.CommandBus,
+	userDB userdb.UserDB,
+	eventBus watermillcmd.MessageBus, // Use MessageBus
+) {
+	router, err := message.NewRouter(message.RouterConfig{}, nil)
 	if err != nil {
-		// Handle the error appropriately, e.g., log it or panic
 		panic(err)
 	}
 
-	err = router.AddHandler(
-		"CreateUserCommandHandler",
+	commandProcessor, err := cqrs.NewCommandProcessorWithConfig(router, cqrs.CommandProcessorConfig{})
+	if err != nil {
+		panic(err)
+	}
+
+	err = commandProcessor.AddHandlers(
 		cqrs.NewCommandHandler(
 			"CreateUser",
 			func(ctx context.Context, cmd *userapimodels.CreateUserCommand) error {
@@ -31,17 +36,10 @@ func registerUserCommandHandlers(commandBus *cqrs.CommandBus, userDB db.UserDB, 
 					eventBus: eventBus,
 				}
 				msg := message.NewMessage(watermill.NewUUID(), nil)
+				msg.Metadata.Set(cqrs.ProtobufMarshaler{}.NameFromMessage(msg), "userapimodels.CreateUserCommand")
 				return handler.Handle(msg)
 			},
 		),
-	)
-	if err != nil {
-		// Handle the error appropriately, e.g., log it or panic
-		panic(err)
-	}
-
-	err = router.AddHandler(
-		"UpdateUserCommandHandler",
 		cqrs.NewCommandHandler(
 			"UpdateUser",
 			func(ctx context.Context, cmd *userapimodels.UpdateUserCommand) error {
@@ -50,22 +48,12 @@ func registerUserCommandHandlers(commandBus *cqrs.CommandBus, userDB db.UserDB, 
 					eventBus: eventBus,
 				}
 				msg := message.NewMessage(watermill.NewUUID(), nil)
+				msg.Metadata.Set(cqrs.ProtobufMarshaler{}.NameFromMessage(msg), "userapimodels.UpdateUserCommand")
 				return handler.Handle(msg)
 			},
 		),
 	)
 	if err != nil {
-		// Handle the error appropriately, e.g., log it or panic
 		panic(err)
 	}
-
-	// Start the router
-	if err := router.Run(context.Background()); err != nil {
-		// Handle the error appropriately
-		panic(err)
-	}
-}
-
-func init() {
-	registerUserCommandHandlers(commandBus, userDB, eventBus)
 }

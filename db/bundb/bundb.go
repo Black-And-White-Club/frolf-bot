@@ -9,6 +9,7 @@ import (
 
 	// Import for db.RoundDB
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
+	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -16,7 +17,7 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	// User        db.UserDB       // Comment out until User module is refactored
+	User *userdb.UserDBImpl // Use *userdb.UserDBImpl
 	// Leaderboard db.LeaderboardDB // Comment out until Leaderboard module is refactored
 	Round rounddb.RoundDB // Use the interface from round/db
 	// Score       db.ScoreDB     // Comment out until Score module is refactored
@@ -47,7 +48,7 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 
 	// Step 3: Initialize DBService
 	dbService := &DBService{
-		// User:        &userDB{db: db},       // Comment out until User module is refactored
+		User: &userdb.UserDBImpl{DB: db}, // Comment out until User module is refactored
 		// Leaderboard: &leaderboardDB{db: db}, // Comment out until Leaderboard module is refactored
 		Round: &rounddb.RoundDBImpl{DB: db}, // Use uppercase DB
 		// Score:       &scoreDB{db: db},     // Comment out until Score module is refactored
@@ -58,7 +59,7 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 
 	// Step 4: Register Models
 	log.Println("NewBunDBService - Registering models")
-	// db.RegisterModel(&models.User{})                // Comment out until User module is refactored
+	db.RegisterModel(&userdb.User{}) // Comment out until User module is refactored
 	// db.RegisterModel(&models.Leaderboard{})        // Comment out until Leaderboard module is refactored
 	db.RegisterModel(&rounddb.Round{}) // Use the Round model from round/db
 	// db.RegisterModel(&models.Score{})              // Comment out until Score module is refactored

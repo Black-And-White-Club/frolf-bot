@@ -9,4 +9,5 @@ type UserHandler interface {
 	CreateUser(w http.ResponseWriter, r *http.Request)
 	GetUser(w http.ResponseWriter, r *http.Request)
 	UpdateUser(w http.ResponseWriter, r *http.Request)
+	GetUserRole(w http.ResponseWriter, r *http.Request)
 }

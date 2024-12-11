@@ -4,6 +4,7 @@ package userapimodels
 // CreateUserCommand represents the request body for creating a user.
 type CreateUserCommand struct {
 	DiscordID string `json:"discord_id"`
+	Name      string `json:"name"`
 	Role      string `json:"role"`
 	TagNumber int    `json:"tag_number"`
 }
@@ -11,6 +12,7 @@ type CreateUserCommand struct {
 // UpdateUserCommand represents the request body for updating a user.
 type UpdateUserCommand struct {
 	DiscordID string                 `json:"discord_id"`
+	Name      string                 `json:"name"`
 	Role      string                 `json:"role"`
 	TagNumber int                    `json:"tagNumber"`
 	Updates   map[string]interface{} `json:"updates"`
@@ -28,7 +30,7 @@ type UserRole string
 
 // Constants for user roles
 const (
-	UserRoleMember UserRole = "member"
-	UserRoleEditor UserRole = "editor"
-	UserRoleAdmin  UserRole = "admin"
+	UserRoleRattler UserRole = "Rattler"
+	UserRoleEditor  UserRole = "Editor"
+	UserRoleAdmin   UserRole = "Admin"
 )

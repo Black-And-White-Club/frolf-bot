@@ -8,6 +8,6 @@ import (
 // UserDB is an interface for interacting with the user database.
 type UserDB interface {
 	CreateUser(ctx context.Context, user *User) error
-	GetUser(ctx context.Context, discordID string) (*User, error)
+	GetUserByDiscordID(ctx context.Context, discordID string) (*User, error)
 	UpdateUser(ctx context.Context, discordID string, updates *User) error
 }

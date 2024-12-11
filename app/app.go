@@ -15,6 +15,10 @@ import (
 	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/round/eventhandling"
 	roundqueries "github.com/Black-And-White-Club/tcr-bot/round/queries"
+	usercommands "github.com/Black-And-White-Club/tcr-bot/user/commands"
+	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
+	userqueries "github.com/Black-And-White-Club/tcr-bot/user/queries"
+	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/go-chi/chi/v5"
@@ -26,12 +30,14 @@ type App struct {
 	db                 *bundb.DBService
 	NatsConnectionPool *natsjetstream.NatsConnectionPool
 	// LeaderboardService *leaderboard.LeaderboardService
-	// UserService        *user.UserService
+	UserService       usercommands.UserService
+	UserQueryService  userqueries.UserQueryService
 	RoundService      roundapi.CommandService
 	RoundQueryService roundqueries.QueryService
 	// ScoreService       *score.ScoreService
 	messagePublisher  message.Publisher
 	roundDB           rounddb.RoundDB
+	userDB            userdb.UserDB
 	roundEventHandler round.RoundEventHandler
 }
 
@@ -58,6 +64,27 @@ func NewApp(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("failed to create NATS publisher: %w", err)
 	}
 
+	// Initialize the command bus
+	commandBus, err := watermillcmd.NewCommandBus(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create command bus: %w", err)
+	}
+
+	// Initialize UserHandlers
+	userService := usercommands.NewUserCommandService(
+		dbService.User,
+		app.NatsConnectionPool,
+		publisher,
+		commandBus,
+	)
+	userQueryService := userqueries.NewUserQueryService(
+		dbService.User,
+		watermillcmd.NewNatsPubSub(),
+	)
+
+	// Register the user command handlers
+	watermillcmd.RegisterUserCommandHandlers(commandBus, dbService.User, watermillcmd.NewNatsPubSub())
+
 	natsjetstream.InitPublisher(publisher)
 
 	// Initialize roundService with a nil roundEventHandler initially
@@ -76,7 +103,9 @@ func NewApp(ctx context.Context) (*App, error) {
 		db:                 dbService,
 		NatsConnectionPool: natsConnectionPool,
 		// LeaderboardService: leaderboardService,
-		// UserService:        userService,
+		userDB:            dbService.User,
+		UserService:       userService,
+		UserQueryService:  userQueryService,
 		RoundService:      roundService,
 		RoundQueryService: roundQueryService,
 		// ScoreService:       scoreService,

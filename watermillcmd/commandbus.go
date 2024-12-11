@@ -22,7 +22,7 @@ func NewCommandBus(config *config.Config) (*cqrs.CommandBus, error) {
 			// Define your topic generation logic here
 			return params.CommandName, nil // For example, use the command name as the topic
 		},
-		Marshaler: cqrs.ProtobufMarshaler{}, // Use the Protobuf marshaler
+		Marshaler: cqrs.JSONMarshaler{}, // Use the Protobuf marshaler
 		Logger:    logger,
 	})
 	if err != nil {

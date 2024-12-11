@@ -15,12 +15,12 @@ import (
 
 // UserHandlers defines the interface for user handlers.
 type UserHandlers struct {
-	commandService usercommands.CommandService
+	commandService usercommands.UserService
 	queryService   userqueries.QueryService
 }
 
 // NewUserHandlers creates a new UserHandlers instance.
-func NewUserHandlers(commandService usercommands.CommandService, queryService userqueries.QueryService) *UserHandlers {
+func NewUserHandlers(commandService usercommands.UserService, queryService userqueries.QueryService) *UserHandlers {
 	return &UserHandlers{
 		commandService: commandService,
 		queryService:   queryService,
@@ -49,7 +49,7 @@ func (h *UserHandlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandlers) GetUser(w http.ResponseWriter, r *http.Request) {
 	discordID := chi.URLParam(r, "discordID")
 
-	user, err := h.queryService.GetUserByID(r.Context(), discordID)
+	user, err := h.queryService.GetUserByDiscordID(r.Context(), discordID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -78,7 +78,7 @@ func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the current user to check the role
-	currentUser, err := h.queryService.GetUserByID(r.Context(), discordID)
+	currentUser, err := h.queryService.GetUserByDiscordID(r.Context(), discordID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
 		return
@@ -90,7 +90,7 @@ func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Prevent non-admin users from updating the role to Editor or Admin
 	if (userapimodels.UserRole(req.Role) == userapimodels.UserRoleEditor || userapimodels.UserRole(req.Role) == userapimodels.UserRoleAdmin) &&
-		currentUser.Role != userapimodels.UserRoleAdmin && discordID != discordID {
+		userapimodels.UserRole(currentUser.Role) != userapimodels.UserRoleAdmin {
 		http.Error(w, "Unauthorized to update role to Editor or Admin", http.StatusForbidden)
 		return
 	}
@@ -98,12 +98,11 @@ func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Use the UpdateUserCommand from your api_models package
 	cmd := userapimodels.UpdateUserCommand{
 		DiscordID: discordID,
-		Role:      req.Role,
-		TagNumber: req.TagNumber, // Assuming this is in your UpdateUserRequest
-		Updates:   req.Updates,   // Assuming this is in your UpdateUserRequest
+		// Role:      req.Role,  // This line is unnecessary
+		Updates: req.Updates, // Assuming this is in your UpdateUserRequest
 	}
 
-	if err := h.commandService.UpdateUser(r.Context(), cmd.DiscordID, cmd.Updates); err != nil { // Pass discordID and Updates
+	if err := h.commandService.UpdateUser(r.Context(), cmd.DiscordID, cmd.Updates); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to update user: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -133,4 +132,16 @@ func (h *UserHandlers) GetUserRole(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
 		return
 	}
+}
+
+// Routes returns the routes for the user module.
+func UserRoutes(h UserHandler) chi.Router {
+	r := chi.NewRouter()
+
+	r.Post("/", h.CreateUser)
+	r.Get("/{discordID}", h.GetUser)
+	r.Put("/{discordID}", h.UpdateUser)
+	r.Get("/{discordID}/role", h.GetUserRole)
+
+	return r
 }

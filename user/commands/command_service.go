@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Black-And-White-Club/tcr-bot/db"
 	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
+	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
 	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
 	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -13,7 +13,7 @@ import (
 
 // UserCommandService implements the api.CommandService interface.
 type UserCommandService struct {
-	userDB             db.UserDB // Use the DB interface
+	userDB             userdb.UserDB // Use the DB interface
 	natsConnectionPool *natsjetstream.NatsConnectionPool
 	publisher          message.Publisher
 	commandBus         watermillcmd.CommandBus
@@ -25,7 +25,7 @@ func (s *UserCommandService) CommandBus() watermillcmd.CommandBus {
 }
 
 // NewUserCommandService creates a new UserCommandService.
-func NewUserCommandService(userDB db.UserDB, natsConnectionPool *natsjetstream.NatsConnectionPool, publisher message.Publisher, commandBus watermillcmd.CommandBus) CommandService {
+func NewUserCommandService(userDB userdb.UserDB, natsConnectionPool *natsjetstream.NatsConnectionPool, publisher message.Publisher, commandBus watermillcmd.CommandBus) UserService {
 	return &UserCommandService{
 		userDB:             userDB,
 		natsConnectionPool: natsConnectionPool,
@@ -44,6 +44,7 @@ func (s *UserCommandService) CreateUser(ctx context.Context, discordID string, n
 	// Create and publish a CreateUserCommand to the command bus, including the tagNumber
 	createUserCmd := userapimodels.CreateUserCommand{
 		DiscordID: discordID,
+		Name:      name,
 		Role:      role,
 		TagNumber: tagNumber, // Include the tagNumber in the command
 	}
