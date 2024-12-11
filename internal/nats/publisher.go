@@ -1,10 +1,9 @@
-package natsjetstream
+package natsutil
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -12,17 +11,11 @@ import (
 	nc "github.com/nats-io/nats.go"
 )
 
-var (
-	globalPublisher message.Publisher
-)
-
 // NewPublisher creates a new NATS JetStream publisher.
-func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publisher, error) {
-	marshaler := &nats.GobMarshaler{}
-	options := []nc.Option{
-		nc.RetryOnFailedConnect(true),
-		nc.Timeout(30 * time.Second),
-		nc.ReconnectWait(1 * time.Second),
+func NewPublisher(config ConnectionConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+	conn, err := GetConnection(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get NATS connection: %w", err)
 	}
 
 	jsConfig := nats.JetStreamConfig{
@@ -31,11 +24,10 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publi
 		PublishOptions: []nc.PubOpt{}, // Use nc.PubOpt
 	}
 
-	Publisher, err := nats.NewPublisher( // Changed 'publisher' to 'Publisher'
+	publisher, err := nats.NewPublisher( // Changed 'publisher' to 'Publisher'
 		nats.PublisherConfig{
-			URL:               natsURL,
-			NatsOptions:       options,
-			Marshaler:         marshaler,
+			Conn:              conn, // Use the provided connection
+			Marshaler:         &nats.GobMarshaler{},
 			JetStream:         jsConfig,
 			SubjectCalculator: nats.DefaultSubjectCalculator,
 		},
@@ -45,13 +37,16 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publi
 		return nil, fmt.Errorf("failed to create NATS publisher: %w", err)
 	}
 
-	return Publisher, nil // Return 'Publisher'
+	return publisher, nil // Return 'Publisher'
 }
 
-// PublishEvent publishes an event to the NATS Jetstream event bus.
-func PublishEvent(ctx context.Context, event interface{}, topic string) error { // Add topic argument
-	// Get the publisher
+// PublishEvent publishes an event to the NATS JetStream event bus.
+func PublishEvent(ctx context.Context, event interface{}, topic string) error {
+	// Get the publisher (you might need to handle the case where the publisher is not initialized)
 	publisher := GetPublisher()
+	if publisher == nil {
+		return fmt.Errorf("publisher is not initialized")
+	}
 
 	// Marshal the event (you might need to adjust this based on your event types)
 	payload, err := json.Marshal(event) // Or use another marshaling method

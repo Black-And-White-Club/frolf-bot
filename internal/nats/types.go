@@ -1,4 +1,4 @@
-package natsjetstream
+package natsutil
 
 import "github.com/nats-io/nats.go"
 
