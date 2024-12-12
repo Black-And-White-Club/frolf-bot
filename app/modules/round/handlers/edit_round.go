@@ -7,52 +7,45 @@ import (
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/Black-And-White-Club/tcr-bot/round/converter"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-type EditRoundRequest struct {
-	RoundID int64
-	converter.EditRoundInput
-}
-
-func (EditRoundRequest) CommandName() string {
-	return "EditRoundRequest"
-}
-
+// EditRoundHandler handles the EditRound command.
 type EditRoundHandler struct {
-	roundDB   rounddb.RoundDB
-	converter converter.RoundConverter
-	eventBus  *watermillutil.PubSub
+	roundDB    rounddb.RoundDB
+	messageBus watermillutil.Publisher
 }
 
-func NewEditRoundHandler(roundDB rounddb.RoundDB, converter converter.RoundConverter, eventBus *watermillutil.PubSub) *EditRoundHandler {
+// NewEditRoundHandler creates a new EditRoundHandler.
+func NewEditRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher) *EditRoundHandler {
 	return &EditRoundHandler{
-		roundDB:   roundDB,
-		converter: converter,
-		eventBus:  eventBus,
+		roundDB:    roundDB,
+		messageBus: messageBus,
 	}
 }
 
-func (h *EditRoundHandler) Handler(msg *message.Message) error {
-	var cmd EditRoundRequest
+// Handle processes the EditRound command.
+func (h *EditRoundHandler) Handle(ctx context.Context, msg *message.Message) error {
+	var cmd EditRoundRequest // Defined in requests.go
 	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
 		return fmt.Errorf("failed to unmarshal EditRoundRequest: %w", err)
 	}
 
-	modelInput := h.converter.ConvertEditRoundInputToModel(cmd.EditRoundInput)
-
-	err := h.roundDB.UpdateRound(context.Background(), cmd.RoundID, modelInput)
+	err := h.roundDB.UpdateRound(ctx, cmd.RoundID, cmd.Input)
 	if err != nil {
 		return fmt.Errorf("failed to update round: %w", err)
 	}
 
-	// Publish a RoundEdited event (you'll need to define this event)
-	if err := h.eventBus.Publish(context.Background(), "RoundEdited", &RoundEdited{
+	event := RoundEditedEvent{ // Defined in events.go
 		RoundID: cmd.RoundID,
-		// ... other relevant data if needed
-	}); err != nil {
-		return fmt.Errorf("failed to publish RoundEdited event: %w", err)
+	}
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal RoundEditedEvent: %w", err)
+	}
+	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil { // Topic() defined in topics.go
+		return fmt.Errorf("failed to publish RoundEditedEvent: %w", err)
 	}
 
 	return nil

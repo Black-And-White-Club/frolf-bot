@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	userrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/user/router"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"
 )
@@ -16,21 +18,35 @@ import (
 // CreateUserHandler handles the CreateUserCommand.
 type CreateUserHandler struct {
 	userDB   userdb.UserDB
-	eventBus *watermillutil.PubSub // Use your PubSub struct
+	eventBus watermillutil.PubSuber
+}
+
+// NewCreateUserHandler creates a new CreateUserHandler.
+func NewCreateUserHandler(userDB userdb.UserDB, eventBus watermillutil.PubSuber) *CreateUserHandler {
+	return &CreateUserHandler{
+		userDB:   userDB,
+		eventBus: eventBus,
+	}
 }
 
 // Handle processes the CreateUserCommand.
-func (h *CreateUserHandler) Handle(msg *message.Message) error {
+func (h *CreateUserHandler) Handle(ctx context.Context, msg *message.Message) error {
 	// 1. Unmarshal the CreateUserCommand from the message payload.
-	var cmd CreateUserRequest
-	marshaler := cqrs.JSONMarshaler{}
-
+	var cmd usercommands.CreateUserRequest
+	marshaler := userrouter.Marshaler // Use the marshaler from userhandlers
 	if err := marshaler.Unmarshal(msg, &cmd); err != nil {
 		return errors.Wrap(err, "failed to unmarshal CreateUserCommand")
 	}
 
-	// 2. Check if a user with this Discord ID already exists
-	existingUser, err := h.userDB.GetUserByDiscordID(context.Background(), cmd.DiscordID)
+	// 2. Set default role if not provided
+	if cmd.Role == "" {
+		cmd.Role = userdb.UserRoleRattler
+	} else if !cmd.Role.IsValid() {
+		return fmt.Errorf("invalid role: %s", cmd.Role)
+	}
+
+	// 3. Check if a user with this Discord ID already exists
+	existingUser, err := h.userDB.GetUserByDiscordID(ctx, cmd.DiscordID)
 	if err != nil {
 		return errors.Wrap(err, "failed to check for existing user")
 	}
@@ -39,32 +55,26 @@ func (h *CreateUserHandler) Handle(msg *message.Message) error {
 		return fmt.Errorf("user with Discord ID %s already exists", cmd.DiscordID)
 	}
 
-	// 3. Check tag availability using PubSub
-	tagAvailable, err := h.checkTagAvailability(context.Background(), cmd.TagNumber)
+	// 4. Check tag availability using PubSub
+	tagAvailable, err := h.checkTagAvailability(ctx, cmd.TagNumber)
 	if err != nil {
 		return errors.Wrap(err, "failed to check tag availability")
 	}
 
 	if tagAvailable {
-		// 4. Create the user in the database
-		user := &userdb.User{
-			DiscordID: cmd.DiscordID,
-			Name:      cmd.Name,
-			Role:      userdb.UserRole(cmd.Role),
-			// ... other fields
-		}
-		if err := h.userDB.CreateUser(context.Background(), user); err != nil {
+		// 5. Create the user in the database
+		err := h.userDB.CreateUser(ctx, cmd.DiscordID, cmd.Name, cmd.Role) // Remove tagNumber
+		if err != nil {
 			return errors.Wrap(err, "failed to create user in database")
 		}
 
-		// 5. Publish a UserCreatedEvent using the publisher from PubSub
-		userCreatedEvent := UserCreatedEvent{
+		// 6. Publish a UserCreatedEvent using the publisher from PubSub
+		userCreatedEvent := UserCreatedEvent{ // Assuming you have this event struct defined
 			DiscordID: cmd.DiscordID,
-			TagNumber: cmd.TagNumber,
+			TagNumber: cmd.TagNumber, // Still include tag number in the event
 			// ... add other relevant data from the command ...
 		}
 
-		// Marshal the UserCreatedEvent using encoding/json
 		payload, err := json.Marshal(userCreatedEvent)
 		if err != nil {
 			return fmt.Errorf("failed to marshal UserCreatedEvent: %w", err)
@@ -82,6 +92,10 @@ func (h *CreateUserHandler) Handle(msg *message.Message) error {
 
 // checkTagAvailability checks if the tag number is available.
 func (h *CreateUserHandler) checkTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
+	// Create a new context with a timeout (e.g., 5 seconds)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel() // Ensure the timeout is canceled
+
 	// 1. Prepare the request data for the leaderboard module
 	checkTagEvent := &CheckTagAvailabilityEvent{
 		TagNumber: tagNumber,
@@ -98,7 +112,7 @@ func (h *CreateUserHandler) checkTagAvailability(ctx context.Context, tagNumber 
 	}
 
 	// 3. Subscribe to the response topic using PubSub
-	responseChan, err := h.eventBus.Subscribe(context.Background(), "tag-availability-result")
+	responseChan, err := h.eventBus.Subscribe(ctx, "tag-availability-result")
 	if err != nil {
 		return false, errors.Wrap(err, "failed to subscribe to tag availability result")
 	}
@@ -112,7 +126,10 @@ func (h *CreateUserHandler) checkTagAvailability(ctx context.Context, tagNumber 
 			return false, fmt.Errorf("failed to unmarshal tag availability response: %w", err)
 		}
 		return tagAvailable, nil
-	case <-ctx.Done():
-		return false, ctx.Err()
+	case <-ctx.Done(): // Handle timeout or cancellation
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return false, fmt.Errorf("timeout waiting for tag availability response")
+		}
+		return false, ctx.Err() // Return the context error (e.g., cancellation)
 	}
 }

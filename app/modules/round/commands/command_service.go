@@ -3,6 +3,7 @@ package roundcommands
 import (
 	"context"
 	"errors"
+	"log"
 
 	// Assuming handlers package is in the same directory
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/round/common"
@@ -19,7 +20,7 @@ type RoundCommandService struct {
 }
 
 // NewRoundCommandService creates a new RoundCommandService.
-func NewRoundCommandService(roundDB rounddb.RoundDB, commandBus cqrs.CommandBus) CommandService {
+func NewRoundCommandService(roundDB rounddb.RoundDB, commandBus cqrs.CommandBus) *RoundCommandService {
 	return &RoundCommandService{
 		roundDB:    roundDB,
 		commandBus: commandBus,
@@ -112,9 +113,10 @@ func (s *RoundCommandService) EditRound(ctx context.Context, roundID int64, disc
 
 // DeleteRound implements the CommandService interface.
 func (s *RoundCommandService) DeleteRound(ctx context.Context, roundID int64) error {
-	deleteRoundCmd := roundhandlers.DeleteRoundRequest{
+	deleteRoundCmd := roundhandlers.DeleteRoundRequest{ // Use handlers.DeleteRoundRequest
 		RoundID: roundID,
 	}
+	log.Printf("Sending DeleteRoundCommand: %+v\n", deleteRoundCmd)
 	return s.commandBus.Send(ctx, deleteRoundCmd)
 }
 

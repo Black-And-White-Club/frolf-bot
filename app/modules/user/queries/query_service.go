@@ -2,52 +2,28 @@ package userqueries
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 )
 
-// UserQueryService implements the QueryService interface.
-type UserQueryService struct {
-	UserDB   userdb.UserDB
-	eventBus *watermillutil.PubSub // Use your PubSub struct
+// userQueryService implements the QueryService interface.
+type userQueryService struct {
+	getUserByDiscordIDHandler GetUserByDiscordIDHandler
+	getUserRoleHandler        GetUserRoleHandler
 }
 
-func (s *UserQueryService) EventBus() *watermillutil.PubSub {
-	return s.eventBus
-}
-
-// NewUserQueryService creates a new UserQueryService.
-func NewUserQueryService(userDB userdb.UserDB, eventBus *watermillutil.PubSub) QueryService {
-	return &UserQueryService{
-		UserDB:   userDB,
-		eventBus: eventBus,
+// NewUserQueryService creates a new QueryService instance.
+func NewUserQueryService(getUserByDiscordIDHandler GetUserByDiscordIDHandler, getUserRoleHandler GetUserRoleHandler) QueryService {
+	return &userQueryService{
+		getUserByDiscordIDHandler: getUserByDiscordIDHandler,
+		getUserRoleHandler:        getUserRoleHandler,
 	}
 }
 
-// GetUserByID retrieves a user by their ID.
-func (s *UserQueryService) GetUserByDiscordID(ctx context.Context, discordID string) (*userdb.User, error) {
-	user, err := s.UserDB.GetUserByDiscordID(ctx, discordID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-	if user == nil {
-		return nil, errors.New("user not found")
-	}
-	return user, nil
+func (s *userQueryService) GetUserByDiscordID(ctx context.Context, discordID string) (*userdb.User, error) {
+	return s.getUserByDiscordIDHandler.Handle(ctx, GetUserByDiscordID{DiscordID: discordID})
 }
 
-// GetUserRole retrieves the role of a user.
-func (s *UserQueryService) GetUserRole(ctx context.Context, discordID string) (string, error) {
-	user, err := s.UserDB.GetUserByDiscordID(ctx, discordID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get user: %w", err)
-	}
-	if user == nil {
-		return "", errors.New("user not found")
-	}
-
-	return string(user.Role), nil // Just return the role, no need to publish an event here
+func (s *userQueryService) GetUserRole(ctx context.Context, discordID string) (userdb.UserRole, error) {
+	return s.getUserRoleHandler.Handle(ctx, GetUserRole{DiscordID: discordID})
 }

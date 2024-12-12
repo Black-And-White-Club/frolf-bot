@@ -3,9 +3,9 @@ package user
 import (
 	"fmt"
 
-	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
 	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/handlers"
 	userqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/user/queries"
+	userrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/user/router"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
@@ -14,40 +14,34 @@ import (
 
 // UserModule represents the user module.
 type UserModule struct {
-	CommandService usercommands.CommandService
+	CommandRouter  userrouter.CommandRouter
 	QueryService   userqueries.QueryService
 	PubSub         watermillutil.PubSuber
+	messageHandler *UserHandlers // Pointer to UserHandlers
 }
 
 // NewUserModule creates a new UserModule with the provided dependencies.
 func NewUserModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*UserModule, error) {
-	// Initialize UserHandlers
-	userCommandService := usercommands.NewUserCommandService(
-		dbService.User,
-		pubsub,
-		*commandBus,
-	)
-	userQueryService := userqueries.NewUserQueryService(
-		dbService.User,
-		pubsub.(*watermillutil.PubSub),
-	)
+	marshaler := userrouter.Marshaler
+	userCommandBus := userrouter.NewUserCommandBus(pubsub, marshaler)
+	userCommandRouter := userrouter.NewUserCommandRouter(userCommandBus)
 
-	// Register the user command handlers
-	if err := userhandlers.RegisterUserCommandHandlers(commandBus, dbService.User, pubsub.(*watermillutil.PubSub)); err != nil {
-		return nil, fmt.Errorf("failed to register user command handlers: %w", err)
-	}
+	getUserByDiscordIDHandler := userqueries.NewGetUserByDiscordIDHandler(dbService.User)
+	getUserRoleHandler := userqueries.NewGetUserRoleHandler(dbService.User)
+	userQueryService := userqueries.NewUserQueryService(getUserByDiscordIDHandler, getUserRoleHandler)
+
+	messageHandler := NewUserHandlers(userCommandRouter, userQueryService, pubsub)
 
 	return &UserModule{
-		CommandService: userCommandService,
+		CommandRouter:  userCommandRouter,
 		QueryService:   userQueryService,
 		PubSub:         pubsub,
+		messageHandler: messageHandler, // Store the pointer
 	}, nil
 }
 
 // RegisterHandlers registers the user module's handlers.
 func (m *UserModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	userHandlers := NewUserHandlers(m.CommandService, m.QueryService, pubsub)
-
 	handlers := []struct {
 		handlerName string
 		topic       string
@@ -55,25 +49,24 @@ func (m *UserModule) RegisterHandlers(router *message.Router, pubsub watermillut
 	}{
 		{
 			handlerName: "user_create_handler",
-			topic:       "create-user",
-			handler:     userHandlers.HandleCreateUser,
+			topic:       userhandlers.TopicCreateUser,
+			handler:     m.messageHandler.Handle,
 		},
 		{
 			handlerName: "user_get_handler",
-			topic:       "get-user",
-			handler:     userHandlers.HandleGetUser,
+			topic:       userhandlers.TopicGetUser,
+			handler:     m.messageHandler.Handle,
 		},
 		{
 			handlerName: "user_update_handler",
-			topic:       "update-user",
-			handler:     userHandlers.HandleUpdateUser,
+			topic:       userhandlers.TopicUpdateUser,
+			handler:     m.messageHandler.Handle,
 		},
 		{
 			handlerName: "user_get_role_handler",
-			topic:       "get-user-role",
-			handler:     userHandlers.HandleGetUserRole,
+			topic:       userhandlers.TopicGetUserRoleRequest, // Correct topic
+			handler:     m.messageHandler.Handle,
 		},
-		// ... add more user handlers ...
 	}
 
 	for _, h := range handlers {
@@ -81,7 +74,7 @@ func (m *UserModule) RegisterHandlers(router *message.Router, pubsub watermillut
 			h.handlerName,
 			h.topic,
 			pubsub,
-			h.topic+"_response",
+			h.topic+"_response", // Assuming you have response topics
 			pubsub,
 			h.handler,
 		); err != nil {

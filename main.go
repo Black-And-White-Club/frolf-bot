@@ -12,14 +12,16 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	app, err := app.NewApp(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	application, err := app.NewApp(ctx) // Renamed app to application
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
 
 	// Start the Watermill router
-	if err := app.WatermillRouter.Run(context.Background()); err != nil {
+	if err := application.WatermillRouter.Run(ctx); err != nil { // Use application
 		log.Fatalf("Failed to start Watermill router: %v", err)
 	}
 
@@ -28,14 +30,22 @@ func main() {
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	fmt.Println("Waiting for shutdown signal...")
-	<-interrupt
-
-	fmt.Println("Shutting down application...")
+	select {
+	case <-interrupt:
+		fmt.Println("Shutting down application...")
+	case <-ctx.Done():
+		fmt.Println("Application context canceled")
+	}
 
 	// Close the Watermill PubSub in the UserModule
-	if err := app.Modules.UserModule.PubSub.Close(); err != nil {
+	if err := application.Modules.UserModule.PubSub.Close(); err != nil { // Use application
 		log.Printf("Failed to close Watermill PubSub in UserModule: %v", err)
 	}
 
-	// ... add similar checks for other modules as needed ...
+	// Gracefully close database connections
+	if err := application.DB().GetDB().Close(); err != nil { // Use application.DB().GetDB()
+		log.Println("Error closing database connection:", err)
+	}
+
+	fmt.Println("Application shut down gracefully.")
 }

@@ -3,68 +3,64 @@ package roundhandlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/Black-And-White-Club/tcr-bot/round/common"
-	"github.com/Black-And-White-Club/tcr-bot/round/converter"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-type FinalizeAndProcessScoresRequest struct {
-	RoundID int64
+// ... (other structs)
+
+// RoundScoresProcessed represents the event of scores being processed for a round.
+type RoundScoresProcessed struct {
+	RoundID      int64                `json:"round_id"`
+	Participants []models.Participant `json:"participants"`
+	Scores       map[string]int       `json:"scores"`
 }
 
-func (FinalizeAndProcessScoresRequest) CommandName() string {
-	return "FinalizeAndProcessScoresRequest"
+// Topic returns the topic for the RoundScoresProcessed event.
+func (e RoundScoresProcessed) Topic() string {
+	return "round.scores.processed"
 }
 
-type FinalizeAndProcessScoresHandler struct {
-	roundDB   rounddb.RoundDB
-	converter converter.RoundConverter
-	eventBus  *watermillutil.PubSub
-}
+// ... (FinalizeAndProcessScoresHandler struct and constructor)
 
-func NewFinalizeAndProcessScoresHandler(roundDB rounddb.RoundDB, converter converter.RoundConverter, eventBus *watermillutil.PubSub) *FinalizeAndProcessScoresHandler {
-	return &FinalizeAndProcessScoresHandler{
-		roundDB:   roundDB,
-		converter: converter,
-		eventBus:  eventBus,
+func (h *FinalizeAndProcessScoresHandler) Handle(ctx context.Context, msg *message.Message) error {
+	// ... (unmarshal command, get round, check if already finalized)
+
+	// Process scores using the new handler
+	processScoresCmd := ProcessScoresRequest{
+		RoundID:      cmd.RoundID,
+		Participants: round.Participants,
+		Scores:       round.Scores,
 	}
-}
-
-func (h *FinalizeAndProcessScoresHandler) Handler(msg *message.Message) error {
-	var cmd FinalizeAndProcessScoresRequest
-	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
-		return fmt.Errorf("failed to unmarshal FinalizeAndProcessScoresRequest: %w", err)
+	if err := h.messageBus.Publish(processScoresCmd.CommandName(), message.NewMessage(watermill.NewUUID(), processScoresCmd)); err != nil {
+		return fmt.Errorf("failed to publish ProcessScoresRequest: %w", err)
 	}
 
-	round, err := h.roundDB.GetRound(context.Background(), cmd.RoundID)
+	if round.State != models.RoundStateFinalized {
+		// Publish command to update the round state ONLY if not already finalized
+		updateStateCmd := UpdateRoundStateRequest{
+			RoundID: cmd.RoundID,
+			State:   models.RoundStateFinalized,
+		}
+		if err := h.messageBus.Publish(updateStateCmd.CommandName(), message.NewMessage(watermill.NewUUID(), updateStateCmd)); err != nil {
+			return fmt.Errorf("failed to publish UpdateRoundStateRequest: %w", err)
+		}
+	}
+
+	// Publish RoundScoresProcessed event regardless of the round state
+	event := RoundScoresProcessed{
+		RoundID:      cmd.RoundID,
+		Participants: round.Participants, // Include the participant data
+		Scores:       round.Scores,
+	}
+	payload, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("failed to get round: %w", err)
+		return fmt.Errorf("failed to marshal RoundScoresProcessed event: %w", err)
 	}
-	if round == nil {
-		return errors.New("round not found")
-	}
-
-	if round.State == common.RoundStateFinalized {
-		return nil // Already finalized
-	}
-
-	// ... (Logic to process scores - you'll need to adapt this from your existing code)
-
-	if err := h.roundDB.UpdateRoundState(context.Background(), cmd.RoundID, common.RoundStateFinalized); err != nil {
-		return fmt.Errorf("failed to update round state: %w", err)
-	}
-
-	// Publish a RoundFinalized event (you'll need to define this event)
-	if err := h.eventBus.Publish(context.Background(), "RoundFinalized", &RoundFinalized{
-		RoundID: cmd.RoundID,
-		// ... other relevant data if needed
-	}); err != nil {
-		return fmt.Errorf("failed to publish RoundFinalized event: %w", err)
+	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish RoundScoresProcessed event: %w", err)
 	}
 
 	return nil

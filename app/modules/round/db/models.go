@@ -38,6 +38,7 @@ const (
 	RoundStateUpcoming   RoundState = "UPCOMING"
 	RoundStateInProgress RoundState = "IN_PROGRESS"
 	RoundStateFinalized  RoundState = "FINALIZED"
+	RoundStateDeleted    RoundState = "DELETED"
 )
 
 // Participant represents a user participating in a round.

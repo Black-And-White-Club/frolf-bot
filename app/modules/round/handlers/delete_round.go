@@ -7,46 +7,45 @@ import (
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-type DeleteRoundRequest struct {
-	RoundID int64
-}
-
-func (DeleteRoundRequest) CommandName() string {
-	return "DeleteRoundRequest"
-}
-
+// DeleteRoundHandler handles the DeleteRound command.
 type DeleteRoundHandler struct {
-	roundDB  rounddb.RoundDB
-	eventBus *watermillutil.PubSub
+	roundDB    rounddb.RoundDB
+	messageBus watermillutil.Publisher
 }
 
-func NewDeleteRoundHandler(roundDB rounddb.RoundDB, eventBus *watermillutil.PubSub) *DeleteRoundHandler {
+// NewDeleteRoundHandler creates a new DeleteRoundHandler.
+func NewDeleteRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher) *DeleteRoundHandler {
 	return &DeleteRoundHandler{
-		roundDB:  roundDB,
-		eventBus: eventBus,
+		roundDB:    roundDB,
+		messageBus: messageBus,
 	}
 }
 
-func (h *DeleteRoundHandler) Handler(msg *message.Message) error {
+// Handle processes the DeleteRound command.
+func (h *DeleteRoundHandler) Handle(ctx context.Context, msg *message.Message) error {
 	var cmd DeleteRoundRequest
 	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
 		return fmt.Errorf("failed to unmarshal DeleteRoundRequest: %w", err)
 	}
 
-	err := h.roundDB.DeleteRound(context.Background(), cmd.RoundID)
+	err := h.roundDB.DeleteRound(ctx, cmd.RoundID)
 	if err != nil {
 		return fmt.Errorf("failed to delete round: %w", err)
 	}
 
-	// Publish a RoundDeleted event (you'll need to define this event)
-	if err := h.eventBus.Publish(context.Background(), "RoundDeleted", &RoundDeleted{
+	event := RoundDeletedEvent{
 		RoundID: cmd.RoundID,
-		// ... other relevant data if needed
-	}); err != nil {
-		return fmt.Errorf("failed to publish RoundDeleted event: %w", err)
+	}
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal RoundDeletedEvent: %w", err)
+	}
+	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish RoundDeletedEvent: %w", err)
 	}
 
 	return nil
