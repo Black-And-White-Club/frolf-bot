@@ -1,8 +1,7 @@
 package db
 
 import (
-	rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
-	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 )
 
 const (
@@ -12,8 +11,8 @@ const (
 
 // DB provides methods for interacting with an underlying database or other storage mechanism.
 type Database interface {
-	LeaderboardDB
-	rounddb.RoundDB
-	ScoreDB
+	// LeaderboardDB
+	// rounddb.RoundDB
+	// ScoreDB
 	userdb.UserDB
 }

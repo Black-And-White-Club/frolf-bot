@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Black-And-White-Club/tcr-bot/models"
 	"github.com/uptrace/bun"
 )
 
@@ -16,7 +15,7 @@ type UserDBImpl struct {
 }
 
 // CreateUser creates a new user.
-func (db *UserDBImpl) CreateUser(ctx context.Context, user *models.User) error { // Use *models.User
+func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error { // Use *models.User
 	if db.DB == nil {
 		return errors.New("database connection is not initialized")
 	}

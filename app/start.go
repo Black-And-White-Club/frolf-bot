@@ -1,35 +1,19 @@
-// app/start.go
-
 package app
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
 )
 
+// Start starts the Watermill router.
 func (app *App) Start(ctx context.Context) error {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3000"
+	// Start the Watermill router
+	if err := app.WatermillRouter.Run(context.Background()); err != nil {
+		return fmt.Errorf("failed to start Watermill router: %w", err)
 	}
-	fmt.Println("Starting server on port", port)
-
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: app.Router(),
-	}
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ListenAndServe(): %v", err)
-		}
-	}()
 
 	// Wait for shutdown signal
-	app.WaitForShutdown(ctx, srv)
+	app.WaitForShutdown(ctx) // Assuming WaitForShutdown is updated to not take *http.Server
 
 	return nil
 }

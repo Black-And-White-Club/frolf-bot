@@ -3,34 +3,32 @@ package usercommands
 import (
 	"context"
 	"errors"
+	"log"
 
-	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
-	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
-	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
-	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/handlers"
+	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // UserCommandService implements the api.CommandService interface.
 type UserCommandService struct {
-	userDB             userdb.UserDB // Use the DB interface
-	natsConnectionPool *natsjetstream.NatsConnectionPool
-	publisher          message.Publisher
-	commandBus         watermillcmd.CommandBus
+	userDB     userdb.UserDB
+	publisher  message.Publisher
+	commandBus cqrs.CommandBus // Use cqrs.CommandBus directly
 }
 
 // CommandBus returns the command bus.
-func (s *UserCommandService) CommandBus() watermillcmd.CommandBus {
+func (s *UserCommandService) CommandBus() cqrs.CommandBus { // Use cqrs.CommandBus directly
 	return s.commandBus
 }
 
 // NewUserCommandService creates a new UserCommandService.
-func NewUserCommandService(userDB userdb.UserDB, natsConnectionPool *natsjetstream.NatsConnectionPool, publisher message.Publisher, commandBus watermillcmd.CommandBus) UserService {
+func NewUserCommandService(userDB userdb.UserDB, publisher message.Publisher, commandBus cqrs.CommandBus) CommandService { // Use cqrs.CommandBus directly
 	return &UserCommandService{
-		userDB:             userDB,
-		natsConnectionPool: natsConnectionPool,
-		publisher:          publisher,
-		commandBus:         commandBus,
+		userDB:     userDB,
+		publisher:  publisher,
+		commandBus: commandBus,
 	}
 }
 
@@ -42,21 +40,29 @@ func (s *UserCommandService) CreateUser(ctx context.Context, discordID string, n
 	}
 
 	// Create and publish a CreateUserCommand to the command bus, including the tagNumber
-	createUserCmd := userapimodels.CreateUserCommand{
+	createUserCmd := userhandlers.CreateUserRequest{
 		DiscordID: discordID,
 		Name:      name,
 		Role:      role,
-		TagNumber: tagNumber, // Include the tagNumber in the command
+		TagNumber: tagNumber,
 	}
+
+	// Log the command being sent
+	log.Printf("Sending CreateUserCommand: %+v\n", createUserCmd)
+
 	return s.commandBus.Send(ctx, createUserCmd)
 }
 
 // UpdateUser updates an existing user.
 func (s *UserCommandService) UpdateUser(ctx context.Context, discordID string, updates map[string]interface{}) error {
 	// Create and publish an UpdateUserCommand to the command bus
-	updateUserCmd := userapimodels.UpdateUserCommand{
+	updateUserCmd := userhandlers.UpdateUserRequest{
 		DiscordID: discordID,
 		Updates:   updates,
 	}
+
+	// Log the command being sent
+	log.Printf("Sending UpdateUserCommand: %+v\n", updateUserCmd)
+
 	return s.commandBus.Send(ctx, updateUserCmd)
 }

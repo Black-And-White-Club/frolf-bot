@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Black-And-White-Club/tcr-bot/internal/nats"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -14,18 +13,13 @@ type PubSub struct {
 	subscriber message.Subscriber
 }
 
-func NewPubSub(config Config, logger watermill.LoggerAdapter) (*PubSub, error) {
-	conn, err := nats.GetConnection(config.Nats)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get NATS connection: %w", err)
-	}
-
-	pub, err := nats.NewPublisher(config.Nats, conn, logger)
+func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) {
+	pub, err := NewPublisher(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
 	}
 
-	sub, err := nats.NewSubscriber(config.Nats, conn, logger)
+	sub, err := NewSubscriber(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
 	}
@@ -37,12 +31,12 @@ func NewPubSub(config Config, logger watermill.LoggerAdapter) (*PubSub, error) {
 }
 
 // Publish publishes a single message to the specified topic.
-func (ps *PubSub) Publish(topic string, msg *message.Message) error {
-	return ps.publisher.Publish(topic, msg)
+func (ps *PubSub) Publish(topic string, messages ...*message.Message) error {
+	return ps.publisher.Publish(topic, messages...)
 }
 
-func (ps *PubSub) Subscribe(topic string) (<-chan *message.Message, error) {
-	return ps.subscriber.Subscribe(context.Background(), topic)
+func (ps *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	return ps.subscriber.Subscribe(ctx, topic)
 }
 
 func (ps *PubSub) Close() error {

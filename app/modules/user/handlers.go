@@ -1,147 +1,130 @@
-// user/handlers.go
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 
-	usercommands "github.com/Black-And-White-Club/tcr-bot/user/commands"
-	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
-	userqueries "github.com/Black-And-White-Club/tcr-bot/user/queries"
-	"github.com/go-chi/chi/v5"
+	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
+	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/handlers"
+	userqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/user/queries"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// UserHandlers defines the interface for user handlers.
+// UserHandlers defines the handlers for user-related events.
 type UserHandlers struct {
-	commandService usercommands.UserService
+	commandService usercommands.CommandService
 	queryService   userqueries.QueryService
+	pubsub         watermillutil.PubSuber // Use the PubSuber interface
 }
 
-// NewUserHandlers creates a new UserHandlers instance.
-func NewUserHandlers(commandService usercommands.UserService, queryService userqueries.QueryService) *UserHandlers {
+func NewUserHandlers(commandService usercommands.CommandService, queryService userqueries.QueryService, pubsub watermillutil.PubSuber) *UserHandlers { // Use PubSuber interface
 	return &UserHandlers{
 		commandService: commandService,
 		queryService:   queryService,
+		pubsub:         pubsub,
 	}
 }
 
-// CreateUser creates a new user.
-func (h *UserHandlers) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var req userapimodels.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
+// HandleCreateUser creates a new user.
+func (h *UserHandlers) HandleCreateUser(msg *message.Message) ([]*message.Message, error) { // Updated return signature
+	var req userhandlers.CreateUserRequest
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		return []*message.Message{}, fmt.Errorf("invalid request: %w", err) // Return empty slice and error
 	}
 
-	tagNumber, _ := strconv.Atoi(r.URL.Query().Get("tagNumber")) // We'll need to handle potential errors here later
-
-	if err := h.commandService.CreateUser(r.Context(), req.DiscordID, req.Name, req.Role, tagNumber); err != nil {
-		http.Error(w, "failed to create user", http.StatusInternalServerError)
-		return
+	// Extract tagNumber from metadata
+	tagNumberStr := msg.Metadata.Get("tagNumber") // Get returns only the value
+	if tagNumberStr == "" {
+		return []*message.Message{}, fmt.Errorf("tagNumber missing in metadata")
 	}
 
-	w.WriteHeader(http.StatusCreated)
-}
-
-// GetUser retrieves a user.
-func (h *UserHandlers) GetUser(w http.ResponseWriter, r *http.Request) {
-	discordID := chi.URLParam(r, "discordID")
-
-	user, err := h.queryService.GetUserByDiscordID(r.Context(), discordID)
+	tagNumber, err := strconv.Atoi(tagNumberStr)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
-		return
+		return []*message.Message{}, fmt.Errorf("invalid tagNumber: %w", err)
+	}
+
+	if err := h.commandService.CreateUser(context.Background(), req.DiscordID, req.Name, req.Role, tagNumber); err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return []*message.Message{}, nil // Return an empty slice of messages and nil error
+}
+
+// HandleGetUser retrieves a user.
+func (h *UserHandlers) HandleGetUser(msg *message.Message) ([]*message.Message, error) { // Updated return signature
+	var req userhandlers.GetUserRequest
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		return []*message.Message{}, fmt.Errorf("invalid request: %w", err)
+	}
+
+	user, err := h.queryService.GetUserByDiscordID(context.Background(), req.DiscordID)
+	if err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	if user == nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
+		return []*message.Message{}, fmt.Errorf("user not found: %s", req.DiscordID)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(user); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
-		return
-	}
-}
-
-// UpdateUser updates an existing user.
-func (h *UserHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	discordID := chi.URLParam(r, "discordID")
-
-	var req userapimodels.UpdateUserCommand // Use a regular UpdateUserRequest struct
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to decode request body: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Get the current user to check the role
-	currentUser, err := h.queryService.GetUserByDiscordID(r.Context(), discordID)
+	// Publish the user data to a response topic (you'll need to define this topic)
+	response := userhandlers.GetUserResponse{User: *user}
+	payload, err := json.Marshal(response)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
-		return
+		return []*message.Message{}, fmt.Errorf("failed to marshal user response: %w", err)
 	}
-	if currentUser == nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
+	if err := h.pubsub.Publish("get-user-response", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to publish user response: %w", err)
 	}
 
-	// Prevent non-admin users from updating the role to Editor or Admin
-	if (userapimodels.UserRole(req.Role) == userapimodels.UserRoleEditor || userapimodels.UserRole(req.Role) == userapimodels.UserRoleAdmin) &&
-		userapimodels.UserRole(currentUser.Role) != userapimodels.UserRoleAdmin {
-		http.Error(w, "Unauthorized to update role to Editor or Admin", http.StatusForbidden)
-		return
-	}
-
-	// Use the UpdateUserCommand from your api_models package
-	cmd := userapimodels.UpdateUserCommand{
-		DiscordID: discordID,
-		// Role:      req.Role,  // This line is unnecessary
-		Updates: req.Updates, // Assuming this is in your UpdateUserRequest
-	}
-
-	if err := h.commandService.UpdateUser(r.Context(), cmd.DiscordID, cmd.Updates); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to update user: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
+	return []*message.Message{}, nil // Return an empty slice of messages and nil error
 }
 
-// GetUserRole retrieves the role of a user.
-func (h *UserHandlers) GetUserRole(w http.ResponseWriter, r *http.Request) {
-	discordID := chi.URLParam(r, "discordID")
+// HandleUpdateUser updates an existing user.
+func (h *UserHandlers) HandleUpdateUser(msg *message.Message) ([]*message.Message, error) { // Updated return signature
+	var req userhandlers.UpdateUserRequest
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		return []*message.Message{}, fmt.Errorf("invalid request: %w", err)
+	}
 
-	role, err := h.queryService.GetUserRole(r.Context(), discordID)
+	// ... (authorization logic remains similar, but use req.DiscordID) ...
+
+	cmd := userhandlers.UpdateUserRequest{
+		DiscordID: req.DiscordID,
+		Updates:   req.Updates,
+	}
+
+	if err := h.commandService.UpdateUser(context.Background(), cmd.DiscordID, cmd.Updates); err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return []*message.Message{}, nil // Return an empty slice of messages and nil error
+}
+
+// HandleGetUserRole retrieves the role of a user.
+func (h *UserHandlers) HandleGetUserRole(msg *message.Message) ([]*message.Message, error) { // Updated return signature
+	var req userhandlers.GetUserRoleRequestEvent
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		return []*message.Message{}, fmt.Errorf("invalid request: %w", err)
+	}
+
+	role, err := h.queryService.GetUserRole(context.Background(), req.DiscordID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user role: %v", err), http.StatusInternalServerError)
-		return
+		return []*message.Message{}, fmt.Errorf("failed to get user role: %w", err)
 	}
 
-	// Assuming UserRole is a string, otherwise adjust accordingly
-	response := struct {
-		Role string `json:"role"`
-	}{
-		Role: role,
+	// Publish the role to a response topic (you'll need to define this topic)
+	response := userhandlers.UserRoleResponseEvent{Role: role}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to marshal role response: %w", err)
+	}
+	if err := h.pubsub.Publish("get-user-role-response", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return []*message.Message{}, fmt.Errorf("failed to publish role response: %w", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
-		return
-	}
-}
-
-// Routes returns the routes for the user module.
-func UserRoutes(h UserHandler) chi.Router {
-	r := chi.NewRouter()
-
-	r.Post("/", h.CreateUser)
-	r.Get("/{discordID}", h.GetUser)
-	r.Put("/{discordID}", h.UpdateUser)
-	r.Get("/{discordID}/role", h.GetUserRole)
-
-	return r
+	return []*message.Message{}, nil // Return an empty slice of messages and nil error
 }

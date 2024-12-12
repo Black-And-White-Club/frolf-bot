@@ -3,14 +3,14 @@ package usercommands
 import (
 	"context"
 
-	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
+	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 )
 
-// CommandService defines the interface for user commands.
-type UserService interface {
+// UserService defines the interface for user commands.
+type CommandService interface {
 	CreateUser(ctx context.Context, discordID string, name string, role string, tagNumber int) error
 	UpdateUser(ctx context.Context, discordID string, updates map[string]interface{}) error
 	// Add other command methods as needed (e.g., DeleteUser)
 
-	CommandBus() watermillcmd.CommandBus
+	CommandBus() cqrs.CommandBus // Use cqrs.CommandBus directly
 }

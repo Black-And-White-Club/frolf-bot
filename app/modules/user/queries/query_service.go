@@ -5,23 +5,22 @@ import (
 	"errors"
 	"fmt"
 
-	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
-	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
-	userhandlers "github.com/Black-And-White-Club/tcr-bot/watermillcmd/user"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 )
 
 // UserQueryService implements the QueryService interface.
 type UserQueryService struct {
 	userDB   userdb.UserDB
-	eventBus watermillcmd.MessageBus // Add an eventBus field
+	eventBus *watermillutil.PubSub // Use your PubSub struct
 }
 
-func (s *UserQueryService) EventBus() watermillcmd.MessageBus {
+func (s *UserQueryService) EventBus() *watermillutil.PubSub {
 	return s.eventBus
 }
 
 // NewUserQueryService creates a new UserQueryService.
-func NewUserQueryService(userDB userdb.UserDB, eventBus watermillcmd.MessageBus) QueryService { // Add eventBus to the constructor
+func NewUserQueryService(userDB userdb.UserDB, eventBus *watermillutil.PubSub) QueryService {
 	return &UserQueryService{
 		userDB:   userDB,
 		eventBus: eventBus,
@@ -50,14 +49,5 @@ func (s *UserQueryService) GetUserRole(ctx context.Context, discordID string) (s
 		return "", errors.New("user not found")
 	}
 
-	role := string(user.Role)
-
-	// Publish UserRoleResponseEvent
-	if err := s.eventBus.PublishEvent(ctx, "get-user-role-topic", userhandlers.UserRoleResponseEvent{
-		Role: role,
-	}); err != nil {
-		// Handle the error (e.g., log it)
-	}
-
-	return role, nil
+	return string(user.Role), nil // Just return the role, no need to publish an event here
 }

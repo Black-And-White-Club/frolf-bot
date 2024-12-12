@@ -1,13 +1,13 @@
-// user/handler_interface.go
 package user
 
 import (
-	"net/http"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+// UserHandler defines the handlers for user-related events.
 type UserHandler interface {
-	CreateUser(w http.ResponseWriter, r *http.Request)
-	GetUser(w http.ResponseWriter, r *http.Request)
-	UpdateUser(w http.ResponseWriter, r *http.Request)
-	GetUserRole(w http.ResponseWriter, r *http.Request)
+	HandleCreateUser(msg *message.Message) ([]*message.Message, error)
+	HandleGetUser(msg *message.Message) ([]*message.Message, error)
+	HandleUpdateUser(msg *message.Message) ([]*message.Message, error)
+	HandleGetUserRole(msg *message.Message) ([]*message.Message, error)
 }

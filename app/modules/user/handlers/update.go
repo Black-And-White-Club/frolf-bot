@@ -2,12 +2,12 @@ package userhandlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
-	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
-	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
-	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"
@@ -16,13 +16,13 @@ import (
 // UpdateUserHandler handles the UpdateUserCommand.
 type UpdateUserHandler struct {
 	userDB   userdb.UserDB
-	eventBus watermillcmd.MessageBus
+	eventBus *watermillutil.PubSub // Use your PubSub struct
 }
 
 // Handle processes the UpdateUserCommand.
 func (h *UpdateUserHandler) Handle(msg *message.Message) error {
 	// 1. Unmarshal the UpdateUserCommand from the message payload.
-	var cmd userapimodels.UpdateUserCommand
+	var cmd UpdateUserRequest
 	marshaler := cqrs.JSONMarshaler{}
 
 	if err := marshaler.Unmarshal(msg, &cmd); err != nil {
@@ -43,17 +43,24 @@ func (h *UpdateUserHandler) Handle(msg *message.Message) error {
 		}
 	}
 
-	// 3. Update the user in the database using the userDB.
-	if err := h.userDB.UpdateUser(context.Background(), cmd.DiscordID, user); err != nil { // Pass cmd.DiscordID
+	// 3. Update the user in the database
+	if err := h.userDB.UpdateUser(context.Background(), cmd.DiscordID, user); err != nil {
 		return fmt.Errorf("failed to update user in database: %w", err)
 	}
 
-	// 4. Publish a UserUpdatedEvent using natsjetstream.PublishEvent.
+	// 4. Publish a UserUpdatedEvent using the publisher from PubSub
 	userUpdatedEvent := UserUpdatedEvent{
 		DiscordID: cmd.DiscordID,
 		// ... populate other fields from cmd if needed
 	}
-	if err := natsjetstream.PublishEvent(context.Background(), &userUpdatedEvent, "user.updated"); err != nil {
+
+	// Marshal the UserUpdatedEvent using encoding/json
+	payload, err := json.Marshal(userUpdatedEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal UserUpdatedEvent: %w", err)
+	}
+
+	if err := h.eventBus.Publish("user.updated", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish UserUpdatedEvent: %w", err)
 	}
 

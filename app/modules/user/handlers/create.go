@@ -2,12 +2,12 @@ package userhandlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	natsjetstream "github.com/Black-And-White-Club/tcr-bot/nats"
-	userdb "github.com/Black-And-White-Club/tcr-bot/user/db"
-	userapimodels "github.com/Black-And-White-Club/tcr-bot/user/models"
-	"github.com/Black-And-White-Club/tcr-bot/watermillcmd"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"
@@ -16,13 +16,13 @@ import (
 // CreateUserHandler handles the CreateUserCommand.
 type CreateUserHandler struct {
 	userDB   userdb.UserDB
-	eventBus watermillcmd.MessageBus
+	eventBus *watermillutil.PubSub // Use your PubSub struct
 }
 
 // Handle processes the CreateUserCommand.
 func (h *CreateUserHandler) Handle(msg *message.Message) error {
 	// 1. Unmarshal the CreateUserCommand from the message payload.
-	var cmd userapimodels.CreateUserCommand
+	var cmd CreateUserRequest
 	marshaler := cqrs.JSONMarshaler{}
 
 	if err := marshaler.Unmarshal(msg, &cmd); err != nil {
@@ -39,7 +39,7 @@ func (h *CreateUserHandler) Handle(msg *message.Message) error {
 		return fmt.Errorf("user with Discord ID %s already exists", cmd.DiscordID)
 	}
 
-	// 3. Check tag availability
+	// 3. Check tag availability using PubSub
 	tagAvailable, err := h.checkTagAvailability(context.Background(), cmd.TagNumber)
 	if err != nil {
 		return errors.Wrap(err, "failed to check tag availability")
@@ -47,23 +47,30 @@ func (h *CreateUserHandler) Handle(msg *message.Message) error {
 
 	if tagAvailable {
 		// 4. Create the user in the database
-		user := &userdb.User{ // Use *userdb.User
+		user := &userdb.User{
 			DiscordID: cmd.DiscordID,
 			Name:      cmd.Name,
-			Role:      userdb.UserRole(cmd.Role), // Use userdb.UserRole
+			Role:      userdb.UserRole(cmd.Role),
 			// ... other fields
 		}
 		if err := h.userDB.CreateUser(context.Background(), user); err != nil {
 			return errors.Wrap(err, "failed to create user in database")
 		}
 
-		// 5. Publish a UserCreatedEvent using nats.PublishEvent
+		// 5. Publish a UserCreatedEvent using the publisher from PubSub
 		userCreatedEvent := UserCreatedEvent{
 			DiscordID: cmd.DiscordID,
 			TagNumber: cmd.TagNumber,
 			// ... add other relevant data from the command ...
 		}
-		if err := natsjetstream.PublishEvent(context.Background(), &userCreatedEvent, "user.created"); err != nil {
+
+		// Marshal the UserCreatedEvent using encoding/json
+		payload, err := json.Marshal(userCreatedEvent)
+		if err != nil {
+			return fmt.Errorf("failed to marshal UserCreatedEvent: %w", err)
+		}
+
+		if err := h.eventBus.Publish("user.created", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 			return errors.Wrap(err, "failed to publish UserCreatedEvent")
 		}
 	} else {
@@ -80,21 +87,30 @@ func (h *CreateUserHandler) checkTagAvailability(ctx context.Context, tagNumber 
 		TagNumber: tagNumber,
 	}
 
-	// 2. Publish the request to the leaderboard module
-	if err := h.eventBus.PublishEvent(ctx, "check-tag-availability", checkTagEvent); err != nil { // Use h.eventBus.Publish
+	// 2. Publish the request using PubSub
+	payload, err := json.Marshal(checkTagEvent) // Marshal using encoding/json
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal CheckTagAvailabilityEvent: %w", err)
+	}
+
+	if err := h.eventBus.Publish("check-tag-availability", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return false, errors.Wrap(err, "failed to publish check tag availability event")
 	}
 
-	// 3. Subscribe to the response topic
-	responseChan := make(chan bool)
-	_, err := h.eventBus.Subscribe(ctx, "tag-availability-result") // Use h.eventBus.Subscribe
+	// 3. Subscribe to the response topic using PubSub
+	responseChan, err := h.eventBus.Subscribe(context.Background(), "tag-availability-result")
 	if err != nil {
 		return false, errors.Wrap(err, "failed to subscribe to tag availability result")
 	}
 
 	// 4. Wait for the response
 	select {
-	case tagAvailable := <-responseChan:
+	case msg := <-responseChan:
+		// Unmarshal the response from msg.Payload
+		var tagAvailable bool
+		if err := json.Unmarshal(msg.Payload, &tagAvailable); err != nil {
+			return false, fmt.Errorf("failed to unmarshal tag availability response: %w", err)
+		}
 		return tagAvailable, nil
 	case <-ctx.Done():
 		return false, ctx.Err()
