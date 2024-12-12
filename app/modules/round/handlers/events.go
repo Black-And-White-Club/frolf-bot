@@ -1,6 +1,6 @@
 // eventhandling/event_handlers.go
 
-package roundevents
+package roundhandlers
 
 import (
 	"context"
