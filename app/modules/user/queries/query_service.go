@@ -11,7 +11,7 @@ import (
 
 // UserQueryService implements the QueryService interface.
 type UserQueryService struct {
-	userDB   userdb.UserDB
+	UserDB   userdb.UserDB
 	eventBus *watermillutil.PubSub // Use your PubSub struct
 }
 
@@ -22,14 +22,14 @@ func (s *UserQueryService) EventBus() *watermillutil.PubSub {
 // NewUserQueryService creates a new UserQueryService.
 func NewUserQueryService(userDB userdb.UserDB, eventBus *watermillutil.PubSub) QueryService {
 	return &UserQueryService{
-		userDB:   userDB,
+		UserDB:   userDB,
 		eventBus: eventBus,
 	}
 }
 
 // GetUserByID retrieves a user by their ID.
 func (s *UserQueryService) GetUserByDiscordID(ctx context.Context, discordID string) (*userdb.User, error) {
-	user, err := s.userDB.GetUserByDiscordID(ctx, discordID)
+	user, err := s.UserDB.GetUserByDiscordID(ctx, discordID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -41,7 +41,7 @@ func (s *UserQueryService) GetUserByDiscordID(ctx context.Context, discordID str
 
 // GetUserRole retrieves the role of a user.
 func (s *UserQueryService) GetUserRole(ctx context.Context, discordID string) (string, error) {
-	user, err := s.userDB.GetUserByDiscordID(ctx, discordID)
+	user, err := s.UserDB.GetUserByDiscordID(ctx, discordID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}

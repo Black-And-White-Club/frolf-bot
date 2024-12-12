@@ -13,7 +13,7 @@ import (
 
 // UserCommandService implements the api.CommandService interface.
 type UserCommandService struct {
-	userDB     userdb.UserDB
+	UserDB     userdb.UserDB
 	publisher  message.Publisher
 	commandBus cqrs.CommandBus // Use cqrs.CommandBus directly
 }
@@ -26,7 +26,7 @@ func (s *UserCommandService) CommandBus() cqrs.CommandBus { // Use cqrs.CommandB
 // NewUserCommandService creates a new UserCommandService.
 func NewUserCommandService(userDB userdb.UserDB, publisher message.Publisher, commandBus cqrs.CommandBus) CommandService { // Use cqrs.CommandBus directly
 	return &UserCommandService{
-		userDB:     userDB,
+		UserDB:     userDB,
 		publisher:  publisher,
 		commandBus: commandBus,
 	}
