@@ -1,5 +1,5 @@
-// user/router/marshaler.go
-package userrouter
+// internal/watermill/marshaler.go
+package watermillutil
 
 import (
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"

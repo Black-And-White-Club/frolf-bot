@@ -3,12 +3,12 @@ package userhandlers
 import (
 	"context"
 
-	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
+	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
 )
 
 // UserCommandHandler is an interface for handlers that process user commands.
 type UserCommandHandler interface {
-	Handle(ctx context.Context, cmd usercommands.Command) error
+	Handle(ctx context.Context, cmd commands.Command) error
 }
 
 // UserQueryHandler is an interface for handlers that process user queries.

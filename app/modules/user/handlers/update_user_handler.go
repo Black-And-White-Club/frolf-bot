@@ -7,7 +7,6 @@ import (
 
 	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
-	userrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/user/router"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -32,7 +31,7 @@ func NewUpdateUserHandler(userDB userdb.UserDB, eventBus watermillutil.PubSuber)
 func (h *UpdateUserHandler) Handle(ctx context.Context, msg *message.Message) error {
 	// 1. Unmarshal the UpdateUserCommand from the message payload.
 	var cmd usercommands.UpdateUserRequest
-	marshaler := userrouter.Marshaler // Use the marshaler from userhandlers
+	marshaler := watermillutil.Marshaler // Use the marshaler from userhandlers
 	if err := marshaler.Unmarshal(msg, &cmd); err != nil {
 		return errors.Wrap(err, "failed to unmarshal UpdateUserCommand")
 	}

@@ -22,7 +22,7 @@ type UserModule struct {
 
 // NewUserModule creates a new UserModule with the provided dependencies.
 func NewUserModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*UserModule, error) {
-	marshaler := userrouter.Marshaler
+	marshaler := watermillutil.Marshaler
 	userCommandBus := userrouter.NewUserCommandBus(pubsub, marshaler)
 	userCommandRouter := userrouter.NewUserCommandRouter(userCommandBus)
 
@@ -42,43 +42,44 @@ func NewUserModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubs
 
 // RegisterHandlers registers the user module's handlers.
 func (m *UserModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := []struct {
-		handlerName string
-		topic       string
-		handler     message.HandlerFunc
+	// Define handlers with their topics and response topics
+	handlers := map[string]struct {
+		topic         string
+		handler       message.HandlerFunc
+		responseTopic string
 	}{
-		{
-			handlerName: "user_create_handler",
-			topic:       userhandlers.TopicCreateUser,
-			handler:     m.messageHandler.Handle,
+		"user_create_handler": {
+			topic:         userhandlers.TopicCreateUser,
+			handler:       m.messageHandler.Handle,
+			responseTopic: userhandlers.TopicCreateUser + "_response",
 		},
-		{
-			handlerName: "user_get_handler",
-			topic:       userhandlers.TopicGetUser,
-			handler:     m.messageHandler.Handle,
+		"user_get_handler": {
+			topic:         userhandlers.TopicGetUser,
+			handler:       m.messageHandler.Handle,
+			responseTopic: userhandlers.TopicGetUser + "_response",
 		},
-		{
-			handlerName: "user_update_handler",
-			topic:       userhandlers.TopicUpdateUser,
-			handler:     m.messageHandler.Handle,
+		"user_update_handler": {
+			topic:         userhandlers.TopicUpdateUser,
+			handler:       m.messageHandler.Handle,
+			responseTopic: userhandlers.TopicUpdateUser + "_response",
 		},
-		{
-			handlerName: "user_get_role_handler",
-			topic:       userhandlers.TopicGetUserRoleRequest, // Correct topic
-			handler:     m.messageHandler.Handle,
+		"user_get_role_handler": {
+			topic:         userhandlers.TopicGetUserRoleRequest,
+			handler:       m.messageHandler.Handle,
+			responseTopic: userhandlers.TopicGetUserRoleRequest + "_response",
 		},
 	}
 
-	for _, h := range handlers {
+	for handlerName, h := range handlers {
 		if err := router.AddHandler(
-			h.handlerName,
+			handlerName,
 			h.topic,
-			pubsub,
-			h.topic+"_response", // Assuming you have response topics
-			pubsub,
+			m.PubSub,
+			h.responseTopic,
+			m.PubSub,
 			h.handler,
 		); err != nil {
-			return fmt.Errorf("failed to register %s handler: %v", h.handlerName, err)
+			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
 		}
 	}
 

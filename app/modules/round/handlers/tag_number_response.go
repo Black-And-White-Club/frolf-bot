@@ -1,0 +1,53 @@
+// In app/modules/round/handlers/get_tag_number_response_handler.go
+
+package roundhandlers
+
+import (
+	"encoding/json"
+	"fmt"
+
+	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+)
+
+// GetTagNumberResponseHandler handles the GetTagNumberResponse event.
+type GetTagNumberResponseHandler struct {
+	roundDB  rounddb.RoundDB
+	eventBus watermillutil.Publisher
+}
+
+// NewGetTagNumberResponseHandler creates a new GetTagNumberResponseHandler.
+func NewGetTagNumberResponseHandler(roundDB rounddb.RoundDB, eventBus watermillutil.Publisher) *GetTagNumberResponseHandler {
+	return &GetTagNumberResponseHandler{
+		roundDB:  roundDB,
+		eventBus: eventBus,
+	}
+}
+
+// Handle processes the GetTagNumberResponse event.
+func (h *GetTagNumberResponseHandler) Handle(msg *message.Message) error {
+	// 1. Unmarshal the GetTagNumberResponse
+	var response GetTagNumberResponse
+	if err := json.Unmarshal(msg.Payload, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal GetTagNumberResponse: %w", err)
+	}
+
+	// 2. Publish an UpdateParticipantCommand
+	updateParticipantCmd := roundcommands.UpdateParticipantRequest{
+		RoundID:   response.RoundID, // Assuming you include RoundID in the response
+		DiscordID: response.DiscordID,
+		// ... set other fields based on the response data ...
+	}
+	payload, err := json.Marshal(updateParticipantCmd)
+	if err != nil {
+		return fmt.Errorf("failed to marshal UpdateParticipantRequest: %w", err)
+	}
+	if err := h.eventBus.Publish(updateParticipantCmd.CommandName(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish UpdateParticipantRequest: %w", err)
+	}
+
+	return nil
+}

@@ -3,14 +3,16 @@ package rounddb
 import (
 	"context"
 	"time"
+
+	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
 )
 
 // RoundDB is the interface for interacting with the rounds database.
 type RoundDB interface {
 	GetRounds(ctx context.Context) ([]*Round, error)
 	GetRound(ctx context.Context, roundID int64) (*Round, error)
-	CreateRound(ctx context.Context, round ScheduleRoundInput) (*Round, error)
-	UpdateRound(ctx context.Context, roundID int64, input EditRoundInput) error
+	CreateRound(ctx context.Context, input rounddto.CreateRoundInput) (*Round, error)
+	UpdateRound(ctx context.Context, roundID int64, updates map[string]interface{}) error
 	DeleteRound(ctx context.Context, roundID int64) error
 	UpdateParticipant(ctx context.Context, roundID int64, participant Participant) error
 	UpdateRoundState(ctx context.Context, roundID int64, state RoundState) error

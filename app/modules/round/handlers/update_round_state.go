@@ -5,43 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/round/models"
+	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// UpdateRoundStateRequest represents the request to update the state of a round.
-type UpdateRoundStateRequest struct {
-	RoundID int64             `json:"round_id"`
-	State   models.RoundState `json:"state"`
-}
-
-// CommandName returns the command name for UpdateRoundStateRequest
-func (cmd UpdateRoundStateRequest) CommandName() string {
-	return "update_round_state"
-}
-
-// RoundStateUpdatedEvent represents the event triggered when a round's state is updated.
-type RoundStateUpdatedEvent struct {
-	RoundID int64             `json:"round_id"`
-	State   models.RoundState `json:"state"`
-}
-
-// Topic returns the topic for the RoundStateUpdatedEvent.
-func (e RoundStateUpdatedEvent) Topic() string {
-	return "round.state.updated"
-}
-
 // UpdateRoundStateHandler handles the UpdateRoundState command.
 type UpdateRoundStateHandler struct {
-	roundDB    db.RoundDB
-	messageBus watermill.Publisher
+	roundDB    rounddb.RoundDB
+	messageBus watermillutil.Publisher
 	logger     watermill.LoggerAdapter
 }
 
 // NewUpdateRoundStateHandler creates a new UpdateRoundStateHandler.
-func NewUpdateRoundStateHandler(roundDB db.RoundDB, messageBus watermill.Publisher, logger watermill.LoggerAdapter) *UpdateRoundStateHandler {
+func NewUpdateRoundStateHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher, logger watermill.LoggerAdapter) *UpdateRoundStateHandler {
 	return &UpdateRoundStateHandler{
 		roundDB:    roundDB,
 		messageBus: messageBus,
@@ -51,7 +30,7 @@ func NewUpdateRoundStateHandler(roundDB db.RoundDB, messageBus watermill.Publish
 
 // Handle processes the UpdateRoundState command.
 func (h *UpdateRoundStateHandler) Handle(ctx context.Context, msg *message.Message) error {
-	var cmd UpdateRoundStateRequest
+	var cmd roundcommands.UpdateRoundStateRequest
 	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
 		h.logger.Error("Failed to unmarshal UpdateRoundStateRequest", err, watermill.LogFields{"payload": string(msg.Payload)})
 		return fmt.Errorf("failed to unmarshal UpdateRoundStateRequest: %w", err)

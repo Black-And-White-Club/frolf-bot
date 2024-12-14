@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
 	"github.com/uptrace/bun"
 )
 
@@ -43,7 +44,7 @@ func (r *RoundDBImpl) GetRound(ctx context.Context, roundID int64) (*Round, erro
 }
 
 // CreateRound creates a new round in the database.
-func (r *RoundDBImpl) CreateRound(ctx context.Context, input ScheduleRoundInput) (*Round, error) {
+func (r *RoundDBImpl) CreateRound(ctx context.Context, input rounddto.CreateRoundInput) (*Round, error) {
 	round := &Round{
 		Title:     input.Title,
 		Location:  input.Location,
@@ -63,20 +64,15 @@ func (r *RoundDBImpl) CreateRound(ctx context.Context, input ScheduleRoundInput)
 }
 
 // UpdateRound updates an existing round in the database.
-func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, input EditRoundInput) error {
-	round := &Round{
-		ID:        roundID,
-		Title:     input.Title,
-		Location:  input.Location,
-		EventType: input.EventType,
-		Date:      input.Date,
-		Time:      input.Time,
-	}
-
+func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID int64, updates map[string]interface{}) error {
 	_, err := r.DB.NewUpdate().
-		Model(round).
-		WherePK().
-		Column("title", "location", "event_type", "date", "time"). // Use Column to specify fields
+		Model((*Round)(nil)).
+		Where("id = ?", roundID).
+		Set("title = ?", updates["title"]).
+		Set("location = ?", updates["location"]).
+		Set("event_type = ?", updates["eventType"]).
+		Set("date = ?", updates["date"]).
+		Set("time = ?", updates["time"]).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update round: %w", err)

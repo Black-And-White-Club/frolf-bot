@@ -1,4 +1,4 @@
-package apimodels
+package rounddto
 
 import (
 	"time"
@@ -37,6 +37,7 @@ const (
 	RoundStateUpcoming   RoundState = "UPCOMING"
 	RoundStateInProgress RoundState = "IN_PROGRESS"
 	RoundStateFinalized  RoundState = "FINALIZED"
+	RoundStateDleted     RoundState = "DELETED"
 )
 
 // Participant represents a user participating in a round.
@@ -53,8 +54,8 @@ type ParticipantScore struct {
 	Score     int    `json:"score"`
 }
 
-// ScheduleRoundInput represents the input data for scheduling a new round.
-type ScheduleRoundInput struct {
+// CreateRoundInput represents the input data for scheduling a new round.
+type CreateRoundInput struct {
 	Title     string    `json:"title"`
 	Location  string    `json:"location"`
 	EventType *string   `json:"eventType"`

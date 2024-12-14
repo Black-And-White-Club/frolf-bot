@@ -1,6 +1,9 @@
 package usercommands
 
-import userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+import (
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
+)
 
 // CreateUserRequest represents the request to create a user.
 type CreateUserRequest struct {
@@ -15,4 +18,4 @@ func (cmd CreateUserRequest) CommandName() string {
 	return "create_user"
 }
 
-var _ Command = CreateUserRequest{}
+var _ commands.Command = CreateUserRequest{}

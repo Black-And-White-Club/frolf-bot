@@ -2,11 +2,12 @@ package userrouter
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -22,13 +23,8 @@ func NewUserCommandBus(publisher message.Publisher, marshaler cqrs.CommandEventM
 	return &UserCommandBus{publisher: publisher, marshaler: marshaler}
 }
 
-func (r UserCommandBus) Send(ctx context.Context, cmd usercommands.Command) error {
-	msg, err := r.marshaler.Marshal(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to marshal command: %w", err)
-	}
-
-	return r.publisher.Publish(cmd.CommandName(), msg)
+func (r UserCommandBus) Send(ctx context.Context, cmd commands.Command) error {
+	return watermillutil.SendCommand(ctx, r.publisher, r.marshaler, cmd, cmd.CommandName())
 }
 
 // UserCommandRouter implements the CommandRouter interface.

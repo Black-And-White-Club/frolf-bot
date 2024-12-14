@@ -3,8 +3,8 @@ package userrouter
 import (
 	"context"
 
-	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
 )
 
 // CommandRouter interface for the user module
@@ -15,5 +15,5 @@ type CommandRouter interface {
 
 // CommandBus is the interface for the command bus.
 type CommandBus interface {
-	Send(ctx context.Context, cmd usercommands.Command) error
+	Send(ctx context.Context, cmd commands.Command) error
 }
