@@ -4,12 +4,14 @@ package roundqueries
 import (
 	"context"
 
-	apimodels "github.com/Black-And-White-Club/tcr-bot/round/models"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 )
 
-// RoundQueryService defines the interface for querying round data.
+// QueryService defines the interface for querying round data.
 type QueryService interface {
-	GetRounds(ctx context.Context) ([]*apimodels.Round, error)
+	GetRounds(ctx context.Context) ([]*rounddb.Round, error)
+	GetRound(ctx context.Context, roundID int64) (*rounddb.Round, error)
+	GetScoreForParticipant(ctx context.Context, roundID int64, participantID string) (*rounddb.Score, error) // Add this method
 	HasActiveRounds(ctx context.Context) (bool, error)
 	// ... add other query methods as needed
 }

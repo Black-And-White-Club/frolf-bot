@@ -18,11 +18,11 @@ import (
 // CreateRoundHandler handles the CreateRoundRequest command.
 type CreateRoundHandler struct {
 	roundDB    rounddb.RoundDB
-	messageBus watermillutil.Publisher
+	messageBus watermillutil.PubSuber // Changed to PubSuber interface
 }
 
 // NewCreateRoundHandler creates a new CreateRoundHandler.
-func NewCreateRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher) *CreateRoundHandler {
+func NewCreateRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.PubSuber) *CreateRoundHandler {
 	return &CreateRoundHandler{
 		roundDB:    roundDB,
 		messageBus: messageBus,
@@ -55,15 +55,18 @@ func (h *CreateRoundHandler) Handler(msg *message.Message) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal RoundCreatedEvent: %w", err)
 	}
-	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.messageBus.Publish(TopicCreateRound, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish RoundCreatedEvent: %w", err)
 	}
 
 	// Schedule the round start event
 	roundStartTime := calculateRoundStartTime(round.Date, round.Time)
+
+	jsCtx := h.messageBus.JetStreamContext()
+
 	if err := jetstream.PublishScheduledMessage(
 		context.Background(),
-		h.messageBus.(*watermillutil.PubSub), // Pass the PubSub instance directly
+		jsCtx,
 		"scheduled_tasks",
 		round.ID,
 		"StartRoundEventHandler",
@@ -75,7 +78,7 @@ func (h *CreateRoundHandler) Handler(msg *message.Message) error {
 	// Schedule the reminder events (1 hour and 30 minutes before)
 	if err := jetstream.PublishScheduledMessage(
 		context.Background(),
-		h.messageBus.(*watermillutil.PubSub),
+		jsCtx,
 		"scheduled_tasks",
 		round.ID,
 		"ReminderOneHourHandler",
@@ -86,7 +89,7 @@ func (h *CreateRoundHandler) Handler(msg *message.Message) error {
 
 	if err := jetstream.PublishScheduledMessage(
 		context.Background(),
-		h.messageBus.(*watermillutil.PubSub),
+		jsCtx,
 		"scheduled_tasks",
 		round.ID,
 		"ReminderThirtyMinutesHandler",
@@ -98,16 +101,13 @@ func (h *CreateRoundHandler) Handler(msg *message.Message) error {
 	return nil
 }
 
-// Helper function to calculate the round start time (similar to calculateReminderTime)
+// Helper function to calculate the round start time
 func calculateRoundStartTime(roundDate time.Time, roundTime string) time.Time {
-	// Parse the roundTime string into a time.Time
-	startTime, err := time.Parse("15:04", roundTime) // Assuming your roundTime is in "HH:MM" format
+	startTime, err := time.Parse("15:04", roundTime)
 	if err != nil {
-		// Handle the error appropriately (e.g., log an error and return a default value)
-		return time.Time{}
+		return time.Time{} // Handle error appropriately in real application
 	}
 
-	// Combine the roundDate and startTime to get the complete start time
 	return time.Date(
 		roundDate.Year(), roundDate.Month(), roundDate.Day(),
 		startTime.Hour(), startTime.Minute(), 0, 0,

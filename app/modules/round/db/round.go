@@ -305,3 +305,54 @@ func (r *RoundDBImpl) GetParticipant(ctx context.Context, roundID int64, discord
 
 	return Participant{}, fmt.Errorf("participant not found")
 }
+
+// GetScoreForParticipant retrieves the score for a specific participant in a round.
+func (r *RoundDBImpl) GetScoreForParticipant(ctx context.Context, roundID int64, participantID string) (*Score, error) {
+	// 1. Fetch the round from the database
+	round, err := r.GetRound(ctx, roundID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch round: %w", err)
+	}
+
+	// 2. Find the score for the participant in the PendingScores slice
+	for _, score := range round.PendingScores {
+		if score.ParticipantID == participantID {
+			return &score, nil
+		}
+	}
+
+	// 3. If not found in PendingScores, check the Scores map
+	if score, ok := round.Scores[participantID]; ok {
+		return &Score{
+			ParticipantID: participantID,
+			Score:         score,
+		}, nil
+	}
+
+	// 4. If not found in either, return nil
+	return nil, nil
+}
+
+// UpdatePendingScores updates the pending scores for a round in the database.
+func (r *RoundDBImpl) UpdatePendingScores(ctx context.Context, roundID int64, pendingScores []Score) error {
+	// 1. Fetch the round from the database
+	round, err := r.GetRound(ctx, roundID)
+	if err != nil {
+		return fmt.Errorf("failed to get round: %w", err)
+	}
+
+	// 2. Update the round's PendingScores field
+	round.PendingScores = pendingScores
+
+	// 3. Update the round in the database
+	_, err = r.DB.NewUpdate().
+		Model(round).
+		Where("id = ?", roundID).
+		Column("pending_scores").
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update pending scores: %w", err)
+	}
+
+	return nil
+}

@@ -75,7 +75,7 @@ func (h *EditRoundHandler) Handle(ctx context.Context, msg *message.Message) err
 	if err != nil {
 		return fmt.Errorf("failed to marshal RoundEditedEvent: %w", err)
 	}
-	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.messageBus.Publish(TopicRoundEdited, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish RoundEditedEvent: %w", err)
 	}
 

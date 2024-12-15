@@ -31,26 +31,28 @@ func NewApp(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database service: %w", err)
 	}
 
+	logger := watermill.NewStdLogger(false, false)
+
 	// Initialize the Watermill router and pubsub
-	router, pubsub, err := watermillutil.NewRouter(natsURL, watermill.NewStdLogger(false, false))
+	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger) // pubSuber is now of type PubSuber
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
 	// Initialize the command bus
-	commandBus, err := watermillutil.NewCommandBus(natsURL, watermill.NewStdLogger(false, false))
+	commandBus, err := watermillutil.NewCommandBus(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create command bus: %w", err)
 	}
 
 	// Initialize module registry
-	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubsub) // Add commandBus argument
+	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber) // Correct usage of pubSuber
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
-	// Register module handlers
-	if err := RegisterHandlers(router, pubsub, modules.UserModule); err != nil {
+	// Register module handlers - Correct Call
+	if err := RegisterHandlers(router, natsURL, logger, modules.UserModule); err != nil {
 		return nil, fmt.Errorf("failed to register handlers: %w", err)
 	}
 

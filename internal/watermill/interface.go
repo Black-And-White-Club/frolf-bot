@@ -5,7 +5,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/nats-io/nats.go" // Make sure to import nats.go
+	nc "github.com/nats-io/nats.go"
+	// Make sure to import nats.go
 )
 
 // CommandBus defines the interface for a command bus.
@@ -25,9 +26,11 @@ type Subscriber interface {
 	Close() error
 }
 
-// PubSuber combines the Publisher and Subscriber interfaces.
+// PubSuber combines the Publisher and Subscriber interfaces.// PubSuber interface defines the methods needed from the PubSub implementation.
 type PubSuber interface {
-	Publisher
-	Subscriber
-	GetJetStreamContext() nats.JetStreamContext // Add this method
+	message.Publisher
+	message.Subscriber
+	JetStreamContext() nc.JetStreamContext
+	NatsConn() *nc.Conn
+	Close() error // Important: Close method must be in the interface
 }

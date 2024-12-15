@@ -7,83 +7,126 @@ import (
 	"time"
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// Define a custom type for the round ID key
-type roundIDCtxKey string
+// TaskData represents the structure of the task payload.
+type TaskData struct {
+	RoundID     int64  `json:"round_id"`
+	HandlerName string `json:"handler"`
+	ScheduledAt string `json:"scheduled_at,omitempty"`
+}
+
+// Validate validates the TaskData.
+func (t TaskData) Validate() error {
+	if t.RoundID == 0 {
+		return fmt.Errorf("round_id is missing or invalid")
+	}
+	if t.HandlerName == "" {
+		return fmt.Errorf("handler is missing or invalid")
+	}
+	return nil
+}
+
+// ScheduledTaskHandlerError is a custom error type for scheduled task handler issues.
+type ScheduledTaskHandlerError struct {
+	msg string
+}
+
+func (e ScheduledTaskHandlerError) Error() string {
+	return e.msg
+}
 
 // ScheduledTaskHandler handles scheduled task events.
 type ScheduledTaskHandler struct {
-	RoundDB  rounddb.RoundDB
-	PubSuber watermillutil.PubSuber
+	RoundDB    rounddb.RoundDB
+	handlerMap map[string]func(context.Context, *message.Message) error
 }
 
-// NewScheduledTaskHandler creates a new ScheduledTaskHandler.
-func NewScheduledTaskHandler(roundDB rounddb.RoundDB, pubsuber watermillutil.PubSuber) *ScheduledTaskHandler {
+// NewScheduledTaskHandler creates a new ScheduledTaskHandler with dependency injection.
+func NewScheduledTaskHandler(roundDB rounddb.RoundDB, handlerMap map[string]func(context.Context, *message.Message) error) *ScheduledTaskHandler {
 	return &ScheduledTaskHandler{
-		RoundDB:  roundDB,
-		PubSuber: pubsuber,
+		RoundDB:    roundDB,
+		handlerMap: handlerMap,
 	}
+}
+
+// MetadataKey is the type for context keys.
+type MetadataKey string
+
+// Exported context keys (Capitalized)
+const (
+	ScheduledAtKey MetadataKey = "scheduled_at"
+	RoundIDKey     MetadataKey = "round_id"
+	HandlerKey     MetadataKey = "handler"
+)
+
+// parseScheduledAt parses the "scheduled_at" metadata.
+func parseScheduledAt(metadata message.Metadata) (time.Time, error) {
+	scheduledAtStr := metadata.Get(string(ScheduledAtKey))
+	if scheduledAtStr == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339, scheduledAtStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse scheduled_at: %w", err)
+	}
+	return t, nil
+}
+
+// GetRoundIDFromContext retrieves the round ID from the context.
+func GetRoundIDFromContext(ctx context.Context) (int64, bool) {
+	roundID, ok := ctx.Value(RoundIDKey).(int64)
+	return roundID, ok
+}
+
+// GetScheduledAtFromContext retrieves the scheduledAt from the context
+func GetScheduledAtFromContext(ctx context.Context) (time.Time, bool) {
+	scheduledAt, ok := ctx.Value(ScheduledAtKey).(time.Time)
+	return scheduledAt, ok
+}
+
+// GetHandlerNameFromContext retrieves the handler name from the context.
+func GetHandlerNameFromContext(ctx context.Context) (string, bool) {
+	handlerName, ok := ctx.Value(HandlerKey).(string)
+	return handlerName, ok
 }
 
 // Handle processes scheduled task events.
 func (h *ScheduledTaskHandler) Handle(ctx context.Context, msg *message.Message) error {
-	var taskData map[string]interface{}
+	var taskData TaskData
 	if err := json.Unmarshal(msg.Payload, &taskData); err != nil {
 		return fmt.Errorf("failed to unmarshal task data: %w", err)
 	}
 
-	// Extract the scheduled time from the message header (if needed)
-	scheduledAtStr := msg.Metadata.Get("scheduled_at")
-	if scheduledAtStr != "" {
-		scheduledAt, err := time.Parse(time.RFC3339, scheduledAtStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse scheduled_at: %w", err)
-		}
-
-		// Check if the scheduled time is in the past
-		if time.Now().Before(scheduledAt) {
-			return nil // Not time to execute the task yet
-		}
+	if err := taskData.Validate(); err != nil {
+		return fmt.Errorf("invalid task data: %w", err)
 	}
 
-	roundID, ok := taskData["round_id"].(float64)
+	scheduledAt, ok := GetScheduledAtFromContext(ctx)
 	if !ok {
-		return fmt.Errorf("invalid round_id")
+		return ScheduledTaskHandlerError{"scheduledAt not found in context"}
 	}
 
-	handlerName, ok := taskData["handler"].(string)
+	if !scheduledAt.IsZero() && time.Now().Before(scheduledAt) {
+		return nil // Not time to execute the task yet
+	}
+
+	roundID, ok := GetRoundIDFromContext(ctx)
 	if !ok {
-		return fmt.Errorf("invalid handler")
+		return ScheduledTaskHandlerError{"roundId not found in context"}
+	}
+	ctx = context.WithValue(ctx, RoundIDKey, roundID)
+
+	handlerName, ok := GetHandlerNameFromContext(ctx)
+	if !ok {
+		return ScheduledTaskHandlerError{"handlerName not found in context"}
 	}
 
-	// Create a new context with the roundID
-	ctxWithRoundID := context.WithValue(ctx, roundIDCtxKey("round_id"), int64(roundID))
-
-	// Create a new message for the handler
-	handlerMsg := message.NewMessage(watermill.NewUUID(), msg.Payload)
-
-	switch handlerName {
-	case "ReminderOneHourHandler", "ReminderThirtyMinutesHandler":
-		// Call ReminderHandler.Handle
-		reminderHandler := NewReminderHandler(h.RoundDB, h.PubSuber)
-		if err := reminderHandler.Handle(ctxWithRoundID, handlerMsg); err != nil {
-			return fmt.Errorf("failed to handle reminder: %w", err)
-		}
-
-	case "StartRoundEventHandler":
-		// Call StartRoundHandler.Handle
-		startRoundHandler := NewStartRoundHandler(h.RoundDB, h.PubSuber)
-		if err := startRoundHandler.Handle(ctxWithRoundID, handlerMsg); err != nil {
-			return fmt.Errorf("failed to handle start round: %w", err)
-		}
-
-	default:
-		return fmt.Errorf("unknown handler: %s", handlerName)
+	handler, exists := h.handlerMap[handlerName]
+	if !exists {
+		return ScheduledTaskHandlerError{fmt.Sprintf("unknown handler: %s", handlerName)}
 	}
 
-	return nil
+	return handler(ctx, msg)
 }

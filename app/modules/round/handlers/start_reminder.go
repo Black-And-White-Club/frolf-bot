@@ -62,14 +62,9 @@ func (h *ReminderHandler) Handle(ctx context.Context, msg *message.Message) erro
 			return fmt.Errorf("failed to marshal reminder payload: %w", err)
 		}
 
-		// Publish the ReminderEvent (replace with your actual publishing logic)
-		reminderEvent := &RoundReminderEvent{ // Assuming you have a ReminderEvent struct
-			RoundID:      round.ID,
-			ReminderType: event.ReminderType,
-			// ... other fields ...
-		}
-		if err := h.PubSuber.Publish(reminderEvent.Topic(), message.NewMessage(watermill.NewUUID(), jsonPayload)); err != nil {
-			return fmt.Errorf("failed to publish ReminderEvent: %w", err)
+		// Publish the payload directly using the topic
+		if err := h.PubSuber.Publish(TopicRoundReminder, message.NewMessage(watermill.NewUUID(), jsonPayload)); err != nil {
+			return fmt.Errorf("failed to publish reminder event: %w", err)
 		}
 	}
 
@@ -79,9 +74,9 @@ func (h *ReminderHandler) Handle(ctx context.Context, msg *message.Message) erro
 // Helper function to calculate the reminder time
 func calculateReminderTime(roundDate time.Time, roundTime string, reminderType string) time.Time {
 	// Parse the roundTime string into a time.Time
-	startTime, err := time.Parse("15:04", roundTime) // Assuming your roundTime is in "HH:MM" format
+	startTime, err := time.Parse("15:04", roundTime)
 	if err != nil {
-		// Handle the error appropriately (e.g., log an error and return a default value)
+		// Handle the error appropriately
 		return time.Time{}
 	}
 
@@ -98,7 +93,7 @@ func calculateReminderTime(roundDate time.Time, roundTime string, reminderType s
 	case "thirty-minutes":
 		return roundStartTime.Add(-30 * time.Minute)
 	default:
-		// Handle invalid reminder type (e.g., log an error)
-		return roundStartTime // Or return a default value
+		// Handle invalid reminder type
+		return roundStartTime
 	}
 }

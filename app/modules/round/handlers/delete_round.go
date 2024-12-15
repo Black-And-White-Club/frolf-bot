@@ -59,7 +59,7 @@ func (h *DeleteRoundHandler) Handle(ctx context.Context, msg *message.Message) e
 	if err != nil {
 		return fmt.Errorf("failed to marshal RoundDeletedEvent: %w", err)
 	}
-	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.messageBus.Publish(TopicDeleteRound, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish RoundDeletedEvent: %w", err)
 	}
 

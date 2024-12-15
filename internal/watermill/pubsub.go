@@ -48,10 +48,24 @@ func (ps *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *message.
 }
 
 func (ps *PubSub) Close() error {
-	err := ps.subscriber.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close subscriber: %w", err)
+	var errs []error
+
+	if err := ps.subscriber.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to close subscriber: %w", err))
 	}
+
+	if err := ps.publisher.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to close publisher: %w", err))
+	}
+
+	if ps.nc != nil {
+		ps.nc.Close()
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("multiple errors occurred during close: %v", errs)
+	}
+
 	return nil
 }
 

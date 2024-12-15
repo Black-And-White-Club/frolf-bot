@@ -92,4 +92,5 @@ type UpdateParticipantResponseInput struct {
 	RoundID   int64    `json:"roundID"`
 	DiscordID string   `json:"discordID"`
 	Response  Response `json:"response"`
+	TagNumber *int     `json:"tagNumber"` // Add the TagNumber field
 }

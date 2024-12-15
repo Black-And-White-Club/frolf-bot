@@ -76,7 +76,7 @@ func (h *RecordScoresHandler) Handle(ctx context.Context, msg *message.Message) 
 	if err != nil {
 		return fmt.Errorf("failed to marshal SendScoresEvent: %w", err)
 	}
-	if err := h.PubSuber.Publish(sendScoresEvent.Topic(), message.NewMessage(watermill.NewUUID(), sendScoresPayload)); err != nil {
+	if err := h.PubSuber.Publish(TopicRecordScores, message.NewMessage(watermill.NewUUID(), sendScoresPayload)); err != nil {
 		return fmt.Errorf("failed to publish SendScoresEvent: %w", err)
 	}
 

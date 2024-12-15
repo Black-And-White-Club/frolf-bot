@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	// Import for db.RoundDB
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
-	// rounddb "github.com/Black-And-White-Club/tcr-bot/round/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -17,11 +16,9 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	User *userdb.UserDBImpl // Use *userdb.UserDBImpl
-	// Leaderboard db.LeaderboardDB // Comment out until Leaderboard module is refactored
-	// Round rounddb.RoundDB // Use the interface from round/db
-	// Score       db.ScoreDB     // Comment out until Score module is refactored
-	db *bun.DB
+	User    *userdb.UserDBImpl
+	RoundDB *rounddb.RoundDBImpl
+	db      *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -32,37 +29,29 @@ func (dbService *DBService) GetDB() *bun.DB {
 func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 	log.Printf("NewBunDBService - Initializing with DSN: %s", dsn)
 
-	// Step 1: Create pgConn
 	sqldb, err := pgConn(dsn)
 	if err != nil {
 		log.Printf("NewBunDBService - Failed to connect to PostgreSQL: %v", err)
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Step 2: Initialize bunDB
 	db := bunDB(sqldb)
 	if db == nil {
 		log.Println("NewBunDBService - bunDB returned nil")
 		return nil, fmt.Errorf("failed to initialize bun.DB")
 	}
 
-	// Step 3: Initialize DBService
 	dbService := &DBService{
-		User: &userdb.UserDBImpl{DB: db}, // Comment out until User module is refactored
-		// Leaderboard: &leaderboardDB{db: db}, // Comment out until Leaderboard module is refactored
-		// Round: &rounddb.RoundDBImpl{DB: db}, // Use uppercase DB
-		// Score:       &scoreDB{db: db},     // Comment out until Score module is refactored
-		db: db,
+		User:    &userdb.UserDBImpl{DB: db},
+		RoundDB: &rounddb.RoundDBImpl{DB: db},
+		db:      db,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)
 
-	// Step 4: Register Models
 	log.Println("NewBunDBService - Registering models")
-	db.RegisterModel(&userdb.User{}) // Comment out until User module is refactored
-	// db.RegisterModel(&models.Leaderboard{})        // Comment out until Leaderboard module is refactored
-	// db.RegisterModel(&rounddb.Round{}) // Use the Round model from round/db
-	// db.RegisterModel(&models.Score{})              // Comment out until Score module is refactored
+	db.RegisterModel(&userdb.User{})
+	db.RegisterModel(&rounddb.Round{})
 	log.Println("NewBunDBService - Models registered successfully")
 
 	return dbService, nil

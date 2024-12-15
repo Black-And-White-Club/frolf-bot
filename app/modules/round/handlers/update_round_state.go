@@ -63,7 +63,7 @@ func (h *UpdateRoundStateHandler) Handle(ctx context.Context, msg *message.Messa
 		"state":    cmd.State,
 	})
 
-	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.messageBus.Publish(TopicRoundStateUpdated, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		h.logger.Error("Failed to publish RoundStateUpdatedEvent", err, watermill.LogFields{"round_id": cmd.RoundID, "state": cmd.State})
 		return fmt.Errorf("failed to publish RoundStateUpdatedEvent: %w", err)
 	}

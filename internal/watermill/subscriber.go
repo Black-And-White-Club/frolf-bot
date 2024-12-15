@@ -15,7 +15,7 @@ type NatsSubscriber struct {
 	conn   *nc.Conn
 	config nats.SubscriberConfig
 	logger watermill.LoggerAdapter
-	js     nc.JetStreamContext // Add this field
+	js     nc.JetStreamContext // Added field for JetStream context
 }
 
 // NewSubscriber creates a new NATS JetStream subscriber.
@@ -68,6 +68,7 @@ func (s *NatsSubscriber) Close() error {
 	return nil
 }
 
+// GetJetStreamContext provides an exported method to access the JetStream context
 func (s *NatsSubscriber) GetJetStreamContext() nc.JetStreamContext {
 	return s.js
 }
