@@ -1,6 +1,7 @@
 package watermillutil
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -40,7 +41,10 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (*NatsPublishe
 	}, nil
 }
 
-func (p *NatsPublisher) Publish(topic string, messages ...*message.Message) error {
+func (p *NatsPublisher) Publish(ctx context.Context, topic string, messages ...*message.Message) error {
+	for _, msg := range messages {
+		msg.SetContext(ctx)
+	}
 	pub, err := nats.NewPublisher(p.config, p.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create NATS publisher: %w", err)

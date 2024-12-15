@@ -12,16 +12,16 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.TODO()) // Use context.TODO()
 	defer cancel()
 
-	application, err := app.NewApp(ctx) // Renamed app to application
+	application, err := app.NewApp(ctx)
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
 
 	// Start the Watermill router
-	if err := application.WatermillRouter.Run(ctx); err != nil { // Use application
+	if err := application.WatermillRouter.Run(ctx); err != nil {
 		log.Fatalf("Failed to start Watermill router: %v", err)
 	}
 
@@ -38,12 +38,13 @@ func main() {
 	}
 
 	// Close the Watermill PubSub in the UserModule
-	if err := application.Modules.UserModule.PubSub.Close(); err != nil { // Use application
+	if err := application.Modules.UserModule.PubSub.Close(); err != nil {
 		log.Printf("Failed to close Watermill PubSub in UserModule: %v", err)
+		// Consider handling the error more explicitly if needed
 	}
 
 	// Gracefully close database connections
-	if err := application.DB().GetDB().Close(); err != nil { // Use application.DB().GetDB()
+	if err := application.DB().GetDB().Close(); err != nil {
 		log.Println("Error closing database connection:", err)
 	}
 

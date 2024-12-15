@@ -61,19 +61,6 @@ const (
 	HandlerKey     MetadataKey = "handler"
 )
 
-// parseScheduledAt parses the "scheduled_at" metadata.
-func parseScheduledAt(metadata message.Metadata) (time.Time, error) {
-	scheduledAtStr := metadata.Get(string(ScheduledAtKey))
-	if scheduledAtStr == "" {
-		return time.Time{}, nil
-	}
-	t, err := time.Parse(time.RFC3339, scheduledAtStr)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to parse scheduled_at: %w", err)
-	}
-	return t, nil
-}
-
 // GetRoundIDFromContext retrieves the round ID from the context.
 func GetRoundIDFromContext(ctx context.Context) (int64, bool) {
 	roundID, ok := ctx.Value(RoundIDKey).(int64)

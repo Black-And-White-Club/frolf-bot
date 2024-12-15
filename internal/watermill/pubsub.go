@@ -9,13 +9,15 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// PubSub combines Publisher and Subscriber with JetStream context.
 type PubSub struct {
 	publisher  message.Publisher
 	subscriber message.Subscriber
-	js         nats.JetStreamContext // Our JetStream context field
-	nc         *nats.Conn            // Add this field to store the NATS connection
+	js         nats.JetStreamContext
+	nc         *nats.Conn
 }
 
+// NewPubSub creates a new PubSub instance.
 func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) {
 	pub, err := NewPublisher(natsURL, logger)
 	if err != nil {
@@ -27,53 +29,44 @@ func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) 
 		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
 	}
 
-	// Get the JetStream context from the subscriber
-	js := sub.js
-
 	return &PubSub{
-		publisher:  pub,
+		publisher:  &watermillPublisher{pub},
 		subscriber: sub,
-		js:         js,       // Initialize the js field
-		nc:         sub.conn, // Store the NATS connection from the subscriber
+		js:         sub.GetJetStreamContext(),
+		nc:         sub.conn,
 	}, nil
 }
 
-// Publish publishes a single message to the specified topic.
+// Publish publishes messages to a topic.
 func (ps *PubSub) Publish(topic string, messages ...*message.Message) error {
 	return ps.publisher.Publish(topic, messages...)
 }
 
+// Subscribe subscribes to messages on a topic.
 func (ps *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	return ps.subscriber.Subscribe(ctx, topic)
 }
 
+// Close closes the publisher and subscriber connections.
 func (ps *PubSub) Close() error {
-	var errs []error
-
-	if err := ps.subscriber.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close subscriber: %w", err))
-	}
-
 	if err := ps.publisher.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close publisher: %w", err))
+		return fmt.Errorf("failed to close publisher: %w", err)
 	}
-
+	if err := ps.subscriber.Close(); err != nil {
+		return fmt.Errorf("failed to close subscriber: %w", err)
+	}
 	if ps.nc != nil {
 		ps.nc.Close()
 	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("multiple errors occurred during close: %v", errs)
-	}
-
 	return nil
 }
 
-func (ps *PubSub) GetJetStreamContext() nats.JetStreamContext {
-	return ps.js // Simply return the stored JetStream context
+// JetStreamContext returns the JetStream context.
+func (ps *PubSub) JetStreamContext() nats.JetStreamContext {
+	return ps.js
 }
 
-// Add a method to get the NATS connection
+// NatsConn returns the NATS connection.
 func (ps *PubSub) NatsConn() *nats.Conn {
 	return ps.nc
 }

@@ -64,7 +64,7 @@ func (h *DeleteRoundHandler) Handle(ctx context.Context, msg *message.Message) e
 	}
 
 	// Get the JetStream context
-	js := h.messageBus.(*watermillutil.PubSub).GetJetStreamContext()
+	js := h.messageBus.(watermillutil.PubSuber).JetStreamContext()
 
 	// Fetch scheduled messages for the round
 	fetchedMessages, err := jetstream.FetchMessagesForRound(js, cmd.RoundID)
