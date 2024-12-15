@@ -8,6 +8,7 @@ import (
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/service"
+	"github.com/Black-And-White-Club/tcr-bot/internal/jetstream"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -45,7 +46,7 @@ func (h *DeleteRoundHandler) Handle(ctx context.Context, msg *message.Message) e
 	}
 
 	// 2. Update the round's state to DELETED
-	err = h.roundDB.UpdateRoundState(ctx, cmd.RoundID, rounddb.RoundStateDeleted) // Use db.RoundState
+	err = h.roundDB.UpdateRoundState(ctx, cmd.RoundID, rounddb.RoundStateDeleted)
 	if err != nil {
 		return fmt.Errorf("failed to update round state: %w", err)
 	}
@@ -60,6 +61,23 @@ func (h *DeleteRoundHandler) Handle(ctx context.Context, msg *message.Message) e
 	}
 	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish RoundDeletedEvent: %w", err)
+	}
+
+	// Get the JetStream context
+	js := h.messageBus.(*watermillutil.PubSub).GetJetStreamContext()
+
+	// Fetch scheduled messages for the round
+	fetchedMessages, err := jetstream.FetchMessagesForRound(js, cmd.RoundID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch scheduled messages: %w", err)
+	}
+
+	// Delete the fetched messages
+	for _, msg := range fetchedMessages {
+		// Acknowledge the message to delete it from the stream
+		if err := msg.Ack(); err != nil {
+			return fmt.Errorf("failed to acknowledge message: %w", err)
+		}
 	}
 
 	return nil

@@ -6,11 +6,14 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/nats-io/nats.go"
 )
 
 type PubSub struct {
 	publisher  message.Publisher
 	subscriber message.Subscriber
+	js         nats.JetStreamContext // Our JetStream context field
+	nc         *nats.Conn            // Add this field to store the NATS connection
 }
 
 func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) {
@@ -24,9 +27,14 @@ func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) 
 		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
 	}
 
+	// Get the JetStream context from the subscriber
+	js := sub.js
+
 	return &PubSub{
 		publisher:  pub,
 		subscriber: sub,
+		js:         js,       // Initialize the js field
+		nc:         sub.conn, // Store the NATS connection from the subscriber
 	}, nil
 }
 
@@ -45,4 +53,13 @@ func (ps *PubSub) Close() error {
 		return fmt.Errorf("failed to close subscriber: %w", err)
 	}
 	return nil
+}
+
+func (ps *PubSub) GetJetStreamContext() nats.JetStreamContext {
+	return ps.js // Simply return the stored JetStream context
+}
+
+// Add a method to get the NATS connection
+func (ps *PubSub) NatsConn() *nats.Conn {
+	return ps.nc
 }

@@ -8,7 +8,6 @@ import (
 
 // GetTagNumberRequest represents the request to get a user's tag number.
 type GetTagNumberRequest struct {
-	RoundID   int64  `json:"round_id"`
 	DiscordID string `json:"discord_id"`
 }
 

@@ -12,6 +12,7 @@ type RoundDB interface {
 	GetRounds(ctx context.Context) ([]*Round, error)
 	GetRound(ctx context.Context, roundID int64) (*Round, error)
 	CreateRound(ctx context.Context, input rounddto.CreateRoundInput) (*Round, error)
+	CreateRoundScores(ctx context.Context, roundID int64, scores map[string]int) error
 	UpdateRound(ctx context.Context, roundID int64, updates map[string]interface{}) error
 	DeleteRound(ctx context.Context, roundID int64) error
 	UpdateParticipant(ctx context.Context, roundID int64, participant Participant) error
@@ -21,5 +22,7 @@ type RoundDB interface {
 	IsRoundFinalized(ctx context.Context, roundID int64) (bool, error)
 	IsUserParticipant(ctx context.Context, roundID int64, DiscordID string) (bool, error)
 	GetRoundState(ctx context.Context, roundID int64) (RoundState, error)
+	RecordScores(ctx context.Context, roundID int64, scores map[string]int) error
 	RoundExists(ctx context.Context, roundID int64) (bool, error)
+	GetParticipant(ctx context.Context, roundID int64, discordID string) (Participant, error)
 }

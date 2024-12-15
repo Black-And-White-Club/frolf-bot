@@ -16,6 +16,30 @@ type RoundDBImpl struct {
 	DB *bun.DB
 }
 
+// CreateRoundScores implements the CreateRoundScores method of the RoundDB interface.
+func (r *RoundDBImpl) CreateRoundScores(ctx context.Context, roundID int64, scores map[string]int) error {
+	// 1. Fetch the round from the database
+	round, err := r.GetRound(ctx, roundID)
+	if err != nil {
+		return fmt.Errorf("failed to get round: %w", err)
+	}
+
+	// 2. Update the round's Scores field
+	round.Scores = scores
+
+	// 3. Update the round in the database
+	_, err = r.DB.NewUpdate().
+		Model(round).
+		Where("id = ?", roundID).
+		Column("scores").
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update round scores: %w", err)
+	}
+
+	return nil
+}
+
 // GetRounds retrieves all rounds.
 func (r *RoundDBImpl) GetRounds(ctx context.Context) ([]*Round, error) {
 	var rounds []*Round
@@ -93,26 +117,58 @@ func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID int64) error {
 	return nil
 }
 
-// SubmitScore updates the scores map for a round in the database.
-func (r *RoundDBImpl) SubmitScore(ctx context.Context, roundID int64, discordID string, score int) error {
-	var round Round
-	err := r.DB.NewSelect().
-		Model(&round).
-		Where("id = ?", roundID).
-		Scan(ctx)
+func (r *RoundDBImpl) RecordScores(ctx context.Context, roundID int64, scores map[string]int) error {
+	// 1. Fetch the round from the database
+	round, err := r.GetRound(ctx, roundID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch round: %w", err)
 	}
 
-	if round.Scores == nil {
-		round.Scores = make(map[string]int)
-	}
-	round.Scores[discordID] = score
+	// 2. Update the round's Scores field
+	round.Scores = scores
 
+	// 3. Update the round in the database
 	_, err = r.DB.NewUpdate().
-		Model(&round).
+		Model(round).
 		Where("id = ?", roundID).
 		Column("scores").
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update round scores: %w", err)
+	}
+
+	return nil
+}
+
+// SubmitScore updates the scores map for a round in the database.
+func (r *RoundDBImpl) SubmitScore(ctx context.Context, roundID int64, discordID string, score int) error {
+	// 1. Fetch the round from the database
+	round, err := r.GetRound(ctx, roundID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch round: %w", err)
+	}
+
+	// 2. Update the score in the PendingScores slice
+	found := false
+	for i, s := range round.PendingScores {
+		if s.ParticipantID == discordID {
+			round.PendingScores[i].Score = score
+			found = true
+			break
+		}
+	}
+	if !found {
+		round.PendingScores = append(round.PendingScores, Score{
+			ParticipantID: discordID,
+			Score:         score,
+		})
+	}
+
+	// 3. Update the round in the database
+	_, err = r.DB.NewUpdate().
+		Model(round).
+		Where("id = ?", roundID).
+		Column("pending_scores"). // Update the pending_scores column
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update round scores: %w", err)
@@ -203,20 +259,6 @@ func (r *RoundDBImpl) IsRoundFinalized(ctx context.Context, roundID int64) (bool
 	return round.Finalized, nil
 }
 
-// IsUserParticipant checks if a user is a participant in a round.
-func (r *RoundDBImpl) IsUserParticipant(ctx context.Context, roundID int64, discordID string) (bool, error) {
-	// Assuming your Participant struct has a DiscordID field
-	var participant Participant
-	err := r.DB.NewSelect().
-		Model(&participant).
-		Where("jsonb_exists(participants, ?) AND participants->>? = ?", discordID, "discord_id", discordID). // Adjust the query based on your JSON structure
-		Scan(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to check participant status: %w", err)
-	}
-	return true, nil // If no error, the user is a participant
-}
-
 // GetRoundState retrieves the state of a round.
 func (r *RoundDBImpl) GetRoundState(ctx context.Context, roundID int64) (RoundState, error) {
 	var round Round
@@ -241,4 +283,25 @@ func (r *RoundDBImpl) RoundExists(ctx context.Context, roundID int64) (bool, err
 		return false, fmt.Errorf("failed to check if round exists: %w", err)
 	}
 	return exists, nil
+}
+
+// GetParticipant retrieves a specific participant from a round by Discord ID.
+func (r *RoundDBImpl) GetParticipant(ctx context.Context, roundID int64, discordID string) (Participant, error) {
+	var round Round
+	err := r.DB.NewSelect().
+		Model(&round).
+		Where("id = ?", roundID).
+		Relation("Participants").
+		Scan(ctx)
+	if err != nil {
+		return Participant{}, fmt.Errorf("failed to fetch round: %w", err)
+	}
+
+	for _, p := range round.Participants {
+		if p.DiscordID == discordID {
+			return p, nil
+		}
+	}
+
+	return Participant{}, fmt.Errorf("participant not found")
 }

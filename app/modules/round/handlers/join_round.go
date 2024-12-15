@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
@@ -12,16 +11,6 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
-
-// GetTagNumberRequest represents the request to get a user's tag number.
-type GetTagNumberRequest struct {
-	DiscordID string `json:"user_id"`
-}
-
-// GetTagNumberResponse represents the response to a GetTagNumberRequest.
-type GetTagNumberResponse struct {
-	TagNumber *int `json:"tag_number"`
-}
 
 // JoinRoundHandler handles the JoinRoundRequest command.
 type JoinRoundHandler struct {
@@ -44,46 +33,54 @@ func (h *JoinRoundHandler) Handle(ctx context.Context, msg *message.Message) err
 		return fmt.Errorf("failed to unmarshal JoinRoundRequest: %w", err)
 	}
 
-	// 1. Validate the command (e.g., ensure the round exists)
-	// ... (Your validation logic here) ...
+	// 1. Validate the command
+	if cmd.RoundID <= 0 {
+		return fmt.Errorf("invalid RoundID")
+	}
+	if cmd.DiscordID == "" {
+		return fmt.Errorf("invalid DiscordID")
+	}
+	if cmd.Response == "" {
+		return fmt.Errorf("invalid Response")
+	}
+
+	exists, err := h.roundDB.RoundExists(ctx, cmd.RoundID)
+	if err != nil {
+		return fmt.Errorf("failed to check if round exists: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("round does not exist")
+	}
+
+	// Check if the user is already a participant using GetParticipant
+	_, err = h.roundDB.GetParticipant(ctx, cmd.RoundID, cmd.DiscordID)
+	if err == nil {
+		return fmt.Errorf("user is already a participant in this round")
+	}
 
 	// 2. Publish a GetTagNumberRequest event to the leaderboard module
-	getTagNumberRequest := GetTagNumberRequest{
-		RoundID:   cmd.RoundID, // Include the RoundID
+	getTagNumberRequest := roundcommands.GetTagNumberRequest{
 		DiscordID: cmd.DiscordID,
 	}
-
-	// 3. Subscribe to the response topic from the leaderboard module
-	responseChan, err := h.eventBus.Subscribe(ctx, "tag.number.response")
+	payload, err := json.Marshal(getTagNumberRequest)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to tag number response: %w", err)
+		return fmt.Errorf("failed to marshal GetTagNumberRequest: %w", err)
+	}
+	if err := h.eventBus.Publish("leaderboard.get.tag.number.request", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish GetTagNumberRequest: %w", err)
 	}
 
-	// 4. Wait for the response (with a timeout)
-	var tagNumber *int
-	select {
-	case responseMsg := <-responseChan:
-		var response GetTagNumberResponse
-		if err := json.Unmarshal(responseMsg.Payload, &response); err != nil {
-			return fmt.Errorf("failed to unmarshal GetTagNumberResponse: %w", err)
-		}
-		tagNumber = response.TagNumber
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("timeout waiting for tag number response")
-	}
-
-	// 5. Add the user as a participant to the round in the database
+	// 3. Add the user as a participant to the round in the database (without tag number initially)
 	participant := rounddb.Participant{
 		DiscordID: cmd.DiscordID,
-		TagNumber: tagNumber,
 		Response:  cmd.Response,
 	}
-	err = h.roundDB.AddParticipantToRound(ctx, cmd.RoundID, participant)
+	err = h.roundDB.UpdateParticipant(ctx, cmd.RoundID, participant)
 	if err != nil {
 		return fmt.Errorf("failed to add participant to round: %w", err)
 	}
 
-	// 6. Publish a ParticipantJoinedRound event
+	// 4. Publish a ParticipantJoinedRound event
 	event := ParticipantJoinedRoundEvent{
 		RoundID:     cmd.RoundID,
 		Participant: participant,
@@ -92,7 +89,7 @@ func (h *JoinRoundHandler) Handle(ctx context.Context, msg *message.Message) err
 	if err != nil {
 		return fmt.Errorf("failed to marshal ParticipantJoinedRoundEvent: %w", err)
 	}
-	if err := h.messageBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.eventBus.Publish(event.Topic(), message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return fmt.Errorf("failed to publish ParticipantJoinedRoundEvent: %w", err)
 	}
 

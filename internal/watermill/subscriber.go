@@ -15,6 +15,7 @@ type NatsSubscriber struct {
 	conn   *nc.Conn
 	config nats.SubscriberConfig
 	logger watermill.LoggerAdapter
+	js     nc.JetStreamContext // Add this field
 }
 
 // NewSubscriber creates a new NATS JetStream subscriber.
@@ -22,6 +23,12 @@ func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscri
 	conn, err := nc.Connect(natsURL, nc.Name("App Service"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+
+	// Create JetStream context here
+	js, err := conn.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
 	}
 
 	subscribeOptions := []nc.SubOpt{
@@ -43,6 +50,7 @@ func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscri
 			SubjectCalculator: nats.DefaultSubjectCalculator,
 		},
 		logger: logger,
+		js:     js, // Store the created JetStream context
 	}, nil
 }
 
@@ -51,10 +59,15 @@ func (s *NatsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *m
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS subscriber: %w", err)
 	}
+
 	return sub.Subscribe(ctx, topic)
 }
 
 func (s *NatsSubscriber) Close() error {
 	s.conn.Close()
 	return nil
+}
+
+func (s *NatsSubscriber) GetJetStreamContext() nc.JetStreamContext {
+	return s.js
 }

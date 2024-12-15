@@ -34,20 +34,23 @@ func (h *UpdateParticipantHandler) Handle(msg *message.Message) error {
 		return fmt.Errorf("failed to unmarshal UpdateParticipantRequest: %w", err)
 	}
 
-	// 1. Construct a Participant with the updated data
-	participant := rounddb.Participant{
-		DiscordID: cmd.DiscordID,
-		// ... set other fields based on the command data ...
+	// 1. Fetch the existing participant from the database using the new GetParticipant function
+	participant, err := h.roundDB.GetParticipant(context.Background(), cmd.RoundID, cmd.DiscordID)
+	if err != nil {
+		return fmt.Errorf("failed to get participant: %w", err)
 	}
 
-	// 2. Update the participant's record in the database
-	err := h.roundDB.UpdateParticipant(context.Background(), cmd.RoundID, participant)
+	// 2. Update the participant's fields based on the command data
+	participant.Response = cmd.Response // Update the response (no need for a conditional check since it's required)
+	if cmd.TagNumber != nil {
+		participant.TagNumber = cmd.TagNumber
+	}
+
+	// 3. Update the participant's record in the database
+	err = h.roundDB.UpdateParticipant(context.Background(), cmd.RoundID, participant)
 	if err != nil {
 		return fmt.Errorf("failed to update participant: %w", err)
 	}
-
-	// 3. (Optional) Publish an event to indicate the participant was updated
-	// ...
 
 	return nil
 }

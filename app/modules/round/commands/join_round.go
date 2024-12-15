@@ -1,13 +1,14 @@
 package roundcommands
 
 import (
-	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
 )
 
 type JoinRoundRequest struct {
-	RoundID  int64             `json:"round_id"`
-	Response rounddto.Response `json:"response"`
+	RoundID   int64            `json:"round_id"`
+	DiscordID string           `json:"discord_id"`
+	Response  rounddb.Response `json:"response"`
 }
 
 func (cmd JoinRoundRequest) CommandName() string {

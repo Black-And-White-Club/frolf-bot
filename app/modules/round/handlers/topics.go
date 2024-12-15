@@ -1,5 +1,10 @@
 package roundhandlers
 
+// Topic returns the topic for the FinalizeRoundEvent.
+func (e FinalizeRoundEvent) Topic() string {
+	return "round.finalize"
+}
+
 func (e RoundDeletedEvent) Topic() string {
 	return "round.deleted"
 }
@@ -19,12 +24,17 @@ func (e RoundCreatedEvent) Topic() string {
 	return "round.created"
 }
 
+// Topic returns the topic for the RoundReminderEvent.
+func (e RoundReminderEvent) Topic() string {
+	return "round.reminder"
+}
+
 // Topic returns the topic for the ParticipantJoinedRoundEvent.
 func (e ParticipantJoinedRoundEvent) Topic() string {
 	return "participant.joined.round"
 }
 
-// Topic returns the topic for the GetTagNumberRequest event.
-func (e GetTagNumberRequest) Topic() string {
-	return "get.tag.number.request"
+// Topic returns the topic for the SendScoresEvent.
+func (e SendScoresEvent) Topic() string {
+	return "round.scores.send"
 }

@@ -1,4 +1,4 @@
-// In app/modules/round/handlers/get_tag_number_response_handler.go
+// In app/modules/round/handlers/tag_number_response.go
 
 package roundhandlers
 
@@ -30,16 +30,16 @@ func NewGetTagNumberResponseHandler(roundDB rounddb.RoundDB, eventBus watermillu
 // Handle processes the GetTagNumberResponse event.
 func (h *GetTagNumberResponseHandler) Handle(msg *message.Message) error {
 	// 1. Unmarshal the GetTagNumberResponse
-	var response GetTagNumberResponse
+	var response GetTagNumberResponse // Use the correct event struct
 	if err := json.Unmarshal(msg.Payload, &response); err != nil {
 		return fmt.Errorf("failed to unmarshal GetTagNumberResponse: %w", err)
 	}
 
-	// 2. Publish an UpdateParticipantCommand
+	// 2. Publish an UpdateParticipantRequest
 	updateParticipantCmd := roundcommands.UpdateParticipantRequest{
-		RoundID:   response.RoundID, // Assuming you include RoundID in the response
+		RoundID:   response.RoundID,
 		DiscordID: response.DiscordID,
-		// ... set other fields based on the response data ...
+		TagNumber: response.TagNumber,
 	}
 	payload, err := json.Marshal(updateParticipantCmd)
 	if err != nil {
