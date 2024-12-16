@@ -16,8 +16,11 @@ func NewScoresProcessingService() *ScoresProcessingService {
 
 // SortScores sorts the scores in ascending order, keeping tags associated with participants.
 func (s *ScoresProcessingService) SortScores(scores []scoredb.Score) ([]scoredb.Score, error) {
-	// Sort scores by the Score field (ascending order for disc golf)
+	// Sort scores by Score (ascending for golf scores) and then by TagNumber
 	sort.Slice(scores, func(i, j int) bool {
+		if scores[i].Score == scores[j].Score {
+			return scores[i].TagNumber < scores[j].TagNumber
+		}
 		return scores[i].Score < scores[j].Score
 	})
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/services"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
@@ -13,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ProcessScoresHandler processes scores and forwards them to the leaderboard module.
+// ProcessScoresHandler processes scores and forwards them to the submit_scores handler.
 type ProcessScoresHandler struct {
 	eventBus       watermillutil.PubSuber
 	scoreProcessor *scoreservice.ScoresProcessingService
@@ -29,25 +28,25 @@ func NewProcessScoresHandler(eventBus watermillutil.PubSuber, scoreProcessor *sc
 
 // Handle processes the scores received from the ProcessScores topic.
 func (h *ProcessScoresHandler) Handle(ctx context.Context, msg *message.Message) error {
-	var scores []scoredb.Score
-	if err := json.Unmarshal(msg.Payload, &scores); err != nil {
-		return errors.Wrap(err, "failed to unmarshal scores for processing")
+	var event ScoresReceivedEvent
+	if err := json.Unmarshal(msg.Payload, &event); err != nil {
+		return errors.Wrap(err, "failed to unmarshal ScoresReceivedEvent")
 	}
 
 	// Process the scores using the service
-	sortedScores, err := h.scoreProcessor.SortScores(scores)
+	sortedScores, err := h.scoreProcessor.SortScores(event.Scores)
 	if err != nil {
 		return errors.Wrap(err, "failed to process scores")
 	}
 
-	// Publish sorted scores to the leaderboard topic
+	// Publish sorted scores to the submit_scores handler
 	payload, err := json.Marshal(sortedScores)
 	if err != nil {
 		return fmt.Errorf("failed to marshal sorted scores: %w", err)
 	}
 
-	if err := h.eventBus.Publish(TopicSendToLeaderboard, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
-		return fmt.Errorf("failed to publish sorted scores to leaderboard: %w", err)
+	if err := h.eventBus.Publish(TopicSubmitScores, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish sorted scores to submit_scores handler: %w", err)
 	}
 
 	return nil

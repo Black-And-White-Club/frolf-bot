@@ -8,6 +8,7 @@ import (
 	"log"
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -18,6 +19,7 @@ import (
 type DBService struct {
 	User    *userdb.UserDBImpl
 	RoundDB *rounddb.RoundDBImpl
+	ScoreDB *scoredb.ScoreDBImpl // Use ScoreDBImpl instead of ScoreDB
 	db      *bun.DB
 }
 
@@ -44,6 +46,7 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 	dbService := &DBService{
 		User:    &userdb.UserDBImpl{DB: db},
 		RoundDB: &rounddb.RoundDBImpl{DB: db},
+		ScoreDB: &scoredb.ScoreDBImpl{DB: db}, // Use ScoreDBImpl here as well
 		db:      db,
 	}
 
@@ -52,6 +55,7 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 	log.Println("NewBunDBService - Registering models")
 	db.RegisterModel(&userdb.User{})
 	db.RegisterModel(&rounddb.Round{})
+	db.RegisterModel(&scoredb.Score{}) // Register scoredb.Score model
 	log.Println("NewBunDBService - Models registered successfully")
 
 	return dbService, nil

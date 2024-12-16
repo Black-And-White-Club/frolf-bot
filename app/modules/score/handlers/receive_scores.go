@@ -24,14 +24,17 @@ type ReceivedScoresMessage struct {
 	Scores  []ReceivedScore `json:"scores"`
 }
 
+// ReceiveScoresHandler handles receiving scores from the round module.
 type ReceiveScoresHandler struct {
 	eventBus watermillutil.PubSuber
 }
 
+// NewReceiveScoresHandler creates a new ReceiveScoresHandler.
 func NewReceiveScoresHandler(eventBus watermillutil.PubSuber) *ReceiveScoresHandler {
 	return &ReceiveScoresHandler{eventBus: eventBus}
 }
 
+// Handle handles the event or message from the round module.
 func (h *ReceiveScoresHandler) Handle(ctx context.Context, msg *message.Message) error {
 	var receivedScores ReceivedScoresMessage
 	marshaler := watermillutil.Marshaler
@@ -59,15 +62,18 @@ func (h *ReceiveScoresHandler) Handle(ctx context.Context, msg *message.Message)
 		}
 	}
 
-	// Marshal scores into JSON
-	payload, err := json.Marshal(scores)
+	// 1. Publish ScoresReceivedEvent
+	event := ScoresReceivedEvent{
+		RoundID: receivedScores.RoundID,
+		Scores:  scores, // This is now correct
+	}
+	payload, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("failed to marshal scores: %w", err)
+		return fmt.Errorf("failed to marshal ScoresReceivedEvent: %w", err)
 	}
 
-	// Publish the scores to the next topic
-	if err := h.eventBus.Publish(TopicProcessScores, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
-		return fmt.Errorf("failed to publish scores: %w", err)
+	if err := h.eventBus.Publish(TopicReceiveScores, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish ScoresReceivedEvent: %w", err)
 	}
 
 	return nil
