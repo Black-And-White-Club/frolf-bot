@@ -1,11 +1,6 @@
-package structs
+package leaderboarddb
 
-// Leaderboard represents a leaderboard with entries.
-type Leaderboard struct {
-	ID              int64          `json:"id"`
-	LeaderboardData map[int]string `json:"leaderboard_data"`
-	Active          bool           `json:"active"`
-}
+import "github.com/uptrace/bun"
 
 // LeaderboardEntry represents an entry in a leaderboard.
 type LeaderboardEntry struct {
@@ -21,3 +16,12 @@ const (
 	ServiceUpdateTagSourceManual        ServiceUpdateTagSource = "manual"
 	ServiceUpdateTagSourceCreateUser    ServiceUpdateTagSource = "createUser"
 )
+
+// Leaderboard represents a leaderboard with entries.
+type Leaderboard struct {
+	bun.BaseModel `bun:"table:leaderboards,alias:l"`
+
+	ID              int64          `bun:"id,pk,autoincrement"`
+	LeaderboardData map[int]string `bun:"leaderboard_data,notnull"` // Using a map for efficient access
+	Active          bool           `bun:"active,notnull"`
+}

@@ -1,24 +1,22 @@
 // leaderboard_service.go
-package services
+package leaderboardservices
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/api/structs"
-	"github.com/Black-And-White-Club/tcr-bot/db"
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
 	"github.com/Black-And-White-Club/tcr-bot/nats"
 	"github.com/google/uuid"
 )
 
 // LeaderboardService handles leaderboard-related logic and database interactions.
 type LeaderboardService struct {
-	db                 db.LeaderboardDB
+	db                 leaderboarddb.LeaderboardDB
 	natsConnectionPool *nats.NatsConnectionPool
 	swapRequests       map[string]map[int]tagSwapRequest
 	swapRequestsMu     sync.Mutex
@@ -32,7 +30,7 @@ type tagSwapRequest struct {
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
-func NewLeaderboardService(db db.LeaderboardDB, natsConnectionPool *nats.NatsConnectionPool) *LeaderboardService {
+func NewLeaderboardService(db leaderboarddb.LeaderboardDB, natsConnectionPool *nats.NatsConnectionPool) *LeaderboardService {
 	return &LeaderboardService{
 		db:                 db,
 		natsConnectionPool: natsConnectionPool,
@@ -316,140 +314,6 @@ func (s *LeaderboardService) UpdateTag(ctx context.Context, discordID string, ta
 func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, processedScores []structs.LeaderboardEntry, source structs.ServiceUpdateTagSource) error {
 
 	return s.updateLeaderboard(ctx, processedScores, source)
-}
-
-// StartNATSSubscribers starts the NATS subscribers for the leaderboard service.
-func (s *LeaderboardService) StartNATSSubscribers(ctx context.Context) error {
-	conn, err := s.natsConnectionPool.GetConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get NATS connection from pool: %w", err)
-	}
-	defer s.natsConnectionPool.ReleaseConnection(conn)
-
-	// Subscribe to "check-tag-availability" subject
-	_, err = conn.Subscribe("check-tag-availability", func(msg *nats.Msg) {
-		var event nats.CheckTagAvailabilityEvent
-		err := json.Unmarshal(msg.Data, &event)
-		if err != nil {
-			log.Printf("Error unmarshaling CheckTagAvailabilityEvent: %v", err)
-			return
-		}
-
-		// Use GetTagInfo to get tag availability
-		isAvailable, _, err := s.GetTagInfo(ctx, "", event.TagNumber)
-		log.Printf("Received leaderboard.get_tag_number message: %v", event)
-		if err != nil {
-			log.Printf("Error checking tag availability: %v", err)
-			return
-		}
-
-		// Publish the response to a specific subject
-		response := &nats.TagAvailabilityResponse{
-			IsAvailable: isAvailable,
-		}
-		log.Printf("Publishing Leaderboard Tag Availability response: %v", response)
-		responseData, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshaling TagAvailabilityResponse: %v", err)
-			return
-		}
-
-		err = conn.Publish("tag-availability-result", responseData) // Publish to "tag-availability-result"
-		if err != nil {
-			log.Printf("Error publishing TagAvailabilityResponse: %v", err)
-			return
-		}
-		log.Printf("Published Response, Leaderboard is no longer responsible")
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to check-tag-availability: %w", err)
-	}
-
-	// Subscribe to "scores.processed" subject
-	_, err = conn.Subscribe("scores.processed", func(msg *nats.Msg) {
-		var event nats.ScoresProcessedEvent
-		err := json.Unmarshal(msg.Data, &event)
-		if err != nil {
-			log.Printf("Error unmarshaling ScoresProcessedEvent: %v", err)
-			return
-		}
-
-		// Convert []structs.ScoreInput to []structs.LeaderboardEntry
-		var leaderboardEntries []structs.LeaderboardEntry
-		for _, score := range event.ProcessedScores {
-			leaderboardEntries = append(leaderboardEntries, structs.LeaderboardEntry{
-				DiscordID: score.DiscordID,
-				TagNumber: *score.TagNumber, // Assuming TagNumber is not nil
-			})
-		}
-
-		err = s.ProcessRanking(ctx, leaderboardEntries)
-		if err != nil {
-			log.Printf("Error processing ranking: %v", err)
-			return
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to scores.processed: %w", err)
-	}
-
-	// Subscribe to "user.created" subject
-	_, err = conn.Subscribe("user.created", func(msg *nats.Msg) {
-		var event nats.UserCreatedEvent
-		err := json.Unmarshal(msg.Data, &event)
-		if err != nil {
-			log.Printf("Error unmarshaling UserCreatedEvent: %v", err)
-			return
-		}
-		log.Printf("What did we get %v", err)
-		// Add the new user to the leaderboard using UpdateTag
-		err = s.UpdateTag(ctx, event.DiscordID, event.TagNumber, structs.ServiceUpdateTagSourceCreateUser)
-		if err != nil {
-			log.Printf("Error adding user to leaderboard: %v", err)
-			return
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to user.created: %w", err)
-	}
-
-	// Subscribe to "leaderboard.get_tag_number" subject
-	_, err = conn.Subscribe("leaderboard.get_tag_number", func(msg *nats.Msg) {
-		var event nats.LeaderboardGetTagNumberEvent
-		err := json.Unmarshal(msg.Data, &event)
-		if err != nil {
-			log.Printf("Error unmarshaling LeaderboardGetTagNumberEvent: %v", err)
-			return
-		}
-
-		// Use GetTagInfo to get tag availability
-		isAvailable, _, err := s.GetTagInfo(ctx, event.DiscordID, event.TagNumber)
-		if err != nil {
-			log.Printf("Error getting tag info: %v", err)
-			return
-		}
-
-		// Publish the response
-		response := &nats.LeaderboardGetTagNumberResponse{
-			IsAvailable: isAvailable,
-		}
-		responseData, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshaling LeaderboardGetTagNumberResponse: %v", err)
-			return
-		}
-
-		err = conn.Publish(event.ReplyTo, responseData)
-		if err != nil {
-			log.Printf("Error publishing LeaderboardGetTagNumberResponse: %v", err)
-			return
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to leaderboard.get_tag_number: %w", err)
-	}
-
-	return nil
 }
 
 // ProcessRanking processes the ranking data received from the Score module.
