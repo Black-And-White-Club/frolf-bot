@@ -1,11 +1,11 @@
-package handlers
+package scorehandlers
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
-	scorecommands "github.com/Black-And-White-Club/tcr-bot/app/modules/score/commands"
 	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
@@ -13,45 +13,61 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ReceiveScoresHandler handles receiving scores from the round module.
+type ReceivedScore struct {
+	UserID    string  `json:"user_id"`
+	Score     float64 `json:"score"`
+	TagNumber string  `json:"tag_number"`
+}
+
+type ReceivedScoresMessage struct {
+	RoundID string          `json:"round_id"`
+	Scores  []ReceivedScore `json:"scores"`
+}
+
 type ReceiveScoresHandler struct {
 	eventBus watermillutil.PubSuber
 }
 
-// NewReceiveScoresHandler creates a new ReceiveScoresHandler.
 func NewReceiveScoresHandler(eventBus watermillutil.PubSuber) *ReceiveScoresHandler {
-	return &ReceiveScoresHandler{
-		eventBus: eventBus,
-	}
+	return &ReceiveScoresHandler{eventBus: eventBus}
 }
 
-// Handle handles the event or message from the round module.
 func (h *ReceiveScoresHandler) Handle(ctx context.Context, msg *message.Message) error {
-	var cmd scorecommands.SubmitScoreCommand
-	marshaler := watermillutil.Marshaler // Use the marshaler from userhandlers
-	if err := marshaler.Unmarshal(msg, &cmd); err != nil {
-		return errors.Wrap(err, "failed to unmarshal SubmitScoreCommand")
+	var receivedScores ReceivedScoresMessage
+	marshaler := watermillutil.Marshaler
+	if err := marshaler.Unmarshal(msg, &receivedScores); err != nil {
+		return errors.Wrap(err, "failed to unmarshal incoming scores")
 	}
 
-	// 1. Extract DiscordID, Score, and TagNumber from the received data
-	scores := make([]scoredb.Score, len(cmd.Scores))
-	for i, s := range cmd.Scores {
+	scores := make([]scoredb.Score, len(receivedScores.Scores))
+	for i, s := range receivedScores.Scores {
+		// Convert score while preserving negatives
+		scoreValue := int(s.Score)
+
+		// Convert tag number with error handling
+		tagNumber, err := strconv.Atoi(s.TagNumber)
+		if err != nil {
+			return fmt.Errorf("failed to convert tag number %q for user %q at index %d: %w", s.TagNumber, s.UserID, i, err)
+		}
+
+		// Create the Score struct
 		scores[i] = scoredb.Score{
-			DiscordID: s.UserID,    // Assuming UserID in cmd.Scores is DiscordID
-			RoundID:   cmd.RoundID, // Assuming you have RoundID in the command
-			Score:     s.Score,
-			TagNumber: s.TagNumber,
+			DiscordID: s.UserID,
+			RoundID:   receivedScores.RoundID,
+			Score:     scoreValue,
+			TagNumber: tagNumber,
 		}
 	}
 
-	// 2. Publish the scores to be processed by the ScoreProcessor
+	// Marshal scores into JSON
 	payload, err := json.Marshal(scores)
 	if err != nil {
 		return fmt.Errorf("failed to marshal scores: %w", err)
 	}
 
+	// Publish the scores to the next topic
 	if err := h.eventBus.Publish(TopicProcessScores, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
-		return fmt.Errorf("failed to publish scores for processing: %w", err)
+		return fmt.Errorf("failed to publish scores: %w", err)
 	}
 
 	return nil
