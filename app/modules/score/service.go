@@ -2,10 +2,8 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strconv"
 
@@ -98,54 +96,4 @@ func (s *ScoreService) UpdateScore(ctx context.Context, roundID, discordID strin
 	}
 
 	return existingScore, nil
-}
-
-// StartNATSSubscribers starts the NATS subscribers for the score service.
-func (s *ScoreService) StartNATSSubscribers(ctx context.Context) error {
-	conn, err := s.natsConnectionPool.GetConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get NATS connection from pool: %w", err)
-	}
-	defer s.natsConnectionPool.ReleaseConnection(conn)
-
-	// Subscribe to "round.finalized" subject
-	_, err = conn.Subscribe("round.finalized", func(msg *nats.Msg) {
-		var event nats.RoundFinalizedEvent
-		err := json.Unmarshal(msg.Data, &event)
-		if err != nil {
-			log.Printf("Error unmarshaling RoundFinalizedEvent: %v", err)
-			return
-		}
-
-		// Retrieve the scores for the finalized round
-		roundID := event.RoundID
-
-		// Get all scores for the round
-		scores, err := s.db.GetScoresForRound(ctx, strconv.FormatInt(roundID, 10))
-		if err != nil {
-			log.Printf("Error getting scores for round: %v", err)
-			return
-		}
-
-		// Convert the scores to ScoreInput
-		var scoreInputs []models.ScoreInput
-		for _, score := range scores {
-			scoreInputs = append(scoreInputs, models.ScoreInput{
-				DiscordID: score.DiscordID,
-				Score:     score.Score,
-			})
-		}
-
-		// Process the scores
-		err = s.ProcessScores(ctx, roundID, scoreInputs)
-		if err != nil {
-			log.Printf("Error processing scores: %v", err)
-			return
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to round.finalized: %w", err)
-	}
-
-	return nil
 }

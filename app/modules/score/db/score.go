@@ -1,10 +1,9 @@
-package bundb
+package scoredb
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/Black-And-White-Club/tcr-bot/models"
 	"github.com/uptrace/bun"
 )
 
@@ -14,8 +13,8 @@ type scoreDB struct {
 }
 
 // GetUserScore retrieves the score for a specific user and round.
-func (db *scoreDB) GetUserScore(ctx context.Context, discordID, roundID string) (*models.Score, error) {
-	var score models.Score
+func (db *scoreDB) GetUserScore(ctx context.Context, discordID, roundID string) (*Score, error) {
+	var score Score
 	err := db.db.NewSelect().
 		Model(&score).
 		Where("discord_id = ? AND round_id = ?", discordID, roundID).
@@ -29,8 +28,8 @@ func (db *scoreDB) GetUserScore(ctx context.Context, discordID, roundID string) 
 }
 
 // GetScoresForRound retrieves all scores for a given round.
-func (db *scoreDB) GetScoresForRound(ctx context.Context, roundID string) ([]models.Score, error) {
-	var scores []models.Score
+func (db *scoreDB) GetScoresForRound(ctx context.Context, roundID string) ([]Score, error) {
+	var scores []Score
 	err := db.db.NewSelect().
 		Model(&scores).
 		Where("round_id = ?", roundID).
@@ -44,7 +43,7 @@ func (db *scoreDB) GetScoresForRound(ctx context.Context, roundID string) ([]mod
 }
 
 // ProcessScores inserts a batch of scores into the database.
-func (db *scoreDB) ProcessScores(ctx context.Context, roundID int64, scores []models.Score) error {
+func (db *scoreDB) ProcessScores(ctx context.Context, roundID int64, scores []Score) error {
 	_, err := db.db.NewInsert().
 		Model(&scores).
 		Exec(ctx)
@@ -55,7 +54,7 @@ func (db *scoreDB) ProcessScores(ctx context.Context, roundID int64, scores []mo
 }
 
 // UpdateScore updates a specific score.
-func (db *scoreDB) UpdateScore(ctx context.Context, score *models.Score) error {
+func (db *scoreDB) UpdateScore(ctx context.Context, score *Score) error {
 	_, err := db.db.NewUpdate().
 		Model(score).
 		Where("discord_id = ? AND round_id = ?", score.DiscordID, score.RoundID).
