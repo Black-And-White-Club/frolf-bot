@@ -25,21 +25,6 @@ func (lb *leaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, 
 	return &leaderboard, nil
 }
 
-// GetLeaderboardTagData retrieves the tag and Discord ID data for the active leaderboard.
-func (lb *leaderboardDBImpl) GetLeaderboardTagData(ctx context.Context) (*Leaderboard, error) {
-	var leaderboard Leaderboard
-	err := lb.db.NewSelect().
-		Model(&leaderboard).
-		Column("leaderboard_data"). // Select only the leaderboard_data column
-		Where("active = ?", true).
-		Scan(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch leaderboard tag data: %w", err)
-	}
-
-	return &leaderboard, nil
-}
-
 // DeactivateCurrentLeaderboard deactivates the currently active leaderboard.
 func (lb *leaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) error {
 	_, err := lb.db.NewUpdate().
@@ -69,8 +54,8 @@ func (lb *leaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardD
 	return nil
 }
 
-// UpdateLeaderboardWithTransaction updates the leaderboard within a transaction.
-func (lb *leaderboardDBImpl) UpdateLeaderboardWithTransaction(ctx context.Context, leaderboardData map[int]string) error {
+// UpdateLeaderboard updates the leaderboard within a transaction.
+func (lb *leaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string) error { // Renamed function
 	tx, err := lb.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -81,27 +66,88 @@ func (lb *leaderboardDBImpl) UpdateLeaderboardWithTransaction(ctx context.Contex
 		}
 	}()
 
-	// Deactivate the current leaderboard
-	_, err = tx.NewUpdate().
-		Model((*Leaderboard)(nil)).
-		Set("active = ?", false).
+	// Retrieve the active leaderboard
+	var leaderboard Leaderboard
+	err = tx.NewSelect().
+		Model(&leaderboard).
 		Where("active = ?", true).
-		Exec(ctx)
+		Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return fmt.Errorf("failed to fetch leaderboard: %w", err)
 	}
 
-	// Insert the new leaderboard
-	newLeaderboard := &Leaderboard{
-		LeaderboardData: leaderboardData,
-		Active:          true,
-	}
-	_, err = tx.NewInsert().
-		Model(newLeaderboard).
+	// Update the leaderboard data
+	leaderboard.LeaderboardData = leaderboardData
+
+	// Save the updated leaderboard
+	_, err = tx.NewUpdate().
+		Model(&leaderboard).
+		Column("leaderboard_data").
+		WherePK().
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to insert new leaderboard: %w", err)
+		return fmt.Errorf("failed to update leaderboard: %w", err)
 	}
 
 	return tx.Commit()
+}
+
+// SwapTags swaps the tags of two users in the leaderboard.
+func (lb *leaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID string) error {
+	// 1. Fetch the leaderboard data
+	leaderboard, err := lb.GetLeaderboard(ctx)
+	if err != nil {
+		return fmt.Errorf("SwapTags: failed to get leaderboard: %w", err)
+	}
+
+	// 2. Find the tag numbers for the two users
+	var requestorTag, targetTag int
+	for tag, id := range leaderboard.LeaderboardData {
+		if id == requestorID {
+			requestorTag = tag
+		} else if id == targetID {
+			targetTag = tag
+		}
+	}
+
+	// 3. If either user is not found, return an error
+	if requestorTag == 0 || targetTag == 0 {
+		return fmt.Errorf("SwapTags: one or both users not found on the leaderboard")
+	}
+
+	// 4. Swap the tags in the leaderboard data
+	leaderboard.LeaderboardData[requestorTag], leaderboard.LeaderboardData[targetTag] = leaderboard.LeaderboardData[targetTag], leaderboard.LeaderboardData[requestorTag]
+
+	// 5. Update the leaderboard in the database
+	err = lb.UpdateLeaderboard(ctx, leaderboard.LeaderboardData)
+	if err != nil {
+		return fmt.Errorf("SwapTags: failed to update leaderboard: %w", err)
+	}
+
+	return nil
+}
+
+// InsertTagAndDiscordID inserts a new tag and Discord ID into the leaderboard.
+func (lb *leaderboardDBImpl) InsertTagAndDiscordID(ctx context.Context, tagNumber int, discordID string) error {
+	// 1. Fetch the leaderboard data
+	leaderboard, err := lb.GetLeaderboard(ctx)
+	if err != nil {
+		return fmt.Errorf("InsertTagAndDiscordID: failed to get leaderboard: %w", err)
+	}
+
+	// 2. Check if the tag is already taken
+	if _, taken := leaderboard.LeaderboardData[tagNumber]; taken {
+		return fmt.Errorf("InsertTagAndDiscordID: tag number %d is already taken", tagNumber)
+	}
+
+	// 3. Add the new tag and Discord ID to the leaderboard data
+	leaderboard.LeaderboardData[tagNumber] = discordID
+
+	// 4. Update the leaderboard in the database
+	err = lb.UpdateLeaderboard(ctx, leaderboard.LeaderboardData)
+	if err != nil {
+		return fmt.Errorf("InsertTagAndDiscordID: failed to update leaderboard: %w", err)
+	}
+
+	return nil
 }

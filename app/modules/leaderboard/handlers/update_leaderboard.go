@@ -6,22 +6,22 @@ import (
 	"fmt"
 
 	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
-	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/services"
+	leaderboardservices "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/services"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"
 )
 
 // UpdateLeaderboardHandler handles updating the leaderboard in the database.
 type UpdateLeaderboardHandler struct {
-	leaderboardDB             leaderboarddb.LeaderboardDB
-	leaderboardUpdaterService leaderboardservice.LeaderboardUpdateService
+	leaderboardDB      leaderboarddb.LeaderboardDB
+	leaderboardService leaderboardservices.LeaderboardService
 }
 
 // NewUpdateLeaderboardHandler creates a new UpdateLeaderboardHandler.
-func NewUpdateLeaderboardHandler(leaderboardDB leaderboarddb.LeaderboardDB, leaderboardUpdaterService leaderboardservice.LeaderboardUpdateService) *UpdateLeaderboardHandler {
+func NewUpdateLeaderboardHandler(leaderboardDB leaderboarddb.LeaderboardDB, leaderboardService leaderboardservices.LeaderboardService) *UpdateLeaderboardHandler {
 	return &UpdateLeaderboardHandler{
-		leaderboardDB:             leaderboardDB,
-		leaderboardUpdaterService: leaderboardUpdaterService,
+		leaderboardDB:      leaderboardDB,
+		leaderboardService: leaderboardService,
 	}
 }
 
@@ -33,18 +33,17 @@ func (h *UpdateLeaderboardHandler) Handle(ctx context.Context, msg *message.Mess
 	}
 
 	// 1. Get the current leaderboard data
-	currentLeaderboard, err := h.leaderboardDB.GetLeaderboard(ctx)
+	currentLeaderboard, err := h.leaderboardDB.GetLeaderboard(ctx) // Use h.leaderboardDB.GetLeaderboard
 	if err != nil {
 		return fmt.Errorf("failed to get current leaderboard: %w", err)
 	}
 
 	// 2. Update the leaderboard data with new tags
-	updatedLeaderboardData := h.leaderboardUpdaterService.UpdateLeaderboardData(currentLeaderboard.LeaderboardData, event.Entries)
+	updatedLeaderboardData := h.leaderboardService.UpdateLeaderboardData(currentLeaderboard.LeaderboardData, event.Entries)
 
-	// 3. Update the leaderboard within a transaction
-	err = h.leaderboardDB.UpdateLeaderboardWithTransaction(ctx, updatedLeaderboardData)
-	if err != nil {
-		return fmt.Errorf("failed to update leaderboard with transaction: %w", err)
+	// 3. Update the leaderboard in the database
+	if err := h.leaderboardDB.UpdateLeaderboard(ctx, updatedLeaderboardData); err != nil { // Use h.leaderboardDB.UpdateLeaderboard
+		return fmt.Errorf("failed to update leaderboard: %w", err)
 	}
 
 	return nil

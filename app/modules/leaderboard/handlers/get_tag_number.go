@@ -6,34 +6,42 @@ import (
 	"fmt"
 
 	leaderboardqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/queries"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // GetTagHandler handles retrieving tag information.
 type GetTagHandler struct {
-	queryService leaderboardqueries.LeaderboardQueryService
+	eventBus     watermillutil.PubSuber
+	queryService leaderboardqueries.QueryService
 }
 
 // NewGetTagHandler creates a new GetTagHandler.
-func NewGetTagHandler(queryService leaderboardqueries.LeaderboardQueryService) *GetTagHandler {
-	return &GetTagHandler{queryService: queryService}
+func NewGetTagHandler(eventBus watermillutil.PubSuber, queryService leaderboardqueries.QueryService) *GetTagHandler {
+	return &GetTagHandler{
+		eventBus:     eventBus,
+		queryService: queryService,
+	}
 }
 
 // Handle retrieves tag information based on the request type.
 func (h *GetTagHandler) Handle(ctx context.Context, msg *message.Message) error {
-	switch msg.Metadata.Get("request_type") {
-	case "get_user_tag":
-		return h.handleGetUserTag(ctx, msg)
-	case "check_tag_taken":
-		return h.handleCheckTagTaken(ctx, msg)
-	case "get_participant_tag":
+	// Check the message topic to determine the request type
+	switch msg.Metadata.Get("topic") {
+	case TopicGetLeaderboardTag:
+		return h.handleGetTagRequest(ctx, msg)
+	case TopicCheckLeaderboardTag:
+		return h.handleCheckTagTakenRequest(ctx, msg)
+	case TopicGetLeaderboard:
 		return h.handleGetParticipantTag(ctx, msg)
 	default:
 		return fmt.Errorf("unknown tag request type: %s", msg.Metadata.Get("request_type"))
 	}
 }
 
-func (h *GetTagHandler) handleGetUserTag(ctx context.Context, msg *message.Message) error {
+// handleGetTagRequest handles requests to get a user's tag.
+func (h *GetTagHandler) handleGetTagRequest(ctx context.Context, msg *message.Message) error {
 	var query leaderboardqueries.GetUserTagQuery
 	if err := json.Unmarshal(msg.Payload, &query); err != nil {
 		return fmt.Errorf("failed to unmarshal GetUserTagQuery: %w", err)
@@ -45,12 +53,24 @@ func (h *GetTagHandler) handleGetUserTag(ctx context.Context, msg *message.Messa
 	}
 
 	// Publish the response (e.g., UserTagResponseEvent)
-	// ...
+	responseEvent := UserTagResponseEvent{
+		UserID:    query.UserID,
+		TagNumber: tagNumber,
+	}
+	payload, err := json.Marshal(responseEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal UserTagResponseEvent: %w", err)
+	}
+
+	if err := h.eventBus.Publish(TopicUserTagResponse, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish UserTagResponseEvent: %w", err)
+	}
 
 	return nil
 }
 
-func (h *GetTagHandler) handleCheckTagTaken(ctx context.Context, msg *message.Message) error {
+// handleCheckTagTakenRequest handles requests to check if a tag is taken.
+func (h *GetTagHandler) handleCheckTagTakenRequest(ctx context.Context, msg *message.Message) error {
 	var query leaderboardqueries.CheckTagTakenQuery
 	if err := json.Unmarshal(msg.Payload, &query); err != nil {
 		return fmt.Errorf("failed to unmarshal CheckTagTakenQuery: %w", err)
@@ -61,12 +81,24 @@ func (h *GetTagHandler) handleCheckTagTaken(ctx context.Context, msg *message.Me
 		return fmt.Errorf("failed to check if tag is taken: %w", err)
 	}
 
-	// Publish the response (e.g., TagTakenResponseEvent)
-	// ...
+	// Publish the response (e.g., TagAvailabilityResponse)
+	response := TagAvailabilityResponse{
+		TagNumber:   query.TagNumber,
+		IsAvailable: !isTaken,
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal TagAvailabilityResponse: %w", err)
+	}
+
+	if err := h.eventBus.Publish(TopicTagAvailabilityResponse, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish TagAvailabilityResponse: %w", err)
+	}
 
 	return nil
 }
 
+// handleGetParticipantTag handles requests to get a participant's tag.
 func (h *GetTagHandler) handleGetParticipantTag(ctx context.Context, msg *message.Message) error {
 	var query leaderboardqueries.GetParticipantTagQuery
 	if err := json.Unmarshal(msg.Payload, &query); err != nil {
@@ -79,7 +111,18 @@ func (h *GetTagHandler) handleGetParticipantTag(ctx context.Context, msg *messag
 	}
 
 	// Publish the response (e.g., ParticipantTagResponseEvent)
-	// ...
+	response := ParticipantTagResponseEvent{
+		ParticipantID: query.ParticipantID,
+		TagNumber:     tagNumber,
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ParticipantTagResponseEvent: %w", err)
+	}
+
+	if err := h.eventBus.Publish(TopicParticipantTagResponse, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		return fmt.Errorf("failed to publish ParticipantTagResponseEvent: %w", err)
+	}
 
 	return nil
 }

@@ -14,15 +14,15 @@ import (
 
 // AssignTagsHandler assigns tags to leaderboard entries.
 type AssignTagsHandler struct {
-	eventBus             watermillutil.PubSuber
-	tagAssignmentService leaderboardservice.TagAssignmentService
+	eventBus           watermillutil.PubSuber
+	leaderboardService leaderboardservice.LeaderboardService
 }
 
 // NewAssignTagsHandler creates a new AssignTagsHandler.
-func NewAssignTagsHandler(eventBus watermillutil.PubSuber, tagAssignmentService leaderboardservice.TagAssignmentService) *AssignTagsHandler {
+func NewAssignTagsHandler(eventBus watermillutil.PubSuber, leaderboardService leaderboardservice.LeaderboardService) *AssignTagsHandler {
 	return &AssignTagsHandler{
-		eventBus:             eventBus,
-		tagAssignmentService: tagAssignmentService,
+		eventBus:           eventBus,
+		leaderboardService: leaderboardService,
 	}
 }
 
@@ -34,7 +34,7 @@ func (h *AssignTagsHandler) Handle(ctx context.Context, msg *message.Message) er
 	}
 
 	// Use the service to assign tags
-	assignedEntries, err := h.tagAssignmentService.AssignTags(ctx, event.Entries)
+	assignedEntries, err := h.leaderboardService.AssignTags(ctx, event.Entries)
 	if err != nil {
 		return fmt.Errorf("failed to assign tags: %w", err)
 	}
