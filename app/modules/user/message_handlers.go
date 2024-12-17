@@ -1,10 +1,10 @@
-// user/message_handlers.go
 package user
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 
 	usercommands "github.com/Black-And-White-Club/tcr-bot/app/modules/user/commands"
@@ -54,14 +54,20 @@ func NewUserHandlers(commandRouter userrouter.CommandRouter, queryService userqu
 
 // Handle implements the MessageHandler interface.
 func (h *UserHandlers) Handle(msg *message.Message) ([]*message.Message, error) {
+	log.Printf("UserHandlers.Handle called with topic: %s", msg.Metadata.Get("topic")) // Log entry with topic
+
 	switch msg.Metadata.Get("topic") {
 	case userhandlers.TopicCreateUser:
+		log.Println("Calling HandleCreateUser")
 		return h.HandleCreateUser(msg)
 	case userhandlers.TopicGetUser:
+		log.Println("Calling HandleGetUser")
 		return h.HandleGetUser(msg)
 	case userhandlers.TopicUpdateUser:
+		log.Println("Calling HandleUpdateUser")
 		return h.HandleUpdateUser(msg)
-	case userhandlers.TopicGetUserRoleRequest:
+	case userhandlers.TopicGetUserRole:
+		log.Println("Calling HandleGetUserRole")
 		return h.HandleGetUserRole(msg)
 	default:
 		return nil, fmt.Errorf("unknown message topic: %s", msg.Metadata.Get("topic"))

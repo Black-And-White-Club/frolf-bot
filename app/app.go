@@ -33,26 +33,23 @@ func NewApp(ctx context.Context) (*App, error) {
 
 	logger := watermill.NewStdLogger(false, false)
 
-	// Initialize the Watermill router and pubsub
-	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger) // pubSuber is now of type PubSuber
+	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
-	// Initialize the command bus
 	commandBus, err := watermillutil.NewCommandBus(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create command bus: %w", err)
 	}
 
-	// Initialize module registry
-	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber) // Correct usage of pubSuber
+	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
-	// Register module handlers - Correct Call
-	if err := RegisterHandlers(router, natsURL, logger, modules.UserModule); err != nil {
+	// Register module handlers
+	if err := RegisterHandlers(router, natsURL, logger, modules.UserModule, modules.RoundModule, modules.LeaderboardModule, modules.ScoreModule); err != nil {
 		return nil, fmt.Errorf("failed to register handlers: %w", err)
 	}
 

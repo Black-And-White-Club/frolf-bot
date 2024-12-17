@@ -24,7 +24,7 @@ type ScoreModule struct {
 func NewScoreModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*ScoreModule, error) {
 	marshaler := watermillutil.Marshaler
 	scoreCommandBus := scorerouter.NewScoreCommandBus(pubsub, marshaler)
-	scoreCommandRouter := scorerouter.NewScoreCommandRouter(scoreCommandBus) // This line was missing
+	scoreCommandRouter := scorerouter.NewScoreCommandRouter(scoreCommandBus)
 
 	scoreQueryService := scorequeries.NewScoreQueryService(dbService.ScoreDB)
 
@@ -40,7 +40,6 @@ func NewScoreModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pub
 
 // RegisterHandlers registers the score module's handlers.
 func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	// Define handlers with their topics and response topics
 	handlers := map[string]struct {
 		topic         string
 		handler       message.HandlerFunc
@@ -62,9 +61,9 @@ func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillu
 		if err := router.AddHandler(
 			handlerName,
 			h.topic,
-			m.PubSub,
+			pubsub, // Changed from m.PubSub to pubsub
 			h.responseTopic,
-			m.PubSub,
+			pubsub, // Changed from m.PubSub to pubsub
 			h.handler,
 		); err != nil {
 			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
@@ -72,4 +71,28 @@ func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillu
 	}
 
 	return nil
+}
+
+// GetHandlers returns the handlers registered for the ScoreModule
+func (m *ScoreModule) GetHandlers() map[string]struct {
+	topic         string
+	handler       message.HandlerFunc
+	responseTopic string
+} {
+	return map[string]struct {
+		topic         string
+		handler       message.HandlerFunc
+		responseTopic string
+	}{
+		"score_update_handler": {
+			topic:         scorehandlers.TopicUpdateScores,
+			handler:       m.messageHandler.Handle,
+			responseTopic: scorehandlers.TopicUpdateScores + "_response",
+		},
+		"score_get_handler": {
+			topic:         scorehandlers.TopicGetScore,
+			handler:       m.messageHandler.Handle,
+			responseTopic: scorehandlers.TopicGetScore + "_response",
+		},
+	}
 }

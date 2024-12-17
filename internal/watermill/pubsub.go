@@ -17,17 +17,20 @@ type PubSub struct {
 	nc         *nats.Conn
 }
 
-// NewPubSub creates a new PubSub instance.
 func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) {
+	logger.Info("Creating Watermill Publisher", nil)
 	pub, err := NewPublisher(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
 	}
+	logger.Info("Created Watermill Publisher", nil)
 
+	logger.Info("Creating Watermill Subscriber", nil)
 	sub, err := NewSubscriber(natsURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
 	}
+	logger.Info("Created Watermill Subscriber", nil)
 
 	return &PubSub{
 		publisher:  &watermillPublisher{pub},

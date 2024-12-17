@@ -17,23 +17,42 @@ import (
 // Module defines the interface for application modules.
 type Module interface {
 	RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error
+	GetHandlers() map[string]struct {
+		topic         string
+		handler       message.HandlerFunc
+		responseTopic string
+	}
 }
 
 // RegisterHandlers registers handlers for all provided modules and sets up scheduled task handling.
 func RegisterHandlers(router *message.Router, natsURL string, logger watermill.LoggerAdapter, modules ...Module) error {
-	for _, module := range modules {
-		if err := module.RegisterHandlers(router, nil); err != nil { // pubsub is not used for scheduled tasks
+	log.Println("Starting RegisterHandlers function")
+
+	pubsub, err := watermillutil.NewPubSub(natsURL, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create pubsub instance: %w", err)
+	}
+
+	for i, module := range modules {
+		log.Printf("Registering handlers for module %d: %T", i+1, module)
+
+		if err := module.RegisterHandlers(router, pubsub); err != nil {
+			log.Printf("Failed to register handlers for module %T: %v", module, err)
 			return fmt.Errorf("failed to register module handlers: %w", err)
+		}
+
+		// Access and log the registered handlers
+		for handlerName, h := range module.GetHandlers() {
+			log.Printf("  - Registered handler: %s (topic: %s)", handlerName, h.topic)
 		}
 	}
 
-	// Get JetStream context directly from NewScheduledTaskSubscriber
 	jsCtx, err := watermillutil.NewScheduledTaskSubscriber(natsURL, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create scheduled task subscriber: %w", err)
 	}
 
-	if jsCtx == nil { // Check if JetStream context is initialized
+	if jsCtx == nil {
 		return fmt.Errorf("JetStream context not initialized")
 	}
 

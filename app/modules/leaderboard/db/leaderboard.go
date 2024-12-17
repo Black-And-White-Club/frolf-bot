@@ -7,15 +7,15 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// leaderboardDBImpl implements the LeaderboardDBImpl interface using bun.
-type leaderboardDBImpl struct {
-	db *bun.DB
+// LeaderboardDBImpl implements the LeaderboardDBImpl interface using bun.
+type LeaderboardDBImpl struct {
+	DB *bun.DB
 }
 
 // GetLeaderboard retrieves the active leaderboard.
-func (lb *leaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, error) {
+func (lb *LeaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, error) {
 	var leaderboard Leaderboard
-	err := lb.db.NewSelect().
+	err := lb.DB.NewSelect().
 		Model(&leaderboard).
 		Where("active = ?", true).
 		Scan(ctx)
@@ -26,8 +26,8 @@ func (lb *leaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, 
 }
 
 // DeactivateCurrentLeaderboard deactivates the currently active leaderboard.
-func (lb *leaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) error {
-	_, err := lb.db.NewUpdate().
+func (lb *LeaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) error {
+	_, err := lb.DB.NewUpdate().
 		Model((*Leaderboard)(nil)).
 		Set("active = ?", false).
 		Where("active = ?", true).
@@ -39,13 +39,13 @@ func (lb *leaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) e
 }
 
 // InsertLeaderboard inserts a new leaderboard into the database.
-func (lb *leaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardData map[int]string, active bool) error {
+func (lb *LeaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardData map[int]string, active bool) error {
 	newLeaderboard := &Leaderboard{
 		LeaderboardData: leaderboardData,
 		Active:          active,
 	}
 
-	_, err := lb.db.NewInsert().
+	_, err := lb.DB.NewInsert().
 		Model(newLeaderboard).
 		Exec(ctx)
 	if err != nil {
@@ -55,8 +55,8 @@ func (lb *leaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardD
 }
 
 // UpdateLeaderboard updates the leaderboard within a transaction.
-func (lb *leaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string) error { // Renamed function
-	tx, err := lb.db.BeginTx(ctx, nil)
+func (lb *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string) error { // Renamed function
+	tx, err := lb.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -93,7 +93,7 @@ func (lb *leaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 }
 
 // SwapTags swaps the tags of two users in the leaderboard.
-func (lb *leaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID string) error {
+func (lb *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID string) error {
 	// 1. Fetch the leaderboard data
 	leaderboard, err := lb.GetLeaderboard(ctx)
 	if err != nil {
@@ -128,7 +128,7 @@ func (lb *leaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 }
 
 // InsertTagAndDiscordID inserts a new tag and Discord ID into the leaderboard.
-func (lb *leaderboardDBImpl) InsertTagAndDiscordID(ctx context.Context, tagNumber int, discordID string) error {
+func (lb *LeaderboardDBImpl) InsertTagAndDiscordID(ctx context.Context, tagNumber int, discordID string) error {
 	// 1. Fetch the leaderboard data
 	leaderboard, err := lb.GetLeaderboard(ctx)
 	if err != nil {

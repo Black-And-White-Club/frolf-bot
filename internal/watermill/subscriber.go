@@ -15,21 +15,24 @@ type NatsSubscriber struct {
 	conn   *nc.Conn
 	config nats.SubscriberConfig
 	logger watermill.LoggerAdapter
-	js     nc.JetStreamContext // Added field for JetStream context
+	js     nc.JetStreamContext
 }
 
 // NewSubscriber creates a new NATS JetStream subscriber.
 func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscriber, error) {
+	logger.Info("Connecting to NATS for subscriber", nil)
 	conn, err := nc.Connect(natsURL, nc.Name("App Service"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
+	logger.Info("Connected to NATS for subscriber", nil)
 
-	// Create JetStream context here
+	logger.Info("Creating JetStream context", nil)
 	js, err := conn.JetStream()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
 	}
+	logger.Info("Created JetStream context", nil)
 
 	subscribeOptions := []nc.SubOpt{
 		nc.DeliverAll(),
@@ -42,6 +45,7 @@ func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscri
 		SubscribeOptions: subscribeOptions,
 	}
 
+	logger.Info("Creating NATS subscriber", nil)
 	return &NatsSubscriber{
 		conn: conn,
 		config: nats.SubscriberConfig{
@@ -50,20 +54,23 @@ func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscri
 			SubjectCalculator: nats.DefaultSubjectCalculator,
 		},
 		logger: logger,
-		js:     js, // Store the created JetStream context
+		js:     js,
 	}, nil
 }
 
 func (s *NatsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	s.logger.Info("Creating NATS subscriber for Subscribe", nil)
 	sub, err := nats.NewSubscriber(s.config, s.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS subscriber: %w", err)
 	}
 
+	s.logger.Info("Subscribing to topic", watermill.LogFields{"topic": topic})
 	return sub.Subscribe(ctx, topic)
 }
 
 func (s *NatsSubscriber) Close() error {
+	s.logger.Info("Closing NATS subscriber connection", nil)
 	s.conn.Close()
 	return nil
 }

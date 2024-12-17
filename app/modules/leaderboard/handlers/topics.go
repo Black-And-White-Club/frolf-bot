@@ -16,4 +16,8 @@ const (
 	TopicAssignTag                  = "assign.tag"
 	TopicTagSwapCommand             = "tag.swap.command"
 	TopicUserCreated                = "user.created"
+	TopicReceiveScores              = "leaderboard.scores.receive"   // Added
+	TopicInitiateTagSwap            = "leaderboard.tagSwap.initiate" // Added
+	TopicSwapGroups                 = "leaderboard.groups.swap"      // Added
+	TopicAssignTags                 = "assign.tags"
 )
