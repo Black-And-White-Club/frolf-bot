@@ -3,7 +3,7 @@ package watermillutil
 import (
 	"context"
 	"fmt"
-	"log"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -13,16 +13,26 @@ import (
 
 // NatsSubscriber implements the Watermill Subscriber interface.
 type NatsSubscriber struct {
-	conn   *nc.Conn
-	config nats.SubscriberConfig
-	logger watermill.LoggerAdapter
-	js     nc.JetStreamContext
+	conn          *nc.Conn
+	config        nats.SubscriberConfig
+	logger        watermill.LoggerAdapter
+	js            nc.JetStreamContext
+	reconnectOpts []nc.Option
+	sub           *nats.Subscriber // Store the subscriber instance
 }
 
 // NewSubscriber creates a new NATS JetStream subscriber.
-func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscriber, error) {
+func NewSubscriber(natsURL string, logger watermill.LoggerAdapter, opts ...nc.Option) (*NatsSubscriber, error) {
 	logger.Info("Connecting to NATS for subscriber", nil)
-	conn, err := nc.Connect(natsURL, nc.Name("App Service"))
+
+	// Add reconnect options
+	reconnectOpts := []nc.Option{
+		nc.MaxReconnects(-1),
+		nc.ReconnectWait(2 * time.Second),
+	}
+	reconnectOpts = append(reconnectOpts, opts...)
+
+	conn, err := nc.Connect(natsURL, reconnectOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
@@ -40,44 +50,47 @@ func NewSubscriber(natsURL string, logger watermill.LoggerAdapter) (*NatsSubscri
 		nc.AckExplicit(),
 	}
 
-	jsConfig := nats.JetStreamConfig{
-		Disabled:         false,
-		AutoProvision:    true,
-		SubscribeOptions: subscribeOptions,
+	// Create the SubscriberConfig
+	subscriberConfig := nats.SubscriberConfig{
+		Unmarshaler: &nats.GobMarshaler{},
+		JetStream: nats.JetStreamConfig{
+			Disabled:         false,
+			AutoProvision:    true,
+			SubscribeOptions: subscribeOptions,
+		},
+		SubjectCalculator: nats.DefaultSubjectCalculator,
 	}
 
 	logger.Info("Creating NATS subscriber", nil)
-	return &NatsSubscriber{
-		conn: conn,
-		config: nats.SubscriberConfig{
-			Unmarshaler:       &nats.GobMarshaler{},
-			JetStream:         jsConfig,
-			SubjectCalculator: nats.DefaultSubjectCalculator,
-		},
-		logger: logger,
-		js:     js,
-	}, nil
-}
-
-func (s *NatsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
-	s.logger.Info("Creating NATS subscriber for Subscribe", nil)
-	sub, err := nats.NewSubscriber(s.config, s.logger)
+	sub, err := nats.NewSubscriber(subscriberConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS subscriber: %w", err)
 	}
 
+	return &NatsSubscriber{
+		conn:          conn,
+		reconnectOpts: reconnectOpts,
+		config:        subscriberConfig, // Use the correct SubscriberConfig
+		logger:        logger,
+		js:            js,
+		sub:           sub, // Store the subscriber instance
+	}, nil
+}
+
+// Subscribe subscribes to messages on a topic.
+func (s *NatsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	s.logger.Info("Subscribing to topic", watermill.LogFields{"topic": topic})
-	messages, err := sub.Subscribe(ctx, topic)
+	messages, err := s.sub.Subscribe(ctx, topic)
 	if err != nil {
-		log.Printf("Error subscribing to topic %s: %v", topic, err) // Log subscription error
-		return nil, err
+		return nil, fmt.Errorf("failed to subscribe to NATS topic: %w", err) // More specific error
 	}
 	return messages, nil
 }
 
+// Close closes the subscriber connection.
 func (s *NatsSubscriber) Close() error {
 	s.logger.Info("Closing NATS subscriber connection", nil)
-	s.conn.Close()
+	s.conn.Close() // Close the connection without checking for an error
 	return nil
 }
 

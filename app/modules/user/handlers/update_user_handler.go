@@ -66,7 +66,7 @@ func (h *UpdateUserHandler) Handle(ctx context.Context, msg *message.Message) er
 		return fmt.Errorf("failed to marshal UserUpdatedEvent: %w", err)
 	}
 
-	if err := h.eventBus.Publish("user.updated", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.eventBus.Publish(TopicUpdateUser, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return errors.Wrap(err, "failed to publish UserUpdatedEvent")
 	}
 

@@ -3,6 +3,7 @@ package watermillutil
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -12,16 +13,26 @@ import (
 
 // NatsPublisher implements the Watermill Publisher interface.
 type NatsPublisher struct {
-	conn   *nc.Conn
-	config nats.PublisherConfig
-	logger watermill.LoggerAdapter
+	conn          *nc.Conn
+	config        nats.PublisherConfig
+	logger        watermill.LoggerAdapter
+	reconnectOpts []nc.Option
 }
 
 // NewPublisher creates a new NATS JetStream publisher.
-func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publisher, error) {
+func NewPublisher(natsURL string, logger watermill.LoggerAdapter, opts ...nc.Option) (message.Publisher, error) {
 	logger.Info("Connecting to NATS for publisher", nil)
-	conn, err := nc.Connect(natsURL, nc.Name("App Service"))
+
+	// Add reconnect options
+	reconnectOpts := []nc.Option{
+		nc.MaxReconnects(-1),
+		nc.ReconnectWait(2 * time.Second),
+	}
+	reconnectOpts = append(reconnectOpts, opts...)
+
+	conn, err := nc.Connect(natsURL, reconnectOpts...)
 	if err != nil {
+		logger.Error("Failed to connect to NATS", err, nil) // Log the error
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	logger.Info("Connected to NATS for publisher", nil)
@@ -33,7 +44,8 @@ func NewPublisher(natsURL string, logger watermill.LoggerAdapter) (message.Publi
 
 	logger.Info("Creating NATS publisher", nil)
 	return &NatsPublisher{
-		conn: conn,
+		conn:          conn,
+		reconnectOpts: reconnectOpts,
 		config: nats.PublisherConfig{
 			Marshaler:         &nats.GobMarshaler{},
 			JetStream:         jsConfig,
@@ -52,17 +64,21 @@ func (p *NatsPublisher) publish(ctx context.Context, topic string, messages ...*
 	for _, msg := range messages {
 		msg.SetContext(ctx)
 	}
-	p.logger.Info("Creating NATS publisher for Publish", nil)
-	pub, err := nats.NewPublisher(p.config, p.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create NATS publisher: %w", err)
-	}
+
 	p.logger.Info("Publishing message", watermill.LogFields{"topic": topic})
-	return pub.Publish(topic, messages...)
+	// Use the existing connection to publish messages
+	for _, msg := range messages {
+		if err := p.conn.Publish(topic, msg.Payload); err != nil {
+			return fmt.Errorf("failed to publish message to NATS: %w", err) // More specific error
+		}
+	}
+
+	return nil
 }
 
+// Close closes the publisher connection.
 func (p *NatsPublisher) Close() error {
 	p.logger.Info("Closing NATS publisher connection", nil)
-	p.conn.Close()
+	p.conn.Close() // Close the connection without checking for an error
 	return nil
 }

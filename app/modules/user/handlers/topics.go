@@ -10,4 +10,5 @@ const (
 	TopicGetUserRole        = "get.user.role" // Use this consistently
 	// TopicGetUserRoleRequest  = "get.user.role.request" // Remove this line
 	TopicGetUserRoleResponse = "get.user.role.response"
+	TopicCheckTagRequest     = "check.tag.availability"
 )

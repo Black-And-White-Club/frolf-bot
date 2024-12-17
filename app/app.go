@@ -27,37 +27,46 @@ func NewApp(ctx context.Context) (*App, error) {
 	dsn := cfg.DSN
 	natsURL := cfg.NATS.URL
 
+	log.Println("Initializing database service...")
+
 	dbService, err := bundb.NewBunDBService(ctx, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database service: %w", err)
 	}
 
-	logger := watermill.NewStdLogger(false, false) // Create logger instance
+	log.Println("Database service initialized successfully.")
 
-	// Initialize the Watermill router and pubsub
+	logger := watermill.NewStdLogger(false, false)
+
+	log.Println("Initializing Watermill router and pubsub...")
+
 	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger)
 	if err != nil {
-		log.Printf("Failed to create Watermill router: %v", err) // Log router creation errors
 		return nil, fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
-	// Initialize the command bus
+	log.Println("Watermill router and pubsub initialized successfully.")
+
+	log.Println("Initializing command bus...")
+
 	commandBus, err := watermillutil.NewCommandBus(natsURL, logger)
 	if err != nil {
-		log.Printf("Failed to create command bus: %v", err) // Log command bus creation errors
 		return nil, fmt.Errorf("failed to create command bus: %w", err)
 	}
 
-	// Initialize module registry
+	log.Println("Command bus initialized successfully.")
+
+	log.Println("Initializing module registry...")
+
 	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber)
 	if err != nil {
-		log.Printf("Failed to initialize modules: %v", err) // Log module initialization errors
 		return nil, fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
+	log.Println("Module registry initialized successfully.")
+
 	// Register module handlers
-	if err := RegisterHandlers(router, pubSuber, modules.UserModule, modules.RoundModule, modules.LeaderboardModule, modules.ScoreModule); err != nil {
-		log.Printf("Failed to register handlers: %v", err)
+	if err := RegisterHandlers(router, pubSuber, modules.UserModule); err != nil {
 		return nil, fmt.Errorf("failed to register handlers: %w", err)
 	}
 

@@ -39,11 +39,12 @@ type UserRoleResponseEvent struct {
 
 // UserHandlers defines the handlers for user-related events.
 type UserHandlers struct {
-	commandRouter userrouter.CommandRouter
-	queryService  userqueries.QueryService
-	pubsub        watermillutil.PubSuber
+	commandRouter userrouter.CommandRouter // Handles command messages
+	queryService  userqueries.QueryService // Handles query logic
+	pubsub        watermillutil.PubSuber   // Used for publishing responses
 }
 
+// NewUserHandlers creates a new instance of UserHandlers.
 func NewUserHandlers(commandRouter userrouter.CommandRouter, queryService userqueries.QueryService, pubsub watermillutil.PubSuber) *UserHandlers {
 	return &UserHandlers{
 		commandRouter: commandRouter,
@@ -74,7 +75,7 @@ func (h *UserHandlers) Handle(msg *message.Message) ([]*message.Message, error) 
 	}
 }
 
-// HandleCreateUser creates a new user.
+// HandleCreateUser creates a new user (Command).
 func (h *UserHandlers) HandleCreateUser(msg *message.Message) ([]*message.Message, error) {
 	var req usercommands.CreateUserRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
@@ -98,13 +99,28 @@ func (h *UserHandlers) HandleCreateUser(msg *message.Message) ([]*message.Messag
 	return nil, nil
 }
 
-// HandleGetUser retrieves a user.
+// HandleUpdateUser updates an existing user (Command).
+func (h *UserHandlers) HandleUpdateUser(msg *message.Message) ([]*message.Message, error) {
+	var req usercommands.UpdateUserRequest
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if err := h.commandRouter.UpdateUser(context.Background(), req.DiscordID, req.Updates); err != nil {
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return nil, nil
+}
+
+// HandleGetUser retrieves a user (Query) by delegating to QueryService.
 func (h *UserHandlers) HandleGetUser(msg *message.Message) ([]*message.Message, error) {
 	var req GetUserRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	// Delegate query logic to QueryService
 	user, err := h.queryService.GetUserByDiscordID(context.Background(), req.DiscordID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -126,35 +142,27 @@ func (h *UserHandlers) HandleGetUser(msg *message.Message) ([]*message.Message, 
 	return []*message.Message{respMsg}, nil
 }
 
-// HandleUpdateUser updates an existing user.
-func (h *UserHandlers) HandleUpdateUser(msg *message.Message) ([]*message.Message, error) {
-	var req usercommands.UpdateUserRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.UpdateUser(context.Background(), req.DiscordID, req.Updates); err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleGetUserRole retrieves the role of a user.
+// HandleGetUser Role retrieves a user's role (Query) by delegating to QueryService.
 func (h *UserHandlers) HandleGetUserRole(msg *message.Message) ([]*message.Message, error) {
 	var req GetUserRoleRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		log.Printf("Error unmarshalling GetUser RoleRequest: %v", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	log.Printf("Request to get user role for Discord ID: %s", req.DiscordID)
+
+	// Delegate query logic to QueryService
 	role, err := h.queryService.GetUserRole(context.Background(), req.DiscordID)
 	if err != nil {
+		log.Printf("Error getting user role for Discord ID %s: %v", req.DiscordID, err)
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
 	response := UserRoleResponseEvent{Role: role}
 	payload, err := json.Marshal(response)
 	if err != nil {
+		log.Printf("Error marshalling role response: %v", err)
 		return nil, fmt.Errorf("failed to marshal role response: %w", err)
 	}
 
@@ -162,4 +170,20 @@ func (h *UserHandlers) HandleGetUserRole(msg *message.Message) ([]*message.Messa
 	respMsg.Metadata.Set("topic", userhandlers.TopicGetUserRoleResponse)
 
 	return []*message.Message{respMsg}, nil
+}
+
+// HandleGetUserWrapper adapts HandleGetUser to NoPublishHandlerFunc signature.
+func (h *UserHandlers) HandleGetUserWrapper(msg *message.Message) error {
+	_, err := h.HandleGetUser(msg)
+	return err
+}
+
+// HandleGetUser RoleWrapper adapts HandleGetUser Role to NoPublishHandlerFunc signature.
+func (h *UserHandlers) HandleGetUserRoleWrapper(msg *message.Message) error {
+	log.Println("HandleGetUser RoleWrapper called")
+	_, err := h.HandleGetUserRole(msg)
+	if err != nil {
+		log.Printf("Error in HandleGetUser Role: %v", err)
+	}
+	return err
 }

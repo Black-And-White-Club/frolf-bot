@@ -1,9 +1,8 @@
-// internal/watermill/marshaler.go
 package watermillutil
 
 import (
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 )
 
-// You can keep the marshaler as a package level variable if you only need one
+// Marshaler is a JSON marshaler for commands and events.
 var Marshaler = cqrs.JSONMarshaler{}

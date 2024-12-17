@@ -60,15 +60,15 @@ func (db *UserDBImpl) UpdateUser(ctx context.Context, discordID string, updates 
 	return nil
 }
 
-// GetUserRole retrieves the role of a user.
 func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID string) (UserRole, error) {
-	var user User
+	var role UserRole
 	err := db.DB.NewSelect().
-		Model(&user).
+		Model((*User)(nil)). // Select from the User model without instantiating a User object
+		Column("role").      // Select only the "role" column
 		Where("discord_id = ?", discordID).
-		Scan(ctx)
+		Scan(ctx, &role) // Scan the result directly into the role variable
 	if err != nil {
-		return "", fmt.Errorf("failed to get user: %w", err)
+		return "", fmt.Errorf("failed to get user role: %w", err)
 	}
-	return user.Role, nil
+	return role, nil
 }

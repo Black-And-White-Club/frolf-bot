@@ -1,5 +1,3 @@
-// In internal/watermill/command_router.go
-
 package watermillutil
 
 import (
@@ -17,5 +15,9 @@ func SendCommand(ctx context.Context, publisher message.Publisher, marshaler cqr
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	return publisher.Publish(commandName, msg)
+	if err := publisher.Publish(commandName, msg); err != nil {
+		return fmt.Errorf("failed to publish command: %w", err)
+	}
+
+	return nil
 }

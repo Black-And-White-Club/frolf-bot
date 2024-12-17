@@ -79,7 +79,7 @@ func (h *CreateUserHandler) Handle(ctx context.Context, msg *message.Message) er
 			return fmt.Errorf("failed to marshal UserCreatedEvent: %w", err)
 		}
 
-		if err := h.eventBus.Publish("user.created", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+		if err := h.eventBus.Publish(TopicCreateUser, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 			return errors.Wrap(err, "failed to publish UserCreatedEvent")
 		}
 	} else {
@@ -106,7 +106,7 @@ func (h *CreateUserHandler) checkTagAvailability(ctx context.Context, tagNumber 
 		return false, fmt.Errorf("failed to marshal CheckTagAvailabilityEvent: %w", err)
 	}
 
-	if err := h.eventBus.Publish("check-tag-availability", message.NewMessage(watermill.NewUUID(), payload)); err != nil {
+	if err := h.eventBus.Publish(TopicCheckTagRequest, message.NewMessage(watermill.NewUUID(), payload)); err != nil {
 		return false, errors.Wrap(err, "failed to publish check tag availability event")
 	}
 

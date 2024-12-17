@@ -19,22 +19,29 @@ type PubSub struct {
 
 // NewPubSub creates a new PubSub instance with optional publisher and subscriber.
 func NewPubSub(natsURL string, logger watermill.LoggerAdapter, publisher message.Publisher, subscriber message.Subscriber) (*PubSub, error) {
+	logger.Info("Creating new PubSub instance", nil) // Log entry for creating PubSub
+
 	if publisher == nil {
+		logger.Info("Creating new Publisher since none was provided", nil)
 		var err error
 		publisher, err = NewPublisher(natsURL, logger)
 		if err != nil {
+			logger.Error("Failed to create Watermill publisher", err, nil) // Log the error
 			return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
 		}
 	}
 
 	if subscriber == nil {
+		logger.Info("Creating new Subscriber since none was provided", nil)
 		var err error
 		subscriber, err = NewSubscriber(natsURL, logger)
 		if err != nil {
+			logger.Error("Failed to create Watermill subscriber", err, nil) // Log the error
 			return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
 		}
 	}
 
+	logger.Info("Returning new PubSub instance", nil)
 	return &PubSub{
 		publisher:  publisher,
 		subscriber: subscriber,
@@ -45,12 +52,19 @@ func NewPubSub(natsURL string, logger watermill.LoggerAdapter, publisher message
 
 // Publish publishes messages to a topic.
 func (ps *PubSub) Publish(topic string, messages ...*message.Message) error {
-	return ps.publisher.Publish(topic, messages...)
+	if err := ps.publisher.Publish(topic, messages...); err != nil {
+		return fmt.Errorf("failed to publish message: %w", err) // Enhanced error handling
+	}
+	return nil
 }
 
 // Subscribe subscribes to messages on a topic.
 func (ps *PubSub) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
-	return ps.subscriber.Subscribe(ctx, topic)
+	messages, err := ps.subscriber.Subscribe(ctx, topic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to topic: %w", err) // Enhanced error handling
+	}
+	return messages, nil
 }
 
 // Close closes the publisher and subscriber connections.
