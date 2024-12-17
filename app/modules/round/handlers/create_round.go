@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
@@ -31,6 +32,8 @@ func NewCreateRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Pub
 
 // Handler processes the CreateRoundRequest command.
 func (h *CreateRoundHandler) Handler(msg *message.Message) error {
+	log.Println("Round create handler called")
+
 	var cmd roundcommands.CreateRoundRequest
 	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
 		return fmt.Errorf("failed to unmarshal CreateRoundRequest: %w", err)

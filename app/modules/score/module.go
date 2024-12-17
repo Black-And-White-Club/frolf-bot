@@ -2,10 +2,12 @@ package score
 
 import (
 	"fmt"
+	"log"
 
 	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
 	scorequeries "github.com/Black-And-White-Club/tcr-bot/app/modules/score/queries"
 	scorerouter "github.com/Black-And-White-Club/tcr-bot/app/modules/score/router"
+	"github.com/Black-And-White-Club/tcr-bot/app/types"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
@@ -38,61 +40,41 @@ func NewScoreModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pub
 	}, nil
 }
 
-// RegisterHandlers registers the score module's handlers.
-func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := map[string]struct {
-		topic         string
-		handler       message.HandlerFunc
-		responseTopic string
-	}{
+// GetHandlers returns the handlers registered for the ScoreModule
+func (m *ScoreModule) GetHandlers() map[string]types.Handler {
+	return map[string]types.Handler{
 		"score_update_handler": {
-			topic:         scorehandlers.TopicUpdateScores,
-			handler:       m.messageHandler.Handle,
-			responseTopic: scorehandlers.TopicUpdateScores + "_response",
+			Topic:         scorehandlers.TopicUpdateScores,
+			Handler:       m.messageHandler.Handle,
+			ResponseTopic: scorehandlers.TopicUpdateScores + "_response",
 		},
 		"score_get_handler": {
-			topic:         scorehandlers.TopicGetScore,
-			handler:       m.messageHandler.Handle,
-			responseTopic: scorehandlers.TopicGetScore + "_response",
+			Topic:         scorehandlers.TopicGetScore,
+			Handler:       m.messageHandler.Handle,
+			ResponseTopic: scorehandlers.TopicGetScore + "_response",
 		},
 	}
+}
+
+// RegisterHandlers registers the score module's handlers.
+func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
+	handlers := m.GetHandlers()
 
 	for handlerName, h := range handlers {
+		log.Printf("Registering handler: %s with topic %s", handlerName, string(h.Topic)) // Log handler registration
+
 		if err := router.AddHandler(
 			handlerName,
-			h.topic,
-			pubsub, // Changed from m.PubSub to pubsub
-			h.responseTopic,
-			pubsub, // Changed from m.PubSub to pubsub
-			h.handler,
+			string(h.Topic),
+			pubsub,
+			h.ResponseTopic,
+			pubsub,
+			h.Handler,
 		); err != nil {
+			log.Printf("Failed to register handler %s: %v", handlerName, err) // Log registration error
 			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
 		}
 	}
 
 	return nil
-}
-
-// GetHandlers returns the handlers registered for the ScoreModule
-func (m *ScoreModule) GetHandlers() map[string]struct {
-	topic         string
-	handler       message.HandlerFunc
-	responseTopic string
-} {
-	return map[string]struct {
-		topic         string
-		handler       message.HandlerFunc
-		responseTopic string
-	}{
-		"score_update_handler": {
-			topic:         scorehandlers.TopicUpdateScores,
-			handler:       m.messageHandler.Handle,
-			responseTopic: scorehandlers.TopicUpdateScores + "_response",
-		},
-		"score_get_handler": {
-			topic:         scorehandlers.TopicGetScore,
-			handler:       m.messageHandler.Handle,
-			responseTopic: scorehandlers.TopicGetScore + "_response",
-		},
-	}
 }

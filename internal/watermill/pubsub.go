@@ -17,26 +17,29 @@ type PubSub struct {
 	nc         *nats.Conn
 }
 
-func NewPubSub(natsURL string, logger watermill.LoggerAdapter) (*PubSub, error) {
-	logger.Info("Creating Watermill Publisher", nil)
-	pub, err := NewPublisher(natsURL, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
+// NewPubSub creates a new PubSub instance with optional publisher and subscriber.
+func NewPubSub(natsURL string, logger watermill.LoggerAdapter, publisher message.Publisher, subscriber message.Subscriber) (*PubSub, error) {
+	if publisher == nil {
+		var err error
+		publisher, err = NewPublisher(natsURL, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
+		}
 	}
-	logger.Info("Created Watermill Publisher", nil)
 
-	logger.Info("Creating Watermill Subscriber", nil)
-	sub, err := NewSubscriber(natsURL, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
+	if subscriber == nil {
+		var err error
+		subscriber, err = NewSubscriber(natsURL, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
+		}
 	}
-	logger.Info("Created Watermill Subscriber", nil)
 
 	return &PubSub{
-		publisher:  &watermillPublisher{pub},
-		subscriber: sub,
-		js:         sub.GetJetStreamContext(),
-		nc:         sub.conn,
+		publisher:  publisher,
+		subscriber: subscriber,
+		js:         subscriber.(*NatsSubscriber).GetJetStreamContext(),
+		nc:         subscriber.(*NatsSubscriber).conn,
 	}, nil
 }
 

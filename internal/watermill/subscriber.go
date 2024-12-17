@@ -3,6 +3,7 @@ package watermillutil
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -66,7 +67,12 @@ func (s *NatsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *m
 	}
 
 	s.logger.Info("Subscribing to topic", watermill.LogFields{"topic": topic})
-	return sub.Subscribe(ctx, topic)
+	messages, err := sub.Subscribe(ctx, topic)
+	if err != nil {
+		log.Printf("Error subscribing to topic %s: %v", topic, err) // Log subscription error
+		return nil, err
+	}
+	return messages, nil
 }
 
 func (s *NatsSubscriber) Close() error {

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
@@ -31,25 +32,32 @@ func NewApp(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database service: %w", err)
 	}
 
-	logger := watermill.NewStdLogger(false, false)
+	logger := watermill.NewStdLogger(false, false) // Create logger instance
 
+	// Initialize the Watermill router and pubsub
 	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger)
 	if err != nil {
+		log.Printf("Failed to create Watermill router: %v", err) // Log router creation errors
 		return nil, fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
+	// Initialize the command bus
 	commandBus, err := watermillutil.NewCommandBus(natsURL, logger)
 	if err != nil {
+		log.Printf("Failed to create command bus: %v", err) // Log command bus creation errors
 		return nil, fmt.Errorf("failed to create command bus: %w", err)
 	}
 
+	// Initialize module registry
 	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber)
 	if err != nil {
+		log.Printf("Failed to initialize modules: %v", err) // Log module initialization errors
 		return nil, fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
 	// Register module handlers
-	if err := RegisterHandlers(router, natsURL, logger, modules.UserModule, modules.RoundModule, modules.LeaderboardModule, modules.ScoreModule); err != nil {
+	if err := RegisterHandlers(router, pubSuber, modules.UserModule, modules.RoundModule, modules.LeaderboardModule, modules.ScoreModule); err != nil {
+		log.Printf("Failed to register handlers: %v", err)
 		return nil, fmt.Errorf("failed to register handlers: %w", err)
 	}
 

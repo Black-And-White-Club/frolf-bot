@@ -23,10 +23,11 @@ type EditRoundHandler struct {
 }
 
 // NewEditRoundHandler creates a new EditRoundHandler.
-func NewEditRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher) *EditRoundHandler {
+func NewEditRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher, roundService roundservice.Service) *EditRoundHandler {
 	return &EditRoundHandler{
-		roundDB:    roundDB,
-		messageBus: messageBus,
+		roundDB:      roundDB,
+		messageBus:   messageBus,
+		roundService: roundService,
 	}
 }
 

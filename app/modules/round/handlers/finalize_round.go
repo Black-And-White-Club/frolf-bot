@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
@@ -28,6 +29,8 @@ func NewFinalizeRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.P
 
 // Handle processes the FinalizeRound command.
 func (h *FinalizeRoundHandler) Handle(ctx context.Context, msg *message.Message) error {
+	log.Println("Round finalize handler called")
+
 	var cmd roundcommands.FinalizeRoundRequest
 	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
 		return fmt.Errorf("failed to unmarshal FinalizeRoundRequest: %w", err)

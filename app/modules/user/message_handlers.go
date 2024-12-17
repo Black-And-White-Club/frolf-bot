@@ -55,7 +55,7 @@ func NewUserHandlers(commandRouter userrouter.CommandRouter, queryService userqu
 // Handle implements the MessageHandler interface.
 func (h *UserHandlers) Handle(msg *message.Message) ([]*message.Message, error) {
 	log.Printf("UserHandlers.Handle called with topic: %s", msg.Metadata.Get("topic")) // Log entry with topic
-
+	log.Printf("Received message: %v", msg)                                            // Log the incoming message
 	switch msg.Metadata.Get("topic") {
 	case userhandlers.TopicCreateUser:
 		log.Println("Calling HandleCreateUser")

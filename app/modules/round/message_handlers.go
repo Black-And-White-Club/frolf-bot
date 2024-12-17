@@ -8,7 +8,6 @@ import (
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
-	roundqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/round/queries"
 	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/router"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill"
@@ -36,15 +35,15 @@ type GetRoundsResponse struct {
 // RoundHandlers defines the handlers for round-related events.
 type RoundHandlers struct {
 	commandRouter roundrouter.CommandRouter
-	queryService  roundqueries.QueryService
+	roundDB       rounddb.RoundDB // Use RoundDB instead of QueryService
 	pubsub        watermillutil.PubSuber
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
-func NewRoundHandlers(commandRouter roundrouter.CommandRouter, queryService roundqueries.QueryService, pubsub watermillutil.PubSuber) *RoundHandlers {
+func NewRoundHandlers(commandRouter roundrouter.CommandRouter, roundDB rounddb.RoundDB, pubsub watermillutil.PubSuber) *RoundHandlers {
 	return &RoundHandlers{
 		commandRouter: commandRouter,
-		queryService:  queryService,
+		roundDB:       roundDB, // Use RoundDB instead of QueryService
 		pubsub:        pubsub,
 	}
 }
@@ -102,7 +101,7 @@ func (h *RoundHandlers) HandleGetRound(msg *message.Message) ([]*message.Message
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	round, err := h.queryService.GetRound(context.Background(), req.RoundID)
+	round, err := h.roundDB.GetRound(context.Background(), req.RoundID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get round: %w", err)
 	}
@@ -130,7 +129,7 @@ func (h *RoundHandlers) HandleGetRounds(msg *message.Message) ([]*message.Messag
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	rounds, err := h.queryService.GetRounds(context.Background())
+	rounds, err := h.roundDB.GetRounds(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rounds: %w", err)
 	}

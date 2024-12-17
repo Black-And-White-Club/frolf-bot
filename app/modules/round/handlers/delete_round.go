@@ -22,10 +22,12 @@ type DeleteRoundHandler struct {
 }
 
 // NewDeleteRoundHandler creates a new DeleteRoundHandler.
-func NewDeleteRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher) *DeleteRoundHandler {
+func NewDeleteRoundHandler(roundDB rounddb.RoundDB, messageBus watermillutil.Publisher, roundService roundservice.Service) *DeleteRoundHandler { // Add roundService argument
 	return &DeleteRoundHandler{
-		roundDB:    roundDB,
-		messageBus: messageBus,
+		roundDB:      roundDB,
+		messageBus:   messageBus,
+		roundService: roundService, // Initialize roundService
+
 	}
 }
 

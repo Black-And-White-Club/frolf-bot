@@ -3,9 +3,9 @@ package round
 import (
 	"fmt"
 
-	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
 	roundqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/round/queries"
 	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/router"
+	"github.com/Black-And-White-Club/tcr-bot/app/types"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
@@ -28,7 +28,7 @@ func NewRoundModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pub
 
 	roundQueryService := roundqueries.NewRoundQueryService(dbService.RoundDB)
 
-	messageHandler := NewRoundHandlers(roundCommandRouter, roundQueryService, pubsub)
+	messageHandler := NewRoundHandlers(roundCommandRouter, dbService.RoundDB, pubsub) // Use dbService.RoundDB
 
 	return &RoundModule{
 		CommandRouter:  roundCommandRouter,
@@ -38,157 +38,89 @@ func NewRoundModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pub
 	}, nil
 }
 
-// GetHandlers returns the handlers registered for the RoundModule
-func (m *RoundModule) GetHandlers() map[string]struct {
-	topic         string
-	handler       message.HandlerFunc
-	responseTopic string
-} {
-	return map[string]struct {
-		topic         string
-		handler       message.HandlerFunc
-		responseTopic string
-	}{
-		"round_create_handler": {
-			topic:         roundhandlers.TopicCreateRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicCreateRound + "_response",
-		},
-		"round_get_handler": {
-			topic:         roundhandlers.TopicGetRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicGetRound + "_response",
-		},
-		"round_get_rounds_handler": {
-			topic:         roundhandlers.TopicGetRounds,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicGetRounds + "_response",
-		},
-		"round_edit_handler": {
-			topic:         roundhandlers.TopicEditRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicEditRound + "_response",
-		},
-		"round_delete_handler": {
-			topic:         roundhandlers.TopicDeleteRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicDeleteRound + "_response",
-		},
-		"round_update_participant_handler": {
-			topic:         roundhandlers.TopicUpdateParticipant,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicUpdateParticipant + "_response",
-		},
-		"round_join_handler": {
-			topic:         roundhandlers.TopicJoinRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicJoinRound + "_response",
-		},
-		"round_submit_score_handler": {
-			topic:         roundhandlers.TopicSubmitScore,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicSubmitScore + "_response",
-		},
-		"round_start_handler": {
-			topic:         roundhandlers.TopicStartRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicStartRound + "_response",
-		},
-		"round_record_scores_handler": {
-			topic:         roundhandlers.TopicRecordScores,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicRecordScores + "_response",
-		},
-		"round_process_score_submission_handler": {
-			topic:         roundhandlers.TopicProcessScoreSubmission,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicProcessScoreSubmission + "_response",
-		},
-		"round_finalize_handler": {
-			topic:         roundhandlers.TopicFinalizeRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicFinalizeRound + "_response",
-		},
+// GetHandlers returns the handlers for the round module.
+func (m *RoundModule) GetHandlers() map[string]types.Handler {
+	return map[string]types.Handler{
+		// "round_create_handler": {
+		// 	Topic:         roundhandlers.TopicCreateRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicCreateRound + "_response",
+		// },
+		// "round_get_handler": {
+		// 	Topic:         roundhandlers.TopicGetRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicGetRound + "_response",
+		// },
+		// "round_get_rounds_handler": {
+		// 	Topic:         roundhandlers.TopicGetRounds,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicGetRounds + "_response",
+		// },
+		// "round_edit_handler": {
+		// 	Topic:         roundhandlers.TopicEditRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicEditRound + "_response",
+		// },
+		// "round_delete_handler": {
+		// 	Topic:         roundhandlers.TopicDeleteRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicDeleteRound + "_response",
+		// },
+		// "round_update_participant_handler": {
+		// 	Topic:         roundhandlers.TopicUpdateParticipant,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicUpdateParticipant + "_response",
+		// },
+		// "round_join_handler": {
+		// 	Topic:         roundhandlers.TopicJoinRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicJoinRound + "_response",
+		// },
+		// "round_submit_score_handler": {
+		// 	Topic:         roundhandlers.TopicSubmitScore,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicSubmitScore + "_response",
+		// },
+		// "round_start_handler": {
+		// 	Topic:         roundhandlers.TopicStartRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicStartRound + "_response",
+		// },
+		// "round_record_scores_handler": {
+		// 	Topic:         roundhandlers.TopicRecordScores,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicRecordScores + "_response",
+		// },
+		// "round_process_score_submission_handler": {
+		// 	Topic:         roundhandlers.TopicProcessScoreSubmission,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicProcessScoreSubmission + "_response",
+		// },
+		// "round_finalize_handler": {
+		// 	Topic:         roundhandlers.TopicFinalizeRound,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicFinalizeRound + "_response",
+		// },
+		// "round_reminder_handler": {
+		// 	Topic:         roundhandlers.TopicRoundReminder,
+		// 	Handler:       m.messageHandler.Handle,
+		// 	ResponseTopic: roundhandlers.TopicRoundReminder + "_response",
+		// },
 	}
 }
 
 // RegisterHandlers registers the round module's handlers.
 func (m *RoundModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := map[string]struct {
-		topic         string
-		handler       message.HandlerFunc
-		responseTopic string
-	}{
-		"round_create_handler": {
-			topic:         roundhandlers.TopicCreateRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicCreateRound + "_response",
-		},
-		"round_get_handler": {
-			topic:         roundhandlers.TopicGetRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicGetRound + "_response",
-		},
-		"round_get_rounds_handler": {
-			topic:         roundhandlers.TopicGetRounds,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicGetRounds + "_response",
-		},
-		"round_edit_handler": {
-			topic:         roundhandlers.TopicEditRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicEditRound + "_response",
-		},
-		"round_delete_handler": {
-			topic:         roundhandlers.TopicDeleteRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicDeleteRound + "_response",
-		},
-		"round_update_participant_handler": {
-			topic:         roundhandlers.TopicUpdateParticipant,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicUpdateParticipant + "_response",
-		},
-		"round_join_handler": {
-			topic:         roundhandlers.TopicJoinRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicJoinRound + "_response",
-		},
-		"round_submit_score_handler": {
-			topic:         roundhandlers.TopicSubmitScore,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicSubmitScore + "_response",
-		},
-		"round_start_handler": {
-			topic:         roundhandlers.TopicStartRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicStartRound + "_response",
-		},
-		"round_record_scores_handler": {
-			topic:         roundhandlers.TopicRecordScores,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicRecordScores + "_response",
-		},
-		"round_process_score_submission_handler": {
-			topic:         roundhandlers.TopicProcessScoreSubmission,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicProcessScoreSubmission + "_response",
-		},
-		"round_finalize_handler": {
-			topic:         roundhandlers.TopicFinalizeRound,
-			handler:       m.messageHandler.Handle,
-			responseTopic: roundhandlers.TopicFinalizeRound + "_response",
-		},
-	}
+	handlers := m.GetHandlers()
 
 	for handlerName, h := range handlers {
 		if err := router.AddHandler(
 			handlerName,
-			h.topic,
-			m.PubSub,
-			h.responseTopic,
-			m.PubSub,
-			h.handler,
+			string(h.Topic),
+			pubsub,
+			h.ResponseTopic,
+			pubsub,
+			h.Handler,
 		); err != nil {
 			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
 		}

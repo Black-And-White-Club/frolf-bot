@@ -7,6 +7,7 @@ import (
 	"time"
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -41,13 +42,15 @@ func (e ScheduledTaskHandlerError) Error() string {
 type ScheduledTaskHandler struct {
 	RoundDB    rounddb.RoundDB
 	handlerMap map[string]func(context.Context, *message.Message) error
+	pubsub     watermillutil.PubSuber // Add pubsub dependency
 }
 
 // NewScheduledTaskHandler creates a new ScheduledTaskHandler with dependency injection.
-func NewScheduledTaskHandler(roundDB rounddb.RoundDB, handlerMap map[string]func(context.Context, *message.Message) error) *ScheduledTaskHandler {
+func NewScheduledTaskHandler(roundDB rounddb.RoundDB, handlerMap map[string]func(context.Context, *message.Message) error, pubsub watermillutil.PubSuber) *ScheduledTaskHandler {
 	return &ScheduledTaskHandler{
 		RoundDB:    roundDB,
 		handlerMap: handlerMap,
+		pubsub:     pubsub, // Initialize pubsub
 	}
 }
 
@@ -80,7 +83,9 @@ func GetHandlerNameFromContext(ctx context.Context) (string, bool) {
 }
 
 // Handle processes scheduled task events.
-func (h *ScheduledTaskHandler) Handle(ctx context.Context, msg *message.Message) error {
+func (h *ScheduledTaskHandler) Handle(msg *message.Message) error {
+	ctx := msg.Context() // Get the context from the message
+
 	var taskData TaskData
 	if err := json.Unmarshal(msg.Payload, &taskData); err != nil {
 		return fmt.Errorf("failed to unmarshal task data: %w", err)
@@ -90,25 +95,23 @@ func (h *ScheduledTaskHandler) Handle(ctx context.Context, msg *message.Message)
 		return fmt.Errorf("invalid task data: %w", err)
 	}
 
-	scheduledAt, ok := GetScheduledAtFromContext(ctx)
-	if !ok {
-		return ScheduledTaskHandlerError{"scheduledAt not found in context"}
+	// Extract scheduledAt from msg.Metadata (assuming it's stored there)
+	scheduledAtStr := msg.Metadata.Get("scheduled_at")
+	scheduledAt, err := time.Parse(time.RFC3339, scheduledAtStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse scheduled_at: %w", err)
 	}
 
 	if !scheduledAt.IsZero() && time.Now().Before(scheduledAt) {
 		return nil // Not time to execute the task yet
 	}
 
-	roundID, ok := GetRoundIDFromContext(ctx)
-	if !ok {
-		return ScheduledTaskHandlerError{"roundId not found in context"}
-	}
+	// Extract roundID from taskData (assuming it's part of the task data)
+	roundID := taskData.RoundID
 	ctx = context.WithValue(ctx, RoundIDKey, roundID)
 
-	handlerName, ok := GetHandlerNameFromContext(ctx)
-	if !ok {
-		return ScheduledTaskHandlerError{"handlerName not found in context"}
-	}
+	// Extract handlerName from taskData (assuming it's part of the task data)
+	handlerName := taskData.HandlerName
 
 	handler, exists := h.handlerMap[handlerName]
 	if !exists {

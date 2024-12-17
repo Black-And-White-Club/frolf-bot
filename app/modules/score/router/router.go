@@ -2,6 +2,7 @@ package scorerouter
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	scorecommands "github.com/Black-And-White-Club/tcr-bot/app/modules/score/commands"
@@ -46,5 +47,11 @@ func (s *ScoreCommandRouter) UpdateScores(ctx context.Context, roundID string, s
 
 	log.Printf("Sending UpdateScoresCommand: %+v\n", updateScoresCmd)
 
-	return s.commandBus.Send(ctx, updateScoresCmd)
+	err := s.commandBus.Send(ctx, updateScoresCmd)
+	if err != nil {
+		log.Printf("Error sending UpdateScoresCommand: %v", err)
+		return fmt.Errorf("failed to send UpdateScoresCommand: %w", err)
+	}
+
+	return nil
 }

@@ -8,12 +8,10 @@ import (
 	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
 	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
-	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
 	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
 	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/nats-io/nats.go"
 )
 
 // RoundCommandBus is the command bus for the round module.
@@ -134,16 +132,4 @@ func (r *RoundCommandRouter) UpdateRoundState(ctx context.Context, roundID int64
 		State:   state,
 	}
 	return r.commandBus.Send(ctx, cmd)
-}
-
-// StartScheduledTasksConsumer starts the scheduled tasks consumer.
-func StartScheduledTasksConsumer(ctx context.Context, jsCtx nats.JetStreamContext, pubsub watermillutil.PubSuber) error {
-	handlerMap := map[string]func(context.Context, *message.Message) error{
-		"ReminderOneHourHandler":       roundhandlers.NewReminderHandler(nil, pubsub).Handle,
-		"ReminderThirtyMinutesHandler": roundhandlers.NewReminderHandler(nil, pubsub).Handle,
-		"StartRoundEventHandler":       roundhandlers.NewStartRoundHandler(nil, pubsub).Handle,
-		"ScheduledTaskHandler":         roundhandlers.NewScheduledTaskHandler(nil, nil).Handle,
-	}
-
-	return roundhandlers.ConsumeScheduledTasks(ctx, jsCtx, pubsub, handlerMap) // Use handlerMap directly
 }
