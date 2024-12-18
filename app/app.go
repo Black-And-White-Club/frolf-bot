@@ -2,83 +2,119 @@ package app
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
+	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/config"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	"github.com/Black-And-White-Club/tcr-bot/internal/modules"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
+	"github.com/Black-And-White-Club/tcr-bot/config" // Import config from the root level
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"github.com/nats-io/nats.go"
 )
 
-// App struct
+// App holds the application components.
 type App struct {
-	Cfg             *config.Config
-	db              *bundb.DBService
-	WatermillRouter *message.Router
-	Modules         *modules.ModuleRegistry
+	Config     *config.Config
+	Logger     watermill.LoggerAdapter
+	NATS       *nats.Conn
+	JetStream  nats.JetStreamContext
+	Router     *message.Router
+	PubSub     *gochannel.GoChannel
+	UserModule *user.Module
+	// ... other modules
 }
 
-// NewApp initializes the application with the necessary services and configuration.
-func NewApp(ctx context.Context) (*App, error) {
-	cfg := config.NewConfig(ctx)
-	dsn := cfg.DSN
-	natsURL := cfg.NATS.URL
+// Initialize initializes the application.
+// Initialize initializes the application.
+func (app *App) Initialize(ctx context.Context) error {
+	// 1. Load configuration
+	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
+	flag.Parse()
 
-	log.Println("Initializing database service...")
-
-	dbService, err := bundb.NewBunDBService(ctx, dsn)
+	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database service: %w", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
+	app.Config = cfg
 
-	log.Println("Database service initialized successfully.")
+	// 2. Initialize logger
+	app.Logger = watermill.NewStdLogger(false, false) // Use your desired logging settings
 
-	logger := watermill.NewStdLogger(false, false)
-
-	log.Println("Initializing Watermill router and pubsub...")
-
-	router, pubSuber, err := watermillutil.NewRouter(natsURL, logger)
+	// 3. Initialize NATS connection
+	natsConn, err := nats.Connect(cfg.NATS.URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Watermill router: %w", err)
+		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
+	app.NATS = natsConn
 
-	log.Println("Watermill router and pubsub initialized successfully.")
-
-	log.Println("Initializing command bus...")
-
-	commandBus, err := watermillutil.NewCommandBus(natsURL, logger)
+	js, err := natsConn.JetStream()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create command bus: %w", err)
+		return fmt.Errorf("failed to create JetStream context: %w", err)
 	}
+	app.JetStream = js
 
-	log.Println("Command bus initialized successfully.")
-
-	log.Println("Initializing module registry...")
-
-	modules, err := modules.NewModuleRegistry(dbService, commandBus, pubSuber)
+	// 4. Initialize Watermill router and publisher
+	router, err := message.NewRouter(message.RouterConfig{}, app.Logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize modules: %w", err)
+		return fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
-	log.Println("Module registry initialized successfully.")
-
-	// Register module handlers
-	if err := RegisterHandlers(router, pubSuber, modules.UserModule); err != nil {
-		return nil, fmt.Errorf("failed to register handlers: %w", err)
+	retryMiddleware := middleware.Retry{
+		MaxRetries:      3,
+		InitialInterval: time.Millisecond * 100,
+		// ... other retry options if needed ...
 	}
+	router.AddMiddleware(
+		middleware.CorrelationID,
+		retryMiddleware.Middleware, // Use the Middleware method of the Retry struct
+	)
 
-	return &App{
-		Cfg:             cfg,
-		db:              dbService,
-		WatermillRouter: router,
-		Modules:         modules,
-	}, nil
+	app.Router = router
+
+	// 5. Initialize modules
+	userModule, err := user.Init(ctx, js) // Remove pubSub from the arguments
+	if err != nil {
+		return fmt.Errorf("failed to initialize user module: %w", err)
+	}
+	app.UserModule = userModule
+
+	// ... initialize other modules ...
+
+	return nil
 }
 
-// DB returns the database service.
-func (app *App) DB() *bundb.DBService {
-	return app.db
+// Run starts the application.
+func (app *App) Run(ctx context.Context) error {
+	// Start the router
+	go func() {
+		if err := app.Router.Run(ctx); err != nil {
+			log.Fatalf("Error running Watermill router: %v", err)
+		}
+	}()
+
+	// ... other startup logic ...
+
+	return nil
+}
+
+// Close gracefully shuts down the application.
+func (app *App) Close() {
+	// Close the Watermill router
+	if err := app.Router.Close(); err != nil {
+		log.Printf("Error closing Watermill router: %v", err)
+	}
+
+	// Close the GoChannel pub/sub
+	if err := app.PubSub.Close(); err != nil {
+		log.Printf("Error closing GoChannel pub/sub: %v", err)
+	}
+
+	// Close the NATS connection
+	app.NATS.Close()
+
+	// ... other cleanup logic ...
 }

@@ -8,24 +8,27 @@ import (
 	"strings"
 
 	"github.com/Black-And-White-Club/tcr-bot/app"
+	"github.com/Black-And-White-Club/tcr-bot/db/bundb" // Import bundb package
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb/migrations"
 	"github.com/uptrace/bun/migrate"
 	"github.com/urfave/cli/v2"
 )
 
 func main() {
-	// Declare ctx first
 	ctx := context.Background()
 
-	// Use the app package to get the database connection
-	app, err := app.NewApp(ctx)
-	if err != nil {
-		log.Fatalf("Failed to initialize app: %v", err)
+	// Initialize the application
+	application := &app.App{}
+	if err := application.Initialize(ctx); err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
 	}
-	db := app.DB()
+	defer application.Close()
 
-	// Access the DSN from the App struct
-	fmt.Println("Database URL:", app.Cfg.DSN)
+	// Access the database connection from the App struct
+	db, err := bundb.NewBunDBService(ctx, application.Config.Postgres) // Pass PostgresConfig
+	if err != nil {
+		log.Fatalf("Failed to initialize bundb: %v", err)
+	}
 
 	// Create a new migrator
 	migrator := migrate.NewMigrator(db.GetDB(), migrations.Migrations)
@@ -34,7 +37,7 @@ func main() {
 		Name: "bun",
 
 		Commands: []*cli.Command{
-			newDBCommand(migrator), // Removed ctx from here
+			newDBCommand(migrator),
 		},
 	}
 	if err := cliApp.Run(os.Args); err != nil {

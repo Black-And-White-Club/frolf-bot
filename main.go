@@ -7,38 +7,30 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Black-And-White-Club/tcr-bot/app"
 )
 
 func main() {
-	// Use context.Background() for the root context
+	// Set up context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Add a timeout to the root context (e.g., 1 hour)
-	ctx, cancel = context.WithTimeout(ctx, 1*time.Hour)
-	defer cancel()
-
-	log.Println("Initializing application...") // More informative log message
-
-	application, err := app.NewApp(ctx)
-	if err != nil {
-		log.Fatalf("Failed to initialize app: %+v", err) // Include error details in log
+	// Initialize the application
+	application := &app.App{}
+	if err := application.Initialize(ctx); err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
 	}
+	defer application.Close()
 
-	log.Println("Application initialized successfully.") // More informative log message
-
-	// Start the Watermill router
-	log.Println("Starting Watermill router...") // More informative log message
-	if err := application.WatermillRouter.Run(ctx); err != nil {
-		log.Fatalf("Failed to start Watermill router: %+v", err) // Include error details in log
+	// Start the application
+	if err := application.Run(ctx); err != nil {
+		log.Fatalf("Failed to run application: %v", err)
 	}
 
 	// Graceful shutdown
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Add SIGINT
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	fmt.Println("Waiting for shutdown signal...")
 	select {
@@ -48,17 +40,6 @@ func main() {
 		fmt.Println("Application context canceled")
 	}
 
-	// Close the Watermill PubSub in the UserModule
-	if err := application.Modules.UserModule.PubSub.Close(); err != nil {
-		log.Printf("Failed to close Watermill PubSub in UserModule: %v", err)
-		// TODO: Handle the error more explicitly if needed
-	}
-
-	// Gracefully close database connections
-	if err := application.DB().GetDB().Close(); err != nil {
-		log.Println("Error closing database connection:", err)
-		// TODO: Handle the error more explicitly if needed
-	}
-
-	fmt.Println("Application shut down gracefully.")
+	// Graceful shutdown is handled by the deferred application.Close()
+	log.Println("Graceful shutdown complete.")
 }

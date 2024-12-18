@@ -1,12 +1,9 @@
 package userhandlers
 
-import (
-	"context"
+import "github.com/ThreeDotsLabs/watermill/message"
 
-	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
-)
-
-// UserCommandHandler is an interface for handlers that process user commands.
-type UserCommandHandler interface {
-	Handle(ctx context.Context, cmd commands.Command) error
+// UserHandlers handles user-related events.
+type Handlers interface {
+	HandleUserSignupRequest(msg *message.Message) error
+	HandleUserRoleUpdateRequest(msg *message.Message) error
 }

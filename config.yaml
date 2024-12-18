@@ -1,0 +1,9 @@
+postgres:
+  dsn: "postgres://postgres:postgres@localhost:5432/tcr-bot?sslmode=disable"
+
+nats:
+  url: "nats://localhost:4222"
+
+discord:
+  token: "YOUR_DISCORD_BOT_TOKEN"
+# ... other configuration settings ...

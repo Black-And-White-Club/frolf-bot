@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -18,11 +16,11 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB        *userdb.UserDBImpl
-	RoundDB       *rounddb.RoundDBImpl
-	ScoreDB       *scoredb.ScoreDBImpl
-	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
-	db            *bun.DB
+	UserDB *userdb.UserDBImpl
+	// RoundDB       *rounddb.RoundDBImpl
+	// ScoreDB       *scoredb.ScoreDBImpl
+	// LeaderboardDB *leaderboarddb.LeaderboardDBImpl
+	db *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -30,10 +28,11 @@ func (dbService *DBService) GetDB() *bun.DB {
 	return dbService.db
 }
 
-func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
-	log.Printf("NewBunDBService - Initializing with DSN: %s", dsn)
+// NewBunDBService initializes a new DBService with the provided Postgres configuration.
+func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService, error) {
+	log.Printf("NewBunDBService - Initializing with DSN: %s", cfg.DSN)
 
-	sqldb, err := pgConn(dsn)
+	sqldb, err := pgConn(cfg.DSN)
 	if err != nil {
 		log.Printf("NewBunDBService - Failed to connect to PostgreSQL: %v", err)
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -46,20 +45,21 @@ func NewBunDBService(ctx context.Context, dsn string) (*DBService, error) {
 	}
 
 	dbService := &DBService{
-		UserDB:        &userdb.UserDBImpl{DB: db},
-		RoundDB:       &rounddb.RoundDBImpl{DB: db},
-		ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
-		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
-		db:            db,
+		UserDB: &userdb.UserDBImpl{DB: db},
+		// RoundDB:       &rounddb.RoundDBImpl{DB: db},
+		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
+		// LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
+		db: db,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)
 
 	log.Println("NewBunDBService - Registering models")
+	// Use the correct model types from their respective modules
 	db.RegisterModel(&userdb.User{})
-	db.RegisterModel(&rounddb.Round{})
-	db.RegisterModel(&scoredb.Score{})
-	db.RegisterModel(&leaderboarddb.Leaderboard{})
+	// db.RegisterModel(&rounddb.Round{})
+	// db.RegisterModel(&scoredb.Score{})
+	// db.RegisterModel(&leaderboarddb.Leaderboard{})
 	log.Println("NewBunDBService - Models registered successfully")
 
 	return dbService, nil

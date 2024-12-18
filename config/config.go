@@ -1,48 +1,76 @@
 package config
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"os"
 
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
-	"github.com/uptrace/bun/driver/pgdriver"
+	"gopkg.in/yaml.v3"
 )
 
 // Config struct to hold the configuration settings
 type Config struct {
-	DB  *bun.DB
-	DSN string
-
-	// NATS configuration
-	NATS struct {
-		URL string `yaml:"url"`
-	} `yaml:"nats"`
+	Postgres PostgresConfig `yaml:"postgres"`
+	NATS     NATSConfig     `yaml:"nats"`
+	// Discord  DiscordConfig  `yaml:"discord"`
+	// ... other configuration fields ...
 }
 
-// NewConfig creates a new Config instance with database connection and NATS URL
-func NewConfig(ctx context.Context) *Config {
-	// Database connection setup
-	dsn := os.Getenv("DATABASE_URL")
+// PostgresConfig holds Postgres configuration.
+type PostgresConfig struct {
+	DSN string `yaml:"dsn"`
+}
 
-	fmt.Println("DSN:", dsn)
+// NATSConfig holds NATS configuration.
+type NATSConfig struct {
+	URL string `yaml:"url"`
+}
 
-	// Use sql.OpenDB to open the database connection
-	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
-	db := bun.NewDB(sqldb, pgdialect.New())
+// DiscordConfig holds Discord configuration.
+// type DiscordConfig struct {
+// 	Token string `yaml:"token"`
+// }
 
-	// Load NATS URL from environment variable
-	natsURL := os.Getenv("NATS_URL")
+// LoadConfig loads the configuration from a YAML file.
+func LoadConfig(filename string) (*Config, error) {
+	// Try reading configuration from the file first
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		// If the file is not found, try loading from environment variables
+		fmt.Printf("Failed to read config file: %v\n", err)
+		fmt.Println("Trying to load configuration from environment variables...")
 
-	return &Config{
-		DB:  db,
-		DSN: dsn,
-		NATS: struct {
-			URL string `yaml:"url"`
-		}{
-			URL: natsURL,
-		},
+		return loadConfigFromEnv()
 	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// loadConfigFromEnv loads the configuration from environment variables.
+func loadConfigFromEnv() (*Config, error) {
+	var cfg Config
+
+	// Load Postgres DSN
+	cfg.Postgres.DSN = os.Getenv("DATABASE_URL")
+	if cfg.Postgres.DSN == "" {
+		return nil, fmt.Errorf("DATABASE_URL environment variable not set")
+	}
+
+	// Load NATS URL
+	cfg.NATS.URL = os.Getenv("NATS_URL")
+	if cfg.NATS.URL == "" {
+		return nil, fmt.Errorf("NATS_URL environment variable not set")
+	}
+
+	// Load Discord token
+	// cfg.Discord.Token = os.Getenv("DISCORD_TOKEN")
+	// if cfg.Discord.Token == "" {
+	// 	return nil, fmt.Errorf("DISCORD_TOKEN environment variable not set")
+	// }
+
+	return &cfg, nil
 }

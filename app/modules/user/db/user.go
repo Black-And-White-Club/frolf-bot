@@ -14,15 +14,9 @@ type UserDBImpl struct {
 }
 
 // CreateUser creates a new user.
-func (db *UserDBImpl) CreateUser(ctx context.Context, discordID string, name string, role UserRole) error {
+func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 	if db.DB == nil {
 		return errors.New("database connection is not initialized")
-	}
-
-	user := &User{
-		DiscordID: discordID,
-		Name:      name,
-		Role:      role,
 	}
 
 	_, err := db.DB.NewInsert().Model(user).Exec(ctx)
@@ -60,6 +54,7 @@ func (db *UserDBImpl) UpdateUser(ctx context.Context, discordID string, updates 
 	return nil
 }
 
+// GetUserRole retrieves the role of a user by their Discord ID.
 func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID string) (UserRole, error) {
 	var role UserRole
 	err := db.DB.NewSelect().
@@ -71,4 +66,21 @@ func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID string) (UserRo
 		return "", fmt.Errorf("failed to get user role: %w", err)
 	}
 	return role, nil
+}
+
+// UpdateUserRole updates the role of a user by their Discord ID.
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID string, newRole UserRole) error {
+	if !newRole.IsValid() {
+		return fmt.Errorf("invalid user role: %s", newRole)
+	}
+
+	_, err := db.DB.NewUpdate().
+		Model(&User{}).
+		Set("role = ?", newRole).
+		Where("discord_id = ?", discordID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update user role: %w", err)
+	}
+	return nil
 }
