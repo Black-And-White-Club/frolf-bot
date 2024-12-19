@@ -7,8 +7,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
-	"github.com/Black-And-White-Club/tcr-bot/config" // Import config from the root level
+	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -18,17 +19,17 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config     *config.Config
-	Logger     watermill.LoggerAdapter
-	NATS       *nats.Conn
-	JetStream  nats.JetStreamContext
-	Router     *message.Router
-	PubSub     *gochannel.GoChannel
-	UserModule *user.Module
+	Config      *config.Config
+	Logger      watermill.LoggerAdapter
+	NATS        *nats.Conn
+	JetStream   nats.JetStreamContext
+	Router      *message.Router
+	PubSub      *gochannel.GoChannel
+	UserModule  *user.Module
+	RoundModule *round.Module
 	// ... other modules
 }
 
-// Initialize initializes the application.
 // Initialize initializes the application.
 func (app *App) Initialize(ctx context.Context) error {
 	// 1. Load configuration
@@ -42,7 +43,7 @@ func (app *App) Initialize(ctx context.Context) error {
 	app.Config = cfg
 
 	// 2. Initialize logger
-	app.Logger = watermill.NewStdLogger(false, false) // Use your desired logging settings
+	app.Logger = watermill.NewStdLogger(false, false)
 
 	// 3. Initialize NATS connection
 	natsConn, err := nats.Connect(cfg.NATS.URL)
@@ -70,17 +71,23 @@ func (app *App) Initialize(ctx context.Context) error {
 	}
 	router.AddMiddleware(
 		middleware.CorrelationID,
-		retryMiddleware.Middleware, // Use the Middleware method of the Retry struct
+		retryMiddleware.Middleware,
 	)
 
 	app.Router = router
 
 	// 5. Initialize modules
-	userModule, err := user.Init(ctx, js) // Remove pubSub from the arguments
+	userModule, err := user.Init(ctx, js)
 	if err != nil {
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
+
+	roundModule, err := round.Init(ctx, js)
+	if err != nil {
+		return fmt.Errorf("failed to initialize round module: %w", err)
+	}
+	app.RoundModule = roundModule
 
 	// ... initialize other modules ...
 

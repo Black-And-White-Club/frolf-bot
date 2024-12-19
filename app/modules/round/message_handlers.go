@@ -1,273 +1,162 @@
 package round
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
-	roundcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/round/commands"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
-	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/router"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
+	roundutil "github.com/Black-And-White-Club/tcr-bot/app/modules/round/utils"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// GetRoundRequest represents the incoming request to get a round.
-type GetRoundRequest struct {
-	RoundID int64 `json:"round_id"`
+// MessageHandlers handles incoming messages and publishes corresponding events.
+type MessageHandlers struct {
+	Publisher message.Publisher
 }
 
-// GetRoundResponse is the response for GetRound
-type GetRoundResponse struct {
-	Round *rounddb.Round `json:"round"`
-}
+// HandleMessage processes incoming messages and publishes corresponding events.
+func (h *MessageHandlers) HandleMessage(msg *message.Message) error {
+	// 1. Determine message type (e.g., from metadata or payload)
+	messageType := msg.Metadata.Get("type")
 
-// GetRoundsRequest represents the incoming request to get all rounds.
-type GetRoundsRequest struct{}
-
-// GetRoundsResponse is the response for GetRounds
-type GetRoundsResponse struct {
-	Rounds []*rounddb.Round `json:"rounds"`
-}
-
-// RoundHandlers defines the handlers for round-related events.
-type RoundHandlers struct {
-	commandRouter roundrouter.CommandRouter
-	roundDB       rounddb.RoundDB // Use RoundDB instead of QueryService
-	pubsub        watermillutil.PubSuber
-}
-
-// NewRoundHandlers creates a new RoundHandlers instance.
-func NewRoundHandlers(commandRouter roundrouter.CommandRouter, roundDB rounddb.RoundDB, pubsub watermillutil.PubSuber) *RoundHandlers {
-	return &RoundHandlers{
-		commandRouter: commandRouter,
-		roundDB:       roundDB, // Use RoundDB instead of QueryService
-		pubsub:        pubsub,
-	}
-}
-
-// Handle implements the MessageHandler interface.
-func (h *RoundHandlers) Handle(msg *message.Message) ([]*message.Message, error) {
-	switch msg.Metadata.Get("topic") {
-	case roundhandlers.TopicCreateRound:
-		return h.HandleCreateRound(msg)
-	case roundhandlers.TopicGetRound:
-		return h.HandleGetRound(msg)
-	case roundhandlers.TopicGetRounds:
-		return h.HandleGetRounds(msg)
-	case roundhandlers.TopicEditRound:
-		return h.HandleEditRound(msg)
-	case roundhandlers.TopicDeleteRound:
-		return h.HandleDeleteRound(msg)
-	case roundhandlers.TopicUpdateParticipant:
-		return h.HandleUpdateParticipant(msg)
-	case roundhandlers.TopicJoinRound:
-		return h.HandleJoinRound(msg)
-	case roundhandlers.TopicSubmitScore:
-		return h.HandleSubmitScore(msg)
-	case roundhandlers.TopicStartRound:
-		return h.HandleStartRound(msg)
-	case roundhandlers.TopicRecordScores:
-		return h.HandleRecordScores(msg)
-	case roundhandlers.TopicProcessScoreSubmission:
-		return h.HandleProcessScoreSubmission(msg)
-	case roundhandlers.TopicFinalizeRound:
-		return h.HandleFinalizeRound(msg)
+	switch messageType {
+	case "create_round":
+		return h.handleCreateRound(msg)
+	case "update_round":
+		return h.handleUpdateRound(msg)
+	case "delete_round":
+		return h.handleDeleteRound(msg)
+	case "participant_response":
+		return h.handleParticipantResponse(msg)
+	case "score_updated":
+		return h.handleScoreUpdated(msg)
 	default:
-		return nil, fmt.Errorf("unknown message topic: %s", msg.Metadata.Get("topic"))
+		return fmt.Errorf("unknown message type: %s", messageType)
 	}
 }
 
-// HandleCreateRound creates a new round.
-func (h *RoundHandlers) HandleCreateRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.CreateRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleCreateRound(msg *message.Message) error {
+	var createRoundDto rounddto.CreateRoundParams
+	if err := json.Unmarshal(msg.Payload, &createRoundDto); err != nil {
+		return fmt.Errorf("failed to unmarshal CreateRoundParams: %w", err)
 	}
 
-	if err := h.commandRouter.CreateRound(context.Background(), req.Input); err != nil { // Call CreateRound on commandRouter
-		return nil, fmt.Errorf("failed to create round: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleGetRound retrieves a round.
-func (h *RoundHandlers) HandleGetRound(msg *message.Message) ([]*message.Message, error) {
-	var req GetRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	round, err := h.roundDB.GetRound(context.Background(), req.RoundID)
+	// Publish RoundCreatedEvent (using parsed date from DTO)
+	startTime, err := roundutil.ParseDateTime(createRoundDto.DateTime.Date + " " + createRoundDto.DateTime.Time) // Parse the combined date and time
 	if err != nil {
-		return nil, fmt.Errorf("failed to get round: %w", err)
+		return fmt.Errorf("failed to parse date/time: %w", err)
 	}
 
-	if round == nil {
-		return nil, fmt.Errorf("round not found: %d", req.RoundID)
+	// Publish RoundCreatedEvent
+	event := roundevents.RoundCreatedEvent{
+		Name:      createRoundDto.Title,
+		StartTime: startTime, // Use the parsed startTime
 	}
-
-	response := GetRoundResponse{Round: round}
-	payload, err := json.Marshal(response)
+	eventData, err := json.Marshal(event)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal round response: %w", err)
+		return fmt.Errorf("failed to marshal RoundCreatedEvent: %w", err)
+	}
+	if err := h.Publisher.Publish(roundevents.RoundCreatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		return fmt.Errorf("failed to publish RoundCreatedEvent: %w", err)
 	}
 
-	respMsg := message.NewMessage(watermill.NewUUID(), payload)
-	respMsg.Metadata.Set("topic", roundhandlers.TopicGetRoundResponse)
-
-	return []*message.Message{respMsg}, nil
+	return nil
 }
 
-// HandleGetRounds retrieves all rounds.
-func (h *RoundHandlers) HandleGetRounds(msg *message.Message) ([]*message.Message, error) {
-	var req GetRoundsRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleUpdateRound(msg *message.Message) error {
+	var updateRoundDto rounddto.EditRoundInput
+	if err := json.Unmarshal(msg.Payload, &updateRoundDto); err != nil {
+		return fmt.Errorf("failed to unmarshal EditRoundInput: %w", err)
 	}
 
-	rounds, err := h.roundDB.GetRounds(context.Background())
+	// Publish RoundUpdatedEvent (extract relevant fields from DTO)
+	event := roundevents.RoundUpdatedEvent{
+		RoundID:   strconv.FormatInt(updateRoundDto.RoundID, 10),
+		Title:     &updateRoundDto.Title,
+		Location:  &updateRoundDto.Location,
+		EventType: updateRoundDto.EventType,
+		Date:      &updateRoundDto.Date,
+	}
+	eventData, err := json.Marshal(event)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get rounds: %w", err)
+		return fmt.Errorf("failed to marshal RoundUpdatedEvent: %w", err)
+	}
+	if err := h.Publisher.Publish(roundevents.RoundUpdatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		return fmt.Errorf("failed to publish RoundUpdatedEvent: %w", err)
 	}
 
-	response := GetRoundsResponse{Rounds: rounds}
-	payload, err := json.Marshal(response)
+	return nil
+}
+
+func (h *MessageHandlers) handleDeleteRound(msg *message.Message) error {
+	var deleteRoundDto struct {
+		RoundID string `json:"round_id"`
+	}
+	if err := json.Unmarshal(msg.Payload, &deleteRoundDto); err != nil {
+		return fmt.Errorf("failed to unmarshal delete round request: %w", err)
+	}
+
+	// Publish RoundDeletedEvent
+	event := roundevents.RoundDeletedEvent{
+		RoundID: deleteRoundDto.RoundID,
+	}
+	eventData, err := json.Marshal(event)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal rounds response: %w", err)
+		return fmt.Errorf("failed to marshal RoundDeletedEvent: %w", err)
+	}
+	if err := h.Publisher.Publish(roundevents.RoundDeletedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		return fmt.Errorf("failed to publish RoundDeletedEvent: %w", err)
 	}
 
-	respMsg := message.NewMessage(watermill.NewUUID(), payload)
-	respMsg.Metadata.Set("topic", roundhandlers.TopicGetRoundsResponse)
-
-	return []*message.Message{respMsg}, nil
+	return nil
 }
 
-// HandleEditRound edits an existing round.
-func (h *RoundHandlers) HandleEditRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.EditRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleParticipantResponse(msg *message.Message) error {
+	var participantResponseDto rounddto.UpdateParticipantResponseInput
+	if err := json.Unmarshal(msg.Payload, &participantResponseDto); err != nil {
+		return fmt.Errorf("failed to unmarshal UpdateParticipantResponseInput: %w", err)
 	}
 
-	if err := h.commandRouter.EditRound(context.Background(), req.RoundID, req.DiscordID, req.APIInput); err != nil {
-		return nil, fmt.Errorf("failed to edit round: %w", err)
+	event := roundevents.ParticipantResponseEvent{
+		RoundID:     strconv.FormatInt(participantResponseDto.RoundID, 10), // Convert int64 to string
+		Participant: participantResponseDto.DiscordID,
+		Response:    string(participantResponseDto.Response),
+	}
+	eventData, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ParticipantResponseEvent: %w", err)
+	}
+	if err := h.Publisher.Publish(roundevents.ParticipantResponseSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		return fmt.Errorf("failed to publish ParticipantResponseEvent: %w", err)
 	}
 
-	return nil, nil
+	return nil
 }
 
-// HandleDeleteRound deletes a round.
-func (h *RoundHandlers) HandleDeleteRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.DeleteRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleScoreUpdated(msg *message.Message) error {
+	var scoreUpdatedDto rounddto.SubmitScoreInput
+	if err := json.Unmarshal(msg.Payload, &scoreUpdatedDto); err != nil {
+		return fmt.Errorf("failed to unmarshal SubmitScoreInput: %w", err)
 	}
 
-	if err := h.commandRouter.DeleteRound(context.Background(), req.RoundID); err != nil {
-		return nil, fmt.Errorf("failed to delete round: %w", err)
+	// Publish ScoreUpdatedEvent
+	event := roundevents.ScoreUpdatedEvent{
+		RoundID:     strconv.FormatInt(scoreUpdatedDto.RoundID, 10), // Convert int64 to string
+		Participant: scoreUpdatedDto.DiscordID,
+		Score:       scoreUpdatedDto.Score,
+		UpdateType:  rounddb.ScoreUpdateTypeRegular, // Set the UpdateType
+	}
+	eventData, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ScoreUpdatedEvent: %w", err)
+	}
+	if err := h.Publisher.Publish(roundevents.ScoreUpdatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		return fmt.Errorf("failed to publish ScoreUpdatedEvent: %w", err)
 	}
 
-	return nil, nil
-}
-
-// HandleUpdateParticipant updates a participant in a round.
-func (h *RoundHandlers) HandleUpdateParticipant(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.UpdateParticipantRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.UpdateParticipant(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to update participant: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleJoinRound adds a participant to a round.
-func (h *RoundHandlers) HandleJoinRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.JoinRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.JoinRound(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to join round: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleSubmitScore submits a score for a participant in a round.
-func (h *RoundHandlers) HandleSubmitScore(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.SubmitScoreRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.SubmitScore(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to submit score: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleStartRound starts a round.
-func (h *RoundHandlers) HandleStartRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.StartRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.StartRound(context.Background(), req.RoundID); err != nil {
-		return nil, fmt.Errorf("failed to start round: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleRecordScores records scores for a round.
-func (h *RoundHandlers) HandleRecordScores(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.RecordScoresRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.RecordRoundScores(context.Background(), req.RoundID); err != nil {
-		return nil, fmt.Errorf("failed to record scores: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleProcessScoreSubmission processes a score submission.
-func (h *RoundHandlers) HandleProcessScoreSubmission(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.ProcessScoreSubmissionRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.ProcessScoreSubmission(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to process score submission: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleFinalizeRound finalizes a round.
-func (h *RoundHandlers) HandleFinalizeRound(msg *message.Message) ([]*message.Message, error) {
-	var req roundcommands.FinalizeRoundRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.FinalizeAndProcessScores(context.Background(), req.RoundID); err != nil {
-		return nil, fmt.Errorf("failed to finalize round: %w", err)
-	}
-
-	return nil, nil
+	return nil
 }

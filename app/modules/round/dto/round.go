@@ -80,6 +80,7 @@ type SubmitScoreInput struct {
 
 // EditRoundInput represents the input data for editing a round.
 type EditRoundInput struct {
+	RoundID   int64     `json:"round_id"` // Add the RoundID field
 	Title     string    `json:"title"`
 	Location  string    `json:"location"`
 	EventType *string   `json:"eventType"`
@@ -93,4 +94,24 @@ type UpdateParticipantResponseInput struct {
 	DiscordID string   `json:"discordID"`
 	Response  Response `json:"response"`
 	TagNumber *int     `json:"tagNumber"` // Add the TagNumber field
+}
+
+type DateTimeInput struct {
+	Date string `json:"date"`
+	Time string `json:"time"`
+}
+
+type CreateRoundParams struct {
+	Title        string           `json:"title"`
+	Location     string           `json:"location"`
+	EventType    *string          `json:"event_type"`
+	DateTime     DateTimeInput    `json:"date_time"`
+	State        string           `json:"round_state"`
+	Participants []ParticipantDTO `json:"participants"`
+}
+
+type ParticipantDTO struct {
+	DiscordID string `json:"discord_id"`
+	TagNumber *int   `json:"tag_number"`
+	Response  string `json:"response"`
 }

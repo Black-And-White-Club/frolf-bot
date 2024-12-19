@@ -17,7 +17,7 @@ import (
 // Module represents the user module.
 type Module struct {
 	UserService  userservice.Service
-	UserHandlers userhandlers.UserHandlers
+	UserHandlers userhandlers.Handlers
 }
 
 // Initialize initializes the user module.
@@ -45,7 +45,7 @@ func (m *Module) Initialize(ctx context.Context, js nats.JetStreamContext) error
 	}
 
 	m.UserService = userService
-	m.UserHandlers = *userHandlers
+	m.UserHandlers = userHandlers
 
 	// 2. Set up subscriptions
 	if err := usersubscribers.SubscribeToUserEvents(ctx, js, userHandlers); err != nil {

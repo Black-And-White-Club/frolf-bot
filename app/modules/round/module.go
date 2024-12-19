@@ -1,130 +1,81 @@
 package round
 
 import (
+	"context"
 	"fmt"
 
-	roundqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/round/queries"
-	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/ThreeDotsLabs/watermill/components/cqrs"
-	"github.com/ThreeDotsLabs/watermill/message"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
+	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
+	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/service"
+	roundsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/subscribers"
+	"github.com/Black-And-White-Club/tcr-bot/internal/jetstream" // Assuming this is your JetStream helper package
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"github.com/nats-io/nats.go"
 )
 
-// RoundModule represents the round module.
-type RoundModule struct {
-	CommandRouter  roundrouter.CommandRouter
-	QueryService   roundqueries.QueryService
-	PubSub         watermillutil.PubSuber
-	messageHandler *RoundHandlers
+// Module represents the round module.
+type Module struct {
+	RoundService  roundservice.Service
+	RoundHandlers roundhandlers.Handlers
 }
 
-// NewRoundModule creates a new RoundModule with the provided dependencies.
-func NewRoundModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*RoundModule, error) {
-	marshaler := watermillutil.Marshaler
-	roundCommandBus := roundrouter.NewRoundCommandBus(pubsub, marshaler)
-	roundCommandRouter := roundrouter.NewRoundCommandRouter(roundCommandBus)
+// Initialize initializes the round module.
+func (m *Module) Initialize(ctx context.Context, js nats.JetStreamContext) error {
+	// 1. Initialize dependencies
+	roundDB := &rounddb.RoundDBImpl{} // Replace with your actual DB initialization
 
-	roundQueryService := roundqueries.NewRoundQueryService(dbService.RoundDB)
+	// Initialize Watermill publisher
+	pubSub := gochannel.NewGoChannel(
+		gochannel.Config{
+			OutputChannelBuffer: 1000,
+		},
+		watermill.NopLogger{},
+	)
 
-	messageHandler := NewRoundHandlers(roundCommandRouter, dbService.RoundDB, pubsub) // Use dbService.RoundDB
-
-	return &RoundModule{
-		CommandRouter:  roundCommandRouter,
-		QueryService:   roundQueryService,
-		PubSub:         pubsub,
-		messageHandler: messageHandler,
-	}, nil
-}
-
-// GetHandlers returns the handlers for the round module.
-func (m *RoundModule) GetHandlers() map[string]types.Handler {
-	return map[string]types.Handler{
-		// "round_create_handler": {
-		// 	Topic:         roundhandlers.TopicCreateRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicCreateRound + "_response",
-		// },
-		// "round_get_handler": {
-		// 	Topic:         roundhandlers.TopicGetRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicGetRound + "_response",
-		// },
-		// "round_get_rounds_handler": {
-		// 	Topic:         roundhandlers.TopicGetRounds,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicGetRounds + "_response",
-		// },
-		// "round_edit_handler": {
-		// 	Topic:         roundhandlers.TopicEditRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicEditRound + "_response",
-		// },
-		// "round_delete_handler": {
-		// 	Topic:         roundhandlers.TopicDeleteRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicDeleteRound + "_response",
-		// },
-		// "round_update_participant_handler": {
-		// 	Topic:         roundhandlers.TopicUpdateParticipant,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicUpdateParticipant + "_response",
-		// },
-		// "round_join_handler": {
-		// 	Topic:         roundhandlers.TopicJoinRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicJoinRound + "_response",
-		// },
-		// "round_submit_score_handler": {
-		// 	Topic:         roundhandlers.TopicSubmitScore,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicSubmitScore + "_response",
-		// },
-		// "round_start_handler": {
-		// 	Topic:         roundhandlers.TopicStartRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicStartRound + "_response",
-		// },
-		// "round_record_scores_handler": {
-		// 	Topic:         roundhandlers.TopicRecordScores,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicRecordScores + "_response",
-		// },
-		// "round_process_score_submission_handler": {
-		// 	Topic:         roundhandlers.TopicProcessScoreSubmission,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicProcessScoreSubmission + "_response",
-		// },
-		// "round_finalize_handler": {
-		// 	Topic:         roundhandlers.TopicFinalizeRound,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicFinalizeRound + "_response",
-		// },
-		// "round_reminder_handler": {
-		// 	Topic:         roundhandlers.TopicRoundReminder,
-		// 	Handler:       m.messageHandler.Handle,
-		// 	ResponseTopic: roundhandlers.TopicRoundReminder + "_response",
-		// },
+	roundService := &roundservice.RoundService{
+		RoundDB:   roundDB,
+		JS:        js,
+		Publisher: js, // Use the NATS connection as the publisher
 	}
-}
 
-// RegisterHandlers registers the round module's handlers.
-func (m *RoundModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := m.GetHandlers()
+	roundHandlers := &roundhandlers.RoundHandlers{
+		RoundService: roundService,
+		Publisher:    pubSub, // Use the GoChannel pub/sub as the publisher
+	}
 
-	for handlerName, h := range handlers {
-		if err := router.AddHandler(
-			handlerName,
-			string(h.Topic),
-			pubsub,
-			h.ResponseTopic,
-			pubsub,
-			h.Handler,
-		); err != nil {
-			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
-		}
+	m.RoundService = roundService
+	m.RoundHandlers = roundHandlers // Assign the pointer to the interface
+
+	// 2. Create the necessary stream
+	if err := jetstream.CreateStream(js, roundevents.RoundStream); err != nil {
+		return fmt.Errorf("failed to create round stream: %w", err)
+	}
+
+	// 3. Set up subscribers
+	subscribers := &roundsubscribers.RoundSubscribers{
+		JS:       js,
+		Handlers: *roundHandlers, // Dereference the pointer before assigning
+	}
+	if err := subscribers.SubscribeToRoundManagementEvents(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to round management events: %w", err)
+	}
+	if err := subscribers.SubscribeToParticipantManagementEvents(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to participant management events: %w", err)
+	}
+	if err := subscribers.SubscribeToRoundFinalizationEvents(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to round finalization events: %w", err)
 	}
 
 	return nil
+}
+
+// Init initializes the round module.
+func Init(ctx context.Context, js nats.JetStreamContext) (*Module, error) {
+	module := &Module{}
+	if err := module.Initialize(ctx, js); err != nil {
+		return nil, fmt.Errorf("failed to initialize round module: %w", err)
+	}
+	return module, nil
 }

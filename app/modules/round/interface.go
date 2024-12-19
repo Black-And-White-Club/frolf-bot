@@ -4,7 +4,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// MessageHandler defines the interface for handling messages.
+// MessageHandler handles incoming messages.
 type MessageHandler interface {
-	Handle(msg *message.Message) ([]*message.Message, error)
+	HandleMessage(msg *message.Message) error
 }
