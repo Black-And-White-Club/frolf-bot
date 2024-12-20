@@ -1,9 +1,13 @@
 package userhandlers
 
-import "github.com/ThreeDotsLabs/watermill/message"
+import (
+	"context"
 
-// UserHandlers handles user-related events.
+	"github.com/ThreeDotsLabs/watermill/message"
+)
+
+// Handlers interface to uncouple handlers from specific implementations.
 type Handlers interface {
-	HandleUserSignupRequest(msg *message.Message) error
-	HandleUserRoleUpdateRequest(msg *message.Message) error
+	HandleUserSignupRequest(ctx context.Context, msg *message.Message) error
+	HandleUserRoleUpdateRequest(ctx context.Context, msg *message.Message) error
 }

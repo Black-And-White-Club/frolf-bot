@@ -2,11 +2,13 @@ package roundsubscribers
 
 import (
 	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
-	"github.com/nats-io/nats.go"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // RoundSubscribers subscribes to round-related events.
 type RoundSubscribers struct {
-	JS       nats.JetStreamContext
-	Handlers roundhandlers.RoundHandlers
+	Subscriber message.Subscriber
+	logger     watermill.LoggerAdapter
+	Handlers   roundhandlers.RoundHandlers
 }

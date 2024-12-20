@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/events"
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/service"
@@ -13,58 +14,88 @@ import (
 
 // UserHandlers handles user-related events.
 type UserHandlers struct {
-	UserService userservice.Service // Use the new interface name
+	UserService userservice.Service
 	Publisher   message.Publisher
+	logger      watermill.LoggerAdapter
+}
+
+func NewHandlers(userService userservice.Service, publisher message.Publisher, logger watermill.LoggerAdapter) Handlers {
+	return &UserHandlers{
+		UserService: userService,
+		Publisher:   publisher,
+		logger:      logger,
+	}
 }
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
-func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) error {
-	defer msg.Ack()
+func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message.Message) error {
+	h.logger.Info("HandleUserSignupRequest called", watermill.LogFields{"message_id": msg.UUID})
 
 	var req userevents.UserSignupRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		h.logger.Error("Failed to unmarshal UserSignupRequest", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to unmarshal UserSignupRequest: %w", err)
 	}
 
-	resp, err := h.UserService.OnUserSignupRequest(context.Background(), req)
+	// Use the context from the message
+	ctx = msg.Context()
+
+	resp, err := h.UserService.OnUserSignupRequest(ctx, req)
 	if err != nil {
+		h.logger.Error("Failed to process user signup request", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to process user signup request: %w", err)
 	}
 
+	// Publish the response event
 	respData, err := json.Marshal(resp)
 	if err != nil {
+		h.logger.Error("Failed to marshal UserSignupResponse", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to marshal UserSignupResponse: %w", err)
 	}
 
 	if err := h.Publisher.Publish(userevents.UserSignupResponseSubject, message.NewMessage(watermill.NewUUID(), respData)); err != nil {
+		h.logger.Error("Failed to publish UserSignupResponse", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to publish UserSignupResponse: %w", err)
 	}
 
+	h.logger.Info("HandleUserSignupRequest completed", watermill.LogFields{"message_id": msg.UUID})
 	return nil
 }
 
 // HandleUserRoleUpdateRequest handles the UserRoleUpdateRequest event.
-func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) error {
-	defer msg.Ack()
+func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg *message.Message) error {
+	h.logger.Info("HandleUserRoleUpdateRequest called", watermill.LogFields{"message_id": msg.UUID})
 
 	var req userevents.UserRoleUpdateRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		h.logger.Error("Failed to unmarshal UserRoleUpdateRequest", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to unmarshal UserRoleUpdateRequest: %w", err)
 	}
 
-	resp, err := h.UserService.OnUserRoleUpdateRequest(context.Background(), req)
+	// Use the context from the message
+	ctx = msg.Context()
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Second) // 5-second timeout
+	defer timeoutCancel()
+
+	resp, err := h.UserService.OnUserRoleUpdateRequest(timeoutCtx, req)
 	if err != nil {
+		h.logger.Error("Failed to process user role update request", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to process user role update request: %w", err)
 	}
 
+	// Publish the response event
 	respData, err := json.Marshal(resp)
 	if err != nil {
+		h.logger.Error("Failed to marshal UserRoleUpdateResponse", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to marshal UserRoleUpdateResponse: %w", err)
 	}
 
 	if err := h.Publisher.Publish(userevents.UserRoleUpdateResponseSubject, message.NewMessage(watermill.NewUUID(), respData)); err != nil {
+		h.logger.Error("Failed to publish UserRoleUpdateResponse", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to publish UserRoleUpdateResponse: %w", err)
 	}
 
+	h.logger.Info("HandleUserRoleUpdateRequest completed", watermill.LogFields{"message_id": msg.UUID})
 	return nil
 }

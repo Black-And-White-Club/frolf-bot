@@ -1,6 +1,7 @@
 package round
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -16,32 +17,51 @@ import (
 // MessageHandlers handles incoming messages and publishes corresponding events.
 type MessageHandlers struct {
 	Publisher message.Publisher
+	logger    watermill.LoggerAdapter
+}
+
+// NewMessageHandlers creates a new MessageHandlers.
+func NewMessageHandlers(publisher message.Publisher, logger watermill.LoggerAdapter) *MessageHandlers {
+	return &MessageHandlers{
+		Publisher: publisher,
+		logger:    logger,
+	}
 }
 
 // HandleMessage processes incoming messages and publishes corresponding events.
 func (h *MessageHandlers) HandleMessage(msg *message.Message) error {
-	// 1. Determine message type (e.g., from metadata or payload)
-	messageType := msg.Metadata.Get("type")
+	// 1. Determine message type based on the topic in metadata
+	messageType := msg.Metadata.Get("topic")
+
+	// Use the context from the message
+	ctx := msg.Context()
 
 	switch messageType {
 	case "create_round":
-		return h.handleCreateRound(msg)
+		return h.handleCreateRound(ctx, msg)
 	case "update_round":
-		return h.handleUpdateRound(msg)
+		return h.handleUpdateRound(ctx, msg)
 	case "delete_round":
-		return h.handleDeleteRound(msg)
+		return h.handleDeleteRound(ctx, msg)
 	case "participant_response":
-		return h.handleParticipantResponse(msg)
+		return h.handleParticipantResponse(ctx, msg)
 	case "score_updated":
-		return h.handleScoreUpdated(msg)
+		return h.handleScoreUpdated(ctx, msg)
 	default:
+		h.logger.Error("Unknown message type", fmt.Errorf("unknown message type: %s", messageType), watermill.LogFields{
+			"topic": messageType,
+		})
 		return fmt.Errorf("unknown message type: %s", messageType)
 	}
 }
 
-func (h *MessageHandlers) handleCreateRound(msg *message.Message) error {
+func (h *MessageHandlers) handleCreateRound(_ context.Context, msg *message.Message) error {
 	var createRoundDto rounddto.CreateRoundParams
+
 	if err := json.Unmarshal(msg.Payload, &createRoundDto); err != nil {
+		h.logger.Error("Failed to unmarshal CreateRoundParams", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to unmarshal CreateRoundParams: %w", err)
 	}
 
@@ -58,18 +78,27 @@ func (h *MessageHandlers) handleCreateRound(msg *message.Message) error {
 	}
 	eventData, err := json.Marshal(event)
 	if err != nil {
+		h.logger.Error("Failed to marshal RoundCreatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to marshal RoundCreatedEvent: %w", err)
 	}
 	if err := h.Publisher.Publish(roundevents.RoundCreatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish RoundCreatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to publish RoundCreatedEvent: %w", err)
 	}
-
+	msg.Ack()
 	return nil
 }
 
-func (h *MessageHandlers) handleUpdateRound(msg *message.Message) error {
+func (h *MessageHandlers) handleUpdateRound(_ context.Context, msg *message.Message) error {
 	var updateRoundDto rounddto.EditRoundInput
 	if err := json.Unmarshal(msg.Payload, &updateRoundDto); err != nil {
+		h.logger.Error("Failed to unmarshal EditRoundInput", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to unmarshal EditRoundInput: %w", err)
 	}
 
@@ -83,20 +112,29 @@ func (h *MessageHandlers) handleUpdateRound(msg *message.Message) error {
 	}
 	eventData, err := json.Marshal(event)
 	if err != nil {
+		h.logger.Error("Failed to marshal RoundUpdatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to marshal RoundUpdatedEvent: %w", err)
 	}
 	if err := h.Publisher.Publish(roundevents.RoundUpdatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish RoundUpdatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to publish RoundUpdatedEvent: %w", err)
 	}
-
+	msg.Ack()
 	return nil
 }
 
-func (h *MessageHandlers) handleDeleteRound(msg *message.Message) error {
+func (h *MessageHandlers) handleDeleteRound(_ context.Context, msg *message.Message) error {
 	var deleteRoundDto struct {
 		RoundID string `json:"round_id"`
 	}
 	if err := json.Unmarshal(msg.Payload, &deleteRoundDto); err != nil {
+		h.logger.Error("Failed to unmarshal delete round request", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to unmarshal delete round request: %w", err)
 	}
 
@@ -106,18 +144,27 @@ func (h *MessageHandlers) handleDeleteRound(msg *message.Message) error {
 	}
 	eventData, err := json.Marshal(event)
 	if err != nil {
+		h.logger.Error("Failed to marshal RoundDeletedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to marshal RoundDeletedEvent: %w", err)
 	}
 	if err := h.Publisher.Publish(roundevents.RoundDeletedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish RoundDeletedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to publish RoundDeletedEvent: %w", err)
 	}
-
+	msg.Ack()
 	return nil
 }
 
-func (h *MessageHandlers) handleParticipantResponse(msg *message.Message) error {
+func (h *MessageHandlers) handleParticipantResponse(_ context.Context, msg *message.Message) error {
 	var participantResponseDto rounddto.UpdateParticipantResponseInput
 	if err := json.Unmarshal(msg.Payload, &participantResponseDto); err != nil {
+		h.logger.Error("Failed to unmarshal UpdateParticipantResponseInput", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to unmarshal UpdateParticipantResponseInput: %w", err)
 	}
 
@@ -128,18 +175,27 @@ func (h *MessageHandlers) handleParticipantResponse(msg *message.Message) error 
 	}
 	eventData, err := json.Marshal(event)
 	if err != nil {
+		h.logger.Error("Failed to marshal ParticipantResponseEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to marshal ParticipantResponseEvent: %w", err)
 	}
 	if err := h.Publisher.Publish(roundevents.ParticipantResponseSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish ParticipantResponseEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to publish ParticipantResponseEvent: %w", err)
 	}
-
+	msg.Ack()
 	return nil
 }
 
-func (h *MessageHandlers) handleScoreUpdated(msg *message.Message) error {
+func (h *MessageHandlers) handleScoreUpdated(_ context.Context, msg *message.Message) error {
 	var scoreUpdatedDto rounddto.SubmitScoreInput
 	if err := json.Unmarshal(msg.Payload, &scoreUpdatedDto); err != nil {
+		h.logger.Error("Failed to unmarshal SubmitScoreInput", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to unmarshal SubmitScoreInput: %w", err)
 	}
 
@@ -152,11 +208,17 @@ func (h *MessageHandlers) handleScoreUpdated(msg *message.Message) error {
 	}
 	eventData, err := json.Marshal(event)
 	if err != nil {
+		h.logger.Error("Failed to marshal ScoreUpdatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to marshal ScoreUpdatedEvent: %w", err)
 	}
 	if err := h.Publisher.Publish(roundevents.ScoreUpdatedSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish ScoreUpdatedEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
 		return fmt.Errorf("failed to publish ScoreUpdatedEvent: %w", err)
 	}
-
+	msg.Ack()
 	return nil
 }

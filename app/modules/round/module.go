@@ -3,79 +3,135 @@ package round
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
 	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
 	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/service"
 	roundsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/subscribers"
-	"github.com/Black-And-White-Club/tcr-bot/internal/jetstream" // Assuming this is your JetStream helper package
+	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
-	"github.com/nats-io/nats.go"
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
+	"github.com/ThreeDotsLabs/watermill/message"
+	nc "github.com/nats-io/nats.go"
 )
 
 // Module represents the round module.
 type Module struct {
-	RoundService  roundservice.Service
-	RoundHandlers roundhandlers.Handlers
+	Subscriber  message.Subscriber
+	Publisher   message.Publisher
+	Service     roundservice.Service
+	Handlers    roundhandlers.Handlers
+	logger      watermill.LoggerAdapter
+	config      *config.Config
+	initialized bool
+	initMutex   sync.Mutex
 }
 
-// Initialize initializes the round module.
-func (m *Module) Initialize(ctx context.Context, js nats.JetStreamContext) error {
-	// 1. Initialize dependencies
+// NewRoundModule creates a new instance of the Round module.
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter) (*Module, error) {
+	options := []nc.Option{
+		nc.RetryOnFailedConnect(true),
+		nc.Timeout(30 * time.Second),
+		nc.ReconnectWait(1 * time.Second),
+		nc.ErrorHandler(func(_ *nc.Conn, s *nc.Subscription, err error) {
+			if s != nil {
+				logger.Error("Error in subscription", err, watermill.LogFields{
+					"subject": s.Subject,
+					"queue":   s.Queue,
+				})
+			} else {
+				logger.Error("Error in connection", err, nil)
+			}
+		}),
+	}
+
+	jsConfig := nats.JetStreamConfig{
+		Disabled: false,
+	}
+
+	publisher, err := nats.NewPublisher(
+		nats.PublisherConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Marshaler:   &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create publisher: %w", err)
+	}
+
+	subscriber, err := nats.NewSubscriber(
+		nats.SubscriberConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Unmarshaler: &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subscriber: %w", err)
+	}
+
 	roundDB := &rounddb.RoundDBImpl{} // Replace with your actual DB initialization
 
-	// Initialize Watermill publisher
-	pubSub := gochannel.NewGoChannel(
-		gochannel.Config{
-			OutputChannelBuffer: 1000,
-		},
-		watermill.NopLogger{},
-	)
-
 	roundService := &roundservice.RoundService{
-		RoundDB:   roundDB,
-		JS:        js,
-		Publisher: js, // Use the NATS connection as the publisher
+		RoundDB:    roundDB,
+		Publisher:  publisher,
+		Subscriber: subscriber,
 	}
 
 	roundHandlers := &roundhandlers.RoundHandlers{
 		RoundService: roundService,
-		Publisher:    pubSub, // Use the GoChannel pub/sub as the publisher
+		Publisher:    publisher,
 	}
 
-	m.RoundService = roundService
-	m.RoundHandlers = roundHandlers // Assign the pointer to the interface
-
-	// 2. Create the necessary stream
-	if err := jetstream.CreateStream(js, roundevents.RoundStream); err != nil {
-		return fmt.Errorf("failed to create round stream: %w", err)
+	module := &Module{
+		Subscriber:  subscriber,
+		Publisher:   publisher,
+		Service:     roundService,
+		Handlers:    roundHandlers,
+		logger:      logger,
+		config:      cfg,
+		initialized: false,
 	}
 
-	// 3. Set up subscribers
-	subscribers := &roundsubscribers.RoundSubscribers{
-		JS:       js,
-		Handlers: *roundHandlers, // Dereference the pointer before assigning
-	}
-	if err := subscribers.SubscribeToRoundManagementEvents(ctx); err != nil {
-		return fmt.Errorf("failed to subscribe to round management events: %w", err)
-	}
-	if err := subscribers.SubscribeToParticipantManagementEvents(ctx); err != nil {
-		return fmt.Errorf("failed to subscribe to participant management events: %w", err)
-	}
-	if err := subscribers.SubscribeToRoundFinalizationEvents(ctx); err != nil {
-		return fmt.Errorf("failed to subscribe to round finalization events: %w", err)
-	}
+	go func() {
+		// 3. Set up subscribers
+		subscribers := &roundsubscribers.RoundSubscribers{
+			Subscriber: subscriber,
+			Handlers:   *roundHandlers,
+		}
 
-	return nil
+		if err := subscribers.SubscribeToRoundManagementEvents(ctx); err != nil {
+			panic(err)
+		}
+		if err := subscribers.SubscribeToParticipantManagementEvents(ctx); err != nil {
+			panic(err)
+		}
+		if err := subscribers.SubscribeToRoundFinalizationEvents(ctx); err != nil {
+			panic(err)
+		}
+		if err := subscribers.SubscribeToRoundStartedEvents(ctx); err != nil {
+			panic(err)
+		}
+
+		module.initMutex.Lock()
+		module.initialized = true
+		module.initMutex.Unlock()
+
+	}()
+
+	return module, nil
 }
 
-// Init initializes the round module.
-func Init(ctx context.Context, js nats.JetStreamContext) (*Module, error) {
-	module := &Module{}
-	if err := module.Initialize(ctx, js); err != nil {
-		return nil, fmt.Errorf("failed to initialize round module: %w", err)
-	}
-	return module, nil
+// IsInitialized safely checks module initialization
+func (m *Module) IsInitialized() bool {
+	m.initMutex.Lock()
+	defer m.initMutex.Unlock()
+	return m.initialized
 }

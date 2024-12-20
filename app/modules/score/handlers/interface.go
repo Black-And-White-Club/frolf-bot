@@ -3,10 +3,10 @@ package scorehandlers
 import (
 	"context"
 
-	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// ScoreCommandHandler is an interface for handlers that process score commands.
-type ScoreCommandHandler interface {
-	Handle(ctx context.Context, cmd commands.Command) error
+// Handlers interface to uncouple handlers from specific implementations.
+type Handlers interface {
+	HandleScoreCorrected(ctx context.Context, msg *message.Message) error
 }

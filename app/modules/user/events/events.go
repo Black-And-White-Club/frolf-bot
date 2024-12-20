@@ -2,6 +2,33 @@ package userevents
 
 import userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 
+// User Events
+const (
+	UserStream = "user" // Stream for all user-related events
+
+	// User Signup Events
+	UserSignupRequestSubject  = UserStream + ".signup.request"  // Subject for requesting a new user signup
+	UserSignupResponseSubject = UserStream + ".signup.response" // Subject for the response to a signup request
+	UserCreatedSubject        = UserStream + ".created"         // Subject for indicating a new user was created
+
+	// User Role Update Events
+	UserRoleUpdateRequestSubject  = UserStream + ".role.update.request"  // Subject for requesting a user role update
+	UserRoleUpdateResponseSubject = UserStream + ".role.update.response" // Subject for the response to a role update request
+	UserRoleUpdatedSubject        = UserStream + ".role.updated"         // Subject for indicating a user's role was updated
+
+	// User Data Retrieval Events
+	GetUserRoleRequestSubject  = UserStream + ".role.get.request"  // Subject for requesting a user's role
+	GetUserRoleResponseSubject = UserStream + ".role.get.response" // Subject for the response to a role retrieval request
+	GetUserRequestSubject      = UserStream + ".get.request"       // Subject for requesting user data
+	GetUserResponseSubject     = UserStream + ".get.response"      // Subject for the response to a user data retrieval request
+
+	// Leaderboard Interaction Events
+	LeaderboardStream                   = "leaderboard"                             // Stream for leaderboard-related events
+	CheckTagAvailabilityRequestSubject  = LeaderboardStream + ".tag.check.request"  // Subject for checking tag availability
+	CheckTagAvailabilityResponseSubject = LeaderboardStream + ".tag.check.response" // Subject for the response to tag availability check
+	TagAssignedSubject                  = LeaderboardStream + ".tag.assigned"       // Subject for indicating a tag was assigned
+)
+
 // UserSignupRequest represents an event requesting a new user signup.
 type UserSignupRequest struct {
 	DiscordID string `json:"discord_id"`
@@ -63,21 +90,6 @@ type GetUserResponse struct {
 	User  userdb.User `json:"user"`
 	Error string      `json:"error,omitempty"` // Include error information if needed
 }
-
-// Leaderboard Events (defined within the user module)
-
-const (
-	CheckTagAvailabilityRequestSubject  = "user.check_tag_availability_request"
-	CheckTagAvailabilityResponseSubject = "user.check_tag_availability_response"
-	TagAssignedSubject                  = "user.tag_assigned"
-	UserRoleUpdatedSubject              = "user.user_role_updated"
-	LeaderboardStream                   = "leaderboard"
-	UserSignupResponseSubject           = "user.user_signup_response"
-	UserRoleUpdateResponseSubject       = "user.user_role_update_response"
-	UserStream                          = "user"
-	UserSignupRequestSubject            = "user.user_signup_request"
-	UserRoleUpdateRequestSubject        = "user.user_role_update_request"
-)
 
 // CheckTagAvailabilityRequest represents an event to check if a tag number is available.
 type CheckTagAvailabilityRequest struct {

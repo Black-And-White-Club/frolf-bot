@@ -1,80 +1,113 @@
 package score
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"sync"
+	"time"
 
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
-	scorequeries "github.com/Black-And-White-Club/tcr-bot/app/modules/score/queries"
-	scorerouter "github.com/Black-And-White-Club/tcr-bot/app/modules/score/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/ThreeDotsLabs/watermill/components/cqrs"
+	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/services"
+	scoresubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/subscribers"
+	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/ThreeDotsLabs/watermill/message"
+	nc "github.com/nats-io/nats.go"
 )
 
-// ScoreModule represents the score module.
-type ScoreModule struct {
-	CommandRouter  scorerouter.CommandRouter
-	QueryService   scorequeries.ScoreQueryService
-	PubSub         watermillutil.PubSuber
-	messageHandler *ScoreHandlers
+// Module represents the score module.
+type Module struct {
+	Subscriber  message.Subscriber
+	Publisher   message.Publisher
+	Service     scoreservice.Service
+	Handlers    scorehandlers.Handlers
+	logger      watermill.LoggerAdapter
+	config      *config.Config
+	initialized bool
+	initMutex   sync.Mutex
 }
 
-// NewScoreModule creates a new ScoreModule with the provided dependencies.
-func NewScoreModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*ScoreModule, error) {
-	marshaler := watermillutil.Marshaler
-	scoreCommandBus := scorerouter.NewScoreCommandBus(pubsub, marshaler)
-	scoreCommandRouter := scorerouter.NewScoreCommandRouter(scoreCommandBus)
-
-	scoreQueryService := scorequeries.NewScoreQueryService(dbService.ScoreDB)
-
-	messageHandler := NewScoreHandlers(scoreCommandRouter, scoreQueryService, pubsub)
-
-	return &ScoreModule{
-		CommandRouter:  scoreCommandRouter,
-		QueryService:   scoreQueryService,
-		PubSub:         pubsub,
-		messageHandler: messageHandler,
-	}, nil
-}
-
-// GetHandlers returns the handlers registered for the ScoreModule
-func (m *ScoreModule) GetHandlers() map[string]types.Handler {
-	return map[string]types.Handler{
-		"score_update_handler": {
-			Topic:         scorehandlers.TopicUpdateScores,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: scorehandlers.TopicUpdateScores + "_response",
-		},
-		"score_get_handler": {
-			Topic:         scorehandlers.TopicGetScore,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: scorehandlers.TopicGetScore + "_response",
-		},
+func NewModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, scoreDB scoredb.ScoreDB) (*Module, error) {
+	options := []nc.Option{
+		nc.RetryOnFailedConnect(true),
+		nc.Timeout(30 * time.Second),
+		nc.ReconnectWait(1 * time.Second),
+		nc.ErrorHandler(func(_ *nc.Conn, s *nc.Subscription, err error) {
+			if s != nil {
+				logger.Error("Error in subscription", err, watermill.LogFields{
+					"subject": s.Subject,
+					"queue":   s.Queue,
+				})
+			} else {
+				logger.Error("Error in connection", err, nil)
+			}
+		}),
 	}
-}
 
-// RegisterHandlers registers the score module's handlers.
-func (m *ScoreModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := m.GetHandlers()
+	jsConfig := nats.JetStreamConfig{
+		Disabled: false,
+	}
 
-	for handlerName, h := range handlers {
-		log.Printf("Registering handler: %s with topic %s", handlerName, string(h.Topic)) // Log handler registration
+	publisher, err := nats.NewPublisher(
+		nats.PublisherConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Marshaler:   &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create publisher: %w", err)
+	}
 
-		if err := router.AddHandler(
-			handlerName,
-			string(h.Topic),
-			pubsub,
-			h.ResponseTopic,
-			pubsub,
-			h.Handler,
-		); err != nil {
-			log.Printf("Failed to register handler %s: %v", handlerName, err) // Log registration error
-			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
+	subscriber, err := nats.NewSubscriber(
+		nats.SubscriberConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Unmarshaler: &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subscriber: %w", err)
+	}
+
+	scoreService := scoreservice.NewScoreService(publisher, subscriber, scoreDB, logger)
+	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, publisher, logger)
+
+	module := &Module{
+		Subscriber: subscriber,
+		Publisher:  publisher,
+		Service:    scoreService,
+		Handlers:   scoreHandlers,
+		logger:     logger,
+		config:     cfg,
+	}
+
+	go func() {
+		scoreSubscribers := scoresubscribers.NewScoreSubscribers(subscriber, logger, scoreHandlers, scoreService)
+
+		if err := scoreSubscribers.SubscribeToScoreEvents(ctx); err != nil {
+			logger.Error("Failed to subscribe to score events", err, nil)
+			fmt.Printf("Fatal error subscribing to score events: %v\n", err)
+		} else {
+			logger.Info("Score module subscribers are ready", nil)
+			module.initMutex.Lock()
+			module.initialized = true
+			module.initMutex.Unlock()
 		}
-	}
+	}()
 
-	return nil
+	return module, nil
+}
+
+// IsInitialized safely checks module initialization
+func (m *Module) IsInitialized() bool {
+	m.initMutex.Lock()
+	defer m.initMutex.Unlock()
+	return m.initialized
 }

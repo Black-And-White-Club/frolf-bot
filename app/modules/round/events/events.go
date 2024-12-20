@@ -119,6 +119,11 @@ const (
 	RoundCreatedSubject         = "round.created"
 	RoundUpdatedSubject         = "round.updated"
 	RoundDeletedSubject         = "round.deleted"
+	RoundReminderSubject        = "round.reminder"
+	RoundStartedSubject         = "round.started"
+	ParticipantJoinedSubject    = "round.participant.joined"
+	ProcessRoundScoresSubject   = "round.process.scores"
+	RoundCreatedFailedSubject   = "round.create.failed"
 )
 
 // RoundStartedEvent is published when a round starts.

@@ -30,7 +30,7 @@ func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.Round
 	if err != nil {
 		// Publish an event indicating the parsing error
 		errMsg := "Invalid date/time format. Please try a different format."
-		err = s.publishEvent(ctx, "round.created_failed", &roundevents.RoundCreatedFailedEvent{
+		err = s.publishEvent(ctx, roundevents.RoundCreatedFailedSubject, &roundevents.RoundCreatedFailedEvent{
 			Reason: errMsg,
 		})
 		if err != nil {
@@ -70,7 +70,7 @@ func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.Round
 	}
 
 	// Publish RoundCreatedEvent with the generated RoundID
-	err = s.publishEvent(ctx, "round.created", &roundevents.RoundCreatedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundCreatedSubject, &roundevents.RoundCreatedEvent{
 		RoundID:   roundID,
 		Name:      dto.Title,
 		StartTime: startTime,
@@ -128,7 +128,7 @@ func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.Round
 		Date:      &round.Date,
 		Time:      &round.Time,
 	}
-	err = s.publishEvent(ctx, "round.updated", updatedEvent)
+	err = s.publishEvent(ctx, roundevents.RoundUpdatedSubject, updatedEvent)
 	if err != nil {
 		return fmt.Errorf("failed to publish round updated event: %w", err)
 	}
@@ -144,7 +144,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, event *roundevents.Round
 	}
 
 	// Publish a RoundDeletedEvent
-	err = s.publishEvent(ctx, "round.deleted", &roundevents.RoundDeletedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundDeletedSubject, &roundevents.RoundDeletedEvent{
 		RoundID: event.RoundID,
 		State:   rounddb.RoundStateDeleted,
 	})
@@ -185,7 +185,7 @@ func (s *RoundService) StartRound(ctx context.Context, event *roundevents.RoundS
 	}
 
 	// 4. Publish a RoundStartedEvent with the participants
-	err = s.publishEvent(ctx, "round.started", &roundevents.RoundStartedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundStartedSubject, &roundevents.RoundStartedEvent{
 		RoundID:      event.RoundID,
 		Participants: participants,
 	})

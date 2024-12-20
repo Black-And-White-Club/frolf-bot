@@ -3,63 +3,112 @@ package user
 import (
 	"context"
 	"fmt"
-	"log"
+	"sync"
+	"time"
 
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/handlers"
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/service"
 	usersubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/subscribers"
+	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
-	"github.com/nats-io/nats.go"
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
+	"github.com/ThreeDotsLabs/watermill/message"
+	nc "github.com/nats-io/nats.go"
 )
 
 // Module represents the user module.
 type Module struct {
-	UserService  userservice.Service
-	UserHandlers userhandlers.Handlers
+	Subscriber  message.Subscriber
+	Publisher   message.Publisher
+	UserService userservice.Service
+	Handlers    userhandlers.Handlers
+	logger      watermill.LoggerAdapter
+	config      *config.Config
+	initialized bool
+	initMutex   sync.Mutex
 }
 
-// Initialize initializes the user module.
-func (m *Module) Initialize(ctx context.Context, js nats.JetStreamContext) error { // Remove publisher argument
-	// 1. Initialize dependencies
-	userDB := &userdb.UserDBImpl{}
+func NewUserModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, userDB userdb.UserDB) (*Module, error) {
+	options := []nc.Option{
+		nc.RetryOnFailedConnect(true),
+		nc.Timeout(30 * time.Second),
+		nc.ReconnectWait(1 * time.Second),
+		nc.ErrorHandler(func(_ *nc.Conn, s *nc.Subscription, err error) {
+			if s != nil {
+				logger.Error("Error in subscription", err, watermill.LogFields{
+					"subject": s.Subject,
+					"queue":   s.Queue,
+				})
+			} else {
+				logger.Error("Error in connection", err, nil)
+			}
+		}),
+	}
 
-	// Initialize Watermill publisher
-	pubSub := gochannel.NewGoChannel(
-		gochannel.Config{
-			OutputChannelBuffer: 1000,
+	jsConfig := nats.JetStreamConfig{
+		Disabled: false,
+	}
+
+	publisher, err := nats.NewPublisher(
+		nats.PublisherConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Marshaler:   &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
 		},
-		watermill.NopLogger{},
+		logger,
 	)
-
-	userService := &userservice.UserService{
-		UserDB:    userDB,
-		JS:        js,
-		Publisher: js, // Use the NATS connection as the publisher
+	if err != nil {
+		return nil, fmt.Errorf("failed to create publisher: %w", err)
 	}
 
-	userHandlers := &userhandlers.UserHandlers{
+	subscriber, err := nats.NewSubscriber(
+		nats.SubscriberConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Unmarshaler: &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subscriber: %w", err)
+	}
+
+	userService := userservice.NewUserService(publisher, subscriber, userDB, logger)
+	userHandlers := userhandlers.NewHandlers(userService, publisher, logger)
+
+	module := &Module{
+		Subscriber:  subscriber,
+		Publisher:   publisher,
 		UserService: userService,
-		Publisher:   pubSub, // Use the GoChannel pub/sub as the publisher
+		Handlers:    userHandlers,
+		logger:      logger,
+		config:      cfg,
+		initialized: false,
 	}
 
-	m.UserService = userService
-	m.UserHandlers = userHandlers
+	go func() {
+		if err := usersubscribers.SubscribeToUserEvents(ctx, subscriber, userHandlers, logger); err != nil {
+			logger.Error("Failed to subscribe to user events", err, nil)
+			// Handle the error appropriately, perhaps by exiting the application
+			// or setting an error flag on the module. For now just log
+			fmt.Printf("Fatal error subscribing to user events: %v\n", err)
+		} else {
+			logger.Info("User module subscribers are ready", nil)
+			module.initMutex.Lock()
+			module.initialized = true
+			module.initMutex.Unlock()
+		}
+	}()
 
-	// 2. Set up subscriptions
-	if err := usersubscribers.SubscribeToUserEvents(ctx, js, userHandlers); err != nil {
-		return fmt.Errorf("failed to subscribe to user events: %w", err)
-	}
-
-	return nil
+	return module, nil
 }
 
-// Init initializes the user module.
-func Init(ctx context.Context, js nats.JetStreamContext) (*Module, error) { // Remove publisher argument
-	module := &Module{}
-	if err := module.Initialize(ctx, js); err != nil {
-		log.Fatal(err)
-	}
-	return module, nil
+// IsInitialized safely checks module initialization
+func (m *Module) IsInitialized() bool {
+	m.initMutex.Lock()
+	defer m.initMutex.Unlock()
+	return m.initialized
 }

@@ -39,7 +39,7 @@ func (s *RoundService) JoinRound(ctx context.Context, event *roundevents.Partici
 	if tagNumber != nil {
 		joinedEvent.TagNumber = *tagNumber // Dereference the tag number for the event
 	}
-	err = s.publishEvent(ctx, "round.participant.joined", joinedEvent)
+	err = s.publishEvent(ctx, roundevents.ParticipantJoinedSubject, joinedEvent)
 	if err != nil {
 		return fmt.Errorf("failed to publish participant joined event: %w", err)
 	}
@@ -78,7 +78,7 @@ func (s *RoundService) UpdateScore(ctx context.Context, event *roundevents.Score
 		}
 	} else {
 		// 5. Publish a ScoreUpdatedEvent to notify the Discord bot
-		err = s.publishEvent(ctx, "round.score_updated", &roundevents.ScoreUpdatedEvent{
+		err = s.publishEvent(ctx, roundevents.ScoreUpdatedSubject, &roundevents.ScoreUpdatedEvent{
 			RoundID:     event.RoundID,
 			Participant: event.Participant,
 			Score:       event.Score,
@@ -131,7 +131,7 @@ func (s *RoundService) UpdateScoreAdmin(ctx context.Context, event *roundevents.
 	}
 
 	// 6. Publish a ScoreUpdatedEvent to notify the Discord bot
-	err = s.publishEvent(ctx, "round.score_updated", &roundevents.ScoreUpdatedEvent{
+	err = s.publishEvent(ctx, roundevents.ScoreUpdatedSubject, &roundevents.ScoreUpdatedEvent{
 		RoundID:     event.RoundID,
 		Participant: event.Participant,
 		Score:       event.Score,

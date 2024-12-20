@@ -29,7 +29,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, event *roundevents.Rou
 	}
 
 	// 4. Publish a RoundFinalizedEvent
-	err = s.publishEvent(ctx, "round.finalized", &roundevents.RoundFinalizedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundFinalizedSubject, &roundevents.RoundFinalizedEvent{
 		RoundID: event.RoundID,
 		// ... (Include any other necessary data in the event)
 	})
@@ -76,7 +76,7 @@ func (s *RoundService) sendRoundDataToScoreModule(ctx context.Context, roundID s
 	}
 
 	// 3. Publish an event to the Score Module
-	err = s.publishEvent(ctx, "score.process_round_scores", &roundevents.SendScoresEvent{
+	err = s.publishEvent(ctx, roundevents.ProcessRoundScoresSubject, &roundevents.SendScoresEvent{
 		RoundID: roundID,
 		Scores:  scores,
 	})

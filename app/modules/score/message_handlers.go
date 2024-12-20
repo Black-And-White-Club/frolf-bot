@@ -5,96 +5,67 @@ import (
 	"encoding/json"
 	"fmt"
 
-	scorecommands "github.com/Black-And-White-Club/tcr-bot/app/modules/score/commands"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
-	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
-	scorequeries "github.com/Black-And-White-Club/tcr-bot/app/modules/score/queries"
-	scorerouter "github.com/Black-And-White-Club/tcr-bot/app/modules/score/router"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/events"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// GetScoreRequest represents the incoming request to get a score.
-type GetScoreRequest struct {
-	DiscordID string `json:"discord_id"`
-	RoundID   string `json:"round_id"`
+// MessageHandlers handles incoming messages and publishes corresponding events.
+type MessageHandlers struct {
+	Publisher message.Publisher
+	logger    watermill.LoggerAdapter
 }
 
-// GetScoreResponse is the response for GetScore
-type GetScoreResponse struct {
-	Score scoredb.Score `json:"score"` // Use scoredb.Score
-}
-
-// ScoreHandlers defines the handlers for score-related events.
-type ScoreHandlers struct {
-	commandRouter scorerouter.CommandRouter
-	queryService  scorequeries.QueryService
-	pubsub        watermillutil.PubSuber
-}
-
-// NewScoreHandlers creates a new ScoreHandlers instance.
-func NewScoreHandlers(commandRouter scorerouter.CommandRouter, queryService scorequeries.QueryService, pubsub watermillutil.PubSuber) *ScoreHandlers {
-	return &ScoreHandlers{
-		commandRouter: commandRouter,
-		queryService:  queryService,
-		pubsub:        pubsub,
+// NewMessageHandlers creates a new MessageHandlers.
+func NewMessageHandlers(publisher message.Publisher, logger watermill.LoggerAdapter) *MessageHandlers {
+	return &MessageHandlers{
+		Publisher: publisher,
+		logger:    logger,
 	}
 }
 
-// Handle implements the MessageHandler interface.
-func (h *ScoreHandlers) Handle(msg *message.Message) ([]*message.Message, error) {
-	switch msg.Metadata.Get("topic") {
-	case scorehandlers.TopicUpdateScores:
-		return h.HandleUpdateScores(msg)
-	case scorehandlers.TopicGetScore:
-		return h.HandleGetScore(msg)
+// HandleMessage processes incoming messages and publishes corresponding events.
+func (h *MessageHandlers) HandleMessage(msg *message.Message) error {
+	// 1. Determine message type based on subject.
+	subject := msg.Metadata.Get("subject")
+	ctx := context.Background()
+
+	switch subject {
+	case scoreevents.ScoreCorrectedEventSubject:
+		return h.handleScoreCorrection(ctx, msg)
+	// ... handle other message types based on subject ...
 	default:
-		return nil, fmt.Errorf("unknown message topic: %s", msg.Metadata.Get("topic"))
+		h.logger.Error("Unknown message type", fmt.Errorf("unknown message type: %s", subject), watermill.LogFields{
+			"subject": subject,
+		})
+		return fmt.Errorf("unknown message type: %s", subject)
 	}
 }
 
-// HandleUpdateScores updates scores for a round.
-func (h *ScoreHandlers) HandleUpdateScores(msg *message.Message) ([]*message.Message, error) {
-	var cmd scorecommands.UpdateScoresCommand
-	if err := json.Unmarshal(msg.Payload, &cmd); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleScoreCorrection(_ context.Context, msg *message.Message) error {
+	var correctionEvent scoreevents.ScoreCorrectedEvent
+	if err := json.Unmarshal(msg.Payload, &correctionEvent); err != nil {
+		h.logger.Error("Failed to unmarshal ScoreCorrectionEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to unmarshal ScoreCorrectionEvent: %w", err)
 	}
 
-	if err := h.commandRouter.UpdateScores(context.Background(), cmd.RoundID, cmd.Scores); err != nil {
-		return nil, fmt.Errorf("failed to update scores: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleGetScore retrieves a score.
-func (h *ScoreHandlers) HandleGetScore(msg *message.Message) ([]*message.Message, error) {
-	var req GetScoreRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	score, err := h.queryService.GetScore(context.Background(), &scorequeries.GetScoreQuery{
-		DiscordID: req.DiscordID,
-		RoundID:   req.RoundID,
-	})
+	// 2. Publish ScoreCorrectionEvent
+	eventData, err := json.Marshal(correctionEvent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get score: %w", err)
+		h.logger.Error("Failed to marshal ScoreCorrectionEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to marshal ScoreCorrectionEvent: %w", err)
 	}
 
-	if score == nil {
-		return nil, fmt.Errorf("score not found: %s, %s", req.DiscordID, req.RoundID)
+	if err := h.Publisher.Publish(scoreevents.ScoreCorrectedEventSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish ScoreCorrectionEvent", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to publish ScoreCorrectionEvent: %w", err)
 	}
-
-	response := GetScoreResponse{Score: *score} // Use *score to get the scoredb.Score value
-	payload, err := json.Marshal(response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal score response: %w", err)
-	}
-
-	respMsg := message.NewMessage(watermill.NewUUID(), payload)
-	respMsg.Metadata.Set("topic", scorehandlers.TopicGetScoreResponse)
-
-	return []*message.Message{respMsg}, nil
+	msg.Ack()
+	return nil
 }

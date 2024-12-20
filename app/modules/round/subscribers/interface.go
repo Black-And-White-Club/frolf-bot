@@ -9,4 +9,5 @@ type Subscribers interface {
 	SubscribeToRoundManagementEvents(ctx context.Context) error
 	SubscribeToParticipantManagementEvents(ctx context.Context) error
 	SubscribeToRoundFinalizationEvents(ctx context.Context) error
+	SubscribeToRoundStartedEvents(ctx context.Context) error
 }

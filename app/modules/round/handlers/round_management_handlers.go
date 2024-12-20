@@ -61,3 +61,19 @@ func (h *RoundHandlers) HandleDeleteRound(msg *message.Message) error {
 
 	return nil
 }
+
+// HandleStartRound handles the RoundStartedEvent.
+func (h *RoundHandlers) HandleStartRound(msg *message.Message) error {
+	defer msg.Ack()
+
+	var event roundevents.RoundStartedEvent
+	if err := json.Unmarshal(msg.Payload, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal RoundStartedEvent: %w", err)
+	}
+
+	if err := h.RoundService.StartRound(context.Background(), &event); err != nil {
+		return fmt.Errorf("failed to start round: %w", err)
+	}
+
+	return nil
+}

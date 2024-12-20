@@ -16,4 +16,5 @@ type Service interface {
 	UpdateScore(ctx context.Context, event *roundevents.ScoreUpdatedEvent) error
 	UpdateScoreAdmin(ctx context.Context, event *roundevents.ScoreUpdatedEvent) error
 	FinalizeRound(ctx context.Context, event *roundevents.RoundFinalizedEvent) error
+	StartRound(ctx context.Context, event *roundevents.RoundStartedEvent) error
 }

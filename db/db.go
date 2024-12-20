@@ -2,6 +2,7 @@ package db
 
 import (
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 )
 
@@ -14,6 +15,6 @@ const (
 type Database interface {
 	// leaderboarddb.LeaderboardDB
 	rounddb.RoundDB
-	// scoredb.ScoreDB
+	scoredb.ScoreDB
 	userdb.UserDB
 }
