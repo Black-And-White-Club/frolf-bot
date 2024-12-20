@@ -1,96 +1,117 @@
 package leaderboard
 
 import (
+	"context"
 	"fmt"
+	"sync"
+	"time"
 
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
 	leaderboardhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/handlers"
-	leaderboardqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/queries"
-	leaderboardrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
-	"github.com/ThreeDotsLabs/watermill/components/cqrs"
+	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/service"
+	leaderboardsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/subscribers"
+	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/ThreeDotsLabs/watermill/message"
+	nc "github.com/nats-io/nats.go"
 )
 
-// LeaderboardModule represents the leaderboard module.
-type LeaderboardModule struct {
-	CommandRouter  leaderboardrouter.CommandRouter
-	QueryService   leaderboardqueries.QueryService
-	PubSub         watermillutil.PubSuber
-	messageHandler *LeaderboardHandlers
+// Module represents the leaderboard module.
+type Module struct {
+	Subscriber  message.Subscriber
+	Publisher   message.Publisher
+	Service     leaderboardservice.Service
+	Handlers    leaderboardhandlers.Handlers
+	logger      watermill.LoggerAdapter
+	config      *config.Config
+	initialized bool
+	initMutex   sync.Mutex
 }
 
-// NewLeaderboardModule creates a new LeaderboardModule with the provided dependencies.
-func NewLeaderboardModule(dbService *bundb.DBService, commandBus *cqrs.CommandBus, pubsub watermillutil.PubSuber) (*LeaderboardModule, error) {
-	marshaler := watermillutil.Marshaler
-	leaderboardCommandBus := leaderboardrouter.NewLeaderboardCommandBus(pubsub, marshaler)
-	leaderboardCommandRouter := leaderboardrouter.NewLeaderboardCommandRouter(leaderboardCommandBus)
-
-	leaderboardQueryService := leaderboardqueries.NewLeaderboardQueryService(dbService.LeaderboardDB)
-
-	messageHandler := NewLeaderboardHandlers(leaderboardCommandRouter, leaderboardQueryService, pubsub)
-
-	return &LeaderboardModule{
-		CommandRouter:  leaderboardCommandRouter,
-		QueryService:   leaderboardQueryService,
-		PubSub:         pubsub,
-		messageHandler: messageHandler,
-	}, nil
-}
-
-// GetHandlers returns the handlers for the leaderboard module.
-func (m *LeaderboardModule) GetHandlers() map[string]types.Handler {
-	return map[string]types.Handler{
-		"leaderboard_get_handler": {
-			Topic:         leaderboardhandlers.TopicGetLeaderboard,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicGetLeaderboard + "_response",
-		},
-		"leaderboard_update_handler": {
-			Topic:         leaderboardhandlers.TopicUpdateLeaderboard,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicUpdateLeaderboard + "_response",
-		},
-		"leaderboard_receive_scores_handler": {
-			Topic:         leaderboardhandlers.TopicReceiveScores,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicReceiveScores + "_response",
-		},
-		"leaderboard_assign_tags_handler": {
-			Topic:         leaderboardhandlers.TopicAssignTags,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicAssignTags + "_response",
-		},
-		"leaderboard_initiate_tag_swap_handler": {
-			Topic:         leaderboardhandlers.TopicInitiateTagSwap,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicInitiateTagSwap + "_response",
-		},
-		"leaderboard_swap_groups_handler": {
-			Topic:         leaderboardhandlers.TopicSwapGroups,
-			Handler:       m.messageHandler.Handle,
-			ResponseTopic: leaderboardhandlers.TopicSwapGroups + "_response",
-		},
+// NewModule creates a new LeaderboardModule with the provided dependencies.
+func NewModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, leaderboardDB leaderboarddb.LeaderboardDB) (*Module, error) {
+	// Initialize NATS publisher and subscriber
+	options := []nc.Option{
+		nc.RetryOnFailedConnect(true),
+		nc.Timeout(30 * time.Second),
+		nc.ReconnectWait(1 * time.Second),
+		nc.ErrorHandler(func(_ *nc.Conn, s *nc.Subscription, err error) {
+			if s != nil {
+				logger.Error("Error in subscription", err, watermill.LogFields{
+					"subject": s.Subject,
+					"queue":   s.Queue,
+				})
+			} else {
+				logger.Error("Error in connection", err, nil)
+			}
+		}),
 	}
-}
 
-// RegisterHandlers registers the leaderboard module's handlers.
-func (m *LeaderboardModule) RegisterHandlers(router *message.Router, pubsub watermillutil.PubSuber) error {
-	handlers := m.GetHandlers()
+	jsConfig := nats.JetStreamConfig{
+		Disabled: false,
+	}
 
-	for handlerName, h := range handlers {
-		if err := router.AddHandler(
-			handlerName,
-			string(h.Topic),
-			pubsub, // Use the pubsub argument here
-			h.ResponseTopic,
-			pubsub, // Use the pubsub argument here
-			h.Handler,
-		); err != nil {
-			return fmt.Errorf("failed to register %s handler: %v", handlerName, err)
+	publisher, err := nats.NewPublisher(
+		nats.PublisherConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Marshaler:   &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create publisher: %w", err)
+	}
+
+	subscriber, err := nats.NewSubscriber(
+		nats.SubscriberConfig{
+			URL:         cfg.NATS.URL,
+			NatsOptions: options,
+			Unmarshaler: &nats.NATSMarshaler{},
+			JetStream:   jsConfig,
+		},
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subscriber: %w", err)
+	}
+
+	// Initialize leaderboard service and handlers
+	leaderboardService := leaderboardservice.NewLeaderboardService(publisher, leaderboardDB, logger)
+	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, publisher, logger)
+
+	module := &Module{
+		Subscriber: subscriber,
+		Publisher:  publisher,
+		Service:    leaderboardService,
+		Handlers:   leaderboardHandlers,
+		logger:     logger,
+		config:     cfg,
+	}
+
+	// Subscribe to leaderboard events
+	go func() {
+		leaderboardSubscribers := leaderboardsubscribers.NewLeaderboardSubscribers(subscriber, logger, leaderboardHandlers)
+
+		if err := leaderboardSubscribers.SubscribeToLeaderboardEvents(ctx); err != nil {
+			logger.Error("Failed to subscribe to leaderboard events", err, nil)
+			fmt.Printf("Fatal error subscribing to leaderboard events: %v\n", err)
+		} else {
+			logger.Info("Leaderboard module subscribers are ready", nil)
+			module.initMutex.Lock()
+			module.initialized = true
+			module.initMutex.Unlock()
 		}
-	}
+	}()
 
-	return nil
+	return module, nil
+}
+
+// IsInitialized safely checks module initialization
+func (m *Module) IsInitialized() bool {
+	m.initMutex.Lock()
+	defer m.initMutex.Unlock()
+	return m.initialized
 }

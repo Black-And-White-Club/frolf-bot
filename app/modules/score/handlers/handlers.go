@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/events"
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/services"
+	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/service"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )

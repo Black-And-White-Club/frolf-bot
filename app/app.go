@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
@@ -27,13 +29,14 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config      *config.Config
-	Logger      watermill.LoggerAdapter
-	Router      *message.Router
-	UserModule  *user.Module
-	RoundModule *round.Module
-	ScoreModule *score.Module
-	DB          db.Database
+	Config            *config.Config
+	Logger            watermill.LoggerAdapter
+	Router            *message.Router
+	UserModule        *user.Module
+	RoundModule       *round.Module
+	ScoreModule       *score.Module
+	LeaderboardModule *leaderboard.Module // Added LeaderboardModule
+	DB                db.Database
 }
 
 // Initialize initializes the application.
@@ -50,6 +53,11 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	app.Logger = watermill.NewStdLogger(false, false)
 
+	// app.DB, err = db.NewDatabase(cfg.Database)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to initialize database: %w", err)
+	// }
+
 	streamCreator, err := jetstream.NewStreamCreator(cfg.NATS.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create stream creator: %w", err)
@@ -63,8 +71,9 @@ func (app *App) Initialize(ctx context.Context) error {
 		"leaderboard": {
 			{
 				ConsumerName: "check_tag_availability_consumer",
-				Subject:      userevents.CheckTagAvailabilityRequestSubject,
+				Subject:      leaderboardevents.CheckTagAvailabilityRequestSubject, // This should be from the leaderboard module
 			},
+			// Add more leaderboard consumers here if needed
 		},
 		"round": {
 			{
@@ -164,6 +173,12 @@ func (app *App) Initialize(ctx context.Context) error {
 	}
 	app.ScoreModule = scoreModule
 
+	leaderboardModule, err := leaderboard.NewModule(ctx, cfg, app.Logger, app.DB) // Initialize the leaderboard module
+	if err != nil {
+		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
+	}
+	app.LeaderboardModule = leaderboardModule
+
 	return nil
 }
 
@@ -193,8 +208,10 @@ func (app *App) Run(ctx context.Context) error {
 				log.Fatalf("Timeout waiting for subscribers to initialize")
 				return
 			case <-time.After(100 * time.Millisecond):
-				if app.UserModule != nil && app.UserModule.IsInitialized() {
-					fmt.Println("User module initialized")
+				// Check if both user and leaderboard modules are initialized
+				if app.UserModule != nil && app.UserModule.IsInitialized() &&
+					app.LeaderboardModule != nil && app.LeaderboardModule.IsInitialized() {
+					fmt.Println("User and Leaderboard modules initialized")
 					return
 				}
 			}
@@ -203,11 +220,9 @@ func (app *App) Run(ctx context.Context) error {
 
 	wg.Wait()
 
-	// *** Correct shutdown handling ***
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-	// Wait for either interrupt OR router context cancellation
 	select {
 	case <-interrupt:
 		fmt.Println("Shutting down gracefully (interrupt signal received)...")
@@ -215,19 +230,13 @@ func (app *App) Run(ctx context.Context) error {
 		fmt.Println("Shutting down gracefully (router context done)...")
 	}
 
-	// *** This is the most important change for the double Ctrl+C issue ***
-	// Cancel the main context here. This will propagate to all other contexts derived from it.
-	// This ensures that all operations using the main context are stopped.
-	//cancel() // Call the main context cancel
-
-	// Now close the router. This will block until all messages are processed (or timeout)
 	if err := app.Router.Close(); err != nil {
 		log.Printf("Error closing Watermill router: %v", err)
 	}
 
 	app.Close()
 
-	fmt.Println("Graceful shutdown complete.") // Print after everything is closed
+	fmt.Println("Graceful shutdown complete.")
 
 	return nil
 }
@@ -267,5 +276,12 @@ func (app *App) Close() {
 		}
 	}
 
-	// Close connections for other modules... (add these back when you implement them)
+	if app.LeaderboardModule != nil { // Close connections for the leaderboard module
+		if err := app.LeaderboardModule.Publisher.Close(); err != nil {
+			log.Printf("Error closing leaderboard module publisher: %v", err)
+		}
+		if err := app.LeaderboardModule.Subscriber.Close(); err != nil {
+			log.Printf("Error closing leaderboard module subscriber: %v", err)
+		}
+	}
 }

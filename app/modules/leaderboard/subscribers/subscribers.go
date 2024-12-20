@@ -1,48 +1,60 @@
-package scoresubscribers
+package leaderboardsubscribers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/events"
-	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/service"
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/events"
+	leaderboardhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/handlers"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// ScoreSubscribers subscribes to round-related events.
-type ScoreSubscribers struct {
+// LeaderboardSubscribers subscribes to leaderboard-related events.
+type LeaderboardSubscribers struct {
 	Subscriber message.Subscriber
 	logger     watermill.LoggerAdapter
-	Handlers   scorehandlers.Handlers
-	Service    scoreservice.Service
+	Handlers   leaderboardhandlers.Handlers
 }
 
-// NewScoreSubscribers creates a new ScoreSubscribers instance.
-func NewScoreSubscribers(subscriber message.Subscriber, logger watermill.LoggerAdapter, handlers scorehandlers.Handlers, service scoreservice.Service) *ScoreSubscribers {
-	return &ScoreSubscribers{
+// NewLeaderboardSubscribers creates a new LeaderboardSubscribers instance.
+func NewLeaderboardSubscribers(subscriber message.Subscriber, logger watermill.LoggerAdapter, handlers leaderboardhandlers.Handlers) *LeaderboardSubscribers {
+	return &LeaderboardSubscribers{
 		Subscriber: subscriber,
 		logger:     logger,
 		Handlers:   handlers,
-		Service:    service,
 	}
 }
 
-// SubscribeToScoreEvents subscribes to score-related events and routes them to handlers.
-func (s *ScoreSubscribers) SubscribeToScoreEvents(ctx context.Context) error {
+// SubscribeToLeaderboardEvents subscribes to leaderboard-related events and routes them to handlers.
+func (s *LeaderboardSubscribers) SubscribeToLeaderboardEvents(ctx context.Context) error {
 	eventSubscriptions := []struct {
 		subject string
 		handler func(context.Context, *message.Message) error
 	}{
 		{
-			subject: scoreevents.ScoresReceivedEventSubject,
-			handler: s.handleScoresReceived,
+			subject: leaderboardevents.LeaderboardUpdateEventSubject,
+			handler: s.Handlers.HandleLeaderboardUpdate,
 		},
 		{
-			subject: scoreevents.ScoreCorrectedEventSubject,
-			handler: s.Handlers.HandleScoreCorrected,
+			subject: leaderboardevents.TagAssignedSubject,
+			handler: s.Handlers.HandleTagAssigned,
+		},
+		{
+			subject: leaderboardevents.TagSwapRequestSubject,
+			handler: s.Handlers.HandleTagSwapRequest,
+		},
+		{
+			subject: leaderboardevents.GetLeaderboardRequestSubject,
+			handler: s.Handlers.HandleGetLeaderboardRequest,
+		},
+		{
+			subject: leaderboardevents.GetTagByDiscordIDRequestSubject,
+			handler: s.Handlers.HandleGetTagByDiscordIDRequest,
+		},
+		{
+			subject: leaderboardevents.CheckTagAvailabilityRequestSubject,
+			handler: s.Handlers.HandleCheckTagAvailabilityRequest,
 		},
 	}
 
@@ -56,19 +68,6 @@ func (s *ScoreSubscribers) SubscribeToScoreEvents(ctx context.Context) error {
 		s.logger.Info("Successfully subscribed to events", watermill.LogFields{"subject": event.subject})
 
 		go processEventMessages(ctx, msgs, event.handler, s.logger)
-	}
-
-	return nil
-}
-
-func (s *ScoreSubscribers) handleScoresReceived(ctx context.Context, msg *message.Message) error {
-	var event scoreevents.ScoresReceivedEvent
-	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		return fmt.Errorf("failed to unmarshal ScoresReceivedEvent: %w", err)
-	}
-
-	if err := s.Service.ProcessRoundScores(ctx, event); err != nil {
-		return fmt.Errorf("failed to process round scores: %w", err)
 	}
 
 	return nil

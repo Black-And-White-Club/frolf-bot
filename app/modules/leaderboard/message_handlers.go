@@ -5,130 +5,67 @@ import (
 	"encoding/json"
 	"fmt"
 
-	leaderboardcommands "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/commands"
-	leaderboardhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/handlers"
-	leaderboardqueries "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/queries"
-	leaderboardrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/router"
-	watermillutil "github.com/Black-And-White-Club/tcr-bot/internal/watermill"
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/events"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// LeaderboardHandlers defines the handlers for leaderboard-related events.
-type LeaderboardHandlers struct {
-	commandRouter leaderboardrouter.CommandRouter
-	queryService  leaderboardqueries.QueryService
-	pubsub        watermillutil.PubSuber
+// MessageHandlers handles incoming messages and publishes corresponding events.
+type MessageHandlers struct {
+	Publisher message.Publisher
+	logger    watermill.LoggerAdapter
 }
 
-// NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
-func NewLeaderboardHandlers(commandRouter leaderboardrouter.CommandRouter, queryService leaderboardqueries.QueryService, pubsub watermillutil.PubSuber) *LeaderboardHandlers {
-	return &LeaderboardHandlers{
-		commandRouter: commandRouter,
-		queryService:  queryService,
-		pubsub:        pubsub,
+// NewMessageHandlers creates a new MessageHandlers.
+func NewMessageHandlers(publisher message.Publisher, logger watermill.LoggerAdapter) *MessageHandlers {
+	return &MessageHandlers{
+		Publisher: publisher,
+		logger:    logger,
 	}
 }
 
-// Handle implements the MessageHandler interface.
-func (h *LeaderboardHandlers) Handle(msg *message.Message) ([]*message.Message, error) {
-	switch msg.Metadata.Get("topic") {
-	case leaderboardhandlers.TopicGetLeaderboard:
-		return h.HandleGetLeaderboard(msg)
-	case leaderboardhandlers.TopicUpdateLeaderboard:
-		return h.HandleUpdateLeaderboard(msg)
-	case leaderboardhandlers.TopicReceiveScores:
-		return h.HandleReceiveScores(msg)
-	case leaderboardhandlers.TopicAssignTag:
-		return h.HandleAssignTags(msg)
-	case leaderboardhandlers.TopicInitiateTagSwap:
-		return h.HandleInitiateTagSwap(msg)
-	case leaderboardhandlers.TopicSwapGroups:
-		return h.HandleSwapGroups(msg)
+// HandleMessage processes incoming messages and publishes corresponding events.
+func (h *MessageHandlers) HandleMessage(msg *message.Message) error {
+	// 1. Determine message type based on subject.
+	subject := msg.Metadata.Get("subject")
+	ctx := context.Background()
+
+	switch subject {
+	case leaderboardevents.TagSwapRequestSubject:
+		return h.handleTagSwapRequest(ctx, msg)
+	// ... handle other message types based on subject ...
 	default:
-		return nil, fmt.Errorf("unknown message topic: %s", msg.Metadata.Get("topic"))
+		h.logger.Error("Unknown message type", fmt.Errorf("unknown message type: %s", subject), watermill.LogFields{
+			"subject": subject,
+		})
+		return fmt.Errorf("unknown message type: %s", subject)
 	}
 }
 
-// HandleGetLeaderboard handles the GetLeaderboardRequest command.
-func (h *LeaderboardHandlers) HandleGetLeaderboard(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.GetLeaderboardRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+func (h *MessageHandlers) handleTagSwapRequest(_ context.Context, msg *message.Message) error {
+	var swapRequest leaderboardevents.TagSwapRequest // Use the TagSwapRequest from events
+	if err := json.Unmarshal(msg.Payload, &swapRequest); err != nil {
+		h.logger.Error("Failed to unmarshal TagSwapRequest", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to unmarshal TagSwapRequest: %w", err)
 	}
 
-	if err := h.commandRouter.GetLeaderboard(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
+	// 2. Publish TagSwapRequestEvent
+	eventData, err := json.Marshal(&swapRequest)
+	if err != nil {
+		h.logger.Error("Failed to marshal TagSwapRequest", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to marshal TagSwapRequest: %w", err)
 	}
 
-	return nil, nil
-}
-
-// HandleUpdateLeaderboard handles the UpdateLeaderboardRequest command.
-func (h *LeaderboardHandlers) HandleUpdateLeaderboard(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.UpdateLeaderboardRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+	if err := h.Publisher.Publish(leaderboardevents.TagSwapRequestSubject, message.NewMessage(watermill.NewUUID(), eventData)); err != nil {
+		h.logger.Error("Failed to publish TagSwapRequest", err, watermill.LogFields{
+			"message_id": msg.UUID,
+		})
+		return fmt.Errorf("failed to publish TagSwapRequest: %w", err)
 	}
-
-	if err := h.commandRouter.UpdateLeaderboard(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to update leaderboard: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleReceiveScores handles the ReceiveScoresRequest command.
-func (h *LeaderboardHandlers) HandleReceiveScores(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.ReceiveScoresRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.ReceiveScores(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to receive scores: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleAssignTags handles the AssignTagsRequest command.
-func (h *LeaderboardHandlers) HandleAssignTags(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.AssignTagsRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.AssignTags(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to assign tags: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleInitiateTagSwap handles the InitiateTagSwapRequest command.
-func (h *LeaderboardHandlers) HandleInitiateTagSwap(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.InitiateTagSwapRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.InitiateTagSwap(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to initiate tag swap: %w", err)
-	}
-
-	return nil, nil
-}
-
-// HandleSwapGroups handles the SwapGroupsRequest command.
-func (h *LeaderboardHandlers) HandleSwapGroups(msg *message.Message) ([]*message.Message, error) {
-	var req leaderboardcommands.SwapGroupsRequest
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	if err := h.commandRouter.SwapGroups(context.Background(), req.Input); err != nil {
-		return nil, fmt.Errorf("failed to swap groups: %w", err)
-	}
-
-	return nil, nil
+	msg.Ack()
+	return nil
 }

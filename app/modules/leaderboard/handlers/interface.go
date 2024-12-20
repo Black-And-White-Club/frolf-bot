@@ -3,15 +3,15 @@ package leaderboardhandlers
 import (
 	"context"
 
-	"github.com/Black-And-White-Club/tcr-bot/internal/commands"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// LeaderboardCommandHandler is an interface for handlers that process user commands.
-type LeaderboardCommandHandler interface {
-	Handle(ctx context.Context, cmd commands.Command) error
-}
-
-// UserQueryHandler is an interface for handlers that process user queries.
-type LeaderboardQueryHandler interface {
-	// Handle(ctx context.Context, query interface{}) (interface{}, error)
+// Handlers interface to uncouple handlers from specific implementations.
+type Handlers interface {
+	HandleLeaderboardUpdate(ctx context.Context, msg *message.Message) error
+	HandleTagAssigned(ctx context.Context, msg *message.Message) error
+	HandleTagSwapRequest(ctx context.Context, msg *message.Message) error
+	HandleGetLeaderboardRequest(ctx context.Context, msg *message.Message) error
+	HandleGetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error
+	HandleCheckTagAvailabilityRequest(ctx context.Context, msg *message.Message) error
 }

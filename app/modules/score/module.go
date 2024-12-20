@@ -8,7 +8,7 @@ import (
 
 	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
 	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/services"
+	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/service"
 	scoresubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/subscribers"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/ThreeDotsLabs/watermill"
