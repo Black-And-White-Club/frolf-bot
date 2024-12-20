@@ -29,6 +29,7 @@ func NewHandlers(userService userservice.Service, publisher message.Publisher, l
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
 func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message.Message) error {
+	msg.Ack()
 	h.logger.Info("HandleUserSignupRequest called", watermill.LogFields{"message_id": msg.UUID})
 
 	var req userevents.UserSignupRequest
@@ -36,6 +37,8 @@ func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message
 		h.logger.Error("Failed to unmarshal UserSignupRequest", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to unmarshal UserSignupRequest: %w", err)
 	}
+
+	fmt.Printf("[DEBUG] HandleUserSignupRequest: Received request: %+v\n", req)
 
 	// Use the context from the message
 	ctx = msg.Context()
@@ -45,6 +48,8 @@ func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message
 		h.logger.Error("Failed to process user signup request", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to process user signup request: %w", err)
 	}
+
+	fmt.Printf("[DEBUG] HandleUserSignupRequest: Got response from OnUserSignupRequest: %+v\n", resp)
 
 	// Publish the response event
 	respData, err := json.Marshal(resp)

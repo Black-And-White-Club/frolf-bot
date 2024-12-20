@@ -14,11 +14,11 @@ import (
 type LeaderboardSubscribers struct {
 	Subscriber message.Subscriber
 	logger     watermill.LoggerAdapter
-	Handlers   leaderboardhandlers.Handlers
+	Handlers   *leaderboardhandlers.LeaderboardHandlers
 }
 
 // NewLeaderboardSubscribers creates a new LeaderboardSubscribers instance.
-func NewLeaderboardSubscribers(subscriber message.Subscriber, logger watermill.LoggerAdapter, handlers leaderboardhandlers.Handlers) *LeaderboardSubscribers {
+func NewLeaderboardSubscribers(subscriber message.Subscriber, logger watermill.LoggerAdapter, handlers *leaderboardhandlers.LeaderboardHandlers) *LeaderboardSubscribers {
 	return &LeaderboardSubscribers{
 		Subscriber: subscriber,
 		logger:     logger,
@@ -59,13 +59,17 @@ func (s *LeaderboardSubscribers) SubscribeToLeaderboardEvents(ctx context.Contex
 	}
 
 	for _, event := range eventSubscriptions {
-		s.logger.Info("Subscribing to events", watermill.LogFields{"subject": event.subject})
 		msgs, err := s.Subscriber.Subscribe(ctx, event.subject)
 		if err != nil {
-			s.logger.Error("Failed to subscribe to events", err, watermill.LogFields{"subject": event.subject})
+			s.logger.Error("Failed to subscribe to events", err, watermill.LogFields{
+				"subject": event.subject,
+			})
 			return fmt.Errorf("failed to subscribe to %s events: %w", event.subject, err)
 		}
-		s.logger.Info("Successfully subscribed to events", watermill.LogFields{"subject": event.subject})
+		s.logger.Info("Successfully subscribed to events", watermill.LogFields{
+			"subject": event.subject,
+		})
+		fmt.Printf("[DEBUG] leaderboardsubscribers: Subscribed to subject: %s\n", event.subject)
 
 		go processEventMessages(ctx, msgs, event.handler, s.logger)
 	}
@@ -98,11 +102,15 @@ func processEventMessages(
 				"payload":    string(msg.Payload),
 			})
 
-			if err := handler(ctx, msg); err != nil {
+			err := handler(ctx, msg)
+			if err != nil {
 				logger.Error("Error handling event", err, watermill.LogFields{
 					"message_id": msg.UUID,
 				})
-				msg.Nack()
+				// Only Nack if you want the message to be retried
+				// msg.Nack()
+				// Consider just logging the error and acknowledging the message
+				msg.Ack()
 				continue
 			}
 

@@ -55,8 +55,8 @@ func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req userevent
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// 3. Publish TagAssigned event to the leaderboard module
-	if err := s.publishTagAssigned(newUser.DiscordID, req.TagNumber); err != nil {
+	// 3. Publish TagAssigned event to the leaderboard module using the context from the message
+	if err := s.publishTagAssigned(ctx, newUser.DiscordID, req.TagNumber); err != nil {
 		return nil, fmt.Errorf("failed to publish TagAssigned event: %w", err)
 	}
 
@@ -124,46 +124,56 @@ func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber in
 	msg := message.NewMessage(watermill.NewUUID(), reqData)
 	msg.Metadata.Set("correlation_id", correlationID)
 
+	// Add a temporary delay for debugging (REMOVE THIS IN PRODUCTION)
+	fmt.Println("[DEBUG] checkTagAvailability: Waiting for subscribers to be ready...")
+	time.Sleep(2 * time.Second) // Wait for 2 seconds
+
 	// 5. Publish the request
+	fmt.Println("[DEBUG] checkTagAvailability: Publishing CheckTagAvailabilityRequest")
 	if err := s.Publisher.Publish(userevents.CheckTagAvailabilityRequestSubject, msg); err != nil {
 		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err)
 	}
 
-	// 6. Subscribe to the response topic with a unique queue group per request
-	responseTopic := userevents.CheckTagAvailabilityResponseSubject
+	// 6. Subscribe to the response topic (using the string literal to avoid dependency)
+	responseTopic := "leaderboard.check_tag_availability_response"
+
+	fmt.Printf("[DEBUG] checkTagAvailability: Subscribing to response topic: %s\n", responseTopic)
 	sub, err := s.Subscriber.Subscribe(ctx, responseTopic)
 	if err != nil {
 		return false, fmt.Errorf("failed to subscribe to CheckTagAvailabilityResponse: %w", err)
 	}
+	fmt.Printf("[DEBUG] checkTagAvailability: Subscribed to response topic: %s\n", responseTopic)
 
-	// 7. Wait for the response with the matching correlation ID
-	for {
-		select {
-		case msg := <-sub:
-			if msg.Metadata.Get("correlation_id") == correlationID {
-				// 8. Unmarshal the response
-				var resp userevents.CheckTagAvailabilityResponse
-				if err := json.Unmarshal(msg.Payload, &resp); err != nil {
-					return false, fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
-				}
+	// 7. Define a local struct to unmarshal the response (avoids dependency)
+	type CheckTagAvailabilityResponse struct {
+		IsAvailable bool `json:"is_available"`
+		TagNumber   int  `json:"tag_number"`
+	}
 
-				// 9. Acknowledge the message
-				msg.Ack()
-
-				// 10. Return the result
-				return resp.IsAvailable, nil
-			} else {
-				msg.Nack()
+	// 8. Wait for the response with the matching correlation ID
+	for msg := range sub {
+		fmt.Printf("[DEBUG] checkTagAvailability: Received message on response topic. Correlation ID: %s\n", msg.Metadata.Get("correlation_id"))
+		if msg.Metadata.Get("correlation_id") == correlationID {
+			// 9. Unmarshal the response using the local struct
+			var resp CheckTagAvailabilityResponse
+			if err := json.Unmarshal(msg.Payload, &resp); err != nil {
+				return false, fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
 			}
 
-		case <-time.After(5 * time.Second): // Timeout after waiting
-			return false, fmt.Errorf("timeout waiting for CheckTagAvailabilityResponse")
+			// 10. Acknowledge the message
+			msg.Ack()
+
+			// 11. Return the result
+			fmt.Printf("[DEBUG] checkTagAvailability: Returning IsAvailable: %t\n", resp.IsAvailable)
+			return resp.IsAvailable, nil
 		}
 	}
+
+	return false, fmt.Errorf("no response received for CheckTagAvailabilityRequest")
 }
 
 // publishTagAssigned publishes a TagAssigned event to the leaderboard module.
-func (s *UserServiceImpl) publishTagAssigned(discordID string, tagNumber int) error {
+func (s *UserServiceImpl) publishTagAssigned(ctx context.Context, discordID string, tagNumber int) error {
 	evt := userevents.TagAssigned{
 		DiscordID: discordID,
 		TagNumber: tagNumber,
@@ -178,10 +188,15 @@ func (s *UserServiceImpl) publishTagAssigned(discordID string, tagNumber int) er
 	// Create a new message
 	msg := message.NewMessage(watermill.NewUUID(), evtData)
 
+	// Set the context of the message
+	msg.SetContext(ctx)
+
 	// Publish the message
 	if err := s.Publisher.Publish(userevents.TagAssignedSubject, msg); err != nil {
 		return fmt.Errorf("failed to publish TagAssigned: %w", err)
 	}
+
+	fmt.Printf("[DEBUG] publishTagAssigned: Published TagAssigned event for Discord ID: %s, Tag Number: %d\n", discordID, tagNumber)
 
 	return nil
 }

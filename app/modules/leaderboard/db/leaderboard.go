@@ -2,6 +2,7 @@ package leaderboarddb
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
 
@@ -9,27 +10,37 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// LeaderboardDBImpl implements the LeaderboardDBImpl interface using bun.
+// LeaderboardDBImpl implements the LeaderboardDB interface using bun.
 type LeaderboardDBImpl struct {
 	DB *bun.DB
 }
 
+func NewLeaderboardDB(db *bun.DB) LeaderboardDB {
+	return &LeaderboardDBImpl{DB: db}
+}
+
 // GetLeaderboard retrieves the active leaderboard.
-func (lb *LeaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, error) {
+func (ldb *LeaderboardDBImpl) GetLeaderboard(ctx context.Context) (*Leaderboard, error) {
 	var leaderboard Leaderboard
-	err := lb.DB.NewSelect().
+	err := ldb.DB.NewSelect().
 		Model(&leaderboard).
 		Where("active = ?", true).
+		OrderExpr("id ASC"). // Use OrderExpr for complex expressions
+		Limit(1).
 		Scan(ctx)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Handle no active leaderboard found
+			return nil, fmt.Errorf("no active leaderboard found")
+		}
 		return nil, fmt.Errorf("failed to fetch leaderboard: %w", err)
 	}
 	return &leaderboard, nil
 }
 
 // DeactivateCurrentLeaderboard deactivates the currently active leaderboard.
-func (lb *LeaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) error {
-	_, err := lb.DB.NewUpdate().
+func (ldb *LeaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) error {
+	_, err := ldb.DB.NewUpdate().
 		Model((*Leaderboard)(nil)).
 		Set("active = ?", false).
 		Where("active = ?", true).
@@ -41,13 +52,13 @@ func (lb *LeaderboardDBImpl) DeactivateCurrentLeaderboard(ctx context.Context) e
 }
 
 // InsertLeaderboard inserts a new leaderboard into the database.
-func (lb *LeaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardData map[int]string, active bool) error {
+func (ldb *LeaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardData map[int]string, active bool) error {
 	newLeaderboard := &Leaderboard{
 		LeaderboardData: leaderboardData,
 		Active:          active,
 	}
 
-	_, err := lb.DB.NewInsert().
+	_, err := ldb.DB.NewInsert().
 		Model(newLeaderboard).
 		Exec(ctx)
 	if err != nil {
@@ -56,57 +67,21 @@ func (lb *LeaderboardDBImpl) InsertLeaderboard(ctx context.Context, leaderboardD
 	return nil
 }
 
-// InsertTagAndDiscordID inserts a new tag and Discord ID into the leaderboard.
-func (lb *LeaderboardDBImpl) InsertTagAndDiscordID(ctx context.Context, tagNumber int, discordID string) error {
-	// 1. Fetch the leaderboard data
-	leaderboard, err := lb.GetLeaderboard(ctx)
-	if err != nil {
-		return fmt.Errorf("InsertTagAndDiscordID: failed to get leaderboard: %w", err)
-	}
-
-	// 2. Check if the tag is already taken
-	if _, taken := leaderboard.LeaderboardData[tagNumber]; taken {
-		return fmt.Errorf("InsertTagAndDiscordID: tag number %d is already taken", tagNumber)
-	}
-
-	// 3. Add the new tag and Discord ID to the leaderboard data
-	leaderboard.LeaderboardData[tagNumber] = discordID
-
-	// --- Conversion happens here ---
-	// Convert map[int]string to []leaderboardevents.Score
-	var scores []leaderboardevents.Score
-	for tagNumber, discordID := range leaderboard.LeaderboardData {
-		scores = append(scores, leaderboardevents.Score{
-			TagNumber: strconv.Itoa(tagNumber),
-			DiscordID: discordID,
-			Score:     0, // Provide the score if needed
-		})
-	}
-
-	// 4. Update the leaderboard in the database using the converted 'scores'
-	err = lb.UpdateLeaderboard(ctx, scores)
-	if err != nil {
-		return fmt.Errorf("InsertTagAndDiscordID: failed to update leaderboard: %w", err)
-	}
-
-	return nil
-}
-
 // UpdateLeaderboard updates the leaderboard with new scores.
-func (lb *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, scores []leaderboardevents.Score) error {
+func (ldb *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, scores []leaderboardevents.Score) error {
 	// 1. Start a transaction
-	tx, err := lb.DB.BeginTx(ctx, nil)
+	tx, err := ldb.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback() // Use named return variable (err)
 		}
 	}()
 
 	// 2. Deactivate the current leaderboard
-	if err := lb.DeactivateCurrentLeaderboard(ctx); err != nil {
+	if err = ldb.DeactivateCurrentLeaderboard(ctx); err != nil {
 		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
 	}
 
@@ -121,128 +96,102 @@ func (lb *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, scores []lea
 	}
 
 	// 4. Insert the new leaderboard
-	if err := lb.InsertLeaderboard(ctx, leaderboardData, true); err != nil {
+	if err := ldb.InsertLeaderboard(ctx, leaderboardData, true); err != nil {
 		return fmt.Errorf("failed to insert new leaderboard: %w", err)
 	}
 
 	// 5. Commit the transaction
-	return tx.Commit()
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // AssignTag assigns a tag to a user.
-func (lb *LeaderboardDBImpl) AssignTag(ctx context.Context, discordID string, tagNumber int) error {
-	// 1. Fetch the leaderboard data
-	leaderboard, err := lb.GetLeaderboard(ctx)
-	if err != nil {
-		return fmt.Errorf("AssignTag: failed to get leaderboard: %w", err)
-	}
+func (ldb *LeaderboardDBImpl) AssignTag(ctx context.Context, discordID string, tagNumber int) error {
+	// Use the context-aware update method
+	return ldb.updateLeaderboardData(ctx, func(leaderboardData map[int]string) error {
+		// Check if the tag is already taken
+		if _, taken := leaderboardData[tagNumber]; taken {
+			return fmt.Errorf("tag number %d is already taken", tagNumber)
+		}
 
-	// 2. Check if the tag is already taken
-	if _, taken := leaderboard.LeaderboardData[tagNumber]; taken {
-		return fmt.Errorf("AssignTag: tag number %d is already taken", tagNumber)
-	}
-
-	// 3. Add the new tag and Discord ID to the leaderboard data
-	leaderboard.LeaderboardData[tagNumber] = discordID
-
-	// 4. Update the leaderboard in the database
-	err = lb.updateLeaderboardData(ctx, leaderboard.LeaderboardData) // Use the helper function
-	if err != nil {
-		return fmt.Errorf("AssignTag: failed to update leaderboard: %w", err)
-	}
-
-	return nil
+		// Assign the tag to the user
+		leaderboardData[tagNumber] = discordID
+		return nil
+	})
 }
 
 // SwapTags swaps the tags of two users in the leaderboard.
-func (lb *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID string) error {
-	// 1. Fetch the leaderboard data
-	leaderboard, err := lb.GetLeaderboard(ctx)
-	if err != nil {
-		return fmt.Errorf("SwapTags: failed to get leaderboard: %w", err)
-	}
-
-	// 2. Find the tag numbers for the two users
-	var requestorTag, targetTag int
-	for tag, id := range leaderboard.LeaderboardData {
-		if id == requestorID {
-			requestorTag = tag
-		} else if id == targetID {
-			targetTag = tag
+func (ldb *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID string) error {
+	// Use the context-aware update method
+	return ldb.updateLeaderboardData(ctx, func(leaderboardData map[int]string) error {
+		// Find the tag numbers for the two users
+		var requestorTag, targetTag int
+		for tag, id := range leaderboardData {
+			if id == requestorID {
+				requestorTag = tag
+			} else if id == targetID {
+				targetTag = tag
+			}
 		}
-	}
 
-	// 3. If either user is not found, return an error
-	if requestorTag == 0 || targetTag == 0 {
-		return fmt.Errorf("SwapTags: one or both users not found on the leaderboard")
-	}
+		// If either user is not found, return an error
+		if requestorTag == 0 || targetTag == 0 {
+			return fmt.Errorf("one or both users not found on the leaderboard")
+		}
 
-	// 4. Swap the tags in the leaderboard data
-	leaderboard.LeaderboardData[requestorTag], leaderboard.LeaderboardData[targetTag] = leaderboard.LeaderboardData[targetTag], leaderboard.LeaderboardData[requestorTag]
-
-	// --- Conversion happens here ---
-	// Convert map[int]string to []leaderboardevents.Score
-	var scores []leaderboardevents.Score
-	for tagNumber, discordID := range leaderboard.LeaderboardData {
-		scores = append(scores, leaderboardevents.Score{
-			TagNumber: strconv.Itoa(tagNumber),
-			DiscordID: discordID,
-			Score:     0, // Provide the score if needed
-		})
-	}
-
-	// 5. Update the leaderboard in the database using the converted 'scores'
-	err = lb.UpdateLeaderboard(ctx, scores)
-	if err != nil {
-		return fmt.Errorf("SwapTags: failed to update leaderboard: %w", err)
-	}
-
-	return nil
+		// Swap the tags
+		leaderboardData[requestorTag], leaderboardData[targetTag] = leaderboardData[targetTag], leaderboardData[requestorTag]
+		return nil
+	})
 }
 
 // GetTagByDiscordID retrieves the tag number associated with a Discord ID.
-func (lb *LeaderboardDBImpl) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) {
-	// 1. Fetch the leaderboard data
-	leaderboard, err := lb.GetLeaderboard(ctx)
+func (ldb *LeaderboardDBImpl) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) {
+	leaderboard, err := ldb.GetLeaderboard(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("GetTagByDiscordID: failed to get leaderboard: %w", err)
 	}
 
-	// 2. Find the tag number for the given Discord ID
 	for tag, id := range leaderboard.LeaderboardData {
 		if id == discordID {
 			return tag, nil
 		}
 	}
 
-	// 3. If the Discord ID is not found, return 0
 	return 0, nil
 }
 
 // CheckTagAvailability checks if a tag number is available.
-func (lb *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
-	// 1. Fetch the leaderboard data
-	leaderboard, err := lb.GetLeaderboard(ctx)
+func (ldb *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
+	leaderboard, err := ldb.GetLeaderboard(ctx)
 	if err != nil {
 		return false, fmt.Errorf("CheckTagAvailability: failed to get leaderboard: %w", err)
 	}
 
-	// 2. Check if the tag number exists in the leaderboard data
 	_, taken := leaderboard.LeaderboardData[tagNumber]
-
-	// 3. Return true if the tag is not taken, false otherwise
 	return !taken, nil
 }
 
-// Helper function to update leaderboard data within a transaction
-func (lb *LeaderboardDBImpl) updateLeaderboardData(ctx context.Context, leaderboardData map[int]string) error {
-	tx, err := lb.DB.BeginTx(ctx, nil)
+// updateLeaderboardData retrieves the active leaderboard, applies the provided function to modify its data,
+// and then updates the leaderboard in the database within a transaction.
+func (ldb *LeaderboardDBImpl) updateLeaderboardData(ctx context.Context, updateFunc func(map[int]string) error) error {
+	// Start a new transaction
+	tx, err := ldb.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err != nil {
+		if p := recover(); p != nil {
 			tx.Rollback()
+			panic(p) // Re-throw panic after rollback
+		} else if err != nil {
+			tx.Rollback() // Rollback if there is an error
+		} else {
+			err = tx.Commit() // Commit if no error
 		}
 	}()
 
@@ -251,23 +200,30 @@ func (lb *LeaderboardDBImpl) updateLeaderboardData(ctx context.Context, leaderbo
 	err = tx.NewSelect().
 		Model(&leaderboard).
 		Where("active = ?", true).
+		OrderExpr("id ASC").
+		Limit(1).
 		Scan(ctx)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("no active leaderboard found")
+		}
 		return fmt.Errorf("failed to fetch leaderboard: %w", err)
 	}
 
-	// Update the leaderboard data
-	leaderboard.LeaderboardData = leaderboardData
-
-	// Save the updated leaderboard
-	_, err = tx.NewUpdate().
-		Model(&leaderboard).
-		Column("leaderboard_data").
-		WherePK().
-		Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to update leaderboard: %w", err)
+	// Update the leaderboard data using the provided function
+	if err := updateFunc(leaderboard.LeaderboardData); err != nil {
+		return err
 	}
 
-	return tx.Commit()
+	// Update the leaderboard in the database
+	_, err = tx.NewUpdate().
+		Model(&leaderboard).
+		Set("leaderboard_data = ?", leaderboard.LeaderboardData).
+		Where("id = ?", leaderboard.ID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update leaderboard data: %w", err)
+	}
+
+	return err
 }

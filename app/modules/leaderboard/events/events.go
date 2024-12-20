@@ -64,8 +64,8 @@ const (
 	TagSwapRequestSubject               = "leaderboard.tag_swap_request"
 	GetLeaderboardRequestSubject        = "leaderboard.get_leaderboard_request"
 	GetTagByDiscordIDRequestSubject     = "leaderboard.get_tag_by_discord_id_request"
-	CheckTagAvailabilityRequestSubject  = "leaderboard.check_tag_availability_request"
 	GetLeaderboardResponseSubject       = "leaderboard.get_leaderboard_response"
 	GetTagByDiscordIDResponseSubject    = "leaderboard.get_tag_by_discord_id_response"
+	CheckTagAvailabilityRequestSubject  = "leaderboard.check_tag_availability_request" // Subject for checking tag availability (subscribed to by leaderboard module)
 	CheckTagAvailabilityResponseSubject = "leaderboard.check_tag_availability_response"
 )

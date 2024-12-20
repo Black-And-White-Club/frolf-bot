@@ -20,7 +20,7 @@ import (
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/events"
 	"github.com/Black-And-White-Club/tcr-bot/config"
-	"github.com/Black-And-White-Club/tcr-bot/db"
+	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
 	"github.com/Black-And-White-Club/tcr-bot/internal/jetstream"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -35,8 +35,8 @@ type App struct {
 	UserModule        *user.Module
 	RoundModule       *round.Module
 	ScoreModule       *score.Module
-	LeaderboardModule *leaderboard.Module // Added LeaderboardModule
-	DB                db.Database
+	LeaderboardModule *leaderboard.Module
+	DB                *bundb.DBService // Changed to DBService
 }
 
 // Initialize initializes the application.
@@ -53,11 +53,10 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	app.Logger = watermill.NewStdLogger(false, false)
 
-	// app.DB, err = db.NewDatabase(cfg.Database)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to initialize database: %w", err)
-	// }
-
+	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres) // Initialize DBService
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
 	streamCreator, err := jetstream.NewStreamCreator(cfg.NATS.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create stream creator: %w", err)
@@ -155,25 +154,25 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	app.Router = router
 
-	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB)
+	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB.UserDB)
 	if err != nil {
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
 
-	roundModule, err := round.NewRoundModule(ctx, cfg, app.Logger)
+	roundModule, err := round.NewRoundModule(ctx, cfg, app.Logger, app.DB.RoundDB)
 	if err != nil {
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
 	app.RoundModule = roundModule
 
-	scoreModule, err := score.NewModule(ctx, cfg, app.Logger, app.DB)
+	scoreModule, err := score.NewScoreModule(ctx, cfg, app.Logger, app.DB.ScoreDB)
 	if err != nil {
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
 	app.ScoreModule = scoreModule
 
-	leaderboardModule, err := leaderboard.NewModule(ctx, cfg, app.Logger, app.DB) // Initialize the leaderboard module
+	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, app.Logger, app.DB.LeaderboardDB) // Initialize the leaderboard module
 	if err != nil {
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}

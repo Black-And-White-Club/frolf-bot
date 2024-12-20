@@ -30,7 +30,7 @@ type Module struct {
 }
 
 // NewModule creates a new LeaderboardModule with the provided dependencies.
-func NewModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, leaderboardDB leaderboarddb.LeaderboardDB) (*Module, error) {
+func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, leaderboardDB leaderboarddb.LeaderboardDB) (*Module, error) {
 	// Initialize NATS publisher and subscriber
 	options := []nc.Option{
 		nc.RetryOnFailedConnect(true),

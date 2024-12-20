@@ -2,7 +2,6 @@ package userevents
 
 import userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
 
-// User Events
 const (
 	UserStream = "user" // Stream for all user-related events
 
@@ -22,11 +21,10 @@ const (
 	GetUserRequestSubject      = UserStream + ".get.request"       // Subject for requesting user data
 	GetUserResponseSubject     = UserStream + ".get.response"      // Subject for the response to a user data retrieval request
 
-	// Leaderboard Interaction Events
-	LeaderboardStream                   = "leaderboard"                             // Stream for leaderboard-related events
-	CheckTagAvailabilityRequestSubject  = LeaderboardStream + ".tag.check.request"  // Subject for checking tag availability
-	CheckTagAvailabilityResponseSubject = LeaderboardStream + ".tag.check.response" // Subject for the response to tag availability check
-	TagAssignedSubject                  = LeaderboardStream + ".tag.assigned"       // Subject for indicating a tag was assigned
+	// Leaderboard Interaction Events - Subjects used by the USER module
+	LeaderboardStream                  = "leaderboard"                                         // Stream for leaderboard-related events
+	CheckTagAvailabilityRequestSubject = LeaderboardStream + ".check_tag_availability_request" // Subject for checking tag availability (published by user module)
+	TagAssignedSubject                 = LeaderboardStream + ".tag.assigned"                   // Subject for indicating a tag was assigned
 )
 
 // UserSignupRequest represents an event requesting a new user signup.

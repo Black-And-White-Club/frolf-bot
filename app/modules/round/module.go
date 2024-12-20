@@ -30,7 +30,7 @@ type Module struct {
 }
 
 // NewRoundModule creates a new instance of the Round module.
-func NewRoundModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter) (*Module, error) {
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, roundDB rounddb.RoundDB) (*Module, error) {
 	options := []nc.Option{
 		nc.RetryOnFailedConnect(true),
 		nc.Timeout(30 * time.Second),
@@ -76,8 +76,6 @@ func NewRoundModule(ctx context.Context, cfg *config.Config, logger watermill.Lo
 	if err != nil {
 		return nil, fmt.Errorf("failed to create subscriber: %w", err)
 	}
-
-	roundDB := &rounddb.RoundDBImpl{} // Replace with your actual DB initialization
 
 	roundService := &roundservice.RoundService{
 		RoundDB:    roundDB,

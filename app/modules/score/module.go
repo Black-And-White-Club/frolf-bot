@@ -29,7 +29,7 @@ type Module struct {
 	initMutex   sync.Mutex
 }
 
-func NewModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, scoreDB scoredb.ScoreDB) (*Module, error) {
+func NewScoreModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, scoreDB scoredb.ScoreDB) (*Module, error) {
 	options := []nc.Option{
 		nc.RetryOnFailedConnect(true),
 		nc.Timeout(30 * time.Second),

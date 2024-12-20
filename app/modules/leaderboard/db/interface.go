@@ -16,4 +16,7 @@ type LeaderboardDB interface {
 	AssignTag(ctx context.Context, discordID string, tagNumber int) error
 	GetTagByDiscordID(ctx context.Context, discordID string) (int, error)
 	CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error)
+
+	// Add this method to the interface
+	updateLeaderboardData(ctx context.Context, updateFunc func(map[int]string) error) error
 }

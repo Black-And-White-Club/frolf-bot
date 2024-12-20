@@ -1,75 +1,99 @@
 package main
 
 import (
-	"context"
+	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/Black-And-White-Club/tcr-bot/app"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb" // Import bundb package
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb/migrations"
+	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
 	"github.com/uptrace/bun/migrate"
 	"github.com/urfave/cli/v2"
+
+	// Import for migrator creation
+	leaderboardmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db/migrations"
+	roundmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db/migrations"
+	scoremigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db/migrations"
+	usermigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db/migrations"
 )
 
 func main() {
-	ctx := context.Background()
 
-	// Initialize the application
-	application := &app.App{}
-	if err := application.Initialize(ctx); err != nil {
-		log.Fatalf("Failed to initialize application: %v", err)
-	}
-	defer application.Close()
+	// Load configuration for database connection ONLY
+	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
+	flag.Parse()
 
-	// Access the database connection from the App struct
-	db, err := bundb.NewBunDBService(ctx, application.Config.Postgres) // Pass PostgresConfig
+	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
-		log.Fatalf("Failed to initialize bundb: %v", err)
+		log.Fatalf("failed to load config: %v", err)
 	}
+	fmt.Printf("Loaded Config: %+v\n", cfg)
 
-	// Create a new migrator
-	migrator := migrate.NewMigrator(db.GetDB(), migrations.Migrations)
+	// Database connection using pgdriver
+	pgdb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(cfg.Postgres.DSN)))
+	db := bun.NewDB(pgdb, pgdialect.New())
+	defer db.Close()
+
+	// Create migrators
+	migrators := map[string]*migrate.Migrator{
+		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
+		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
+		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
+		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
+	}
 
 	cliApp := &cli.App{
 		Name: "bun",
-
 		Commands: []*cli.Command{
-			newDBCommand(migrator),
+			newMultiModuleDBCommand(migrators),
 		},
 	}
+
 	if err := cliApp.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func newDBCommand(migrator *migrate.Migrator) *cli.Command {
+func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Command {
 	return &cli.Command{
-		Name:  "db",
+		Name:  "migrate",
 		Usage: "database migrations",
 		Subcommands: []*cli.Command{
 			{
 				Name:  "init",
 				Usage: "create migration tables",
 				Action: func(c *cli.Context) error {
-					return migrator.Init(c.Context)
+					for moduleName, migrator := range migrators {
+						fmt.Printf("Initializing migrations for module: %s\n", moduleName)
+						if err := migrator.Init(c.Context); err != nil {
+							fmt.Printf("Error initializing migrations for module %s: %v\n", moduleName, err)
+							return err
+						}
+					}
+					return nil
 				},
 			},
 			{
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(c *cli.Context) error {
-					group, err := migrator.Migrate(c.Context)
-					if err != nil {
-						return err
+					for moduleName, migrator := range migrators {
+						fmt.Printf("Running migrations for module: %s\n", moduleName)
+						group, err := migrator.Migrate(c.Context)
+						if err != nil {
+							return err
+						}
+						if group.IsZero() {
+							fmt.Printf("No new migrations to run for module: %s\n", moduleName)
+						} else {
+							fmt.Printf("Migrated module: %s to %s\n", moduleName, group)
+						}
 					}
-					if group.IsZero() {
-						fmt.Printf("there are no new migrations to run (database is up to date)\n")
-						return nil
-					}
-					fmt.Printf("migrated to %s\n", group)
 					return nil
 				},
 			},
@@ -77,15 +101,18 @@ func newDBCommand(migrator *migrate.Migrator) *cli.Command {
 				Name:  "rollback",
 				Usage: "rollback the last migration group",
 				Action: func(c *cli.Context) error {
-					group, err := migrator.Rollback(c.Context)
-					if err != nil {
-						return err
+					for moduleName, migrator := range migrators {
+						fmt.Printf("Rolling back migrations for module: %s\n", moduleName)
+						group, err := migrator.Rollback(c.Context)
+						if err != nil {
+							return err
+						}
+						if group.IsZero() {
+							fmt.Printf("No groups to roll back for module: %s\n", moduleName)
+						} else {
+							fmt.Printf("Rolled back module: %s to %s\n", moduleName, group)
+						}
 					}
-					if group.IsZero() {
-						fmt.Printf("there are no groups to roll back\n")
-						return nil
-					}
-					fmt.Printf("rolled back %s\n", group)
 					return nil
 				},
 			},
@@ -93,12 +120,18 @@ func newDBCommand(migrator *migrate.Migrator) *cli.Command {
 				Name:  "create_go",
 				Usage: "create Go migration",
 				Action: func(c *cli.Context) error {
-					name := strings.Join(c.Args().Slice(), "_")
+					moduleName := c.Args().First() // Get module name from args
+					migrator, ok := migrators[moduleName]
+					if !ok {
+						return fmt.Errorf("invalid module name: %s", moduleName)
+					}
+
+					name := strings.Join(c.Args().Tail(), "_")
 					mf, err := migrator.CreateGoMigration(c.Context, name)
 					if err != nil {
 						return err
 					}
-					fmt.Printf("created migration %s (%s)\n", mf.Name, mf.Path)
+					fmt.Printf("Created migration for module %s: %s (%s)\n", moduleName, mf.Name, mf.Path)
 					return nil
 				},
 			},
@@ -106,14 +139,20 @@ func newDBCommand(migrator *migrate.Migrator) *cli.Command {
 				Name:  "create_sql",
 				Usage: "create up and down SQL migrations",
 				Action: func(c *cli.Context) error {
-					name := strings.Join(c.Args().Slice(), "_")
+					moduleName := c.Args().First() // Get module name from args
+					migrator, ok := migrators[moduleName]
+					if !ok {
+						return fmt.Errorf("invalid module name: %s", moduleName)
+					}
+
+					name := strings.Join(c.Args().Tail(), "_")
 					files, err := migrator.CreateSQLMigrations(c.Context, name)
 					if err != nil {
 						return err
 					}
 
 					for _, mf := range files {
-						fmt.Printf("created migration %s (%s)\n", mf.Name, mf.Path)
+						fmt.Printf("Created migration for module %s: %s (%s)\n", moduleName, mf.Name, mf.Path)
 					}
 
 					return nil
@@ -123,13 +162,16 @@ func newDBCommand(migrator *migrate.Migrator) *cli.Command {
 				Name:  "status",
 				Usage: "print migrations status",
 				Action: func(c *cli.Context) error {
-					ms, err := migrator.MigrationsWithStatus(c.Context)
-					if err != nil {
-						return err
+					for moduleName, migrator := range migrators {
+						ms, err := migrator.MigrationsWithStatus(c.Context)
+						if err != nil {
+							return err
+						}
+						fmt.Printf("Migrations for module: %s\n", moduleName)
+						fmt.Printf("  %s\n", ms)
+						fmt.Printf("  Applied: %s\n", ms.Applied())
+						fmt.Printf("  Unapplied: %s\n", ms.Unapplied())
 					}
-					fmt.Printf("migrations: %s\n", ms)
-					fmt.Printf("unapplied migrations: %s\n", ms.Unapplied())
-					fmt.Printf("last migration group: %s\n", ms.LastGroup())
 					return nil
 				},
 			},

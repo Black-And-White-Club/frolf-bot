@@ -103,11 +103,16 @@ func (s *LeaderboardService) GetTagByDiscordID(ctx context.Context, discordID st
 
 // CheckTagAvailability checks if a tag number is available.
 func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
+	fmt.Printf("[DEBUG] CheckTagAvailability: Called with tagNumber: %d, Context: %v\n", tagNumber, ctx)
+
 	// Check tag availability in the database
 	isAvailable, err := s.LeaderboardDB.CheckTagAvailability(ctx, tagNumber)
 	if err != nil {
-		return false, fmt.Errorf("failed to check tag availability: %w", err)
+		fmt.Printf("[DEBUG] CheckTagAvailability: Error from database: %v\n", err)
+		return false, fmt.Errorf("CheckTagAvailability: failed to get leaderboard: %w", err)
 	}
+
+	fmt.Printf("[DEBUG] CheckTagAvailability: Tag availability result: %t\n", isAvailable)
 
 	return isAvailable, nil
 }
