@@ -3,6 +3,7 @@ package userservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,31 +34,32 @@ func NewUserService(publisher message.Publisher, subscriber message.Subscriber, 
 
 // OnUserSignupRequest processes a user signup request.
 func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req userevents.UserSignupRequest) (*userevents.UserSignupResponse, error) {
-	// 1. Check tag availability (communicate with leaderboard module)
-	tagAvailable, err := s.checkTagAvailability(ctx, req.TagNumber)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check tag availability: %w", err)
+	// 1. Check tag availability only if a tag number is provided
+	var tagAvailable bool
+	if req.TagNumber != 0 {
+		var err error
+		tagAvailable, err = s.checkTagAvailability(ctx, req.TagNumber)
+
+		if err != nil {
+			s.logger.Error("failed to check tag availability", err, watermill.LogFields{"error": err})
+		}
+
 	}
 
-	if !tagAvailable {
-		return &userevents.UserSignupResponse{
-			Success: false,
-			Error:   fmt.Sprintf("tag number %d is already taken", req.TagNumber),
-		}, nil
-	}
-
-	// 2. If tag is available, create the user
+	// 2. Create the user
 	newUser := &userdb.User{
 		DiscordID: req.DiscordID,
-		Role:      userdb.UserRoleRattler, // Default role
+		Role:      userdb.UserRoleRattler,
 	}
 	if err := s.UserDB.CreateUser(ctx, newUser); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// 3. Publish TagAssigned event to the leaderboard module using the context from the message
-	if err := s.publishTagAssigned(ctx, newUser.DiscordID, req.TagNumber); err != nil {
-		return nil, fmt.Errorf("failed to publish TagAssigned event: %w", err)
+	// 3. Publish TagAssigned event only if a tag number is provided and available
+	if req.TagNumber != 0 && tagAvailable {
+		if err := s.publishTagAssigned(ctx, newUser.DiscordID, req.TagNumber); err != nil {
+			return nil, fmt.Errorf("failed to publish TagAssigned event: %w", err)
+		}
 	}
 
 	return &userevents.UserSignupResponse{
@@ -104,72 +106,58 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, discordID string) (*userd
 	return user, nil
 }
 
-// checkTagAvailability checks if a tag number is available by querying the leaderboard module.
+// Define error variables at the package level
+var (
+	errTimeout          = errors.New("timeout waiting for tag availability response")
+	errContextCancelled = errors.New("context cancelled while waiting for tag availability response")
+	errSubscribe        = errors.New("failed to subscribe to reply: subscribe error")
+)
+
 func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
-	// 1. Prepare the request
-	req := userevents.CheckTagAvailabilityRequest{
-		TagNumber: tagNumber,
-	}
+	const waitForResponseTimeout = time.Second * 3
 
-	// 2. Marshal the request to JSON
-	reqData, err := json.Marshal(req)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal CheckTagAvailabilityRequest: %w", err)
-	}
+	msg := message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"tag_number":%d}`, tagNumber)))
 
-	// 3. Use a unique correlation ID for this request
-	correlationID := watermill.NewUUID()
+	replySubject := fmt.Sprintf("%s.reply.%s", userevents.LeaderboardStream, msg.UUID)
+	msg.Metadata.Set("Reply-To", replySubject)
 
-	// 4. Create a new message with headers for correlation
-	msg := message.NewMessage(watermill.NewUUID(), reqData)
-	msg.Metadata.Set("correlation_id", correlationID)
-
-	// Add a temporary delay for debugging (REMOVE THIS IN PRODUCTION)
-	fmt.Println("[DEBUG] checkTagAvailability: Waiting for subscribers to be ready...")
-	time.Sleep(2 * time.Second) // Wait for 2 seconds
-
-	// 5. Publish the request
-	fmt.Println("[DEBUG] checkTagAvailability: Publishing CheckTagAvailabilityRequest")
 	if err := s.Publisher.Publish(userevents.CheckTagAvailabilityRequestSubject, msg); err != nil {
-		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err)
+		return false, fmt.Errorf("failed to publish request: %w", err)
 	}
 
-	// 6. Subscribe to the response topic (using the string literal to avoid dependency)
-	responseTopic := "leaderboard.check_tag_availability_response"
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waitForResponseTimeout)
+	defer cancel()
 
-	fmt.Printf("[DEBUG] checkTagAvailability: Subscribing to response topic: %s\n", responseTopic)
-	sub, err := s.Subscriber.Subscribe(ctx, responseTopic)
+	messages, err := s.Subscriber.Subscribe(ctxWithTimeout, replySubject)
 	if err != nil {
-		return false, fmt.Errorf("failed to subscribe to CheckTagAvailabilityResponse: %w", err)
-	}
-	fmt.Printf("[DEBUG] checkTagAvailability: Subscribed to response topic: %s\n", responseTopic)
-
-	// 7. Define a local struct to unmarshal the response (avoids dependency)
-	type CheckTagAvailabilityResponse struct {
-		IsAvailable bool `json:"is_available"`
-		TagNumber   int  `json:"tag_number"`
+		return false, fmt.Errorf("failed to subscribe to reply: %w", err)
 	}
 
-	// 8. Wait for the response with the matching correlation ID
-	for msg := range sub {
-		fmt.Printf("[DEBUG] checkTagAvailability: Received message on response topic. Correlation ID: %s\n", msg.Metadata.Get("correlation_id"))
-		if msg.Metadata.Get("correlation_id") == correlationID {
-			// 9. Unmarshal the response using the local struct
-			var resp CheckTagAvailabilityResponse
-			if err := json.Unmarshal(msg.Payload, &resp); err != nil {
-				return false, fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
-			}
-
-			// 10. Acknowledge the message
-			msg.Ack()
-
-			// 11. Return the result
-			fmt.Printf("[DEBUG] checkTagAvailability: Returning IsAvailable: %t\n", resp.IsAvailable)
-			return resp.IsAvailable, nil
+	select {
+	case replyMsg, ok := <-messages:
+		if !ok {
+			return false, fmt.Errorf("reply channel closed unexpectedly")
 		}
-	}
+		defer replyMsg.Ack()
 
-	return false, fmt.Errorf("no response received for CheckTagAvailabilityRequest")
+		var payload map[string]interface{}
+		if err := json.Unmarshal(replyMsg.Payload, &payload); err != nil {
+			return false, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		isAvailable, ok := payload["is_available"].(bool)
+		if !ok {
+			return false, fmt.Errorf("invalid response format: is_available field is not a boolean")
+		}
+
+		return isAvailable, nil
+
+	case <-ctxWithTimeout.Done():
+		if errors.Is(ctxWithTimeout.Err(), context.DeadlineExceeded) {
+			return false, errTimeout
+		}
+		return false, errContextCancelled
+	}
 }
 
 // publishTagAssigned publishes a TagAssigned event to the leaderboard module.

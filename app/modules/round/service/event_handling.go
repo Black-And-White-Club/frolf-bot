@@ -37,17 +37,19 @@ func (s *RoundService) getTagNumber(ctx context.Context, discordID string) (*int
 		return nil, fmt.Errorf("failed to subscribe to GetTagNumberResponse: %w", err)
 	}
 
-	// 4. Receive the response with the matching correlation ID
+	// 4. Receive the response with the matching correlation ID (with timeout and nil check)
 	var respMsg *message.Message
-	for {
-		respMsg = <-messages
-
-		if respMsg.UUID == correlationID { // Check if the correlation IDs match
-			break
+	select {
+	case respMsg = <-messages:
+		if respMsg == nil {
+			return nil, fmt.Errorf("received nil message")
 		}
-
-		// If the correlation ID doesn't match, nack the message and continue listening
-		respMsg.Nack()
+		if respMsg.UUID != correlationID {
+			respMsg.Nack()
+			return nil, fmt.Errorf("correlation id mismatch")
+		}
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for response")
 	}
 
 	// 5. Unmarshal the response
@@ -89,17 +91,19 @@ func (s *RoundService) getUserRole(ctx context.Context, discordID string) (strin
 		return "", fmt.Errorf("failed to subscribe to GetUserRoleResponseEvent: %w", err)
 	}
 
-	// 4. Receive the response with the matching correlation ID
+	// 4. Receive the response with the matching correlation ID (with timeout and nil check)
 	var respMsg *message.Message
-	for {
-		respMsg = <-subscriber
-
-		if respMsg.UUID == correlationID { // Check if the correlation IDs match
-			break
+	select {
+	case respMsg = <-subscriber:
+		if respMsg == nil {
+			return "", fmt.Errorf("received nil message")
 		}
-
-		// If the correlation ID doesn't match, nack the message and continue listening
-		respMsg.Nack()
+		if respMsg.UUID != correlationID {
+			respMsg.Nack()
+			return "", fmt.Errorf("correlation id mismatch")
+		}
+	case <-time.After(5 * time.Second):
+		return "", fmt.Errorf("timeout waiting for response")
 	}
 
 	// 5. Unmarshal the response

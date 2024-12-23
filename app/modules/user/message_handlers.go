@@ -11,6 +11,7 @@ import (
 )
 
 // MessageHandlers handles incoming messages and publishes corresponding events.
+// MessageHandlers handles incoming messages and publishes corresponding events.
 type MessageHandlers struct {
 	Publisher message.Publisher
 	logger    watermill.LoggerAdapter
@@ -26,21 +27,17 @@ func NewMessageHandlers(publisher message.Publisher, logger watermill.LoggerAdap
 
 // HandleMessage processes incoming messages and publishes corresponding events.
 func (h *MessageHandlers) HandleMessage(msg *message.Message) error {
-	// 1. Determine message type based on subject.
-	subject := msg.Metadata.Get("subject") // Assuming you set the subject in the metadata
+	subject := msg.Metadata.Get("subject")
 	ctx := context.Background()
+	logFields := watermill.LogFields{"subject": subject, "message_id": msg.UUID}
 
 	switch subject {
 	case userevents.UserSignupRequestSubject:
 		return h.handleUserSignupRequest(ctx, msg)
-
-		// ... handle other message types based on subject ...
-
 	default:
-		h.logger.Error("Unknown message type", fmt.Errorf("unknown message type: %s", subject), watermill.LogFields{
-			"subject": subject,
-		})
-		return fmt.Errorf("unknown message type: %s", subject)
+		err := fmt.Errorf("unknown message type: %s", subject)
+		h.logger.Error("Unknown message type", err, logFields)
+		return err
 	}
 }
 
@@ -53,7 +50,6 @@ func (h *MessageHandlers) handleUserSignupRequest(_ context.Context, msg *messag
 		return fmt.Errorf("failed to unmarshal signup request: %w", err)
 	}
 
-	// 2. Publish UserSignupRequest event
 	event := userevents.UserSignupRequest{
 		DiscordID: signupReq.DiscordID,
 		TagNumber: signupReq.TagNumber,
@@ -72,6 +68,7 @@ func (h *MessageHandlers) handleUserSignupRequest(_ context.Context, msg *messag
 		})
 		return fmt.Errorf("failed to publish UserSignupRequest: %w", err)
 	}
+
 	msg.Ack()
 	return nil
 }

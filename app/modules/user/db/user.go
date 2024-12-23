@@ -39,21 +39,6 @@ func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID string) 
 	return &user, nil
 }
 
-// UpdateUser updates an existing user.
-func (db *UserDBImpl) UpdateUser(ctx context.Context, discordID string, updates map[string]interface{}) error {
-	query := db.DB.NewUpdate().Model(&User{}).Where("discord_id = ?", discordID)
-
-	for column, value := range updates {
-		query = query.Set(fmt.Sprintf("%s = ?", column), value)
-	}
-
-	_, err := query.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to update user: %w", err)
-	}
-	return nil
-}
-
 // GetUserRole retrieves the role of a user by their Discord ID.
 func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID string) (UserRole, error) {
 	var role UserRole

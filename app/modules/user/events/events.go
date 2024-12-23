@@ -6,25 +6,26 @@ const (
 	UserStream = "user" // Stream for all user-related events
 
 	// User Signup Events
-	UserSignupRequestSubject  = UserStream + ".signup.request"  // Subject for requesting a new user signup
-	UserSignupResponseSubject = UserStream + ".signup.response" // Subject for the response to a signup request
-	UserCreatedSubject        = UserStream + ".created"         // Subject for indicating a new user was created
+	UserSignupRequestSubject  = "user.signup.request"  // Subject for requesting a new user signup
+	UserSignupResponseSubject = "user.signup.response" // Subject for the response to a signup request
+	UserCreatedSubject        = "user.created"         // Subject for indicating a new user was created
 
 	// User Role Update Events
-	UserRoleUpdateRequestSubject  = UserStream + ".role.update.request"  // Subject for requesting a user role update
-	UserRoleUpdateResponseSubject = UserStream + ".role.update.response" // Subject for the response to a role update request
-	UserRoleUpdatedSubject        = UserStream + ".role.updated"         // Subject for indicating a user's role was updated
+	UserRoleUpdateRequestSubject  = "user.role.update.request"  // Subject for requesting a user role update
+	UserRoleUpdateResponseSubject = "user.role.update.response" // Subject for the response to a role update request
+	UserRoleUpdatedSubject        = "user.role.updated"         // Subject for indicating a user's role was updated
 
 	// User Data Retrieval Events
-	GetUserRoleRequestSubject  = UserStream + ".role.get.request"  // Subject for requesting a user's role
-	GetUserRoleResponseSubject = UserStream + ".role.get.response" // Subject for the response to a role retrieval request
-	GetUserRequestSubject      = UserStream + ".get.request"       // Subject for requesting user data
-	GetUserResponseSubject     = UserStream + ".get.response"      // Subject for the response to a user data retrieval request
+	GetUserRoleRequestSubject  = "user.role.get.request"  // Subject for requesting a user's role
+	GetUserRoleResponseSubject = "user.role.get.response" // Subject for the response to a role retrieval request
+	GetUserRequestSubject      = "user.get.request"       // Subject for requesting user data
+	GetUserResponseSubject     = "user.get.response"      // Subject for the response to a user data retrieval request
 
 	// Leaderboard Interaction Events - Subjects used by the USER module
-	LeaderboardStream                  = "leaderboard"                                         // Stream for leaderboard-related events
-	CheckTagAvailabilityRequestSubject = LeaderboardStream + ".check_tag_availability_request" // Subject for checking tag availability (published by user module)
-	TagAssignedSubject                 = LeaderboardStream + ".tag.assigned"                   // Subject for indicating a tag was assigned
+	LeaderboardStream                  = "leaderboard"                                // Stream for leaderboard-related events
+	CheckTagAvailabilityRequestSubject = "leaderboard.check.tag.availability.request" // Subject for checking tag availability (published by user module)
+	TagAssignedSubject                 = "leaderboard.tag.assigned"                   // Subject for indicating a tag was assigned
+	CheckTagAvailabilityResponseTopic  = "leaderboard.check.tag.availability.response"
 )
 
 // UserSignupRequest represents an event requesting a new user signup.
@@ -96,7 +97,6 @@ type CheckTagAvailabilityRequest struct {
 
 // CheckTagAvailabilityResponse represents an event indicating whether a tag is available.
 type CheckTagAvailabilityResponse struct {
-	TagNumber   int  `json:"tag_number"`
 	IsAvailable bool `json:"is_available"`
 }
 

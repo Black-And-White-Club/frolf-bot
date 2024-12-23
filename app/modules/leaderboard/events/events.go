@@ -59,6 +59,7 @@ type CheckTagAvailabilityResponse struct {
 }
 
 const (
+	LeaderboardStream                   = "leaderboard" // Stream for leaderboard-related events
 	LeaderboardUpdateEventSubject       = "leaderboard.update"
 	TagAssignedSubject                  = "leaderboard.tag_assigned"
 	TagSwapRequestSubject               = "leaderboard.tag_swap_request"

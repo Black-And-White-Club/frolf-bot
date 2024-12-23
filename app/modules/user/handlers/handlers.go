@@ -30,7 +30,8 @@ func NewHandlers(userService userservice.Service, publisher message.Publisher, l
 // HandleUserSignupRequest handles the UserSignupRequest event.
 func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message.Message) error {
 	msg.Ack()
-	h.logger.Info("HandleUserSignupRequest called", watermill.LogFields{"message_id": msg.UUID})
+
+	h.logger.Info("Processing UserSignupRequest", watermill.LogFields{"message_id": msg.UUID})
 
 	var req userevents.UserSignupRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
@@ -38,20 +39,15 @@ func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message
 		return fmt.Errorf("failed to unmarshal UserSignupRequest: %w", err)
 	}
 
-	fmt.Printf("[DEBUG] HandleUserSignupRequest: Received request: %+v\n", req)
+	messageCtx := msg.Context() // Get the message context
 
-	// Use the context from the message
-	ctx = msg.Context()
+	resp, err := h.UserService.OnUserSignupRequest(messageCtx, req)
 
-	resp, err := h.UserService.OnUserSignupRequest(ctx, req)
 	if err != nil {
 		h.logger.Error("Failed to process user signup request", err, watermill.LogFields{"message_id": msg.UUID})
 		return fmt.Errorf("failed to process user signup request: %w", err)
 	}
 
-	fmt.Printf("[DEBUG] HandleUserSignupRequest: Got response from OnUserSignupRequest: %+v\n", resp)
-
-	// Publish the response event
 	respData, err := json.Marshal(resp)
 	if err != nil {
 		h.logger.Error("Failed to marshal UserSignupResponse", err, watermill.LogFields{"message_id": msg.UUID})
@@ -67,25 +63,28 @@ func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message
 	return nil
 }
 
-// HandleUserRoleUpdateRequest handles the UserRoleUpdateRequest event.
 func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg *message.Message) error {
 	h.logger.Info("HandleUserRoleUpdateRequest called", watermill.LogFields{"message_id": msg.UUID})
 
 	var req userevents.UserRoleUpdateRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
 		h.logger.Error("Failed to unmarshal UserRoleUpdateRequest", err, watermill.LogFields{"message_id": msg.UUID})
+		// Consider returning a specific error type here (e.g., ErrInvalidPayload) to differentiate from service errors
 		return fmt.Errorf("failed to unmarshal UserRoleUpdateRequest: %w", err)
 	}
 
-	// Use the context from the message
-	ctx = msg.Context()
+	// Use a new variable for the context derived from the message
+	messageCtx := msg.Context()
 
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Second) // 5-second timeout
+	// Set a timeout context for the service call
+	timeoutCtx, timeoutCancel := context.WithTimeout(messageCtx, 5*time.Second) // 5-second timeout
 	defer timeoutCancel()
 
 	resp, err := h.UserService.OnUserRoleUpdateRequest(timeoutCtx, req)
 	if err != nil {
 		h.logger.Error("Failed to process user role update request", err, watermill.LogFields{"message_id": msg.UUID})
+		// Consider returning a specific error type here (e.g., ErrUserService) to differentiate from other errors
+		// You can check for specific error types returned by the service and handle them accordingly
 		return fmt.Errorf("failed to process user role update request: %w", err)
 	}
 
@@ -93,11 +92,13 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg *mes
 	respData, err := json.Marshal(resp)
 	if err != nil {
 		h.logger.Error("Failed to marshal UserRoleUpdateResponse", err, watermill.LogFields{"message_id": msg.UUID})
+		// Consider returning a specific error type here (e.g., ErrMarshalling) to differentiate from other errors
 		return fmt.Errorf("failed to marshal UserRoleUpdateResponse: %w", err)
 	}
 
 	if err := h.Publisher.Publish(userevents.UserRoleUpdateResponseSubject, message.NewMessage(watermill.NewUUID(), respData)); err != nil {
 		h.logger.Error("Failed to publish UserRoleUpdateResponse", err, watermill.LogFields{"message_id": msg.UUID})
+		// Consider returning a specific error type here (e.g., ErrPublish) to differentiate from other errors
 		return fmt.Errorf("failed to publish UserRoleUpdateResponse: %w", err)
 	}
 

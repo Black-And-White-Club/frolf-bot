@@ -90,17 +90,23 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger watermill.Log
 	}
 
 	go func() {
-		if err := usersubscribers.SubscribeToUserEvents(ctx, subscriber, userHandlers, logger); err != nil {
-			logger.Error("Failed to subscribe to user events", err, nil)
-			// Handle the error appropriately, perhaps by exiting the application
-			// or setting an error flag on the module. For now just log
-			fmt.Printf("Fatal error subscribing to user events: %v\n", err)
-		} else {
-			logger.Info("User module subscribers are ready", nil)
-			module.initMutex.Lock()
-			module.initialized = true
-			module.initMutex.Unlock()
+		userSubscriber, closer, err := usersubscribers.NewUserSubscribers(subscriber, userHandlers, logger)
+		if err != nil {
+			logger.Error("Failed to create user subscribers", err, nil)
+			return // Or other appropriate error handling
 		}
+		defer closer.Close() // Close the subscriber when the module is done
+
+		if err := userSubscriber.SubscribeToUserEvents(ctx); err != nil {
+			logger.Error("Failed to subscribe to user events", err, nil)
+			fmt.Printf("Fatal error subscribing to user events: %v\n", err)
+			return // Or other appropriate error handling
+		}
+
+		logger.Info("User module subscribers are ready", nil)
+		module.initMutex.Lock()
+		module.initialized = true
+		module.initMutex.Unlock()
 	}()
 
 	return module, nil
