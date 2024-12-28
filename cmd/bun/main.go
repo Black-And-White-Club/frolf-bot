@@ -16,10 +16,10 @@ import (
 	"github.com/urfave/cli/v2"
 
 	// Import for migrator creation
-	leaderboardmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db/migrations"
-	roundmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db/migrations"
-	scoremigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db/migrations"
-	usermigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db/migrations"
+	leaderboardmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
+	roundmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories/migrations"
+	scoremigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories/migrations"
+	usermigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
 func main() {

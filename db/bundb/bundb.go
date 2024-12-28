@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"log"
 
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"

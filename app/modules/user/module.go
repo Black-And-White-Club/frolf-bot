@@ -6,30 +6,33 @@ import (
 	"sync"
 	"time"
 
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
-	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/handlers"
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/service"
-	usersubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/subscribers"
+	eventbus "github.com/Black-And-White-Club/tcr-bot/app/events"
+	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
+	usersubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/subscribers"
+	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/interfaces"
+	"github.com/Black-And-White-Club/tcr-bot/app/types"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
-	"github.com/ThreeDotsLabs/watermill/message"
 	nc "github.com/nats-io/nats.go"
 )
 
 // Module represents the user module.
 type Module struct {
-	Subscriber  message.Subscriber
-	Publisher   message.Publisher
+	EventBus    eventbus.EventBus
 	UserService userservice.Service
 	Handlers    userhandlers.Handlers
-	logger      watermill.LoggerAdapter
+	Subscribers usersubscribers.EventSubscribers
+	logger      types.LoggerAdapter
 	config      *config.Config
 	initialized bool
 	initMutex   sync.Mutex
 }
 
 func NewUserModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, userDB userdb.UserDB) (*Module, error) {
+	logger.Info("NewUserModule started", watermill.LogFields{"contextErr": ctx.Err()})
+
 	options := []nc.Option{
 		nc.RetryOnFailedConnect(true),
 		nc.Timeout(30 * time.Second),
@@ -76,31 +79,42 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger watermill.Log
 		return nil, fmt.Errorf("failed to create subscriber: %w", err)
 	}
 
-	userService := userservice.NewUserService(publisher, subscriber, userDB, logger)
-	userHandlers := userhandlers.NewHandlers(userService, publisher, logger)
+	// Wrap the publisher and subscriber to fulfill the EventBus interface
+	eventBus := eventbus.NewEventBus(publisher, subscriber)
+
+	userService := userservice.NewUserService(eventBus, userDB, logger)     // Pass eventBus instead of publisher and subscriber
+	userHandlers := userhandlers.NewHandlers(userService, eventBus, logger) // Pass eventBus instead of publisher
+	userSubscribers := usersubscribers.NewSubscribers(userService, eventBus, logger)
 
 	module := &Module{
-		Subscriber:  subscriber,
-		Publisher:   publisher,
+		EventBus:    eventBus,
 		UserService: userService,
 		Handlers:    userHandlers,
+		Subscribers: userSubscribers,
 		logger:      logger,
 		config:      cfg,
 		initialized: false,
 	}
 
-	go func() {
-		userSubscriber, closer, err := usersubscribers.NewUserSubscribers(subscriber, userHandlers, logger)
-		if err != nil {
-			logger.Error("Failed to create user subscribers", err, nil)
-			return // Or other appropriate error handling
-		}
-		defer closer.Close() // Close the subscriber when the module is done
+	// Use a WaitGroup to synchronize the subscriber goroutine
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-		if err := userSubscriber.SubscribeToUserEvents(ctx); err != nil {
+	go func() {
+		defer wg.Done()
+
+		// Create a new background context for the subscriber
+		subscriberCtx := context.Background()
+
+		// Logging the subscriber details
+		module.logger.Info("Created NATS subscriber", watermill.LogFields{
+			"nats_url": cfg.NATS.URL,
+		})
+
+		if err := usersubscribers.SubscribeToUserEvents(subscriberCtx, eventBus, userHandlers, logger); err != nil {
+			// Decide how to handle subscriber errors - log, panic or return
 			logger.Error("Failed to subscribe to user events", err, nil)
-			fmt.Printf("Fatal error subscribing to user events: %v\n", err)
-			return // Or other appropriate error handling
+			return
 		}
 
 		logger.Info("User module subscribers are ready", nil)
@@ -108,6 +122,8 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger watermill.Log
 		module.initialized = true
 		module.initMutex.Unlock()
 	}()
+
+	wg.Wait() // Wait for the subscriber goroutine to finish subscribing
 
 	return module, nil
 }

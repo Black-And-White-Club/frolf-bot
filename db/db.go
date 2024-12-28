@@ -1,10 +1,10 @@
 package db
 
 import (
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/db"
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/db"
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 )
 
 const (
