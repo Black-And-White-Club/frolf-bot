@@ -9,12 +9,11 @@ import (
 	"testing"
 
 	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	"github.com/Black-And-White-Club/tcr-bot/app/events"
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
 	usermocks "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	testutils "github.com/Black-And-White-Club/tcr-bot/internal/testutils"
 	"go.uber.org/mock/gomock"
 )
@@ -87,14 +86,35 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				msg.EXPECT().Payload().Return(payload).AnyTimes()
 				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
 				msg.EXPECT().Context().Return(context.Background()).AnyTimes()
+				msg.EXPECT().Ack().Times(1) // Expect Ack to be called
 				return msg
 			}(),
 			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
 				mockUserService.EXPECT().OnUserSignupRequest(gomock.Any(), gomock.Any()).Return(nil, errors.New("service error"))
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+				// Expect Publish to be called with an error payload
+				mockEventBus.EXPECT().Publish(gomock.Any(), userevents.UserSignupResponse, gomock.Any()).DoAndReturn(
+					func(ctx context.Context, topic shared.EventType, msg *adapters.WatermillMessageAdapter) error {
+						var responsePayload userevents.UserSignupResponsePayload
+						if err := json.Unmarshal(msg.Payload(), &responsePayload); err != nil {
+							t.Fatalf("failed to unmarshal response payload: %v", err)
+						}
+
+						if responsePayload.Success {
+							t.Errorf("unexpected success in response payload: got true, want false")
+						}
+
+						if !strings.Contains(responsePayload.Error, "service error") {
+							t.Errorf("unexpected error message in response payload: got %s, want to contain 'service error'", responsePayload.Error)
+						}
+
+						return nil
+					},
+				).Times(1)
 				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			},
-			expectedError: errors.New("failed to process user signup request: service error"),
+			expectedError: nil, // We expect no error from the handler as it handles it internally
 		},
 	}
 
@@ -166,7 +186,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				// Expect Publish to be called with a Watermill message
 				mockEventBus.EXPECT().
 					Publish(gomock.Any(), userevents.UserRoleUpdateResponse, gomock.Any()).
-					DoAndReturn(func(ctx context.Context, topic events.EventType, msg *adapters.WatermillMessageAdapter) error {
+					DoAndReturn(func(ctx context.Context, topic shared.EventType, msg *adapters.WatermillMessageAdapter) error {
 						var responsePayload userevents.UserRoleUpdateResponsePayload
 						if err := json.Unmarshal(msg.Payload(), &responsePayload); err != nil {
 							t.Errorf("failed to unmarshal response payload: %v", err)
@@ -224,7 +244,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 
 				mockLogger.EXPECT().
 					Error(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ interface{}, msg interface{}, fields ...types.LogFields) {
+					DoAndReturn(func(_ interface{}, msg interface{}, fields ...shared.LogFields) {
 						// Assert that msg is an error and convert it to string
 						err, ok := msg.(error)
 						if !ok {

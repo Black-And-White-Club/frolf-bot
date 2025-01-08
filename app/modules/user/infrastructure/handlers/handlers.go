@@ -7,22 +7,21 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	"github.com/Black-And-White-Club/tcr-bot/app/events"
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	user "github.com/Black-And-White-Club/tcr-bot/app/modules/user/interfaces"
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 )
 
 // UserHandlers handles user-related events.
 type UserHandlers struct {
 	UserService userservice.Service
-	EventBus    events.EventBus
-	logger      types.LoggerAdapter
+	EventBus    shared.EventBus
+	logger      shared.LoggerAdapter
 }
 
 // NewHandlers creates a new UserHandlers.
-func NewHandlers(userService userservice.Service, eventBus events.EventBus, logger types.LoggerAdapter) user.Handlers {
+func NewHandlers(userService userservice.Service, eventBus shared.EventBus, logger shared.LoggerAdapter) user.Handlers {
 	return &UserHandlers{
 		UserService: userService,
 		EventBus:    eventBus,
@@ -31,50 +30,59 @@ func NewHandlers(userService userservice.Service, eventBus events.EventBus, logg
 }
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
-func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg types.Message) error {
-	h.logger.Info("HandleUserSignupRequest started", types.LogFields{"contextErr": ctx.Err()})
+func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg shared.Message) error {
+	h.logger.Info("HandleUserSignupRequest started", shared.LogFields{"contextErr": ctx.Err()})
 
-	h.logger.Info("Processing UserSignupRequest", types.LogFields{"message_id": msg.UUID()})
+	h.logger.Info("Processing UserSignupRequest", shared.LogFields{"message_id": msg.UUID()})
 
-	var req userevents.UserSignupRequestPayload // Use userevents.UserSignupRequestPayload
+	var req userevents.UserSignupRequestPayload
 	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
-		h.logger.Error("Failed to unmarshal UserSignupRequest", err, types.LogFields{
+		h.logger.Error("Failed to unmarshal UserSignupRequest", err, shared.LogFields{
 			"message_id": msg.UUID(),
 			"error":      err.Error(),
 		})
 		return fmt.Errorf("failed to unmarshal UserSignupRequest: %w", err)
 	}
 
+	// Call the service to handle user signup
 	resp, err := h.UserService.OnUserSignupRequest(msg.Context(), req)
 	if err != nil {
-		h.logger.Error("Failed to process user signup request", err, types.LogFields{
+		h.logger.Error("Failed to process user signup request", err, shared.LogFields{
 			"message_id": msg.UUID(),
 			"error":      err.Error(),
 			"discord_id": req.DiscordID,
 			"tag_number": req.TagNumber,
 		})
-		return fmt.Errorf("failed to process user signup request: %w", err)
+
+		// Publish a UserSignupResponse with the error
+		errorResponse := &userevents.UserSignupResponsePayload{
+			Success: false,
+			Error:   err.Error(),
+		}
+		if err := h.publishEvent(ctx, userevents.UserSignupResponse, errorResponse); err != nil {
+			return fmt.Errorf("failed to publish UserSignupResponse event: %w", err)
+		}
+	} else {
+		// Publish a successful UserSignupResponse
+		if err := h.publishEvent(ctx, userevents.UserSignupResponse, resp); err != nil {
+			return fmt.Errorf("failed to publish UserSignupResponse event: %w", err)
+		}
 	}
 
-	// Publish the response event using the EventBus
-	if err := h.publishEvent(ctx, userevents.UserSignupResponse, resp); err != nil {
-		return fmt.Errorf("failed to publish UserSignupResponse event: %w", err)
-	}
-
-	h.logger.Info("HandleUserSignupRequest completed", types.LogFields{"message_id": msg.UUID()})
+	h.logger.Info("HandleUserSignupRequest completed", shared.LogFields{"message_id": msg.UUID()})
 	msg.Ack()
 	return nil
 }
 
-func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg types.Message) error {
-	h.logger.Info("HandleUserRoleUpdateRequest started", types.LogFields{
+func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg shared.Message) error {
+	h.logger.Info("HandleUserRoleUpdateRequest started", shared.LogFields{
 		"message_id": msg.UUID(),
 		"contextErr": ctx.Err(),
 	})
 
 	var req userevents.UserRoleUpdateRequestPayload
 	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
-		h.logger.Error("Failed to unmarshal UserRoleUpdateRequest", err, types.LogFields{
+		h.logger.Error("Failed to unmarshal UserRoleUpdateRequest", err, shared.LogFields{
 			"message_id": msg.UUID(),
 		})
 		return fmt.Errorf("failed to unmarshal UserRoleUpdateRequest: %w", err)
@@ -83,7 +91,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg type
 	// Validate UserRole field
 	if !req.NewRole.IsValid() {
 		err := fmt.Errorf("invalid UserRole: %s", req.NewRole.String())
-		h.logger.Error("Validation failed for UserRoleUpdateRequest", err, types.LogFields{
+		h.logger.Error("Validation failed for UserRoleUpdateRequest", err, shared.LogFields{
 			"message_id": msg.UUID(),
 			"new_role":   req.NewRole.String(),
 		})
@@ -97,7 +105,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg type
 	resp, err := h.UserService.OnUserRoleUpdateRequest(timeoutCtx, req)
 	if err != nil {
 		// Log the specific error and a general message
-		h.logger.Error("Failed to process user role update request", err, types.LogFields{
+		h.logger.Error("Failed to process user role update request", err, shared.LogFields{
 			"message_id": msg.UUID(),
 			"error_msg":  err.Error(), // Add the error message to the log fields
 		})
@@ -109,18 +117,18 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(ctx context.Context, msg type
 		return fmt.Errorf("failed to publish UserRoleUpdateResponse event: %w", err)
 	}
 
-	h.logger.Info("HandleUserRoleUpdateRequest completed successfully", types.LogFields{"message_id": msg.UUID()})
+	h.logger.Info("HandleUserRoleUpdateRequest completed successfully", shared.LogFields{"message_id": msg.UUID()})
 	msg.Ack()
 	return nil
 }
 
-// Helper function to publish events
-func (h *UserHandlers) publishEvent(ctx context.Context, eventType events.EventType, payload interface{}) error {
+// Helper function to publish events (updated to use shared.Message)
+func (h *UserHandlers) publishEvent(ctx context.Context, eventType shared.EventType, payload interface{}) error {
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg := adapters.NewWatermillMessageAdapter(types.NewUUID(), payloadData)
+	msg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadData)
 	return h.EventBus.Publish(ctx, eventType, msg)
 }

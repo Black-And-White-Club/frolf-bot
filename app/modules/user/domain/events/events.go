@@ -1,31 +1,31 @@
 package userevents
 
 import (
-	"github.com/Black-And-White-Club/tcr-bot/app/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 )
 
 // EventType variables for user events
 var (
-	UserSignupRequest  = events.EventType{Module: "user", Name: "signup.request"}
-	UserSignupResponse = events.EventType{Module: "user", Name: "signup.response"}
-	UserCreated        = events.EventType{Module: "user", Name: "created"}
+	UserSignupRequest  = shared.EventType{Module: "user", Name: "signup.request"}
+	UserSignupResponse = shared.EventType{Module: "user", Name: "signup.response"}
+	UserCreated        = shared.EventType{Module: "user", Name: "created"}
 
-	UserRoleUpdateRequest  = events.EventType{Module: "user", Name: "role.update.request"}
-	UserRoleUpdateResponse = events.EventType{Module: "user", Name: "role.update.response"}
-	UserRoleUpdated        = events.EventType{Module: "user", Name: "role.updated"}
+	UserRoleUpdateRequest  = shared.EventType{Module: "user", Name: "role.update.request"}
+	UserRoleUpdateResponse = shared.EventType{Module: "user", Name: "role.update.response"}
+	UserRoleUpdated        = shared.EventType{Module: "user", Name: "role.updated"}
 
-	GetUserRoleRequest  = events.EventType{Module: "user", Name: "role.get.request"}
-	GetUserRoleResponse = events.EventType{Module: "user", Name: "role.get.response"}
-	GetUserRequest      = events.EventType{Module: "user", Name: "get.request"}
-	GetUserResponse     = events.EventType{Module: "user", Name: "get.response"}
+	GetUserRoleRequest  = shared.EventType{Module: "user", Name: "role.get.request"}
+	GetUserRoleResponse = shared.EventType{Module: "user", Name: "role.get.response"}
+	GetUserRequest      = shared.EventType{Module: "user", Name: "get.request"}
+	GetUserResponse     = shared.EventType{Module: "user", Name: "get.response"}
 )
 
 // EventType variables for leaderboard events (used by the user module)
 var (
-	CheckTagAvailabilityRequest  = events.EventType{Module: "leaderboard", Name: "check.tag.availability.request"}
-	CheckTagAvailabilityResponse = events.EventType{Module: "leaderboard", Name: "check.tag.availability.response"}
-	TagAssignedRequest           = events.EventType{Module: "leaderboard", Name: "tag.assigned.request"}
+	CheckTagAvailabilityRequest  = shared.EventType{Module: "leaderboard", Name: "check.tag.availability.request"}
+	CheckTagAvailabilityResponse = shared.EventType{Module: "leaderboard", Name: "check.tag.availability.response"}
+	TagAssignedRequest           = shared.EventType{Module: "leaderboard", Name: "tag.assigned.request"}
 )
 
 // User Events
@@ -85,7 +85,8 @@ type CheckTagAvailabilityRequestPayload struct {
 }
 
 type CheckTagAvailabilityResponsePayload struct {
-	IsAvailable bool `json:"is_available"`
+	IsAvailable bool   `json:"is_available"`
+	Error       string `json:"error,omitempty"`
 }
 
 type TagAssignedRequestPayload struct {

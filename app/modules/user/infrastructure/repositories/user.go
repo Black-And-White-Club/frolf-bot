@@ -60,7 +60,6 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.Di
 	if !newRole.IsValid() {
 		return fmt.Errorf("invalid user role: %s", newRole)
 	}
-
 	_, err := db.DB.NewUpdate().
 		Model(&User{}).
 		Set("role = ?", newRole). // Use newRole directly

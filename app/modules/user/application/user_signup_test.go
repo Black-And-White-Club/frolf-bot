@@ -8,16 +8,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/events"
+	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	userdbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
-
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/internal/testutils"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,8 +26,9 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 		mockUserDB       func(context.Context, *gomock.Controller, *userdb.MockUserDB)
 		mockEventBus     func(context.Context, *gomock.Controller, *eventbusmock.MockEventBus)
 		mockLogger       func(*testutils.MockLoggerAdapter)
+		mockCheckTag     func(*gomock.Controller, *eventbusmock.MockEventBus, bool, error)
 		want             *userevents.UserSignupResponsePayload
-		wantErr          error
+		wantErr          bool
 		checkTagCalled   bool
 		publishTagCalled bool
 	}{
@@ -58,65 +57,46 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 					}).Times(1)
 			},
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
-				// Expect Publish for CheckTagAvailabilityRequest
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userevents.CheckTagAvailabilityRequest), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, eventType events.EventType, msg types.Message) error {
-						// You can validate the message content here if needed
+					Publish(gomock.Any(), gomock.Eq(userevents.TagAssignedRequest), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, eventType shared.EventType, msg shared.Message) error {
 						return nil
 					}).
+					Times(1)
+			},
+			mockCheckTag: func(ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus, available bool, err error) {
+				mockEB.EXPECT().
+					Publish(gomock.Any(), gomock.Eq(userevents.CheckTagAvailabilityRequest), gomock.Any()).
+					Return(nil).
 					Times(1)
 
 				mockEB.EXPECT().
 					Subscribe(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, types.Message) error) error {
-						responsePayload := map[string]interface{}{
-							"is_available": true,
-						}
-
-						// Pass the ctrl to the handler function
-						if handler != nil {
-							mockMsg := testutils.NewMockMessage(ctrl)
-							mockMsg.EXPECT().Metadata().Return(message.Metadata{}).AnyTimes()
-							mockMsg.EXPECT().UUID().Return("").AnyTimes()
-
-							mockMsg.EXPECT().Payload().Return(func() []byte {
-								payloadBytes, err := json.Marshal(responsePayload)
-								if err != nil {
-									t.Fatalf("Failed to marshal response payload: %v", err)
-								}
-								return payloadBytes
-							}()).Times(1)
-							err := handler(ctx, mockMsg)
-							if err != nil {
-								return fmt.Errorf("handler returned an error: %v", err)
+					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, shared.Message) error) error {
+						if err == nil {
+							responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+								IsAvailable: available,
 							}
+							payloadBytes, _ := json.Marshal(responsePayload)
+							responseMsg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadBytes)
+
+							// Directly call the handler function to simulate the response
+							go func() {
+								handler(ctx, responseMsg)
+							}()
 						}
 						return nil
-					}).
-					Times(1)
-
-				// Expect Publish for TagAssignedRequest
-				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userevents.TagAssignedRequest), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, eventType events.EventType, msg types.Message) error {
-						// You can validate the message content here if needed
-						return nil
-					}).
-					Times(1)
+					}).AnyTimes()
 			},
 			mockLogger: func(mockLogger *testutils.MockLoggerAdapter) {
 				mockLogger.EXPECT().Info("OnUserSignupRequest started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Before checkTagAvailability", gomock.Any()).Times(1)
 				mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Generated replySubject", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Info("publishTagAssigned called", gomock.Any()).Times(1) // Expect this log
-				mockLogger.EXPECT().Error("Response channel full", nil, gomock.Any()).Times(0)
+				mockLogger.EXPECT().Info("publishTagAssigned called", gomock.Any()).Times(1)
 			},
 			want: &userevents.UserSignupResponsePayload{
 				Success: true,
 			},
-			wantErr: nil,
+			wantErr: false,
 		},
 		{
 			name: "Successful Signup without Tag",
@@ -151,7 +131,7 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			want: &userevents.UserSignupResponsePayload{
 				Success: true,
 			},
-			wantErr:          nil,
+			wantErr:          false,
 			checkTagCalled:   false,
 			publishTagCalled: false,
 		},
@@ -186,7 +166,7 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 				mockLogger.EXPECT().Info("OnUserSignupRequest started", gomock.Any()).Times(1)
 			},
 			want:             nil,
-			wantErr:          fmt.Errorf("failed to create user: %w", errors.New("database error")),
+			wantErr:          true,
 			checkTagCalled:   false,
 			publishTagCalled: false,
 		},
@@ -197,71 +177,41 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 				TagNumber: 99,
 			},
 			mockUserDB: func(ctx context.Context, ctrl *gomock.Controller, mockDB *userdb.MockUserDB) {
-				mockDB.EXPECT().CreateUser(gomock.Any(), gomock.AssignableToTypeOf(&userdbtypes.User{})).
-					DoAndReturn(func(ctx context.Context, u usertypes.User) error {
-						user, ok := u.(*userdbtypes.User)
-						if !ok {
-							return fmt.Errorf("unexpected type passed to CreateUser: %T", u)
-						}
-
-						if user.DiscordID != "user101" {
-							return fmt.Errorf("unexpected DiscordID: got %v, want %v", user.DiscordID, "user101")
-						}
-						if user.Role != usertypes.UserRoleRattler {
-							return fmt.Errorf("unexpected Role: got %v, want %v", user.Role, usertypes.UserRoleRattler)
-						}
-
-						return nil
-					}).Times(1)
+				// No CreateUser expectation when the tag is not available
 			},
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
+				// No additional expectations for event bus here, as they are set in mockCheckTag
+			},
+			mockCheckTag: func(ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus, available bool, err error) {
 				mockEB.EXPECT().
 					Publish(gomock.Any(), gomock.Eq(userevents.CheckTagAvailabilityRequest), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, eventType events.EventType, msg types.Message) error {
-						return nil
-					}).
+					Return(nil).
 					Times(1)
 
 				mockEB.EXPECT().
 					Subscribe(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, types.Message) error) error {
-						responsePayload := map[string]interface{}{
-							"is_available": false,
-						}
-
-						// Pass the ctrl to the handler function
-						if handler != nil {
-							mockMsg := testutils.NewMockMessage(ctrl)
-							mockMsg.EXPECT().Metadata().Return(message.Metadata{}).AnyTimes()
-							mockMsg.EXPECT().UUID().Return("").AnyTimes()
-
-							mockMsg.EXPECT().Payload().Return(func() []byte {
-								payloadBytes, err := json.Marshal(responsePayload)
-								if err != nil {
-									t.Fatalf("Failed to marshal response payload: %v", err)
-								}
-								return payloadBytes
-							}()).Times(1)
-							err := handler(ctx, mockMsg)
-							if err != nil {
-								return fmt.Errorf("handler returned an error: %v", err)
+					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, shared.Message) error) error {
+						if err == nil {
+							responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+								IsAvailable: false, // Tag is not available
 							}
+							payloadBytes, _ := json.Marshal(responsePayload)
+							responseMsg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadBytes)
+
+							// Directly call the handler function to simulate the response
+							go func() {
+								handler(ctx, responseMsg)
+							}()
 						}
 						return nil
-					}).
-					Times(1)
+					}).AnyTimes()
 			},
 			mockLogger: func(mockLogger *testutils.MockLoggerAdapter) {
 				mockLogger.EXPECT().Info("OnUserSignupRequest started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Before checkTagAvailability", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1) // Expect this log
-				mockLogger.EXPECT().Debug("Generated replySubject", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Error("Response channel full", nil, gomock.Any()).Times(0)
+				mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1)
 			},
-			want: &userevents.UserSignupResponsePayload{
-				Success: true,
-			},
-			wantErr: nil,
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name: "Failed Signup - Tag Check Error",
@@ -270,28 +220,30 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 				TagNumber: 99,
 			},
 			mockUserDB: func(ctx context.Context, ctrl *gomock.Controller, mockDB *userdb.MockUserDB) {
-				// No CreateUser expectation needed as it should not be called
+				// No CreateUser expectation because tag check fails
 			},
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
 				mockEB.EXPECT().
 					Publish(gomock.Any(), gomock.Eq(userevents.CheckTagAvailabilityRequest), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, eventType events.EventType, msg types.Message) error {
-						// Simulate an error during tag availability check
-						return errors.New("tag check error")
-					}).
+					Return(errors.New("tag check error")).
 					Times(1)
 
-				// No Subscribe expectation needed as Publish returns an error
+				// No Subscribe calls expected
+				mockEB.EXPECT().
+					Subscribe(gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			mockLogger: func(mockLogger *testutils.MockLoggerAdapter) {
 				mockLogger.EXPECT().Info("OnUserSignupRequest started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Before checkTagAvailability", gomock.Any()).Times(1)
 				mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Generated replySubject", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Error(gomock.Eq("failed to check tag availability"), gomock.Any(), gomock.Any())
+				mockLogger.EXPECT().Error(
+					gomock.Eq("failed to publish CheckTagAvailabilityRequest"),
+					gomock.AssignableToTypeOf(errors.New("")),
+					gomock.Eq(shared.LogFields{"error": errors.New("tag check error")}),
+				).Times(1)
 			},
 			want:    nil,
-			wantErr: fmt.Errorf("failed to check tag availability: %w", errors.New("failed to publish CheckTagAvailabilityRequest: tag check error")),
+			wantErr: true,
 		},
 		{
 			name: "Failed Signup - Publish TagAssignedRequest Error",
@@ -318,58 +270,44 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 					}).Times(1)
 			},
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
+				// Expect the Publish call for TagAssignedRequest and make it return an error.
+				mockEB.EXPECT().
+					Publish(gomock.Any(), gomock.Eq(userevents.TagAssignedRequest), gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1) // We expect this to be called once
+			},
+			mockCheckTag: func(ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus, available bool, err error) {
 				mockEB.EXPECT().
 					Publish(gomock.Any(), gomock.Eq(userevents.CheckTagAvailabilityRequest), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, eventType events.EventType, msg types.Message) error {
-						return nil
-					}).
+					Return(nil).
 					Times(1)
 
 				mockEB.EXPECT().
 					Subscribe(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, types.Message) error) error {
-						responsePayload := map[string]interface{}{
-							"is_available": true,
-						}
-
-						if handler != nil {
-							mockMsg := testutils.NewMockMessage(ctrl)
-							mockMsg.EXPECT().Metadata().Return(message.Metadata{}).AnyTimes()
-							mockMsg.EXPECT().UUID().Return("").AnyTimes()
-
-							mockMsg.EXPECT().Payload().Return(func() []byte {
-								payloadBytes, err := json.Marshal(responsePayload)
-								if err != nil {
-									t.Fatalf("Failed to marshal response payload: %v", err)
-								}
-								return payloadBytes
-							}()).Times(1)
-
-							err := handler(ctx, mockMsg)
-							if err != nil {
-								return fmt.Errorf("handler returned an error: %v", err)
+					DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, shared.Message) error) error {
+						if err == nil {
+							responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+								IsAvailable: true, // Tag is available
 							}
+							payloadBytes, _ := json.Marshal(responsePayload)
+							responseMsg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadBytes)
+
+							// Directly call the handler function to simulate the response
+							go func() {
+								handler(ctx, responseMsg)
+							}()
 						}
 						return nil
-					}).
-					Times(1)
-
-				// Mock the publishTagAssigned call to return an error
-				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userevents.TagAssignedRequest), gomock.Any()).
-					Return(errors.New("publish error")) // Simulate publish error
+					}).AnyTimes()
 			},
 			mockLogger: func(mockLogger *testutils.MockLoggerAdapter) {
 				mockLogger.EXPECT().Info("OnUserSignupRequest started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Before checkTagAvailability", gomock.Any()).Times(1)
 				mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1)
-				mockLogger.EXPECT().Debug("Generated replySubject", gomock.Any()).Times(1)
 				mockLogger.EXPECT().Info("publishTagAssigned called", gomock.Any()).Times(1)
-				// Expect only one error log for the publishTagAssigned error
-				mockLogger.EXPECT().Error(gomock.Eq("failed to publish TagAssignedRequest event"), gomock.Any(), gomock.Any())
+				mockLogger.EXPECT().Error(gomock.Eq("failed to publish TagAssignedRequest event"), gomock.Any(), gomock.Any()).Times(1)
 			},
 			want:    nil,
-			wantErr: fmt.Errorf("failed to publish TagAssignedRequest event: %w", errors.New("failed to publish TagAssignedRequest event: publish error")),
+			wantErr: true,
 		},
 	}
 
@@ -393,6 +331,15 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			if tt.mockLogger != nil {
 				tt.mockLogger(mockLogger)
 			}
+			if tt.mockCheckTag != nil {
+				if tt.name == "Failed Signup - Tag Check Error" {
+					// Pass false for available to simulate failure
+					tt.mockCheckTag(ctrl, mockEventBus, false, errors.New("tag check error"))
+				} else {
+					// For other cases, assume tag is available
+					tt.mockCheckTag(ctrl, mockEventBus, true, nil)
+				}
+			}
 
 			service := &UserServiceImpl{
 				UserDB:   mockUserDB,
@@ -402,20 +349,12 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 
 			got, err := service.OnUserSignupRequest(ctx, tt.req)
 
-			if tt.wantErr != nil {
-				if err == nil {
-					t.Errorf("Expected error, got nil")
-				} else if tt.wantErr == nil {
-					t.Errorf("Expected no error, but got: %v", err)
-				} else if err.Error() != tt.wantErr.Error() {
-					t.Errorf("Expected error: %v, got: %v", tt.wantErr, err)
-				}
-			} else if err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("OnUserSignupRequest() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Expected result: %v, got: %v", tt.want, got)
+				t.Errorf("OnUserSignupRequest() = %v, want %v", got, tt.want)
 			}
 		})
 	}

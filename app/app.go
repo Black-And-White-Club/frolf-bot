@@ -11,17 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/events"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/events"
+	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/events"
+	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	"github.com/Black-And-White-Club/tcr-bot/internal/jetstream"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -29,14 +23,11 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config            *config.Config
-	Logger            watermill.LoggerAdapter
-	Router            *message.Router
-	UserModule        *user.Module
-	RoundModule       *round.Module
-	ScoreModule       *score.Module
-	LeaderboardModule *leaderboard.Module
-	DB                *bundb.DBService // Changed to DBService
+	Config     *config.Config
+	Logger     watermill.LoggerAdapter
+	Router     *message.Router
+	UserModule *user.Module
+	DB         *bundb.DBService
 }
 
 // Initialize initializes the application.
@@ -53,11 +44,12 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	app.Logger = watermill.NewStdLogger(false, false)
 
-	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres) // Initialize DBService
+	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	streamCreator, err := jetstream.NewStreamCreator(cfg.NATS.URL, app.Logger)
+
+	streamCreator, err := adapters.NewStreamCreator(cfg.NATS.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create stream creator: %w", err)
 	}
@@ -67,53 +59,6 @@ func (app *App) Initialize(ctx context.Context) error {
 		ConsumerName string
 		Subject      string
 	}{
-		"leaderboard": {
-			{
-				ConsumerName: "check_tag_availability_consumer",
-				Subject:      leaderboardevents.CheckTagAvailabilityRequestSubject, // This should be from the leaderboard module
-			},
-			// Add more leaderboard consumers here if needed
-		},
-		"round": {
-			{
-				ConsumerName: "round_created_consumer",
-				Subject:      roundevents.RoundCreatedSubject,
-			},
-			{
-				ConsumerName: "round_updated_consumer",
-				Subject:      roundevents.RoundUpdatedSubject,
-			},
-			{
-				ConsumerName: "round_deleted_consumer",
-				Subject:      roundevents.RoundDeletedSubject,
-			},
-			{
-				ConsumerName: "round_started_consumer",
-				Subject:      roundevents.RoundStartedSubject,
-			},
-			{
-				ConsumerName: "participant_response_consumer",
-				Subject:      roundevents.ParticipantResponseSubject,
-			},
-			{
-				ConsumerName: "score_updated_consumer",
-				Subject:      roundevents.ScoreUpdatedSubject,
-			},
-			{
-				ConsumerName: "round_finalized_consumer",
-				Subject:      roundevents.RoundFinalizedSubject,
-			},
-		},
-		"score": {
-			{
-				ConsumerName: "score_received_consumer",
-				Subject:      scoreevents.ScoresReceivedEventSubject,
-			},
-			{
-				ConsumerName: "score_corrected_consumer",
-				Subject:      scoreevents.ScoreCorrectedEventSubject,
-			},
-		},
 		"user": {
 			{
 				ConsumerName: "user_signup_consumer",
@@ -143,40 +88,21 @@ func (app *App) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create Watermill router: %w", err)
 	}
 
-	retryMiddleware := middleware.Retry{
+	// Add retry middleware with backoff for resilience
+	router.AddMiddleware(middleware.Retry{
 		MaxRetries:      3,
 		InitialInterval: time.Millisecond * 100,
-	}
-	router.AddMiddleware(
-		middleware.CorrelationID,
-		retryMiddleware.Middleware,
-	)
+		Multiplier:      2, // Exponential backoff
+		MaxInterval:     time.Second * 5,
+	}.Middleware)
 
 	app.Router = router
 
-	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB.UserDB)
+	userModule, err := user.NewUserModule(ctx, cfg, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
-
-	roundModule, err := round.NewRoundModule(ctx, cfg, app.Logger, app.DB.RoundDB)
-	if err != nil {
-		return fmt.Errorf("failed to initialize round module: %w", err)
-	}
-	app.RoundModule = roundModule
-
-	scoreModule, err := score.NewScoreModule(ctx, cfg, app.Logger, app.DB.ScoreDB)
-	if err != nil {
-		return fmt.Errorf("failed to initialize score module: %w", err)
-	}
-	app.ScoreModule = scoreModule
-
-	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, app.Logger, app.DB.LeaderboardDB) // Initialize the leaderboard module
-	if err != nil {
-		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
-	}
-	app.LeaderboardModule = leaderboardModule
 
 	return nil
 }
@@ -208,9 +134,9 @@ func (app *App) Run(ctx context.Context) error {
 				return
 			case <-time.After(100 * time.Millisecond):
 				// Check if both user and leaderboard modules are initialized
-				if app.UserModule != nil && app.UserModule.IsInitialized() &&
-					app.LeaderboardModule != nil && app.LeaderboardModule.IsInitialized() {
-					fmt.Println("User and Leaderboard modules initialized")
+				if app.UserModule != nil && app.UserModule.IsInitialized() {
+					// && app.LeaderboardModule != nil && app.LeaderboardModule.IsInitialized() {
+					fmt.Println("User module initialized")
 					return
 				}
 			}
@@ -257,30 +183,30 @@ func (app *App) Close() {
 		}
 	}
 
-	if app.RoundModule != nil {
-		if err := app.RoundModule.Publisher.Close(); err != nil {
-			log.Printf("Error closing round module publisher: %v", err)
-		}
-		if err := app.RoundModule.Subscriber.Close(); err != nil {
-			log.Printf("Error closing round module subscriber: %v", err)
-		}
-	}
+	// if app.RoundModule != nil {
+	// 	if err := app.RoundModule.Publisher.Close(); err != nil {
+	// 		log.Printf("Error closing round module publisher: %v", err)
+	// 	}
+	// 	if err := app.RoundModule.Subscriber.Close(); err != nil {
+	// 		log.Printf("Error closing round module subscriber: %v", err)
+	// 	}
+	// }
 
-	if app.ScoreModule != nil {
-		if err := app.ScoreModule.Publisher.Close(); err != nil {
-			log.Printf("Error closing score module publisher: %v", err)
-		}
-		if err := app.ScoreModule.Subscriber.Close(); err != nil {
-			log.Printf("Error closing score module subscriber: %v", err)
-		}
-	}
+	// if app.ScoreModule != nil {
+	// 	if err := app.ScoreModule.Publisher.Close(); err != nil {
+	// 		log.Printf("Error closing score module publisher: %v", err)
+	// 	}
+	// 	if err := app.ScoreModule.Subscriber.Close(); err != nil {
+	// 		log.Printf("Error closing score module subscriber: %v", err)
+	// 	}
+	// }
 
-	if app.LeaderboardModule != nil { // Close connections for the leaderboard module
-		if err := app.LeaderboardModule.Publisher.Close(); err != nil {
-			log.Printf("Error closing leaderboard module publisher: %v", err)
-		}
-		if err := app.LeaderboardModule.Subscriber.Close(); err != nil {
-			log.Printf("Error closing leaderboard module subscriber: %v", err)
-		}
-	}
+	// if app.LeaderboardModule != nil { // Close connections for the leaderboard module
+	// 	if err := app.LeaderboardModule.Publisher.Close(); err != nil {
+	// 		log.Printf("Error closing leaderboard module publisher: %v", err)
+	// 	}
+	// 	if err := app.LeaderboardModule.Subscriber.Close(); err != nil {
+	// 		log.Printf("Error closing leaderboard module subscriber: %v", err)
+	// 	}
+	// }
 }

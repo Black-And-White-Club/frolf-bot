@@ -1,39 +1,38 @@
 package testutils
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
-	types "github.com/Black-And-White-Club/tcr-bot/app/types"
+	types "github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"go.uber.org/mock/gomock"
 )
 
-type MockSubscriberWithReturn struct {
-	ReturnChannel     <-chan types.Message // Use types.Message
-	ReturnError       error
-	hasBeenSubscribed bool
-}
+// type MockSubscriberWithReturn struct {
+// 	ReturnChannel     <-chan types.Message // Use types.Message
+// 	ReturnError       error
+// 	hasBeenSubscribed bool
+// }
 
-func (m *MockSubscriberWithReturn) Subscribe(ctx context.Context, topic string) (<-chan types.Message, error) {
-	fmt.Println("MockSubscriberWithReturn.Subscribe called")
-	if m.hasBeenSubscribed {
-		fmt.Println("MockSubscriberWithReturn.Subscribe called AGAIN. This is likely an error")
-	}
-	m.hasBeenSubscribed = true
-	return m.ReturnChannel, m.ReturnError
-}
+// func (m *MockSubscriberWithReturn) Subscribe(ctx context.Context, topic string) (<-chan types.Message, error) {
+// 	fmt.Println("MockSubscriberWithReturn.Subscribe called")
+// 	if m.hasBeenSubscribed {
+// 		fmt.Println("MockSubscriberWithReturn.Subscribe called AGAIN. This is likely an error")
+// 	}
+// 	m.hasBeenSubscribed = true
+// 	return m.ReturnChannel, m.ReturnError
+// }
 
-func (m *MockSubscriberWithReturn) Messages() <-chan types.Message {
-	return m.ReturnChannel
-}
+// func (m *MockSubscriberWithReturn) Messages() <-chan types.Message {
+// 	return m.ReturnChannel
+// }
 
-func (m *MockSubscriberWithReturn) Close() error {
-	return nil
-}
+// func (m *MockSubscriberWithReturn) Close() error {
+// 	return nil
+// }
 
 // CreateMessageWithPayload creates a MockMessage with a JSON payload.
 func CreateMessageWithPayload(t *testing.T, correlationID string, payload interface{}) types.Message {

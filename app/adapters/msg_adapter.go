@@ -3,7 +3,7 @@ package adapters
 import (
 	"context"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/types"
+	types "github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
