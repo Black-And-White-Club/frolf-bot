@@ -1,34 +1,32 @@
-package userevents
+package events
 
 import (
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 )
 
-// EventType variables for user events
+// User-related events (published to user-stream)
 var (
-	UserSignupRequest  = shared.EventType{Module: "user", Name: "signup.request"}
-	UserSignupResponse = shared.EventType{Module: "user", Name: "signup.response"}
-	UserCreated        = shared.EventType{Module: "user", Name: "created"}
-
-	UserRoleUpdateRequest  = shared.EventType{Module: "user", Name: "role.update.request"}
-	UserRoleUpdateResponse = shared.EventType{Module: "user", Name: "role.update.response"}
-	UserRoleUpdated        = shared.EventType{Module: "user", Name: "role.updated"}
-
-	GetUserRoleRequest  = shared.EventType{Module: "user", Name: "role.get.request"}
-	GetUserRoleResponse = shared.EventType{Module: "user", Name: "role.get.response"}
-	GetUserRequest      = shared.EventType{Module: "user", Name: "get.request"}
-	GetUserResponse     = shared.EventType{Module: "user", Name: "get.response"}
+	UserSignupRequest      = "user.signup.request"
+	UserSignupResponse     = "user.signup.response"
+	UserCreated            = "user.created"
+	UserRoleUpdateRequest  = "user.role.update.request"
+	UserRoleUpdateResponse = "user.role.update.response"
+	UserRoleUpdated        = "user.role.updated"
+	GetUserRoleRequest     = "user.get.role.request"
+	GetUserRoleResponse    = "user.get.role.response"
+	GetUserRequest         = "user.get.request"
+	GetUserResponse        = "user.get.response"
 )
 
-// EventType variables for leaderboard events (used by the user module)
+// Leaderboard-related events (used by user module, published to leaderboard-stream)
 var (
-	CheckTagAvailabilityRequest  = shared.EventType{Module: "leaderboard", Name: "check.tag.availability.request"}
-	CheckTagAvailabilityResponse = shared.EventType{Module: "leaderboard", Name: "check.tag.availability.response"}
-	TagAssignedRequest           = shared.EventType{Module: "leaderboard", Name: "tag.assigned.request"}
+	CheckTagAvailabilityRequest  = "leaderboard.check.tag.availability.request"
+	CheckTagAvailabilityResponse = "leaderboard.check.tag.availability.response"
+	TagAssignedRequest           = "leaderboard.tag.assigned.request"
+	TagAssignedResponse          = "leaderboard.tag.assigned.response"
 )
 
-// User Events
+// User Events Payloads
 type UserSignupRequestPayload struct {
 	DiscordID usertypes.DiscordID `json:"discord_id"`
 	TagNumber int                 `json:"tag_number,omitempty"`
@@ -79,17 +77,23 @@ type GetUserResponsePayload struct {
 	Error string         `json:"error,omitempty"`
 }
 
-// Leaderboard Events
+// Leaderboard Request Payloads (initiated by the user module)
 type CheckTagAvailabilityRequestPayload struct {
 	TagNumber int `json:"tag_number"`
-}
-
-type CheckTagAvailabilityResponsePayload struct {
-	IsAvailable bool   `json:"is_available"`
-	Error       string `json:"error,omitempty"`
 }
 
 type TagAssignedRequestPayload struct {
 	DiscordID usertypes.DiscordID `json:"discord_id"`
 	TagNumber int                 `json:"tag_number"`
+}
+
+// Leaderboard Response Payloads (received by the user module from the leaderboard module)
+type CheckTagAvailabilityResponsePayload struct {
+	IsAvailable bool   `json:"is_available"`
+	Error       string `json:"error,omitempty"`
+}
+
+type TagAssignedResponsePayload struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }

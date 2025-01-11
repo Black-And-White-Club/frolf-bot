@@ -4,70 +4,65 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	adaptermock "github.com/Black-And-White-Club/tcr-bot/app/adapters/mocks"
-	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
+	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/internal/testutils"
-
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
 func TestUserServiceImpl_checkTagAvailability(t *testing.T) {
+	type fields struct {
+		_ *eventbusmock.MockEventBus
+		_ *slog.Logger
+	}
+	type args struct {
+		_ context.Context
+		_ int
+	}
 	tests := []struct {
 		name            string
+		fields          fields
+		args            args
 		tagNumber       int
-		isAvailable     bool
+		responsePayload *userevents.CheckTagAvailabilityResponsePayload
 		timeout         bool
-		expectError     error
 		expected        bool
-		publishPayload  map[string]interface{}
-		responsePayload map[string]interface{}
+		expectError     error
 	}{
 		{
-			name:        "Happy Path",
-			tagNumber:   123,
-			isAvailable: true,
-			timeout:     false,
-			expectError: nil,
+			name:      "Tag Available",
+			tagNumber: 123,
+			responsePayload: &userevents.CheckTagAvailabilityResponsePayload{
+				IsAvailable: true,
+				Error:       "",
+			},
 			expected:    true,
-			publishPayload: map[string]interface{}{
-				"tag_number": 123,
+			expectError: nil,
+		},
+		{
+			name:      "Tag Not Available",
+			tagNumber: 456,
+			responsePayload: &userevents.CheckTagAvailabilityResponsePayload{
+				IsAvailable: false,
+				Error:       "",
 			},
-			responsePayload: map[string]interface{}{
-				"is_available": true,
-			},
+			expected:    false,
+			expectError: nil,
 		},
 		{
 			name:        "Timeout",
-			tagNumber:   456,
-			isAvailable: false,
-			timeout:     true,
-			expectError: errTimeout,
-			expected:    false,
-			publishPayload: map[string]interface{}{
-				"tag_number": 456,
-			},
-			responsePayload: nil,
-		},
-		{
-			name:        "Tag Not Available",
 			tagNumber:   789,
-			isAvailable: false,
-			timeout:     false,
-			expectError: nil,
+			timeout:     true,
 			expected:    false,
-			publishPayload: map[string]interface{}{
-				"tag_number": 789,
-			},
-			responsePayload: map[string]interface{}{
-				"is_available": false,
-			},
+			expectError: errTimeout,
 		},
 	}
 
@@ -77,17 +72,20 @@ func TestUserServiceImpl_checkTagAvailability(t *testing.T) {
 			defer ctrl.Finish()
 
 			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-			mockLogger := testutils.NewMockLoggerAdapter(ctrl)
-			mockEventAdapter := adaptermock.NewMockEventAdapterInterface(ctrl)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-			mockLogger.EXPECT().Info("checkTagAvailability started", gomock.Any()).Times(1)
-
+			// Set up the expected call to Publish for CheckTagAvailabilityRequest
 			mockEventBus.EXPECT().
-				Publish(gomock.Any(), userevents.CheckTagAvailabilityRequest, gomock.Any()).
-				DoAndReturn(func(_ context.Context, eventType shared.EventType, msg shared.Message) error {
-					if !testutils.NewMessageMatcher(t, tt.publishPayload).Matches(msg) {
-						t.Errorf("message payload does not match expected: %v", tt.publishPayload)
-						return fmt.Errorf("message does not match expected")
+				Publish(gomock.Any(), userstream.LeaderboardStreamName, gomock.Any()). // Expect leaderboard stream name
+				DoAndReturn(func(_ context.Context, streamName string, msg *message.Message) error {
+					// Verify the stream name
+					if streamName != userstream.LeaderboardStreamName {
+						t.Errorf("Expected stream name: %s, got: %s", userstream.LeaderboardStreamName, streamName)
+					}
+					// Verify the subject from message metadata
+					subject := msg.Metadata.Get("subject")
+					if subject != userevents.CheckTagAvailabilityRequest {
+						t.Errorf("Expected subject: %s, got: %s", userevents.CheckTagAvailabilityRequest, subject)
 					}
 					return nil
 				}).
@@ -99,33 +97,39 @@ func TestUserServiceImpl_checkTagAvailability(t *testing.T) {
 			var cancel context.CancelFunc
 			if tt.timeout {
 				ctxWithTimeout, cancel = context.WithTimeout(context.Background(), shortTimeout)
-				cancel() // Simulate immediate timeout
+				defer cancel() // Cancel immediately if timeout is expected
 			} else {
 				ctxWithTimeout, cancel = context.WithCancel(context.Background())
+				defer cancel() // Ensure cancel is called even when no timeout is expected
 			}
-			defer cancel()
 
-			// Expect Subscribe to be called
+			// Set up the expected call to Subscribe for CheckTagAvailabilityResponse
 			mockEventBus.EXPECT().
-				Subscribe(gomock.Any(), gomock.Any(), gomock.Any()).
-				DoAndReturn(func(ctx context.Context, subject string, handler func(context.Context, shared.Message) error) error {
+				Subscribe(gomock.Any(), userstream.LeaderboardStreamName, userevents.CheckTagAvailabilityResponse, gomock.Any()).
+				DoAndReturn(func(ctx context.Context, streamName, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
+					// Verify the stream name and subject
+					if streamName != userstream.LeaderboardStreamName { // Expect LeaderboardStreamName
+						t.Errorf("Expected stream name: %s, got: %s", userstream.LeaderboardStreamName, streamName)
+					}
+					if subject != userevents.CheckTagAvailabilityResponse {
+						t.Errorf("Expected subject: %s, got: %s", userevents.CheckTagAvailabilityResponse, subject)
+					}
+
 					if !tt.timeout && tt.responsePayload != nil {
 						payloadBytes, _ := json.Marshal(tt.responsePayload)
-						responseMsg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadBytes) // Use the function from the adapters package
+						responseMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+						responseMsg.Metadata.Set("subject", userevents.CheckTagAvailabilityResponse)
 
-						// Directly call the handler function to simulate the response
-						go func() {
-							handler(ctx, responseMsg)
-						}()
+						// Call the handler function to simulate the response
+						go handler(ctx, responseMsg)
 					}
 					return nil
 				}).
 				AnyTimes()
 
 			service := &UserServiceImpl{
-				eventBus:     mockEventBus,
-				logger:       mockLogger,
-				eventAdapter: mockEventAdapter,
+				eventBus: mockEventBus,
+				logger:   logger,
 			}
 
 			got, err := service.checkTagAvailability(ctxWithTimeout, tt.tagNumber)
@@ -162,8 +166,18 @@ func TestUserServiceImpl_publishTagAssigned(t *testing.T) {
 			tagNumber: 123,
 			mockEventBus: func(mockEventBus *eventbusmock.MockEventBus) {
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userevents.TagAssignedRequest, gomock.Any()).
-					Return(nil)
+					Publish(gomock.Any(), userstream.LeaderboardStreamName, gomock.Any()). // Expect LeaderboardStreamName
+					DoAndReturn(func(_ context.Context, streamName string, msg *message.Message) error {
+						if streamName != userstream.LeaderboardStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", userstream.LeaderboardStreamName, streamName)
+						}
+						subject := msg.Metadata.Get("subject")
+						if subject != userevents.TagAssignedRequest {
+							t.Errorf("Expected subject: %s, got: %s", userevents.TagAssignedRequest, subject)
+						}
+						return nil
+					}).
+					Times(1)
 			},
 			wantErr: false,
 		},
@@ -173,7 +187,7 @@ func TestUserServiceImpl_publishTagAssigned(t *testing.T) {
 			tagNumber: 456,
 			mockEventBus: func(mockEventBus *eventbusmock.MockEventBus) {
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userevents.TagAssignedRequest, gomock.Any()).
+					Publish(gomock.Any(), userstream.LeaderboardStreamName, gomock.Any()). // Expect LeaderboardStreamName
 					Return(fmt.Errorf("simulated publish error"))
 			},
 			wantErr: true,
@@ -182,20 +196,15 @@ func TestUserServiceImpl_publishTagAssigned(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-			mockLogger := testutils.NewMockLoggerAdapter(ctrl)
-			mockEventAdapter := new(adaptermock.MockEventAdapterInterface)
-
-			// Set up logger expectations
-			mockLogger.EXPECT().Info("publishTagAssigned called", gomock.Any()).Times(1)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 			if tt.mockEventBus != nil {
 				tt.mockEventBus(mockEventBus)
 			}
 
 			s := &UserServiceImpl{
-				eventBus:     mockEventBus,
-				logger:       mockLogger,
-				eventAdapter: mockEventAdapter,
+				eventBus: mockEventBus,
+				logger:   logger,
 			}
 
 			// Call publishTagAssigned with a context
@@ -227,8 +236,18 @@ func TestUserServiceImpl_publishUserRoleUpdated(t *testing.T) {
 			},
 			mockEventBus: func(mockEventBus *eventbusmock.MockEventBus) {
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userevents.UserRoleUpdated, gomock.Any()).
-					Return(nil)
+					Publish(gomock.Any(), userstream.UserRoleUpdateResponseStreamName, gomock.Any()). // Expect UserRoleUpdateResponseStreamName
+					DoAndReturn(func(_ context.Context, streamName string, msg *message.Message) error {
+						if streamName != userstream.UserRoleUpdateResponseStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", userstream.UserRoleUpdateResponseStreamName, streamName)
+						}
+						subject := msg.Metadata.Get("subject")
+						if subject != userevents.UserRoleUpdated {
+							t.Errorf("Expected subject: %s, got: %s", userevents.UserRoleUpdated, subject)
+						}
+						return nil
+					}).
+					Times(1)
 			},
 			wantErr: false,
 		},
@@ -240,7 +259,7 @@ func TestUserServiceImpl_publishUserRoleUpdated(t *testing.T) {
 			},
 			mockEventBus: func(mockEventBus *eventbusmock.MockEventBus) {
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userevents.UserRoleUpdated, gomock.Any()).
+					Publish(gomock.Any(), userstream.UserRoleUpdateResponseStreamName, gomock.Any()). // Expect UserRoleUpdateResponseStreamName
 					Return(fmt.Errorf("failed to publish"))
 			},
 			wantErr: true,
@@ -250,20 +269,15 @@ func TestUserServiceImpl_publishUserRoleUpdated(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-			mockLogger := testutils.NewMockLoggerAdapter(ctrl)
-			mockEventAdapter := new(adaptermock.MockEventAdapterInterface)
-
-			// Set up logger expectations
-			mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes() // Allow any number of calls to Info
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 			if tt.mockEventBus != nil {
 				tt.mockEventBus(mockEventBus)
 			}
 
 			s := &UserServiceImpl{
-				eventBus:     mockEventBus,
-				logger:       mockLogger,
-				eventAdapter: mockEventAdapter,
+				eventBus: mockEventBus,
+				logger:   logger,
 			}
 
 			ctx := context.Background()

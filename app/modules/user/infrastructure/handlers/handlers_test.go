@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
+	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	usermocks "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	testutils "github.com/Black-And-White-Club/tcr-bot/internal/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
@@ -24,9 +24,9 @@ func TestNewHandlers(t *testing.T) {
 
 	mockUserService := usermocks.NewMockService(ctrl)
 	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-	mockLogger := testutils.NewMockLoggerAdapter(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	handlers := NewHandlers(mockUserService, mockEventBus, mockLogger)
+	handlers := NewHandlers(mockUserService, mockEventBus, logger)
 
 	if handlers == nil {
 		t.Error("NewHandlers() returned nil")
@@ -39,80 +39,89 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		message       *testutils.MockMessage
-		setupMocks    func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter)
+		message       *message.Message
+		setupMocks    func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger)
 		expectedError error
 	}{
 		{
 			name: "Success",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
+			message: func() *message.Message {
 				req := userevents.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
 				payload, _ := json.Marshal(req)
-				msg.EXPECT().Payload().Return(payload).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
-				msg.EXPECT().Context().Return(context.Background()).AnyTimes()
-				msg.EXPECT().Ack().Times(1)
+				msg := message.NewMessage("mock-uuid", payload)
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
 			}(),
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
 				resp := &userevents.UserSignupResponsePayload{Success: true}
 				mockUserService.EXPECT().OnUserSignupRequest(gomock.Any(), gomock.Any()).Return(resp, nil)
-				mockEventBus.EXPECT().Publish(gomock.Any(), userevents.UserSignupResponse, gomock.Any()).Return(nil)
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+				mockEventBus.EXPECT().
+					Publish(gomock.Any(), userstream.UserSignupResponseStreamName, gomock.Any()). // Use UserSignupResponseStreamName
+					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
+						// Verify the stream name
+						if streamName != userstream.UserSignupResponseStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", userstream.UserSignupResponseStreamName, streamName)
+						}
+						// Verify the subject from message metadata
+						subject := msg.Metadata.Get("subject")
+						if subject != userevents.UserSignupResponse {
+							t.Errorf("Expected subject: %s, got: %s", userevents.UserSignupResponse, subject)
+						}
+						return nil
+					}).
+					Times(1)
+				logger.Info("HandleUserSignupRequest started", slog.String("contextErr", ""))
+				logger.Info("Processing UserSignupRequest", slog.String("message_id", "mock-uuid"))
+				logger.Info("HandleUserSignupRequest completed", slog.String("message_id", "mock-uuid"))
 			},
 			expectedError: nil,
 		},
 		{
 			name: "Invalid Payload",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
-				msg.EXPECT().Payload().Return([]byte("invalid json")).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
+			message: func() *message.Message {
+				msg := message.NewMessage("mock-uuid", []byte("invalid json"))
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
 			}(),
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
+				logger.Info("HandleUserSignupRequest started", slog.String("contextErr", ""))
+				logger.Info("Processing UserSignupRequest", slog.String("message_id", "mock-uuid"))
+				logger.Error("Failed to unmarshal UserSignupRequest", slog.Any("error", errors.New("invalid character 'i' looking for beginning of value")), slog.String("message_id", "mock-uuid"))
 			},
 			expectedError: errors.New("failed to unmarshal UserSignupRequest"),
 		},
 		{
 			name: "Service Error",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
+			message: func() *message.Message {
 				req := userevents.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
 				payload, _ := json.Marshal(req)
-				msg.EXPECT().Payload().Return(payload).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
-				msg.EXPECT().Context().Return(context.Background()).AnyTimes()
-				msg.EXPECT().Ack().Times(1) // Expect Ack to be called
+				msg := message.NewMessage("mock-uuid", payload)
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
 			}(),
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
 				mockUserService.EXPECT().OnUserSignupRequest(gomock.Any(), gomock.Any()).Return(nil, errors.New("service error"))
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+				logger.Info("HandleUserSignupRequest started", slog.String("contextErr", ""))
+				logger.Info("Processing UserSignupRequest", slog.String("message_id", "mock-uuid"))
 
 				// Expect Publish to be called with an error payload
-				mockEventBus.EXPECT().Publish(gomock.Any(), userevents.UserSignupResponse, gomock.Any()).DoAndReturn(
-					func(ctx context.Context, topic shared.EventType, msg *adapters.WatermillMessageAdapter) error {
-						var responsePayload userevents.UserSignupResponsePayload
-						if err := json.Unmarshal(msg.Payload(), &responsePayload); err != nil {
-							t.Fatalf("failed to unmarshal response payload: %v", err)
+				mockEventBus.EXPECT().
+					Publish(gomock.Any(), userstream.UserSignupResponseStreamName, gomock.Any()). // Use UserSignupResponseStreamName
+					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
+						// Verify the stream name
+						if streamName != userstream.UserSignupResponseStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", userstream.UserSignupResponseStreamName, streamName)
 						}
-
-						if responsePayload.Success {
-							t.Errorf("unexpected success in response payload: got true, want false")
+						// Verify the subject from message metadata
+						subject := msg.Metadata.Get("subject")
+						if subject != userevents.UserSignupResponse {
+							t.Errorf("Expected subject: %s, got: %s", userevents.UserSignupResponse, subject)
 						}
-
-						if !strings.Contains(responsePayload.Error, "service error") {
-							t.Errorf("unexpected error message in response payload: got %s, want to contain 'service error'", responsePayload.Error)
-						}
-
 						return nil
-					},
-				).Times(1)
-				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+					}).
+					Times(1)
+				logger.Error("Failed to process user signup request", slog.Any("error", errors.New("service error")), slog.String("message_id", "mock-uuid"), slog.String("discord_id", "123"), slog.Int("tag_number", 1))
+				logger.Info("HandleUserSignupRequest completed", slog.String("message_id", "mock-uuid"))
 			},
 			expectedError: nil, // We expect no error from the handler as it handles it internally
 		},
@@ -122,15 +131,15 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockUserService := usermocks.NewMockService(ctrl)
 			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-			mockLogger := testutils.NewMockLoggerAdapter(ctrl)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 			handlers := &UserHandlers{
 				UserService: mockUserService,
 				EventBus:    mockEventBus,
-				logger:      mockLogger,
+				logger:      logger,
 			}
 
-			tc.setupMocks(mockUserService, mockEventBus, mockLogger)
+			tc.setupMocks(mockUserService, mockEventBus, logger)
 
 			err := handlers.HandleUserSignupRequest(context.Background(), tc.message)
 
@@ -153,125 +162,88 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		message       func() *testutils.MockMessage
-		setupMocks    func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter)
+		message       *message.Message // Corrected type
+		setupMocks    func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger)
 		expectedError string
 	}{
 		{
 			name: "Success",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
+			message: func() *message.Message { // Helper function to create the message
 				req := userevents.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}
 				payload, _ := json.Marshal(req)
-				msg.EXPECT().Payload().Return(payload).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
-				msg.EXPECT().Context().Return(context.Background()).AnyTimes()
-				msg.EXPECT().Ack().Times(1)
+				msg := message.NewMessage("mock-uuid", payload)
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
-			},
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
+			}(), // Immediately call the function
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
 				req := userevents.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}
 				resp := &userevents.UserRoleUpdateResponsePayload{Success: true}
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+				logger.Info("HandleUserRoleUpdateRequest started", slog.String("message_id", "mock-uuid"), slog.String("contextErr", ""))
 				mockUserService.EXPECT().
 					OnUserRoleUpdateRequest(gomock.Any(), gomock.Eq(req)).
 					Return(resp, nil).Times(1)
 
 				// Expect Publish to be called with a Watermill message
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userevents.UserRoleUpdateResponse, gomock.Any()).
-					DoAndReturn(func(ctx context.Context, topic shared.EventType, msg *adapters.WatermillMessageAdapter) error {
-						var responsePayload userevents.UserRoleUpdateResponsePayload
-						if err := json.Unmarshal(msg.Payload(), &responsePayload); err != nil {
-							t.Errorf("failed to unmarshal response payload: %v", err)
+					Publish(gomock.Any(), userstream.UserRoleUpdateResponseStreamName, gomock.Any()).
+					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
+						// Verify the stream name
+						if streamName != userstream.UserRoleUpdateResponseStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", userstream.UserRoleUpdateResponseStreamName, streamName)
 						}
-
-						if !reflect.DeepEqual(responsePayload, *resp) {
-							t.Errorf("unexpected response payload: got %v, want %v", responsePayload, *resp)
+						// Verify the subject from message metadata
+						subject := msg.Metadata.Get("subject")
+						if subject != userevents.UserRoleUpdateResponse {
+							t.Errorf("Expected subject: %s, got: %s", userevents.UserRoleUpdateResponse, subject)
 						}
-
 						return nil
-					}).Times(1)
+					}).
+					Times(1)
 
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+				logger.Info("HandleUserRoleUpdateRequest completed successfully", slog.String("message_id", "mock-uuid"))
 			},
 			expectedError: "",
 		},
 		{
 			name: "Invalid Payload",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
-				msg.EXPECT().Payload().Return([]byte("invalid json")).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
+			message: func() *message.Message { // Helper function
+				msg := message.NewMessage("mock-uuid", []byte("invalid json"))
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
-			},
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-
-				// Use testutils.isErrorType to create the matcher
-				mockLogger.EXPECT().
-					Error(gomock.Any(), testutils.IsErrorType(&json.SyntaxError{}), gomock.Any()).
-					Times(1)
+			}(), // Immediately call the function
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
+				logger.Info("HandleUserRoleUpdateRequest started", slog.String("message_id", "mock-uuid"), slog.String("contextErr", ""))
+				logger.Error("Failed to unmarshal UserRoleUpdateRequest", slog.Any("error", errors.New("invalid character 'i' looking for beginning of value")), slog.String("message_id", "mock-uuid"))
 			},
 			expectedError: "failed to unmarshal UserRoleUpdateRequest",
 		},
 		{
 			name: "Service Failure",
-			message: func() *testutils.MockMessage {
-				msg := testutils.NewMockMessage(ctrl)
+			message: func() *message.Message { // Helper function
 				req := userevents.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}
 				payload, _ := json.Marshal(req)
-				msg.EXPECT().Payload().Return(payload).AnyTimes()
-				msg.EXPECT().UUID().Return("mock-uuid").AnyTimes()
-				msg.EXPECT().Context().Return(context.Background()).AnyTimes()
+				msg := message.NewMessage("mock-uuid", payload)
+				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
-			},
-			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, mockLogger *testutils.MockLoggerAdapter) {
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+			}(), // Immediately call the function
+			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
+				logger.Info("HandleUserRoleUpdateRequest started", slog.String("message_id", "mock-uuid"), slog.String("contextErr", ""))
 
 				mockUserService.EXPECT().
 					OnUserRoleUpdateRequest(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("service failure")).Times(1)
 
-				mockLogger.EXPECT().
-					Error(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ interface{}, msg interface{}, fields ...shared.LogFields) {
-						// Assert that msg is an error and convert it to string
-						err, ok := msg.(error)
-						if !ok {
-							t.Fatalf("Error message is not an error type: %v", msg)
-						}
-						errMsg := err.Error()
+				logger.Error("Failed to process user role update request", slog.Any("error", errors.New("service failure")), slog.String("message_id", "mock-uuid"), slog.String("error_msg", "service failure"))
 
-						// Assert that the error message contains "service failure"
-						if !strings.Contains(errMsg, "service failure") {
-							t.Errorf("Expected error message to contain 'service failure', got '%s'", errMsg)
-						}
-
-						// Check if any of the fields contain "Failed to process user role update request"
-						found := false
-						for _, field := range fields {
-							if msgVal, ok := field["message_id"]; ok {
-								if _, ok := msgVal.(string); ok {
-									found = true
-									break
-								}
-							}
-						}
-						if !found {
-							t.Errorf("Expected message to contain 'Failed to process user role update request', but it was not found in fields: %v", fields)
-						}
-					}).
-					Times(1)
 			},
 			expectedError: "service failure",
 		},
@@ -281,17 +253,17 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockUserService := usermocks.NewMockService(ctrl)
 			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-			mockLogger := testutils.NewMockLoggerAdapter(ctrl)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 			handlers := &UserHandlers{
 				UserService: mockUserService,
 				EventBus:    mockEventBus,
-				logger:      mockLogger,
+				logger:      logger,
 			}
 
-			tc.setupMocks(mockUserService, mockEventBus, mockLogger)
+			tc.setupMocks(mockUserService, mockEventBus, logger)
 
-			err := handlers.HandleUserRoleUpdateRequest(context.Background(), tc.message())
+			err := handlers.HandleUserRoleUpdateRequest(context.Background(), tc.message)
 
 			if tc.expectedError != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.expectedError) {

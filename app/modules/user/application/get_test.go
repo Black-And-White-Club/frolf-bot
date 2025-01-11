@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"reflect"
 	"testing"
 
-	adaptermock "github.com/Black-And-White-Club/tcr-bot/app/adapters/mocks"
-	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
+	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	usertypemocks "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types/mocks"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/tcr-bot/internal/testutils"
 	"go.uber.org/mock/gomock"
 )
 
@@ -22,14 +22,12 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 
 	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
 	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockLogger := testutils.NewMockLoggerAdapter(ctrl)
-	mockEventAdapter := new(adaptermock.MockEventAdapterInterface)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	s := &UserServiceImpl{
-		eventBus:     mockEventBus,
-		UserDB:       mockUserDB,
-		logger:       mockLogger,
-		eventAdapter: mockEventAdapter,
+		eventBus: mockEventBus,
+		UserDB:   mockUserDB,
+		logger:   logger,
 	}
 
 	tests := []struct {
@@ -95,20 +93,19 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 		})
 	}
 }
+
 func TestUserServiceImpl_GetUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockUserDB := userdb.NewMockUserDB(ctrl)
 	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-	mockLogger := testutils.NewMockLoggerAdapter(ctrl)
-	mockEventAdapter := new(adaptermock.MockEventAdapterInterface)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	s := &UserServiceImpl{
-		eventBus:     mockEventBus,
-		UserDB:       mockUserDB,
-		logger:       mockLogger,
-		eventAdapter: mockEventAdapter, // Add the mockEventAdapter
+		eventBus: mockEventBus,
+		UserDB:   mockUserDB,
+		logger:   logger,
 	}
 
 	tests := []struct {

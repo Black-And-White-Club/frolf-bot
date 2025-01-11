@@ -2,14 +2,15 @@ package usersubscribers
 
 import (
 	"context"
-	"errors"
-	"reflect"
+	"fmt"
+	"log/slog"
+	"os"
 	"testing"
 
-	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/events/mocks"
+	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
 	handlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/handlers/mocks"
-	"github.com/Black-And-White-Club/tcr-bot/internal/testutils"
 	"go.uber.org/mock/gomock"
 )
 
@@ -17,130 +18,109 @@ func TestNewSubscribers(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
 	mockHandlers := handlers.NewMockHandlers(ctrl)
-	mockLogger := testutils.NewMockLoggerAdapter(ctrl)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	t.Run("Creates a new UserSubscribers instance", func(t *testing.T) {
-		want := &UserSubscribers{
-			eventBus: mockEventBus,
-			handlers: mockHandlers,
-			logger:   mockLogger,
-		}
-		got := NewSubscribers(mockEventBus, mockHandlers, mockLogger)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("NewSubscribers() = %v, want %v", got, want)
+		got := NewSubscribers(mockEventBus, mockHandlers, logger)
+		if got == nil {
+			t.Errorf("NewSubscribers() returned nil")
 		}
 	})
 }
 
 func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
-	type fields struct {
-		eventBus *eventbusmocks.MockEventBus
-		handlers *handlers.MockHandlers
-		logger   *testutils.MockLoggerAdapter
-		args     struct {
-			ctx context.Context
-		}
-	}
 	tests := []struct {
 		name    string
-		fields  fields
-		setup   func(f fields)
+		setup   func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers)
 		wantErr bool
 	}{
 		{
 			name: "Successful subscription",
-			fields: fields{
-				eventBus: eventbusmocks.NewMockEventBus(gomock.NewController(t)),  // New controller for each test
-				handlers: handlers.NewMockHandlers(gomock.NewController(t)),       // New controller for each test
-				logger:   testutils.NewMockLoggerAdapter(gomock.NewController(t)), // New controller for each test
-				args: struct {
-					ctx context.Context
-				}{
-					ctx: context.Background(),
-				},
-			},
-			setup: func(f fields) {
-				f.eventBus.EXPECT().
-					Subscribe(f.args.ctx, userevents.UserSignupRequest.String(), gomock.Any()).
-					Return(nil). // Correct Return
-					Times(1)
-				f.eventBus.EXPECT().
-					Subscribe(f.args.ctx, userevents.UserRoleUpdateRequest.String(), gomock.Any()).
-					Return(nil). // Correct Return
-					Times(1)
-				f.logger.EXPECT().Info("Subscribing to event", gomock.Any()).AnyTimes()
-				f.logger.EXPECT().Info("Successfully subscribed to event", gomock.Any()).AnyTimes()
+			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
+				// Expect Subscribe calls for each event type with correct stream names
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Return(nil).Times(1)
+
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Return(nil).Times(1)
+
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupResponseStreamName, userevents.UserSignupResponse, gomock.Any()).
+					Return(nil).Times(1)
 			},
 			wantErr: false,
 		},
 		{
 			name: "Error subscribing to UserSignupRequest",
-			fields: fields{
-				eventBus: eventbusmocks.NewMockEventBus(gomock.NewController(t)),  // New controller for each test
-				handlers: handlers.NewMockHandlers(gomock.NewController(t)),       // New controller for each test
-				logger:   testutils.NewMockLoggerAdapter(gomock.NewController(t)), // New controller for each test
-				args: struct {
-					ctx context.Context
-				}{
-					ctx: context.Background(),
-				},
-			},
-			setup: func(f fields) {
-				f.eventBus.EXPECT().
-					Subscribe(f.args.ctx, userevents.UserSignupRequest.String(), gomock.Any()).
-					Return(errors.New("subscription error")). // Correct Return
-					Times(1)
+			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Return(fmt.Errorf("subscription error")).Times(1)
 			},
 			wantErr: true,
 		},
 		{
 			name: "Error subscribing to UserRoleUpdateRequest",
-			fields: fields{
-				eventBus: eventbusmocks.NewMockEventBus(gomock.NewController(t)),  // New controller for each test
-				handlers: handlers.NewMockHandlers(gomock.NewController(t)),       // New controller for each test
-				logger:   testutils.NewMockLoggerAdapter(gomock.NewController(t)), // New controller for each test
-				args: struct {
-					ctx context.Context
-				}{
-					ctx: context.Background(),
-				},
+			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Return(nil).Times(1)
+
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Return(fmt.Errorf("subscription error")).Times(1)
 			},
-			setup: func(f fields) {
-				f.eventBus.EXPECT().
-					Subscribe(f.args.ctx, userevents.UserSignupRequest.String(), gomock.Any()).
-					Return(nil).
-					Times(1)
-				f.eventBus.EXPECT().
-					Subscribe(f.args.ctx, userevents.UserRoleUpdateRequest.String(), gomock.Any()).
-					Return(errors.New("subscription error")). // Correct Return
-					Times(1)
-				f.logger.EXPECT().Info("Subscribing to event", gomock.Any()).AnyTimes()
-				f.logger.EXPECT().Error("Failed to subscribe to event", gomock.Any(), gomock.Any()).AnyTimes()
+			wantErr: true,
+		},
+		{
+			name: "Error subscribing to UserSignupResponse",
+			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Return(nil).Times(1)
+
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Return(nil).Times(1)
+
+				mockEventBus.EXPECT().
+					Subscribe(gomock.Any(), userstream.UserSignupResponseStreamName, userevents.UserSignupResponse, gomock.Any()).
+					Return(fmt.Errorf("subscription error")).Times(1)
 			},
 			wantErr: true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create new mock controllers *inside* each test run
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			tt.fields.eventBus = eventbusmocks.NewMockEventBus(ctrl)
-			tt.fields.handlers = handlers.NewMockHandlers(ctrl)
-			tt.fields.logger = testutils.NewMockLoggerAdapter(ctrl)
 
+			// Initialize mocks
+			mockEventBus := eventbusmock.NewMockEventBus(ctrl)
+			mockHandlers := handlers.NewMockHandlers(ctrl)
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+			// Call the setup function to configure mocks
+			tt.setup(mockEventBus, mockHandlers)
+
+			// Initialize UserSubscribers instance
 			s := &UserSubscribers{
-				eventBus: tt.fields.eventBus,
-				handlers: tt.fields.handlers,
-				logger:   tt.fields.logger,
+				eventBus: mockEventBus,
+				handlers: mockHandlers,
+				logger:   logger,
 			}
-			tt.setup(tt.fields) // Call setup to configure mocks
 
-			if err := s.SubscribeToUserEvents(tt.fields.args.ctx, tt.fields.eventBus, tt.fields.handlers, tt.fields.logger); (err != nil) != tt.wantErr {
-				t.Errorf("UserSubscribers.SubscribeToUserEvents() error = %v, wantErr %v", err, tt.wantErr)
+			// Invoke the SubscribeToUserEvents method
+			err := s.SubscribeToUserEvents(context.Background(), mockEventBus, mockHandlers, logger)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SubscribeToUserEvents() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
+
 }

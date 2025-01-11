@@ -2,11 +2,8 @@ package user
 
 import (
 	"context"
-	"fmt"
-	"sync"
+	"log/slog"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	eventbus "github.com/Black-And-White-Club/tcr-bot/app/events"
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
 	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/handlers"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
@@ -18,32 +15,21 @@ import (
 
 // Module represents the user module.
 type Module struct {
-	EventBus     shared.EventBus
-	EventAdapter shared.EventAdapterInterface
-	UserService  userservice.Service
-	Handlers     userinterfaces.Handlers
-	Subscribers  usersubscribers.UserEventSubscriber
-	logger       shared.LoggerAdapter
-	config       *config.Config
-	initialized  bool
-	initMutex    sync.Mutex
+	EventBus         shared.EventBus
+	UserService      userservice.Service
+	Handlers         userinterfaces.Handlers
+	Subscribers      usersubscribers.UserEventSubscriber
+	logger           *slog.Logger
+	config           *config.Config
+	SubscribersReady chan struct{} // Add a channel to signal readiness
 }
 
 // NewUserModule initializes the user module.
-func NewUserModule(ctx context.Context, cfg *config.Config, logger shared.LoggerAdapter, userDB userdb.UserDB) (*Module, error) {
-	logger.Info("NewUserModule started", shared.LogFields{"contextErr": ctx.Err()})
-
-	// Initialize EventAdapter.
-	eventAdapter, err := adapters.NewEventAdapter(cfg.NATS.URL, logger, eventbus.NewStreamNamer())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create event adapter: %w", err)
-	}
-
-	// Initialize EventBus.
-	eventBus := eventbus.NewEventBus(eventAdapter)
+func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus shared.EventBus) (*Module, error) {
+	logger.Info("user.NewUserModule called") // Log function call
 
 	// Initialize user service.
-	userService := userservice.NewUserService(userDB, eventBus, logger, eventAdapter)
+	userService := userservice.NewUserService(userDB, eventBus, logger)
 
 	// Initialize user handlers.
 	userHandlers := userhandlers.NewHandlers(userService, eventBus, logger)
@@ -52,47 +38,38 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger shared.Logger
 	userSubscribers := usersubscribers.NewSubscribers(eventBus, userHandlers, logger)
 
 	module := &Module{
-		EventBus:     eventBus,
-		EventAdapter: eventAdapter,
-		UserService:  userService,
-		Handlers:     userHandlers,
-		Subscribers:  userSubscribers,
-		logger:       logger,
-		config:       cfg,
-		initialized:  false,
+		EventBus:         eventBus,
+		UserService:      userService,
+		Handlers:         userHandlers,
+		Subscribers:      userSubscribers,
+		logger:           logger,
+		config:           cfg,
+		SubscribersReady: make(chan struct{}),
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	go func() {
-		defer wg.Done()
-
 		subscriberCtx := context.Background()
 
-		module.logger.Info("Created NATS subscriber", shared.LogFields{
-			"nats_url": cfg.NATS.URL,
-		})
-
 		if err := module.Subscribers.SubscribeToUserEvents(subscriberCtx, eventBus, userHandlers, logger); err != nil {
-			logger.Error("Failed to subscribe to user events", err, nil)
+			logger.Error("Failed to subscribe to user events", slog.Any("error", err))
 			return
 		}
 
-		logger.Info("User module subscribers are ready", nil)
-		module.initMutex.Lock()
-		module.initialized = true
-		module.initMutex.Unlock()
-	}()
+		logger.Info("User module subscribers are ready")
 
-	wg.Wait()
+		// Signal that initialization is complete
+		close(module.SubscribersReady)
+	}()
 
 	return module, nil
 }
 
-// IsInitialized safely checks module initialization.
+// IsInitialized checks if the subscribers are ready.
 func (m *Module) IsInitialized() bool {
-	m.initMutex.Lock()
-	defer m.initMutex.Unlock()
-	return m.initialized
+	select {
+	case <-m.SubscribersReady:
+		return true
+	default:
+		return false
+	}
 }

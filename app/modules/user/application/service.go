@@ -5,81 +5,72 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/adapters"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // UserServiceImpl handles user-related logic.
 type UserServiceImpl struct {
-	UserDB       userdb.UserDB
-	eventBus     shared.EventBus
-	logger       shared.LoggerAdapter
-	eventAdapter shared.EventAdapterInterface
+	UserDB   userdb.UserDB
+	eventBus shared.EventBus
+	logger   *slog.Logger
 }
 
 // NewUserService creates a new UserService.
-func NewUserService(db userdb.UserDB, eventBus shared.EventBus, logger shared.LoggerAdapter, eventAdapter shared.EventAdapterInterface) *UserServiceImpl {
+func NewUserService(db userdb.UserDB, eventBus shared.EventBus, logger *slog.Logger) *UserServiceImpl {
 	return &UserServiceImpl{
-		UserDB:       db,
-		eventBus:     eventBus,
-		logger:       logger,
-		eventAdapter: eventAdapter,
+		UserDB:   db,
+		eventBus: eventBus,
+		logger:   logger,
 	}
 }
 
-func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req userevents.UserSignupRequestPayload) (*userevents.UserSignupResponsePayload, error) {
-	s.logger.Info("OnUserSignupRequest started", shared.LogFields{
-		"discord_id": req.DiscordID,
-		"tag_number": req.TagNumber,
-	})
-
-	var isTagAvailable bool
-	var err error
+func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req events.UserSignupRequestPayload) (*events.UserSignupResponsePayload, error) {
+	s.logger.Info("OnUserSignupRequest started",
+		slog.String("discord_id", string(req.DiscordID)),
+		slog.Int("tag_number", req.TagNumber),
+	)
 
 	if req.TagNumber != 0 {
-		// Launch a goroutine to check tag availability asynchronously
-		tagAvailabilityChan := make(chan bool)
-		go func() {
-			isTagAvailable, err = s.checkTagAvailability(ctx, req.TagNumber)
-			tagAvailabilityChan <- isTagAvailable
-		}()
+		// Step 1: Check tag availability
+		isTagAvailable, err := s.checkTagAvailability(ctx, req.TagNumber)
+		if err != nil {
+			s.logger.Error("Failed to check tag availability", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to check tag availability: %w", err)
+		}
+		if !isTagAvailable {
+			s.logger.Info("Tag number is not available", slog.Int("tag_number", req.TagNumber))
+			return nil, fmt.Errorf("tag number %d is already taken", req.TagNumber)
+		}
 
-		// Wait for the result or a timeout
-		select {
-		case <-time.After(3 * time.Second): // Adjust timeout as needed
-			return nil, errTimeout
-		case isTagAvailable = <-tagAvailabilityChan:
-			if err != nil {
-				return nil, fmt.Errorf("failed to check tag availability: %w", err)
-			}
-
-			if !isTagAvailable {
-				return nil, fmt.Errorf("tag number %d is already taken", req.TagNumber)
-			}
+		// Step 2: Publish TagAssignedRequest
+		if err := s.publishTagAssigned(ctx, req.DiscordID, req.TagNumber); err != nil {
+			s.logger.Error("Failed to publish TagAssignedRequest event", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to publish TagAssignedRequest: %w", err)
 		}
 	}
 
+	// Step 3: Create the user after tag handling is complete
 	newUser := &userdb.User{
 		DiscordID: req.DiscordID,
 		Role:      usertypes.UserRoleRattler,
 	}
 	if err := s.UserDB.CreateUser(ctx, newUser); err != nil {
+		s.logger.Error("Failed to create user", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	if req.TagNumber != 0 {
-		if err := s.publishTagAssigned(ctx, newUser.DiscordID, req.TagNumber); err != nil {
-			s.logger.Error("failed to publish TagAssignedRequest event", err, shared.LogFields{"error": err})
-			return nil, err
-		}
-	}
+	s.logger.Info("User successfully created", slog.String("discord_id", string(req.DiscordID)))
 
-	return &userevents.UserSignupResponsePayload{
+	return &events.UserSignupResponsePayload{
 		Success: true,
 	}, nil
 }
@@ -87,45 +78,50 @@ func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req userevent
 var errTimeout = errors.New("timeout waiting for tag availability response")
 
 func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
-	s.logger.Info("checkTagAvailability started", shared.LogFields{
-		"tag_number": tagNumber,
-	})
+	s.logger.Info("checkTagAvailability started", slog.Int("tag_number", tagNumber))
 
 	const defaultTimeout = 3 * time.Second
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
 
-	correlationID := shared.NewUUID()
-	responseChan := make(chan userevents.CheckTagAvailabilityResponsePayload)
+	correlationID := watermill.NewUUID()
+	responseChan := make(chan events.CheckTagAvailabilityResponsePayload)
 
-	requestPayload := []byte(fmt.Sprintf(`{"tag_number":%d}`, tagNumber))
-	requestMsg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), requestPayload)
-	requestMsg.SetMetadata("correlation_id", correlationID)
-
-	// Publish CheckTagAvailabilityRequest
-	if err := s.eventBus.Publish(ctxWithTimeout, userevents.CheckTagAvailabilityRequest, requestMsg); err != nil {
-		s.logger.Error("failed to publish CheckTagAvailabilityRequest", err, shared.LogFields{"error": err})
-		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err)
+	requestPayload, err := json.Marshal(events.CheckTagAvailabilityRequestPayload{
+		TagNumber: tagNumber,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal CheckTagAvailabilityRequestPayload: %w", err)
 	}
 
-	// Proceed with Subscribe only if Publish succeeds
-	responseTopic := userevents.CheckTagAvailabilityResponse.String() + "." + correlationID
-	go func() {
-		err := s.eventBus.Subscribe(ctxWithTimeout, responseTopic, func(ctx context.Context, msg shared.Message) error {
-			var responsePayload userevents.CheckTagAvailabilityResponsePayload
-			if err := json.Unmarshal(msg.Payload(), &responsePayload); err != nil {
-				return fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
-			}
-			if responsePayload.Error != "" {
-				return fmt.Errorf("leaderboard error: %s", responsePayload.Error)
-			}
-			responseChan <- responsePayload
-			return nil
-		})
-		if err != nil {
-			s.logger.Error("failed to subscribe to response topic", err, shared.LogFields{"topic": responseTopic})
+	requestMsg := message.NewMessage(watermill.NewUUID(), requestPayload)
+	requestMsg.SetContext(ctxWithTimeout)
+	requestMsg.Metadata.Set("correlation_id", correlationID)
+	requestMsg.Metadata.Set("subject", events.CheckTagAvailabilityRequest)
+
+	// Subscribe to the response in the leaderboard-stream
+	responseSubject := events.CheckTagAvailabilityResponse
+	responseStream := userstream.LeaderboardStreamName
+
+	err = s.eventBus.Subscribe(ctxWithTimeout, responseStream, responseSubject, func(ctx context.Context, msg *message.Message) error {
+		var responsePayload events.CheckTagAvailabilityResponsePayload
+		if err := json.Unmarshal(msg.Payload, &responsePayload); err != nil {
+			return fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
 		}
-	}()
+		responseChan <- responsePayload
+		return nil
+	})
+	if err != nil {
+		s.logger.Error("failed to subscribe to response topic", slog.Any("error", err), slog.String("topic", responseStream))
+		return false, fmt.Errorf("failed to subscribe to response topic: %w", err)
+	}
+
+	// Publish CheckTagAvailabilityRequest to the leaderboard-stream
+	streamName := userstream.LeaderboardStreamName
+	if err := s.eventBus.Publish(ctxWithTimeout, streamName, requestMsg); err != nil {
+		s.logger.Error("failed to publish CheckTagAvailabilityRequest", slog.Any("error", err))
+		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err) // Return the error immediately
+	}
 
 	select {
 	case <-ctx.Done():
@@ -136,7 +132,7 @@ func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber in
 }
 
 // OnUserRoleUpdateRequest processes a user role update request.
-func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req userevents.UserRoleUpdateRequestPayload) (*userevents.UserRoleUpdateResponsePayload, error) {
+func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req events.UserRoleUpdateRequestPayload) (*events.UserRoleUpdateResponsePayload, error) {
 	if !req.NewRole.IsValid() {
 		return nil, fmt.Errorf("invalid user role: %s", req.NewRole)
 	}
@@ -158,7 +154,7 @@ func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req usere
 		return nil, fmt.Errorf("user not found: %s", req.DiscordID)
 	}
 
-	evt := userevents.UserRoleUpdatedPayload{
+	evt := events.UserRoleUpdatedPayload{
 		DiscordID: req.DiscordID,
 		NewRole:   req.NewRole.String(),
 	}
@@ -167,7 +163,7 @@ func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req usere
 		return nil, fmt.Errorf("failed to publish UserRoleUpdated event: %w", err)
 	}
 
-	return &userevents.UserRoleUpdateResponsePayload{
+	return &events.UserRoleUpdateResponsePayload{
 		Success: true,
 	}, nil
 }
@@ -191,12 +187,9 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, discordID usertypes.Disco
 }
 
 func (s *UserServiceImpl) publishTagAssigned(ctx context.Context, discordID usertypes.DiscordID, tagNumber int) error {
-	s.logger.Info("publishTagAssigned called", shared.LogFields{
-		"discord_id": discordID,
-		"tag_number": tagNumber,
-	})
+	s.logger.Info("publishTagAssigned called", slog.String("discord_id", string(discordID)), slog.Int("tag_number", tagNumber))
 
-	msgPayload := userevents.TagAssignedRequestPayload{
+	msgPayload := events.TagAssignedRequestPayload{
 		DiscordID: discordID,
 		TagNumber: tagNumber,
 	}
@@ -206,31 +199,34 @@ func (s *UserServiceImpl) publishTagAssigned(ctx context.Context, discordID user
 		return fmt.Errorf("failed to marshal TagAssignedRequest payload: %w", err)
 	}
 
-	msg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), payloadBytes)
+	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	msg.SetContext(ctx)
+	msg.Metadata.Set("subject", events.TagAssignedRequest)
 
-	if err := s.eventBus.Publish(ctx, userevents.TagAssignedRequest, msg); err != nil {
+	// Publish to the LeaderboardStreamName
+	if err := s.eventBus.Publish(ctx, userstream.LeaderboardStreamName, msg); err != nil {
 		return fmt.Errorf("failed to publish TagAssignedRequest event: %w", err)
 	}
 
 	return nil
 }
 
-func (s *UserServiceImpl) publishUserRoleUpdated(ctx context.Context, evt userevents.UserRoleUpdatedPayload) error {
+func (s *UserServiceImpl) publishUserRoleUpdated(ctx context.Context, evt events.UserRoleUpdatedPayload) error {
 	evtData, err := json.Marshal(evt)
 	if err != nil {
 		return fmt.Errorf("marshal UserRoleUpdatedPayload: %w", err)
 	}
 
-	msg := adapters.NewWatermillMessageAdapter(shared.NewUUID(), evtData)
+	msg := message.NewMessage(watermill.NewUUID(), evtData)
+	msg.SetContext(ctx)
+	msg.Metadata.Set("subject", events.UserRoleUpdated)
 
-	if err := s.eventBus.Publish(ctx, userevents.UserRoleUpdated, msg); err != nil {
+	streamName := userstream.UserRoleUpdateResponseStreamName
+	if err := s.eventBus.Publish(ctx, streamName, msg); err != nil {
 		return fmt.Errorf("eventBus.Publish UserRoleUpdated: %w", err)
 	}
 
-	s.logger.Info("Published UserRoleUpdated event", shared.LogFields{
-		"discord_id": evt.DiscordID,
-		"new_role":   evt.NewRole,
-	})
+	s.logger.Info("Published UserRoleUpdated event", slog.String("discord_id", string(evt.DiscordID)), slog.String("new_role", evt.NewRole))
 
 	return nil
 }
