@@ -134,15 +134,23 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, tagNumber
 
 // sortScores sorts the scores according to your specific criteria.
 func (s *LeaderboardService) sortScores(scores []leaderboardevents.Score) ([]leaderboardevents.Score, error) {
+	// Convert TagNumbers to integers
+	for i, score := range scores {
+		tagNumberInt, err := strconv.Atoi(score.TagNumber)
+		if err != nil {
+			s.logger.Error("Error converting tag number to integer", "tag_number", score.TagNumber, "error", err)
+			return nil, fmt.Errorf("error converting tag number to integer: %w", err)
+		}
+		// Temporarily store the integer value for sorting
+		scores[i].TagNumber = fmt.Sprintf("%d", tagNumberInt)
+	}
+
+	// Sort the scores
 	sort.Slice(scores, func(i, j int) bool {
 		if scores[i].Score == scores[j].Score {
-			tagI, errI := strconv.Atoi(scores[i].TagNumber)
-			tagJ, errJ := strconv.Atoi(scores[j].TagNumber)
-			if errI != nil || errJ != nil {
-				// Log the error and use a default value for comparison
-				s.logger.Error("Error converting tag number to integer", "error", errI, "error", errJ)
-				return scores[i].TagNumber > scores[j].TagNumber
-			}
+			// Compare TagNumbers as integers
+			tagI, _ := strconv.Atoi(scores[i].TagNumber)
+			tagJ, _ := strconv.Atoi(scores[j].TagNumber)
 			return tagI > tagJ
 		}
 		return scores[i].Score < scores[j].Score
