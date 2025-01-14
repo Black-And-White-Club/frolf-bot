@@ -6,8 +6,6 @@ import (
 	"log/slog"
 
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
-
 	user "github.com/Black-And-White-Club/tcr-bot/app/modules/user/interfaces"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -32,7 +30,10 @@ func NewSubscribers(eventBus shared.EventBus, handlers user.Handlers, logger *sl
 func (s *UserSubscribers) SubscribeToUserEvents(ctx context.Context, eventBus shared.EventBus, handlers user.Handlers, logger *slog.Logger) error {
 
 	logger.Debug("Subscribing to UserSignupRequest")
-	if err := eventBus.Subscribe(ctx, userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, func(ctx context.Context, msg *message.Message) error {
+	if err := eventBus.Subscribe(ctx, userevents.UserStreamName, userevents.UserSignupRequest, func(ctx context.Context, msg *message.Message) error {
+		logger.Info("UserSignupRequest handler invoked")
+		logger.Debug("Message received", slog.Any("msg", msg))
+
 		if err := handlers.HandleUserSignupRequest(ctx, msg); err != nil {
 			return fmt.Errorf("failed to handle UserSignupRequest: %w", err)
 		}
@@ -42,7 +43,7 @@ func (s *UserSubscribers) SubscribeToUserEvents(ctx context.Context, eventBus sh
 	}
 
 	logger.Debug("Subscribing to UserRoleUpdateRequest")
-	if err := eventBus.Subscribe(ctx, userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, func(ctx context.Context, msg *message.Message) error {
+	if err := eventBus.Subscribe(ctx, userevents.UserStreamName, userevents.UserRoleUpdateRequest, func(ctx context.Context, msg *message.Message) error {
 		if err := handlers.HandleUserRoleUpdateRequest(ctx, msg); err != nil {
 			return fmt.Errorf("failed to handle UserRoleUpdateRequest: %w", err)
 		}
@@ -52,7 +53,7 @@ func (s *UserSubscribers) SubscribeToUserEvents(ctx context.Context, eventBus sh
 	}
 
 	logger.Debug("Subscribing to UserSignupResponse")
-	if err := eventBus.Subscribe(ctx, userstream.UserSignupResponseStreamName, userevents.UserSignupResponse, func(ctx context.Context, msg *message.Message) error {
+	if err := eventBus.Subscribe(ctx, userevents.UserStreamName, userevents.UserSignupResponse, func(ctx context.Context, msg *message.Message) error {
 		logger.Info("Received UserSignupResponse", slog.String("payload", string(msg.Payload)))
 		msg.Ack()
 		return nil

@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	usertypemocks "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types/mocks"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
@@ -24,16 +23,16 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		req           userevents.UserRoleUpdateRequestPayload
+		req           events.UserRoleUpdateRequestPayload
 		mockUserDB    func(context.Context, *userdb.MockUserDB)
 		mockEventBus  func(context.Context, *eventbusmock.MockEventBus)
-		want          *userevents.UserRoleUpdateResponsePayload
+		want          *events.UserRoleUpdateResponsePayload
 		wantErr       error
 		publishCalled bool
 	}{
 		{
 			name: "Success",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   usertypes.UserRoleAdmin,
 			},
@@ -44,20 +43,20 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 			},
 			mockEventBus: func(ctx context.Context, mockEB *eventbusmock.MockEventBus) {
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.UserRoleUpdateResponseStreamName), gomock.Any()). // Use UserRoleUpdateResponseStreamName
+					Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()). // Use UserRoleUpdateResponseStreamName
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
-						if streamName != userstream.UserRoleUpdateResponseStreamName {
-							t.Errorf("Expected stream name: %s, got: %s", userstream.UserRoleUpdateResponseStreamName, streamName)
+						if streamName != events.UserStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", events.UserStreamName, streamName)
 						}
 						subject := msg.Metadata.Get("subject")
-						if subject != userevents.UserRoleUpdated {
-							t.Errorf("Expected subject: %s, got: %s", userevents.UserRoleUpdated, subject)
+						if subject != events.UserRoleUpdated {
+							t.Errorf("Expected subject: %s, got: %s", events.UserRoleUpdated, subject)
 						}
 						return nil
 					}).
 					Times(1)
 			},
-			want: &userevents.UserRoleUpdateResponsePayload{
+			want: &events.UserRoleUpdateResponsePayload{
 				Success: true,
 			},
 			wantErr:       nil,
@@ -65,7 +64,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid Role",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   "InvalidRole", // Invalid role
 			},
@@ -81,7 +80,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Empty Discord ID",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "", // Empty Discord ID
 				NewRole:   usertypes.UserRoleEditor,
 			},
@@ -97,7 +96,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "UpdateUserRole Error",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   usertypes.UserRoleEditor,
 			},
@@ -114,7 +113,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "GetUserByDiscordID Error",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   usertypes.UserRoleAdmin,
 			},
@@ -132,7 +131,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "User Not Found",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   usertypes.UserRoleAdmin,
 			},
@@ -150,7 +149,7 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Publish Event Error",
-			req: userevents.UserRoleUpdateRequestPayload{
+			req: events.UserRoleUpdateRequestPayload{
 				DiscordID: "12345",
 				NewRole:   usertypes.UserRoleAdmin,
 			},
@@ -161,8 +160,8 @@ func TestUserServiceImpl_OnUserRoleUpdateRequest(t *testing.T) {
 			},
 			mockEventBus: func(ctx context.Context, mockEB *eventbusmock.MockEventBus) {
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.UserRoleUpdateResponseStreamName), gomock.Any()). // Use UserRoleUpdateResponseStreamName
-					Return(fmt.Errorf("publish error"))                                                          // Simulate publish error
+					Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()). // Use events.UserStreamName
+					Return(fmt.Errorf("publish error"))                                    // Simulate publish error
 			},
 			want:          nil,
 			wantErr:       fmt.Errorf("failed to publish UserRoleUpdated event: eventBus.Publish UserRoleUpdated: publish error"),

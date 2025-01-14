@@ -11,8 +11,7 @@ import (
 	"testing"
 
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	userdbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
@@ -24,18 +23,18 @@ import (
 func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 	tests := []struct {
 		name             string
-		req              userevents.UserSignupRequestPayload
+		req              events.UserSignupRequestPayload
 		mockUserDB       func(context.Context, *gomock.Controller, *userdb.MockUserDB)
 		mockEventBus     func(context.Context, *gomock.Controller, *eventbusmock.MockEventBus)
 		mockCheckTag     func(*gomock.Controller, *eventbusmock.MockEventBus, bool, error)
-		want             *userevents.UserSignupResponsePayload
+		want             *events.UserSignupResponsePayload
 		wantErr          bool
 		checkTagCalled   bool
 		publishTagCalled bool
 	}{
 		{
 			name: "Successful Signup with Tag",
-			req: userevents.UserSignupRequestPayload{
+			req: events.UserSignupRequestPayload{
 				DiscordID: "user123",
 				TagNumber: 42,
 			},
@@ -57,10 +56,10 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
 				// Expect publish for CheckTagAvailabilityRequest on the leaderboard stream
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Any()).
+					Publish(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
-						if msg.Metadata.Get("subject") != userevents.CheckTagAvailabilityRequest {
-							return fmt.Errorf("unexpected subject for CheckTagAvailabilityRequest: got %v, want %v", msg.Metadata.Get("subject"), userevents.CheckTagAvailabilityRequest)
+						if msg.Metadata.Get("subject") != events.CheckTagAvailabilityRequest {
+							return fmt.Errorf("unexpected subject for CheckTagAvailabilityRequest: got %v, want %v", msg.Metadata.Get("subject"), events.CheckTagAvailabilityRequest)
 						}
 						return nil
 					}).
@@ -68,14 +67,14 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 
 				// Expect subscribe for CheckTagAvailabilityResponse on the leaderboard stream
 				mockEB.EXPECT().
-					Subscribe(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Eq(userevents.CheckTagAvailabilityResponse), gomock.Any()).
+					Subscribe(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Eq(events.CheckTagAvailabilityResponse), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
-						responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+						responsePayload := events.CheckTagAvailabilityResponsePayload{
 							IsAvailable: true, // Assuming the tag is available
 						}
 						payloadBytes, _ := json.Marshal(responsePayload)
 						responseMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-						responseMsg.Metadata.Set("subject", userevents.CheckTagAvailabilityResponse)
+						responseMsg.Metadata.Set("subject", events.CheckTagAvailabilityResponse)
 
 						go handler(ctx, responseMsg)
 						return nil
@@ -84,23 +83,23 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 
 				// Expect publish for TagAssignedRequest on the leaderboard stream (after tag availability is confirmed)
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Any()).
+					Publish(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
-						if subject := msg.Metadata.Get("subject"); subject != userevents.TagAssignedRequest {
-							return fmt.Errorf("unexpected subject: got %v, want %v", subject, userevents.TagAssignedRequest)
+						if subject := msg.Metadata.Get("subject"); subject != events.TagAssignedRequest {
+							return fmt.Errorf("unexpected subject: got %v, want %v", subject, events.TagAssignedRequest)
 						}
 						return nil
 					}).
 					Times(1)
 			},
-			want: &userevents.UserSignupResponsePayload{
+			want: &events.UserSignupResponsePayload{
 				Success: true,
 			},
 			wantErr: false,
 		},
 		{
 			name: "Failed Signup - CreateUser Error",
-			req: userevents.UserSignupRequestPayload{
+			req: events.UserSignupRequestPayload{
 				DiscordID: "user789",
 				TagNumber: 0,
 			},
@@ -132,7 +131,7 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 		},
 		{
 			name: "Failed Signup - Tag Not Available",
-			req: userevents.UserSignupRequestPayload{
+			req: events.UserSignupRequestPayload{
 				DiscordID: "user101",
 				TagNumber: 99,
 			},
@@ -144,27 +143,27 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			},
 			mockCheckTag: func(ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus, available bool, err error) {
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Any()).
+					Publish(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
 						// Ensure the subject is set correctly in the message metadata
-						if msg.Metadata.Get("subject") != userevents.CheckTagAvailabilityRequest {
-							return fmt.Errorf("unexpected subject: got %v, want %v", msg.Metadata.Get("subject"), userevents.CheckTagAvailabilityRequest)
+						if msg.Metadata.Get("subject") != events.CheckTagAvailabilityRequest {
+							return fmt.Errorf("unexpected subject: got %v, want %v", msg.Metadata.Get("subject"), events.CheckTagAvailabilityRequest)
 						}
 						return nil
 					}).
 					Times(1)
 
 				mockEB.EXPECT().
-					Subscribe(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Eq(userevents.CheckTagAvailabilityResponse), gomock.Any()).
+					Subscribe(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Eq(events.CheckTagAvailabilityResponse), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
 						if err == nil {
-							responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+							responsePayload := events.CheckTagAvailabilityResponsePayload{
 								IsAvailable: false, // Tag is NOT available
 							}
 							payloadBytes, _ := json.Marshal(responsePayload)
 							responseMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 							// Set the subject in the metadata for the response message
-							responseMsg.Metadata.Set("subject", userevents.CheckTagAvailabilityResponse)
+							responseMsg.Metadata.Set("subject", events.CheckTagAvailabilityResponse)
 
 							// Directly call the handler function to simulate the response
 							go func() {
@@ -179,7 +178,7 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 		},
 		{
 			name: "Failed Signup - Tag Check Error",
-			req: userevents.UserSignupRequestPayload{
+			req: events.UserSignupRequestPayload{
 				DiscordID: "user102",
 				TagNumber: 99,
 			},
@@ -188,13 +187,13 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			},
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Any()).
+					Publish(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Any()).
 					Return(errors.New("tag check error")).
 					Times(1)
 
 				// Expect Subscribe call even though Publish fails
 				mockEB.EXPECT().
-					Subscribe(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Eq(userevents.CheckTagAvailabilityResponse), gomock.Any()).
+					Subscribe(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Eq(events.CheckTagAvailabilityResponse), gomock.Any()).
 					Return(nil).
 					AnyTimes()
 			},
@@ -203,7 +202,7 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 		},
 		{
 			name: "Failed Signup - Publish TagAssignedRequest Error",
-			req: userevents.UserSignupRequestPayload{
+			req: events.UserSignupRequestPayload{
 				DiscordID: "user103",
 				TagNumber: 100,
 			},
@@ -213,14 +212,14 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 			mockEventBus: func(ctx context.Context, ctrl *gomock.Controller, mockEB *eventbusmock.MockEventBus) {
 				// Mock Publish for CheckTagAvailabilityRequest
 				mockEB.EXPECT().
-					Publish(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Any()).
+					Publish(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
 						sub := msg.Metadata.Get("subject") // Extract the subject for each call
 
 						switch sub {
-						case userevents.CheckTagAvailabilityRequest:
+						case events.CheckTagAvailabilityRequest:
 							return nil // Simulate success for CheckTagAvailabilityRequest
-						case userevents.TagAssignedRequest:
+						case events.TagAssignedRequest:
 							return errors.New("publish error") // Simulate failure for TagAssignedRequest
 						default:
 							return fmt.Errorf("unexpected subject: %v", sub)
@@ -230,14 +229,14 @@ func TestUserServiceImpl_OnUserSignupRequest(t *testing.T) {
 
 				// Mock Subscribe for CheckTagAvailabilityResponse
 				mockEB.EXPECT().
-					Subscribe(gomock.Any(), gomock.Eq(userstream.LeaderboardStreamName), gomock.Eq(userevents.CheckTagAvailabilityResponse), gomock.Any()).
+					Subscribe(gomock.Any(), gomock.Eq(events.LeaderboardStreamName), gomock.Eq(events.CheckTagAvailabilityResponse), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, streamName, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
-						responsePayload := userevents.CheckTagAvailabilityResponsePayload{
+						responsePayload := events.CheckTagAvailabilityResponsePayload{
 							IsAvailable: true, // Simulate tag is available
 						}
 						payloadBytes, _ := json.Marshal(responsePayload)
 						responseMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-						responseMsg.Metadata.Set("subject", userevents.CheckTagAvailabilityResponse)
+						responseMsg.Metadata.Set("subject", events.CheckTagAvailabilityResponse)
 
 						go handler(ctx, responseMsg) // Trigger the handler asynchronously
 						return nil

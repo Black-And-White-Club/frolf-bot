@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/uptrace/bun"
@@ -19,8 +20,8 @@ type DBService struct {
 	UserDB *userdb.UserDBImpl
 	// RoundDB       *rounddb.RoundDBImpl
 	// ScoreDB       *scoredb.ScoreDBImpl
-	// LeaderboardDB *leaderboarddb.LeaderboardDBImpl
-	db *bun.DB
+	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
+	db            *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -48,8 +49,8 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 		UserDB: &userdb.UserDBImpl{DB: db},
 		// RoundDB:       &rounddb.RoundDBImpl{DB: db},
 		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
-		// LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
-		db: db,
+		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
+		db:            db,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)
@@ -59,7 +60,7 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	db.RegisterModel(&userdb.User{})
 	// db.RegisterModel(&rounddb.Round{})
 	// db.RegisterModel(&scoredb.Score{})
-	// db.RegisterModel(&leaderboarddb.Leaderboard{})
+	db.RegisterModel(&leaderboarddb.Leaderboard{})
 	log.Println("NewBunDBService - Models registered successfully")
 
 	return dbService, nil

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 

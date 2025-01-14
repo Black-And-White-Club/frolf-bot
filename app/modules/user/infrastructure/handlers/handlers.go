@@ -9,14 +9,13 @@ import (
 
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
 	user "github.com/Black-And-White-Club/tcr-bot/app/modules/user/interfaces"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// UserHandlers handles user-related events.
+// UserHandlers handles user-related userevents.
 type UserHandlers struct {
 	UserService userservice.Service
 	EventBus    shared.EventBus
@@ -34,6 +33,9 @@ func NewHandlers(userService userservice.Service, eventBus shared.EventBus, logg
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
 func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message.Message) error {
+	h.logger.Info("HandleUserSignupRequest handler invoked")
+	h.logger.Debug("Message received", slog.Any("msg", msg))
+
 	h.logger.Info("HandleUserSignupRequest started", "contextErr", ctx.Err())
 	h.logger.Info("Processing UserSignupRequest", "payload", string(msg.Payload))
 	h.logger.Info("Processing UserSignupRequest", "message_id", msg.UUID)
@@ -67,7 +69,7 @@ func (h *UserHandlers) HandleUserSignupRequest(ctx context.Context, msg *message
 		responseMsg := message.NewMessage(watermill.NewUUID(), payloadData)
 		responseMsg.Metadata.Set("subject", userevents.UserSignupResponse)
 
-		if err := h.EventBus.Publish(ctx, userstream.UserSignupResponseStreamName, responseMsg); err != nil {
+		if err := h.EventBus.Publish(ctx, userevents.UserStreamName, responseMsg); err != nil {
 			return fmt.Errorf("failed to publish UserSignupResponse event: %w", err)
 		}
 	}
@@ -124,12 +126,9 @@ func (h *UserHandlers) publishEvent(ctx context.Context, subject string, payload
 	msg := message.NewMessage(watermill.NewUUID(), payloadData)
 	msg.Metadata.Set("subject", subject)
 
-	// Determine the stream name based on the event type
-	streamName := userstream.StreamNameForEvent(subject)
-
 	h.logger.Info("Publishing event", "subject", subject, "payload", string(payloadData))
 
-	if err := h.EventBus.Publish(ctx, streamName, msg); err != nil {
+	if err := h.EventBus.Publish(ctx, userevents.UserStreamName, msg); err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}
 

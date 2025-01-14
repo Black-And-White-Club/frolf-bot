@@ -56,17 +56,17 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 }
 
 // CreateStream mocks base method.
-func (m *MockEventBus) CreateStream(ctx context.Context, streamName, subject string) error {
+func (m *MockEventBus) CreateStream(ctx context.Context, streamName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateStream", ctx, streamName, subject)
+	ret := m.ctrl.Call(m, "CreateStream", ctx, streamName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateStream indicates an expected call of CreateStream.
-func (mr *MockEventBusMockRecorder) CreateStream(ctx, streamName, subject any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) CreateStream(ctx, streamName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStream", reflect.TypeOf((*MockEventBus)(nil).CreateStream), ctx, streamName, subject)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStream", reflect.TypeOf((*MockEventBus)(nil).CreateStream), ctx, streamName)
 }
 
 // Publish mocks base method.

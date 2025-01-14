@@ -8,8 +8,7 @@ import (
 	"testing"
 
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	handlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/handlers/mocks"
 	"go.uber.org/mock/gomock"
 )
@@ -41,15 +40,15 @@ func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
 			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
 				// Expect Subscribe calls for each event type with correct stream names
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupRequest, gomock.Any()).
 					Return(nil).Times(1)
 
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserRoleUpdateRequest, gomock.Any()).
 					Return(nil).Times(1)
 
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupResponseStreamName, userevents.UserSignupResponse, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupResponse, gomock.Any()).
 					Return(nil).Times(1)
 			},
 			wantErr: false,
@@ -58,7 +57,7 @@ func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
 			name: "Error subscribing to UserSignupRequest",
 			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupRequest, gomock.Any()).
 					Return(fmt.Errorf("subscription error")).Times(1)
 			},
 			wantErr: true,
@@ -67,11 +66,11 @@ func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
 			name: "Error subscribing to UserRoleUpdateRequest",
 			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupRequest, gomock.Any()).
 					Return(nil).Times(1)
 
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserRoleUpdateRequest, gomock.Any()).
 					Return(fmt.Errorf("subscription error")).Times(1)
 			},
 			wantErr: true,
@@ -80,15 +79,15 @@ func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
 			name: "Error subscribing to UserSignupResponse",
 			setup: func(mockEventBus *eventbusmock.MockEventBus, mockHandlers *handlers.MockHandlers) {
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupRequestStreamName, userevents.UserSignupRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupRequest, gomock.Any()).
 					Return(nil).Times(1)
 
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserRoleUpdateRequestStreamName, userevents.UserRoleUpdateRequest, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserRoleUpdateRequest, gomock.Any()).
 					Return(nil).Times(1)
 
 				mockEventBus.EXPECT().
-					Subscribe(gomock.Any(), userstream.UserSignupResponseStreamName, userevents.UserSignupResponse, gomock.Any()).
+					Subscribe(gomock.Any(), events.UserStreamName, events.UserSignupResponse, gomock.Any()).
 					Return(fmt.Errorf("subscription error")).Times(1)
 			},
 			wantErr: true,
@@ -122,5 +121,4 @@ func TestUserSubscribers_SubscribeToUserEvents(t *testing.T) {
 			}
 		})
 	}
-
 }

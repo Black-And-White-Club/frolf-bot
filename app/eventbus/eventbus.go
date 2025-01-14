@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
+	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -18,7 +20,6 @@ import (
 // eventBus implements the shared.EventBus interface.
 type eventBus struct {
 	publisher      message.Publisher
-	subscriber     message.Subscriber
 	js             jetstream.JetStream
 	natsConn       *nc.Conn
 	logger         *slog.Logger
@@ -49,15 +50,17 @@ func NewEventBus(ctx context.Context, natsURL string, logger *slog.Logger) (shar
 	// Create a Marshaller for the publisher
 	marshaller := &nats.NATSMarshaler{}
 
+	// Initialize the publisher
 	publisher, err := nats.NewPublisher(
 		nats.PublisherConfig{
-			URL:       natsURL,
-			Marshaler: marshaller,
-			NatsOptions: []nc.Option{
-				nc.RetryOnFailedConnect(true),
-			},
+			URL:         natsURL,
+			Marshaler:   marshaller,
+			NatsOptions: []nc.Option{nc.RetryOnFailedConnect(true)},
+			// JetStream's asynchronous publishing is enabled by default
+			// You can customize it further using the JetStreamConfig field
+			// if needed (e.g., setting AckAsync, timeouts, etc.)
 		},
-		watermillLogger, // Use the Watermill logger
+		watermillLogger,
 	)
 	if err != nil {
 		natsConn.Close()
@@ -65,26 +68,8 @@ func NewEventBus(ctx context.Context, natsURL string, logger *slog.Logger) (shar
 		return nil, fmt.Errorf("failed to create Watermill publisher: %w", err)
 	}
 
-	subscriber, err := nats.NewSubscriber(
-		nats.SubscriberConfig{
-			URL:         natsURL,
-			Unmarshaler: marshaller,
-			NatsOptions: []nc.Option{
-				nc.RetryOnFailedConnect(true),
-			},
-		},
-		watermillLogger, // Use the Watermill logger
-	)
-	if err != nil {
-		natsConn.Close()
-		publisher.Close()
-		logger.Error("Failed to create Watermill subscriber", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to create Watermill subscriber: %w", err)
-	}
-
 	return &eventBus{
 		publisher:      publisher,
-		subscriber:     subscriber,
 		js:             js,
 		natsConn:       natsConn,
 		logger:         logger,
@@ -92,77 +77,117 @@ func NewEventBus(ctx context.Context, natsURL string, logger *slog.Logger) (shar
 	}, nil
 }
 
+// Publish sends a message to a specific subject within a stream.
 func (eb *eventBus) Publish(ctx context.Context, streamName string, msg *message.Message) error {
 	// Ensure the message has a unique UUID
 	if msg.UUID == "" {
 		msg.UUID = watermill.NewUUID()
 	}
 
-	// Log details before publishing
+	// Extract subject from metadata
+	subject := msg.Metadata.Get("subject")
+	if subject == "" {
+		return fmt.Errorf("message metadata does not contain a valid 'subject'")
+	}
+
+	// Log the details before publishing
 	eb.logger.Debug("Publishing message",
 		slog.String("stream_name", streamName),
-		slog.String("subject", msg.Metadata.Get("subject")),
+		slog.String("subject", subject),
+		slog.String("message_id", msg.UUID),
 		slog.String("payload", string(msg.Payload)),
 	)
 
-	// Get JetStream context directly from the NATS connection
-	js, err := eb.natsConn.JetStream()
-	if err != nil {
-		eb.logger.Error("Failed to get JetStream context", slog.Any("error", err))
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+	// Asynchronous publish with acknowledgement
+	type AsyncPublishResult struct {
+		Msg *message.Message
+		Err error
 	}
+	ackChan := make(chan AsyncPublishResult, 1)
 
-	// Use the subject directly from the message's metadata
-	subject := msg.Metadata.Get("subject")
-	if subject == "" {
-		return fmt.Errorf("message does not have a subject set in metadata")
-	}
+	go func() {
+		// Publish the message asynchronously
+		err := eb.publisher.Publish(subject, msg)
+		ackChan <- AsyncPublishResult{Msg: msg, Err: err}
+		close(ackChan)
+	}()
 
-	// Publish the message
-	ack, err := js.Publish(subject, msg.Payload)
-	if err != nil {
-		eb.logger.Error("Failed to publish message",
-			slog.String("subject", subject),
+	// Set a timeout for the acknowledgement
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case <-timeoutCtx.Done():
+		eb.logger.Error("Timeout waiting for publish acknowledgement",
 			slog.String("stream_name", streamName),
-			slog.Any("error", err),
+			slog.String("subject", subject),
+			slog.String("message_id", msg.UUID),
 		)
-		return fmt.Errorf("failed to publish message to JetStream: %w", err)
+		return fmt.Errorf("timeout waiting for publish acknowledgement")
+
+	case result := <-ackChan:
+		if result.Err != nil {
+			eb.logger.Error("Failed to publish message",
+				slog.String("stream_name", streamName),
+				slog.String("subject", subject),
+				slog.String("message_id", msg.UUID),
+				slog.Any("error", result.Err),
+			)
+			return fmt.Errorf("failed to publish message to JetStream: %w", result.Err)
+		}
+
+		eb.logger.Info("Message published successfully",
+			slog.String("stream_name", streamName),
+			slog.String("subject", subject),
+			slog.String("message_id", msg.UUID),
+		)
+
+		return nil
 	}
-
-	// Log successful publishing
-	eb.logger.Info("Message published successfully",
-		slog.String("stream_name", streamName),
-		slog.String("subject", subject),
-		slog.Uint64("sequence", ack.Sequence),
-	)
-
-	return nil
 }
 
-func (eb *eventBus) Subscribe(ctx context.Context, streamName string, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
-	eb.logger.Info("Subscribing to subject", slog.String("subject", subject))
+// Subscribe listens to a subject within a stream and processes messages.
+func (eb *eventBus) Subscribe(ctx context.Context, streamName, subject string, handler func(ctx context.Context, msg *message.Message) error) error {
+	eb.logger.Info("Subscribing",
+		slog.String("stream_name", streamName),
+		slog.String("subject", subject),
+	)
 
-	messages, err := eb.subscriber.Subscribe(ctx, subject)
+	// Add logging before subscribing
+	eb.logger.Info("Attempting to subscribe to stream", slog.String("stream_name", streamName))
+
+	// Create a channel to receive messages
+	messages := make(chan *nc.Msg)
+
+	// Subscribe using nats.Subscribe with the channel
+	_, err := eb.natsConn.Subscribe(subject, func(msg *nc.Msg) {
+		messages <- msg
+	})
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to subject %s: %w", subject, err)
 	}
 
-	eb.logger.Info("Subscription started", slog.String("subject", subject))
+	// Add logging after subscribing
+	eb.logger.Info("Successfully subscribed to stream", slog.String("stream_name", streamName))
 
 	go func() {
 		for msg := range messages {
-			// Log the message when received
-			eb.logger.Info(
-				"Message received by subscriber",
+			// Convert nats.Msg to watermill.Message
+			wmMsg := message.NewMessage(watermill.NewUUID(), msg.Data)
+			wmMsg.Metadata.Set("subject", subject) // Set the subject in metadata
+
+			eb.logger.Info("Message received",
 				slog.String("subject", subject),
-				slog.String("payload", string(msg.Payload)),
+				slog.String("payload", string(msg.Data)),
 			)
 
-			if err := handler(ctx, msg); err != nil {
-				eb.logger.Error("Handler error", slog.String("subject", subject), "error", err)
-				msg.Nack()
+			if err := handler(ctx, wmMsg); err != nil {
+				eb.logger.Error("Handler error", slog.String("subject", subject), slog.Any("error", err))
+				// Handle the error (e.g., log, retry, etc.)
 				continue
 			}
+
+			// Acknowledge the message manually
 			msg.Ack()
 		}
 	}()
@@ -170,8 +195,8 @@ func (eb *eventBus) Subscribe(ctx context.Context, streamName string, subject st
 	return nil
 }
 
-func (eb *eventBus) CreateStream(ctx context.Context, streamName string, subject string) error {
-	eb.logger.Info("Creating stream", "stream_name", streamName, "subject", subject)
+func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
+	eb.logger.Info("Creating stream", "stream_name", streamName)
 
 	eb.streamMutex.Lock()
 	defer eb.streamMutex.Unlock()
@@ -183,73 +208,48 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string, subject
 	}
 
 	// Attempt to retrieve the stream
-	stream, err := eb.js.Stream(ctx, streamName)
+	_, err := eb.js.Stream(ctx, streamName)
 	if err != nil && err != jetstream.ErrStreamNotFound {
 		return fmt.Errorf("failed to check if stream exists: %w", err)
 	}
 
 	if err == jetstream.ErrStreamNotFound {
-		// Stream doesn't exist, create it
+		// Stream doesn't exist, create it with specific subjects
+		var subjects []string
+
+		if streamName == userevents.UserStreamName {
+			subjects = []string{
+				userevents.UserSignupRequest,
+				userevents.UserRoleUpdateRequest,
+				userevents.UserSignupResponse,
+			}
+		} else if streamName == leaderboardevents.LeaderboardStreamName {
+			subjects = []string{
+				leaderboardevents.LeaderboardUpdatedSubject,
+				leaderboardevents.TagAssignedSubject,
+				leaderboardevents.TagSwapRequestedSubject,
+				leaderboardevents.GetLeaderboardRequestSubject,
+				leaderboardevents.GetTagByDiscordIDRequestSubject,
+				leaderboardevents.CheckTagAvailabilityRequestSubject,
+				leaderboardevents.CheckTagAvailabilityResponseSubject,
+			}
+		} else {
+			return fmt.Errorf("unknown stream name: %s", streamName)
+		}
+
 		_, err = eb.js.CreateStream(ctx, jetstream.StreamConfig{
 			Name:     streamName,
-			Subjects: []string{subject},
+			Subjects: subjects, // Include specific subjects
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create stream: %w", err)
 		}
-		eb.logger.Info("Stream created", "stream_name", streamName, "subject", subject)
+		eb.logger.Info("Stream created with subjects", "stream_name", streamName, "subjects", subjects)
 	} else {
-		// Stream exists, check if the subject needs to be added
-		streamInfo, err := stream.Info(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get stream info: %w", err)
-		}
-
-		// Check if the subject already exists
-		found := false
-		for _, existingSubject := range streamInfo.Config.Subjects {
-			if existingSubject == subject {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			// Subject not found, update the stream configuration
-			streamInfo.Config.Subjects = append(streamInfo.Config.Subjects, subject)
-			_, err = eb.js.UpdateStream(ctx, streamInfo.Config)
-			if err != nil {
-				return fmt.Errorf("failed to update stream with new subject: %w", err)
-			}
-			eb.logger.Info("Stream updated with new subject", "stream_name", streamName, "subject", subject)
-		} else {
-			eb.logger.Info("Stream already exists with subject", "stream_name", streamName, "subject", subject)
-		}
+		eb.logger.Info("Stream already exists", "stream_name", streamName)
 	}
 
-	// Wait for stream creation confirmation
-	retries := 5
-	retryInterval := 100 * time.Millisecond
-	for i := 0; i < retries; i++ {
-		_, err = eb.js.Stream(ctx, streamName)
-		if err == nil {
-			eb.logger.Info("Stream creation confirmed", "stream_name", streamName)
-			break // Stream is ready
-		}
-		if err != jetstream.ErrStreamNotFound {
-			eb.logger.Error("Failed to check if stream exists", "error", err, "stream_name", streamName)
-			return fmt.Errorf("failed to check if stream exists: %w", err)
-		}
-		eb.logger.Warn("Stream not yet available, retrying...", "stream_name", streamName, "attempt", i+1)
-		time.Sleep(retryInterval)
-	}
-
-	if err != nil {
-		eb.logger.Error("Failed to confirm stream creation after retries", "error", err, "stream_name", streamName)
-		return fmt.Errorf("failed to confirm stream creation after retries: %w", err)
-	}
-
-	// Mark the stream as created
+	// Mark the stream as created in this process
 	eb.createdStreams[streamName] = true
 
 	return nil
@@ -260,11 +260,6 @@ func (eb *eventBus) Close() error {
 	if eb.publisher != nil {
 		if err := eb.publisher.Close(); err != nil {
 			eb.logger.Error("Error closing NATS publisher", "error", err)
-		}
-	}
-	if eb.subscriber != nil {
-		if err := eb.subscriber.Close(); err != nil {
-			eb.logger.Error("Error closing NATS subscriber", "error", err)
 		}
 	}
 

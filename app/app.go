@@ -11,9 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	events "github.com/Black-And-White-Club/tcr-bot/app/eventbus"
+	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
@@ -23,16 +25,18 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config     *config.Config
-	Logger     *slog.Logger
-	Router     *message.Router
-	UserModule *user.Module
-	DB         *bundb.DBService
-	EventBus   shared.EventBus
+	Config            *config.Config
+	Logger            *slog.Logger
+	Router            *message.Router
+	UserModule        *user.Module
+	LeaderboardModule *leaderboard.Module
+	DB                *bundb.DBService
+	EventBus          shared.EventBus
 }
 
 // Initialize initializes the application.
 func (app *App) Initialize(ctx context.Context) error {
+	// Parse config file
 	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
 	flag.Parse()
 
@@ -40,54 +44,42 @@ func (app *App) Initialize(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	fmt.Printf("Loaded Config: %+v\n", cfg)
 	app.Config = cfg
 
-	// Use slog for logging with Debug level
+	// Initialize logger
 	app.Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug, // Set log level to Debug
+		Level: slog.LevelDebug,
 	}))
 
-	app.Logger.Info("App Initialize started") // Log initialization start
+	app.Logger.Info("App Initialize started")
 
+	// Initialize database
 	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
 	// Initialize EventBus
-	app.EventBus, err = events.NewEventBus(ctx, cfg.NATS.URL, app.Logger)
+	app.EventBus, err = eventbus.NewEventBus(ctx, cfg.NATS.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
 
-	// CREATE STREAMS HERE - ONLY ONCE
-	streams := map[string]string{
-		userstream.UserSignupRequestStreamName:      "user.signup.request",
-		userstream.UserSignupResponseStreamName:     "user.signup.response",
-		userstream.UserRoleUpdateRequestStreamName:  "user.role.update.request",
-		userstream.UserRoleUpdateResponseStreamName: "user.role.update.response",
-		userstream.LeaderboardStreamName:            "leaderboard.>",
-	}
-
-	for streamName, subject := range streams {
-		if err := app.EventBus.CreateStream(ctx, streamName, subject); err != nil {
-			return fmt.Errorf("failed to create stream %s: %w", streamName, err)
-		}
-		app.Logger.Info("Stream created", "stream_name", streamName, "subject", subject)
-	}
-
-	app.Logger.Info("All streams created")
-
-	// Set Watermill's logger to use slog
+	// Create the Watermill router
 	watermillLogger := watermill.NewSlogLogger(app.Logger)
-
 	router, err := message.NewRouter(message.RouterConfig{}, watermillLogger)
 	if err != nil {
 		return fmt.Errorf("failed to create Watermill router: %w", err)
 	}
-
 	app.Router = router
+
+	// Create streams before initializing modules
+	if err := app.EventBus.CreateStream(context.Background(), userevents.UserStreamName); err != nil {
+		return fmt.Errorf("failed to create user stream: %w", err)
+	}
+	if err := app.EventBus.CreateStream(context.Background(), leaderboardevents.LeaderboardStreamName); err != nil {
+		return fmt.Errorf("failed to create leaderboard stream: %w", err)
+	}
 
 	// Initialize User Module
 	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB.UserDB, app.EventBus)
@@ -96,10 +88,21 @@ func (app *App) Initialize(ctx context.Context) error {
 	}
 	app.UserModule = userModule
 
-	// Wait for user module subscribers to be ready
-	<-userModule.SubscribersReady
+	// Initialize Leaderboard Module
+	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, app.Logger, app.DB.LeaderboardDB, app.EventBus)
+	if err != nil {
+		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
+	}
+	app.LeaderboardModule = leaderboardModule
 
-	app.Logger.Info("User module initialized in App Initialize")
+	// Wait for subscribers to be ready
+	<-userModule.SubscribersReady
+	<-leaderboardModule.SubscribersReady
+
+	// Add a delay here
+	time.Sleep(100 * time.Millisecond)
+
+	app.Logger.Info("All modules initialized successfully")
 
 	return nil
 }
@@ -111,16 +114,16 @@ func (app *App) Run(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 
-	// Signal handling
+	// Handle OS signals
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-interrupt
 		app.Logger.Info("Interrupt signal received, shutting down...")
-		cancel() // Cancel the main context
+		cancel()
 	}()
 
-	// START ROUTER (AND SUBSCRIBERS) *AFTER* INITIALIZATION
+	// Start the router
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -130,30 +133,7 @@ func (app *App) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Initialization timeout
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 10*time.Second)
-		defer timeoutCancel()
-
-		for {
-			select {
-			case <-timeoutCtx.Done():
-				app.Logger.Error("Timeout waiting for subscribers to initialize")
-				cancel()
-				return
-			case <-ctx.Done():
-				return
-			case <-time.After(100 * time.Millisecond):
-				if app.UserModule != nil && app.UserModule.IsInitialized() {
-					app.Logger.Info("User module initialized")
-					return
-				}
-			}
-		}
-	}()
-
+	// Wait for graceful shutdown
 	wg.Wait()
 
 	app.Close()
@@ -162,7 +142,7 @@ func (app *App) Run(ctx context.Context) error {
 	return nil
 }
 
-// Close gracefully shuts down the application.
+// Close shuts down all resources.
 func (app *App) Close() {
 	if app.Router != nil {
 		if err := app.Router.Close(); err != nil {

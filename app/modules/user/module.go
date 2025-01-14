@@ -47,6 +47,7 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger,
 		SubscribersReady: make(chan struct{}),
 	}
 
+	// Start the subscription process in a separate goroutine.
 	go func() {
 		subscriberCtx := context.Background()
 

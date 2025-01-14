@@ -4,8 +4,14 @@ import (
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 )
 
-// User-related events (published to user-stream)
-var (
+// Stream names
+const (
+	UserStreamName        = "user"
+	LeaderboardStreamName = "leaderboard"
+)
+
+// User-related events (published to the user stream)
+const (
 	UserSignupRequest      = "user.signup.request"
 	UserSignupResponse     = "user.signup.response"
 	UserCreated            = "user.created"
@@ -18,8 +24,8 @@ var (
 	GetUserResponse        = "user.get.response"
 )
 
-// Leaderboard-related events (used by user module, published to leaderboard-stream)
-var (
+// Leaderboard-related events (used by user module, published to the leaderboard stream)
+const (
 	CheckTagAvailabilityRequest  = "leaderboard.check.tag.availability.request"
 	CheckTagAvailabilityResponse = "leaderboard.check.tag.availability.response"
 	TagAssignedRequest           = "leaderboard.tag.assigned.request"

@@ -11,8 +11,7 @@ import (
 
 	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	usermocks "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application/mocks"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
@@ -46,26 +45,26 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 		{
 			name: "Success",
 			message: func() *message.Message {
-				req := userevents.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
+				req := events.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
 				payload, _ := json.Marshal(req)
 				msg := message.NewMessage("mock-uuid", payload)
 				msg.Metadata.Set("correlation_id", "mock-correlation-id")
 				return msg
 			}(),
 			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
-				resp := &userevents.UserSignupResponsePayload{Success: true}
+				resp := &events.UserSignupResponsePayload{Success: true}
 				mockUserService.EXPECT().OnUserSignupRequest(gomock.Any(), gomock.Any()).Return(resp, nil)
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userstream.UserSignupResponseStreamName, gomock.Any()). // Use UserSignupResponseStreamName
+					Publish(gomock.Any(), events.UserStreamName, gomock.Any()). // Use events.UserStreamName
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
 						// Verify the stream name
-						if streamName != userstream.UserSignupResponseStreamName {
-							t.Errorf("Expected stream name: %s, got: %s", userstream.UserSignupResponseStreamName, streamName)
+						if streamName != events.UserStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", events.UserStreamName, streamName)
 						}
 						// Verify the subject from message metadata
 						subject := msg.Metadata.Get("subject")
-						if subject != userevents.UserSignupResponse {
-							t.Errorf("Expected subject: %s, got: %s", userevents.UserSignupResponse, subject)
+						if subject != events.UserSignupResponse {
+							t.Errorf("Expected subject: %s, got: %s", events.UserSignupResponse, subject)
 						}
 						return nil
 					}).
@@ -93,7 +92,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 		{
 			name: "Service Error",
 			message: func() *message.Message {
-				req := userevents.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
+				req := events.UserSignupRequestPayload{DiscordID: "123", TagNumber: 1}
 				payload, _ := json.Marshal(req)
 				msg := message.NewMessage("mock-uuid", payload)
 				msg.Metadata.Set("correlation_id", "mock-correlation-id")
@@ -106,16 +105,16 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 
 				// Expect Publish to be called with an error payload
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userstream.UserSignupResponseStreamName, gomock.Any()). // Use UserSignupResponseStreamName
+					Publish(gomock.Any(), events.UserStreamName, gomock.Any()). // Use events.UserStreamName
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
 						// Verify the stream name
-						if streamName != userstream.UserSignupResponseStreamName {
-							t.Errorf("Expected stream name: %s, got: %s", userstream.UserSignupResponseStreamName, streamName)
+						if streamName != events.UserStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", events.UserStreamName, streamName)
 						}
 						// Verify the subject from message metadata
 						subject := msg.Metadata.Get("subject")
-						if subject != userevents.UserSignupResponse {
-							t.Errorf("Expected subject: %s, got: %s", userevents.UserSignupResponse, subject)
+						if subject != events.UserSignupResponse {
+							t.Errorf("Expected subject: %s, got: %s", events.UserSignupResponse, subject)
 						}
 						return nil
 					}).
@@ -169,7 +168,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "Success",
 			message: func() *message.Message { // Helper function to create the message
-				req := userevents.UserRoleUpdateRequestPayload{
+				req := events.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}
@@ -179,11 +178,11 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				return msg
 			}(), // Immediately call the function
 			setupMocks: func(mockUserService *usermocks.MockService, mockEventBus *eventbusmock.MockEventBus, logger *slog.Logger) {
-				req := userevents.UserRoleUpdateRequestPayload{
+				req := events.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}
-				resp := &userevents.UserRoleUpdateResponsePayload{Success: true}
+				resp := &events.UserRoleUpdateResponsePayload{Success: true}
 				logger.Info("HandleUserRoleUpdateRequest started", slog.String("message_id", "mock-uuid"), slog.String("contextErr", ""))
 				mockUserService.EXPECT().
 					OnUserRoleUpdateRequest(gomock.Any(), gomock.Eq(req)).
@@ -191,16 +190,16 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 
 				// Expect Publish to be called with a Watermill message
 				mockEventBus.EXPECT().
-					Publish(gomock.Any(), userstream.UserRoleUpdateResponseStreamName, gomock.Any()).
+					Publish(gomock.Any(), events.UserStreamName, gomock.Any()). // Use events.UserStreamName
 					DoAndReturn(func(ctx context.Context, streamName string, msg *message.Message) error {
 						// Verify the stream name
-						if streamName != userstream.UserRoleUpdateResponseStreamName {
-							t.Errorf("Expected stream name: %s, got: %s", userstream.UserRoleUpdateResponseStreamName, streamName)
+						if streamName != events.UserStreamName {
+							t.Errorf("Expected stream name: %s, got: %s", events.UserStreamName, streamName)
 						}
 						// Verify the subject from message metadata
 						subject := msg.Metadata.Get("subject")
-						if subject != userevents.UserRoleUpdateResponse {
-							t.Errorf("Expected subject: %s, got: %s", userevents.UserRoleUpdateResponse, subject)
+						if subject != events.UserRoleUpdateResponse {
+							t.Errorf("Expected subject: %s, got: %s", events.UserRoleUpdateResponse, subject)
 						}
 						return nil
 					}).
@@ -226,7 +225,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "Service Failure",
 			message: func() *message.Message { // Helper function
-				req := userevents.UserRoleUpdateRequestPayload{
+				req := events.UserRoleUpdateRequestPayload{
 					DiscordID: "123",
 					NewRole:   usertypes.UserRoleEditor,
 				}

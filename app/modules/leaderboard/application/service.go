@@ -3,136 +3,149 @@ package leaderboardservice
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/db"
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/events"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
+	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 )
 
 // LeaderboardService handles leaderboard logic.
 type LeaderboardService struct {
 	LeaderboardDB leaderboarddb.LeaderboardDB
-	Publisher     message.Publisher
-	logger        watermill.LoggerAdapter
+	EventBus      shared.EventBus
+	logger        *slog.Logger
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
-func NewLeaderboardService(publisher message.Publisher, db leaderboarddb.LeaderboardDB, logger watermill.LoggerAdapter) *LeaderboardService {
+func NewLeaderboardService(db leaderboarddb.LeaderboardDB, eventBus shared.EventBus, logger *slog.Logger) *LeaderboardService {
 	return &LeaderboardService{
 		LeaderboardDB: db,
-		Publisher:     publisher,
+		EventBus:      eventBus,
 		logger:        logger,
 	}
 }
 
 // UpdateLeaderboard processes a LeaderboardUpdateEvent.
 func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, event leaderboardevents.LeaderboardUpdateEvent) error {
+	s.logger.Info("Updating leaderboard", "event", event)
 
-	// Sort scores
 	sortedScores, err := s.sortScores(event.Scores)
 	if err != nil {
+		s.logger.Error("Failed to sort scores", "error", err)
 		return fmt.Errorf("failed to sort scores: %w", err)
 	}
 
-	// Update the leaderboard in the database
-	if err := s.LeaderboardDB.UpdateLeaderboard(ctx, sortedScores); err != nil {
-		return fmt.Errorf("failed to update leaderboard: %w", err)
+	entries := make(map[int]string)
+	for _, score := range sortedScores {
+		tagNumber, err := strconv.Atoi(score.TagNumber)
+		if err != nil {
+			return fmt.Errorf("failed to convert tag number to int: %w", err)
+		}
+		entries[tagNumber] = score.DiscordID
 	}
 
+	if err := s.LeaderboardDB.UpdateLeaderboard(ctx, entries); err != nil {
+		s.logger.Error("Failed to update leaderboard in DB", "error", err)
+		return &leaderboardevents.ErrLeaderboardUpdateFailed{Reason: err.Error()}
+	}
+
+	s.logger.Info("Leaderboard updated successfully")
 	return nil
 }
 
 // AssignTag assigns a tag to a user.
-func (s *LeaderboardService) AssignTag(ctx context.Context, event leaderboardevents.TagAssigned) error {
-	// Add the tag to the leaderboard in the database
+func (s *LeaderboardService) AssignTag(ctx context.Context, event leaderboardevents.TagAssignedEvent) error {
+	s.logger.Info("Assigning tag to user", "event", event)
+
 	if err := s.LeaderboardDB.AssignTag(ctx, event.DiscordID, event.TagNumber); err != nil {
+		s.logger.Error("Failed to assign tag", "error", err)
 		return fmt.Errorf("failed to assign tag: %w", err)
 	}
 
+	s.logger.Info("Tag assigned successfully")
 	return nil
 }
 
 // SwapTags swaps tags between two users.
 func (s *LeaderboardService) SwapTags(ctx context.Context, requestorID, targetID string) error {
-	// Perform the tag swap in the database
+	s.logger.Info("Swapping tags", "requestor", requestorID, "target", targetID)
+
 	if err := s.LeaderboardDB.SwapTags(ctx, requestorID, targetID); err != nil {
+		s.logger.Error("Failed to swap tags", "error", err)
 		return fmt.Errorf("failed to swap tags: %w", err)
 	}
 
+	s.logger.Info("Tags swapped successfully")
 	return nil
 }
 
 // GetLeaderboard returns the current leaderboard.
 func (s *LeaderboardService) GetLeaderboard(ctx context.Context) ([]leaderboardevents.LeaderboardEntry, error) {
-	// Fetch the leaderboard from the database
+	s.logger.Debug("Fetching leaderboard")
+
 	leaderboard, err := s.LeaderboardDB.GetLeaderboard(ctx)
 	if err != nil {
+		s.logger.Error("Failed to fetch leaderboard from DB", "error", err)
 		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 
-	// Access the LeaderboardData map from the pointer
 	leaderboardData := leaderboard.LeaderboardData
 
-	// Convert to leaderboardevents.LeaderboardEntry
-	eventLeaderboard := make([]leaderboardevents.LeaderboardEntry, len(leaderboardData)) // Use len(leaderboardData)
-	i := 0
-	for tagNumber, discordID := range leaderboardData { // Range over leaderboardData
-		eventLeaderboard[i] = leaderboardevents.LeaderboardEntry{
+	eventLeaderboard := make([]leaderboardevents.LeaderboardEntry, 0, len(leaderboardData))
+	for tagNumber, discordID := range leaderboardData {
+		eventLeaderboard = append(eventLeaderboard, leaderboardevents.LeaderboardEntry{
 			TagNumber: strconv.Itoa(tagNumber),
 			DiscordID: discordID,
-		}
-		i++
+		})
 	}
 
+	s.logger.Debug("Leaderboard fetched successfully")
 	return eventLeaderboard, nil
 }
 
 // GetTagByDiscordID returns the tag number associated with a Discord ID.
-func (s *LeaderboardService) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) { // Changed return type to int
-	// Fetch the tag number from the database
+func (s *LeaderboardService) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) {
+	s.logger.Debug("Fetching tag by Discord ID", "discordID", discordID)
 	tagNumber, err := s.LeaderboardDB.GetTagByDiscordID(ctx, discordID)
 	if err != nil {
+		s.logger.Error("Failed to fetch tag by Discord ID", "error", err)
 		return 0, fmt.Errorf("failed to get tag by Discord ID: %w", err)
 	}
-
-	return tagNumber, nil // Return the tag number as an integer
+	s.logger.Debug("Tag fetched successfully", "tag", tagNumber)
+	return tagNumber, nil
 }
 
 // CheckTagAvailability checks if a tag number is available.
 func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
-	fmt.Printf("[DEBUG] CheckTagAvailability: Called with tagNumber: %d, Context: %v\n", tagNumber, ctx)
+	s.logger.Debug("Checking tag availability", "tagNumber", tagNumber)
 
-	// Check tag availability in the database
 	isAvailable, err := s.LeaderboardDB.CheckTagAvailability(ctx, tagNumber)
 	if err != nil {
-		fmt.Printf("[DEBUG] CheckTagAvailability: Error from database: %v\n", err)
-		return false, fmt.Errorf("CheckTagAvailability: failed to get leaderboard: %w", err)
+		s.logger.Error("Failed to check tag availability", "error", err)
+		return false, fmt.Errorf("failed to check tag availability: %w", err)
 	}
 
-	fmt.Printf("[DEBUG] CheckTagAvailability: Tag availability result: %t\n", isAvailable)
-
+	s.logger.Debug("Tag availability checked", "tagNumber", tagNumber, "isAvailable", isAvailable)
 	return isAvailable, nil
 }
 
 // sortScores sorts the scores according to your specific criteria.
 func (s *LeaderboardService) sortScores(scores []leaderboardevents.Score) ([]leaderboardevents.Score, error) {
-	// Sort by score (ascending), then by tag number (descending)
 	sort.Slice(scores, func(i, j int) bool {
 		if scores[i].Score == scores[j].Score {
-			// Convert tag numbers to integers for comparison
 			tagI, errI := strconv.Atoi(scores[i].TagNumber)
 			tagJ, errJ := strconv.Atoi(scores[j].TagNumber)
 			if errI != nil || errJ != nil {
-				// Handle the error (e.g., log it or return an error)
-				// For now, assuming valid tag numbers
+				// Log the error and use a default value for comparison
+				s.logger.Error("Error converting tag number to integer", "error", errI, "error", errJ)
 				return scores[i].TagNumber > scores[j].TagNumber
 			}
-			return tagI > tagJ // Sort by tag number in descending order
+			return tagI > tagJ
 		}
-		return scores[i].Score < scores[j].Score // Sort by score in ascending order
+		return scores[i].Score < scores[j].Score
 	})
 
 	return scores, nil

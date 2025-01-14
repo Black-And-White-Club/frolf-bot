@@ -3,13 +3,11 @@ package userservice
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userstream "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/stream"
+	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
@@ -33,7 +31,7 @@ func NewUserService(db userdb.UserDB, eventBus shared.EventBus, logger *slog.Log
 	}
 }
 
-func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req events.UserSignupRequestPayload) (*events.UserSignupResponsePayload, error) {
+func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req userevents.UserSignupRequestPayload) (*userevents.UserSignupResponsePayload, error) {
 	s.logger.Info("OnUserSignupRequest started",
 		slog.String("discord_id", string(req.DiscordID)),
 		slog.Int("tag_number", req.TagNumber),
@@ -70,41 +68,54 @@ func (s *UserServiceImpl) OnUserSignupRequest(ctx context.Context, req events.Us
 
 	s.logger.Info("User successfully created", slog.String("discord_id", string(req.DiscordID)))
 
-	return &events.UserSignupResponsePayload{
+	return &userevents.UserSignupResponsePayload{
 		Success: true,
 	}, nil
 }
 
-var errTimeout = errors.New("timeout waiting for tag availability response")
-
 func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
 	s.logger.Info("checkTagAvailability started", slog.Int("tag_number", tagNumber))
 
-	const defaultTimeout = 3 * time.Second
+	const defaultTimeout = 5 * time.Second // Increased timeout for safety
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
 
 	correlationID := watermill.NewUUID()
-	responseChan := make(chan events.CheckTagAvailabilityResponsePayload)
+	responseChan := make(chan userevents.CheckTagAvailabilityResponsePayload)
 
-	requestPayload, err := json.Marshal(events.CheckTagAvailabilityRequestPayload{
+	// Prepare the request payload
+	requestPayload, err := json.Marshal(userevents.CheckTagAvailabilityRequestPayload{
 		TagNumber: tagNumber,
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal CheckTagAvailabilityRequestPayload: %w", err)
 	}
 
+	// Create the request message
 	requestMsg := message.NewMessage(watermill.NewUUID(), requestPayload)
 	requestMsg.SetContext(ctxWithTimeout)
 	requestMsg.Metadata.Set("correlation_id", correlationID)
-	requestMsg.Metadata.Set("subject", events.CheckTagAvailabilityRequest)
+	requestMsg.Metadata.Set("subject", userevents.CheckTagAvailabilityRequest)
+	requestMsg.Metadata.Set("Reply-To", userevents.CheckTagAvailabilityResponse) // Set Reply-To metadata
 
-	// Subscribe to the response in the leaderboard-stream
-	responseSubject := events.CheckTagAvailabilityResponse
-	responseStream := userstream.LeaderboardStreamName
+	// Log the message metadata before publishing
+	s.logger.Debug("Request message metadata before publishing",
+		slog.String("correlation_id", correlationID),
+		slog.String("Reply-To", requestMsg.Metadata.Get("Reply-To")),
+		slog.String("subject", requestMsg.Metadata.Get("subject")),
+	)
 
-	err = s.eventBus.Subscribe(ctxWithTimeout, responseStream, responseSubject, func(ctx context.Context, msg *message.Message) error {
-		var responsePayload events.CheckTagAvailabilityResponsePayload
+	// Subscribe to the response on the LeaderboardStreamName
+	s.logger.Debug("Subscribing to CheckTagAvailabilityResponse",
+		slog.String("stream_name", userevents.LeaderboardStreamName),
+		slog.String("subject", userevents.CheckTagAvailabilityResponse),
+	)
+
+	// --- Add logging for subscription ---
+	s.logger.Info("Attempting to subscribe to CheckTagAvailabilityResponse")
+	err = s.eventBus.Subscribe(ctxWithTimeout, userevents.LeaderboardStreamName, userevents.CheckTagAvailabilityResponse, func(ctx context.Context, msg *message.Message) error {
+		s.logger.Info("Received CheckTagAvailabilityResponse in subscriber")
+		var responsePayload userevents.CheckTagAvailabilityResponsePayload
 		if err := json.Unmarshal(msg.Payload, &responsePayload); err != nil {
 			return fmt.Errorf("failed to unmarshal CheckTagAvailabilityResponse: %w", err)
 		}
@@ -112,27 +123,40 @@ func (s *UserServiceImpl) checkTagAvailability(ctx context.Context, tagNumber in
 		return nil
 	})
 	if err != nil {
-		s.logger.Error("failed to subscribe to response topic", slog.Any("error", err), slog.String("topic", responseStream))
+		s.logger.Error("Failed to subscribe to response topic",
+			slog.Any("error", err),
+			slog.String("topic", userevents.LeaderboardStreamName),
+		)
 		return false, fmt.Errorf("failed to subscribe to response topic: %w", err)
 	}
+	s.logger.Info("Successfully subscribed to CheckTagAvailabilityResponse")
 
-	// Publish CheckTagAvailabilityRequest to the leaderboard-stream
-	streamName := userstream.LeaderboardStreamName
-	if err := s.eventBus.Publish(ctxWithTimeout, streamName, requestMsg); err != nil {
-		s.logger.Error("failed to publish CheckTagAvailabilityRequest", slog.Any("error", err))
-		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err) // Return the error immediately
+	// Publish the request to the LeaderboardStreamName
+	s.logger.Debug("Publishing CheckTagAvailabilityRequest",
+		slog.String("stream_name", userevents.LeaderboardStreamName),
+		slog.String("subject", userevents.CheckTagAvailabilityRequest),
+		slog.String("Reply-To", userevents.CheckTagAvailabilityResponse),
+	)
+
+	s.logger.Info("Publishing CheckTagAvailabilityRequest event")
+	if err := s.eventBus.Publish(ctxWithTimeout, userevents.LeaderboardStreamName, requestMsg); err != nil {
+		s.logger.Error("Failed to publish CheckTagAvailabilityRequest", slog.Any("error", err))
+		return false, fmt.Errorf("failed to publish CheckTagAvailabilityRequest: %w", err)
 	}
+	s.logger.Info("Published CheckTagAvailabilityRequest event")
 
+	// Wait for the response or timeout
 	select {
-	case <-ctx.Done():
-		return false, errTimeout
+	case <-ctxWithTimeout.Done():
+		return false, fmt.Errorf("timeout waiting for tag availability response")
 	case responsePayload := <-responseChan:
+		s.logger.Debug("Received CheckTagAvailabilityResponse", slog.Any("response", responsePayload))
 		return responsePayload.IsAvailable, nil
 	}
 }
 
 // OnUserRoleUpdateRequest processes a user role update request.
-func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req events.UserRoleUpdateRequestPayload) (*events.UserRoleUpdateResponsePayload, error) {
+func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req userevents.UserRoleUpdateRequestPayload) (*userevents.UserRoleUpdateResponsePayload, error) {
 	if !req.NewRole.IsValid() {
 		return nil, fmt.Errorf("invalid user role: %s", req.NewRole)
 	}
@@ -154,7 +178,7 @@ func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req event
 		return nil, fmt.Errorf("user not found: %s", req.DiscordID)
 	}
 
-	evt := events.UserRoleUpdatedPayload{
+	evt := userevents.UserRoleUpdatedPayload{
 		DiscordID: req.DiscordID,
 		NewRole:   req.NewRole.String(),
 	}
@@ -163,7 +187,7 @@ func (s *UserServiceImpl) OnUserRoleUpdateRequest(ctx context.Context, req event
 		return nil, fmt.Errorf("failed to publish UserRoleUpdated event: %w", err)
 	}
 
-	return &events.UserRoleUpdateResponsePayload{
+	return &userevents.UserRoleUpdateResponsePayload{
 		Success: true,
 	}, nil
 }
@@ -187,31 +211,59 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, discordID usertypes.Disco
 }
 
 func (s *UserServiceImpl) publishTagAssigned(ctx context.Context, discordID usertypes.DiscordID, tagNumber int) error {
-	s.logger.Info("publishTagAssigned called", slog.String("discord_id", string(discordID)), slog.Int("tag_number", tagNumber))
+	// Log the start of the function
+	s.logger.Info("publishTagAssigned called",
+		slog.String("discord_id", string(discordID)),
+		slog.Int("tag_number", tagNumber),
+	)
 
-	msgPayload := events.TagAssignedRequestPayload{
+	// Prepare the payload
+	msgPayload := userevents.TagAssignedRequestPayload{
 		DiscordID: discordID,
 		TagNumber: tagNumber,
 	}
-
 	payloadBytes, err := json.Marshal(msgPayload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal TagAssignedRequest payload: %w", err)
 	}
 
+	// Create a new message
 	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 	msg.SetContext(ctx)
-	msg.Metadata.Set("subject", events.TagAssignedRequest)
+	msg.Metadata.Set("subject", userevents.TagAssignedRequest)
+	msg.Metadata.Set("correlation_id", watermill.NewUUID()) // Add correlation ID for tracking
 
-	// Publish to the LeaderboardStreamName
-	if err := s.eventBus.Publish(ctx, userstream.LeaderboardStreamName, msg); err != nil {
-		return fmt.Errorf("failed to publish TagAssignedRequest event: %w", err)
+	// Log the prepared message details
+	s.logger.Debug("Prepared message for publishing",
+		slog.String("stream_name", userevents.LeaderboardStreamName),
+		slog.String("subject", userevents.TagAssignedRequest),
+		slog.String("message_id", msg.UUID),
+	)
+
+	// Validate context
+	if ctx.Err() != nil {
+		s.logger.Error("Context error before publishing", slog.String("ctx_err", fmt.Sprintf("%v", ctx.Err())))
+		return fmt.Errorf("context error before publishing: %w", ctx.Err())
 	}
+
+	// Publish to the event bus
+	err = s.eventBus.Publish(ctx, userevents.LeaderboardStreamName, msg)
+	if err != nil {
+		s.logger.Error("Failed to publish TagAssigned event", slog.Any("error", err))
+		return fmt.Errorf("failed to publish TagAssigned event: %w", err)
+	}
+
+	// Log success
+	s.logger.Info("Published TagAssigned event successfully",
+		slog.String("stream_name", userevents.LeaderboardStreamName),
+		slog.String("subject", userevents.TagAssignedRequest),
+		slog.String("message_id", msg.UUID),
+	)
 
 	return nil
 }
 
-func (s *UserServiceImpl) publishUserRoleUpdated(ctx context.Context, evt events.UserRoleUpdatedPayload) error {
+func (s *UserServiceImpl) publishUserRoleUpdated(ctx context.Context, evt userevents.UserRoleUpdatedPayload) error {
 	evtData, err := json.Marshal(evt)
 	if err != nil {
 		return fmt.Errorf("marshal UserRoleUpdatedPayload: %w", err)
@@ -219,10 +271,10 @@ func (s *UserServiceImpl) publishUserRoleUpdated(ctx context.Context, evt events
 
 	msg := message.NewMessage(watermill.NewUUID(), evtData)
 	msg.SetContext(ctx)
-	msg.Metadata.Set("subject", events.UserRoleUpdated)
+	msg.Metadata.Set("subject", userevents.UserRoleUpdated)
 
-	streamName := userstream.UserRoleUpdateResponseStreamName
-	if err := s.eventBus.Publish(ctx, streamName, msg); err != nil {
+	// Publish to the UserStreamName
+	if err := s.eventBus.Publish(ctx, userevents.UserStreamName, msg); err != nil {
 		return fmt.Errorf("eventBus.Publish UserRoleUpdated: %w", err)
 	}
 

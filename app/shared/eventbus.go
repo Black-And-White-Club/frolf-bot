@@ -14,8 +14,8 @@ type EventBus interface {
 	// Subscribe subscribes a handler function to a specific stream and subject.
 	Subscribe(ctx context.Context, streamName string, subject string, handler func(ctx context.Context, msg *message.Message) error) error
 
-	// CreateStream creates a stream with the given name and configures it with the specified subject.
-	CreateStream(ctx context.Context, streamName string, subject string) error
+	// CreateStream creates a stream with the given name.
+	CreateStream(ctx context.Context, streamName string) error
 
 	// Close closes the underlying resources held by the EventBus implementation.
 	Close() error
