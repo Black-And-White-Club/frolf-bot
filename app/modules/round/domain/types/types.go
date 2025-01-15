@@ -1,8 +1,7 @@
-package rounddto
+// types.go
+package roundtypes
 
-import (
-	"time"
-)
+import "time"
 
 // Round represents a single round in the tournament.
 type Round struct {
@@ -18,6 +17,28 @@ type Round struct {
 	Participants []Participant  `json:"participants"`
 	Scores       map[string]int `json:"scores"`
 }
+
+// IsUpcoming checks if the round is in the upcoming state.
+func (r *Round) IsUpcoming() bool {
+	return r.State == RoundStateUpcoming
+}
+
+// IsInProgress checks if the round is in the in-progress state.
+func (r *Round) IsInProgress() bool {
+	return r.State == RoundStateInProgress
+}
+
+// IsFinalized checks if the round is in the finalized state.
+func (r *Round) IsFinalized() bool {
+	return r.State == RoundStateFinalized
+}
+
+// AddParticipant adds a participant to the round.
+func (r *Round) AddParticipant(participant Participant) {
+	r.Participants = append(r.Participants, participant)
+}
+
+// ... other methods for Round if needed ...
 
 // Response represents the possible responses for a participant.
 type Response string
@@ -47,40 +68,32 @@ type Participant struct {
 	Response  Response `json:"response"`
 }
 
-// ParticipantScore represents the score of a participant in a finalized round.
-type ParticipantScore struct {
-	DiscordID string `json:"discord_id"`
-	TagNumber int    `json:"tag_number"`
-	Score     int    `json:"score"`
+// DateTimeInput represents the date and time input for creating a round.
+type DateTimeInput struct {
+	Date string `json:"date"`
+	Time string `json:"time"`
 }
 
-// CreateRoundInput represents the input data for scheduling a new round.
+// CreateRoundInput represents the input for creating a new round.
 type CreateRoundInput struct {
-	Title     string    `json:"title"`
-	Location  string    `json:"location"`
-	EventType *string   `json:"eventType"`
-	Date      time.Time `json:"date"`
-	Time      string    `json:"time"`
-	DiscordID string    `json:"discordID"`
+	Title        string             `json:"title"`
+	Location     string             `json:"location"`
+	EventType    *string            `json:"event_type"`
+	DateTime     DateTimeInput      `json:"date_time"`
+	State        string             `json:"round_state"`
+	Participants []ParticipantInput `json:"participants"`
 }
 
-// JoinRoundInput represents the input data for a participant joining a round.
-type JoinRoundInput struct {
-	RoundID   int64    `json:"roundID"`
-	DiscordID string   `json:"discordID"`
-	Response  Response `json:"response"`
-}
-
-// SubmitScoreInput represents the input data for submitting a score.
-type SubmitScoreInput struct {
-	RoundID   int64  `json:"roundID"`
-	DiscordID string `json:"discordID"`
-	Score     int    `json:"score"`
+// ParticipantInput represents the input for a participant in a round.
+type ParticipantInput struct {
+	DiscordID string `json:"discord_id"`
+	TagNumber *int   `json:"tag_number"`
+	Response  string `json:"response"`
 }
 
 // EditRoundInput represents the input data for editing a round.
 type EditRoundInput struct {
-	RoundID   int64     `json:"round_id"` // Add the RoundID field
+	RoundID   int64     `json:"round_id"`
 	Title     string    `json:"title"`
 	Location  string    `json:"location"`
 	EventType *string   `json:"eventType"`
@@ -93,25 +106,5 @@ type UpdateParticipantResponseInput struct {
 	RoundID   int64    `json:"roundID"`
 	DiscordID string   `json:"discordID"`
 	Response  Response `json:"response"`
-	TagNumber *int     `json:"tagNumber"` // Add the TagNumber field
-}
-
-type DateTimeInput struct {
-	Date string `json:"date"`
-	Time string `json:"time"`
-}
-
-type CreateRoundParams struct {
-	Title        string           `json:"title"`
-	Location     string           `json:"location"`
-	EventType    *string          `json:"event_type"`
-	DateTime     DateTimeInput    `json:"date_time"`
-	State        string           `json:"round_state"`
-	Participants []ParticipantDTO `json:"participants"`
-}
-
-type ParticipantDTO struct {
-	DiscordID string `json:"discord_id"`
-	TagNumber *int   `json:"tag_number"`
-	Response  string `json:"response"`
+	TagNumber *int     `json:"tagNumber"`
 }

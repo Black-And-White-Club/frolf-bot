@@ -2,134 +2,86 @@ package round
 
 import (
 	"context"
-	"fmt"
-	"sync"
-	"time"
+	"log/slog"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/handlers"
-	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/service"
-	roundsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/subscribers"
+	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application"
+	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/handlers"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
+	roundsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/subscribers"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
-	"github.com/ThreeDotsLabs/watermill/message"
-	nc "github.com/nats-io/nats.go"
 )
 
 // Module represents the round module.
 type Module struct {
-	Subscriber  message.Subscriber
-	Publisher   message.Publisher
-	Service     roundservice.Service
-	Handlers    roundhandlers.Handlers
-	logger      watermill.LoggerAdapter
-	config      *config.Config
-	initialized bool
-	initMutex   sync.Mutex
+	EventBus         shared.EventBus
+	RoundService     roundservice.Service
+	Handlers         roundhandlers.Handlers
+	Subscribers      roundsubscribers.Subscribers
+	logger           *slog.Logger
+	config           *config.Config
+	SubscribersReady chan struct{}
 }
 
 // NewRoundModule creates a new instance of the Round module.
-func NewRoundModule(ctx context.Context, cfg *config.Config, logger watermill.LoggerAdapter, roundDB rounddb.RoundDB) (*Module, error) {
-	options := []nc.Option{
-		nc.RetryOnFailedConnect(true),
-		nc.Timeout(30 * time.Second),
-		nc.ReconnectWait(1 * time.Second),
-		nc.ErrorHandler(func(_ *nc.Conn, s *nc.Subscription, err error) {
-			if s != nil {
-				logger.Error("Error in subscription", err, watermill.LogFields{
-					"subject": s.Subject,
-					"queue":   s.Queue,
-				})
-			} else {
-				logger.Error("Error in connection", err, nil)
-			}
-		}),
-	}
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus shared.EventBus) (*Module, error) {
+	logger.Info("round.NewRoundModule called")
 
-	jsConfig := nats.JetStreamConfig{
-		Disabled: false,
-	}
+	// Initialize round service.
+	roundService := roundservice.NewRoundService(ctx, eventBus, roundDB, logger)
 
-	publisher, err := nats.NewPublisher(
-		nats.PublisherConfig{
-			URL:         cfg.NATS.URL,
-			NatsOptions: options,
-			Marshaler:   &nats.NATSMarshaler{},
-			JetStream:   jsConfig,
-		},
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create publisher: %w", err)
-	}
+	// Initialize round handlers.
+	roundHandlers := roundhandlers.NewRoundHandlers(roundService, &eventBus, logger)
 
-	subscriber, err := nats.NewSubscriber(
-		nats.SubscriberConfig{
-			URL:         cfg.NATS.URL,
-			NatsOptions: options,
-			Unmarshaler: &nats.NATSMarshaler{},
-			JetStream:   jsConfig,
-		},
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create subscriber: %w", err)
-	}
-
-	roundService := &roundservice.RoundService{
-		RoundDB:    roundDB,
-		Publisher:  publisher,
-		Subscriber: subscriber,
-	}
-
-	roundHandlers := &roundhandlers.RoundHandlers{
-		RoundService: roundService,
-		Publisher:    publisher,
-	}
+	// Initialize round subscribers.
+	roundSubscribers := roundsubscribers.NewRoundSubscribers(eventBus, roundHandlers, logger) // Pass the handler directly
 
 	module := &Module{
-		Subscriber:  subscriber,
-		Publisher:   publisher,
-		Service:     roundService,
-		Handlers:    roundHandlers,
-		logger:      logger,
-		config:      cfg,
-		initialized: false,
+		EventBus:         eventBus,
+		RoundService:     roundService,
+		Handlers:         roundHandlers,
+		Subscribers:      roundSubscribers,
+		logger:           logger,
+		config:           cfg,
+		SubscribersReady: make(chan struct{}),
 	}
 
+	// Start the subscription process in a separate goroutine.
 	go func() {
-		// 3. Set up subscribers
-		subscribers := &roundsubscribers.RoundSubscribers{
-			Subscriber: subscriber,
-			Handlers:   *roundHandlers,
+		subscriberCtx := context.Background()
+
+		if err := module.Subscribers.SubscribeToRoundManagementEvents(subscriberCtx); err != nil {
+			logger.Error("Failed to subscribe to round management events", slog.Any("error", err))
+			return
+		}
+		if err := module.Subscribers.SubscribeToParticipantManagementEvents(subscriberCtx); err != nil {
+			logger.Error("Failed to subscribe to participant management events", slog.Any("error", err))
+			return
+		}
+		if err := module.Subscribers.SubscribeToRoundFinalizationEvents(subscriberCtx); err != nil {
+			logger.Error("Failed to subscribe to round finalization events", slog.Any("error", err))
+			return
+		}
+		if err := module.Subscribers.SubscribeToRoundStartedEvents(subscriberCtx); err != nil {
+			logger.Error("Failed to subscribe to round started events", slog.Any("error", err))
+			return
 		}
 
-		if err := subscribers.SubscribeToRoundManagementEvents(ctx); err != nil {
-			panic(err)
-		}
-		if err := subscribers.SubscribeToParticipantManagementEvents(ctx); err != nil {
-			panic(err)
-		}
-		if err := subscribers.SubscribeToRoundFinalizationEvents(ctx); err != nil {
-			panic(err)
-		}
-		if err := subscribers.SubscribeToRoundStartedEvents(ctx); err != nil {
-			panic(err)
-		}
+		logger.Info("Round module subscribers are ready")
 
-		module.initMutex.Lock()
-		module.initialized = true
-		module.initMutex.Unlock()
-
+		// Signal that initialization is complete
+		close(module.SubscribersReady)
 	}()
 
 	return module, nil
 }
 
-// IsInitialized safely checks module initialization
+// IsInitialized checks if the subscribers are ready.
 func (m *Module) IsInitialized() bool {
-	m.initMutex.Lock()
-	defer m.initMutex.Unlock()
-	return m.initialized
+	select {
+	case <-m.SubscribersReady:
+		return true
+	default:
+		return false
+	}
 }

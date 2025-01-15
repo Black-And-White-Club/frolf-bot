@@ -5,33 +5,37 @@ import (
 	"fmt"
 	"time"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	rounddto "github.com/Black-And-White-Club/tcr-bot/app/modules/round/dto"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories" // Importing the correct package
 	roundutil "github.com/Black-And-White-Club/tcr-bot/app/modules/round/utils"
 	"github.com/ThreeDotsLabs/watermill"
 )
 
-// CreateRound handles the RoundCreatedEvent.
-func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.RoundCreatedEvent, dto rounddto.CreateRoundParams) error {
+// CreateRound handles the RoundCreateRequest event.
+func (s *RoundService) CreateRound(ctx context.Context, input roundevents.RoundCreateRequestPayload) error {
 	// Generate a new UUID for the round
 	roundID := watermill.NewUUID()
 
-	// Validate DTO fields
-	if dto.Title == "" {
+	// Validate input fields
+	if input.Title == "" {
 		return fmt.Errorf("title cannot be empty")
 	}
-	if dto.DateTime.Date == "" || dto.DateTime.Time == "" {
+	if input.DateTime.Date == "" || input.DateTime.Time == "" {
 		return fmt.Errorf("date/time input cannot be empty")
 	}
 
-	// Parse the date/time input
-	startTime, err := roundutil.ParseDateTime(dto.DateTime.Date + " " + dto.DateTime.Time)
+	// Create a DateTimeParser instance
+	parser := roundutil.NewDateTimeParser()
+
+	// Parse the date/time input using the parser
+	startTime, err := parser.ParseDateTime(input.DateTime.Date + " " + input.DateTime.Time)
 	if err != nil {
 		// Publish an event indicating the parsing error
 		errMsg := "Invalid date/time format. Please try a different format."
-		err = s.publishEvent(ctx, roundevents.RoundCreatedFailedSubject, &roundevents.RoundCreatedFailedEvent{
-			Reason: errMsg,
+		err = s.publishEvent(ctx, roundevents.RoundCreateResponse, &roundevents.RoundCreateResponsePayload{
+			Success: false,
+			RoundID: "",
+			Error:   errMsg,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to publish round creation failed event: %w", err)
@@ -39,20 +43,20 @@ func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.Round
 		return fmt.Errorf("failed to parse date/time: %w", err)
 	}
 
-	// Convert DTO to Round model
+	// Convert input to Round model
 	round := &rounddb.Round{
 		ID:           roundID,
-		Title:        dto.Title,
-		Location:     dto.Location,
-		EventType:    dto.EventType,
+		Title:        input.Title,
+		Location:     input.Location,
+		EventType:    input.EventType,
 		Date:         startTime.Truncate(24 * time.Hour),
 		Time:         startTime,
 		State:        rounddb.RoundStateUpcoming,
-		Participants: make([]rounddb.Participant, 0), // Initialize an empty slice
+		Participants: make([]rounddb.Participant, 0),
 	}
 
-	// Convert Participants from DTO to database model
-	for _, p := range dto.Participants {
+	// Convert Participants from input to database model
+	for _, p := range input.Participants {
 		tagNumber := 0
 		if p.TagNumber != nil {
 			tagNumber = *p.TagNumber
@@ -70,10 +74,11 @@ func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.Round
 	}
 
 	// Publish RoundCreatedEvent with the generated RoundID
-	err = s.publishEvent(ctx, roundevents.RoundCreatedSubject, &roundevents.RoundCreatedEvent{
-		RoundID:   roundID,
-		Name:      dto.Title,
-		StartTime: startTime,
+	err = s.publishEvent(ctx, roundevents.RoundCreated, &roundevents.RoundCreatedPayload{
+		RoundID:      roundID,
+		Name:         input.Title,
+		StartTime:    startTime,
+		Participants: input.Participants,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to publish round created event: %w", err)
@@ -89,7 +94,7 @@ func (s *RoundService) CreateRound(ctx context.Context, event *roundevents.Round
 }
 
 // UpdateRound handles the RoundUpdatedEvent.
-func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.RoundUpdatedEvent) error {
+func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.RoundUpdatedPayload) error { // Using RoundUpdatedPayload
 	// 1. Fetch the round from the database
 	round, err := s.RoundDB.GetRound(ctx, event.RoundID)
 	if err != nil {
@@ -120,7 +125,7 @@ func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.Round
 	}
 
 	// 4. Publish a RoundUpdatedEvent with the updated values
-	updatedEvent := &roundevents.RoundUpdatedEvent{
+	updatedEvent := &roundevents.RoundUpdatedPayload{ // Using RoundUpdatedPayload
 		RoundID:   event.RoundID,
 		Title:     &round.Title,
 		Location:  &round.Location,
@@ -128,7 +133,7 @@ func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.Round
 		Date:      &round.Date,
 		Time:      &round.Time,
 	}
-	err = s.publishEvent(ctx, roundevents.RoundUpdatedSubject, updatedEvent)
+	err = s.publishEvent(ctx, roundevents.RoundUpdated, updatedEvent) // Publish RoundUpdated
 	if err != nil {
 		return fmt.Errorf("failed to publish round updated event: %w", err)
 	}
@@ -137,14 +142,14 @@ func (s *RoundService) UpdateRound(ctx context.Context, event *roundevents.Round
 }
 
 // DeleteRound handles the RoundDeletedEvent.
-func (s *RoundService) DeleteRound(ctx context.Context, event *roundevents.RoundDeletedEvent) error {
+func (s *RoundService) DeleteRound(ctx context.Context, event *roundevents.RoundDeletedPayload) error { // Using RoundDeletedPayload
 	err := s.RoundDB.DeleteRound(ctx, event.RoundID)
 	if err != nil {
 		return fmt.Errorf("failed to delete round: %w", err)
 	}
 
 	// Publish a RoundDeletedEvent
-	err = s.publishEvent(ctx, roundevents.RoundDeletedSubject, &roundevents.RoundDeletedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundDeleted, &roundevents.RoundDeletedPayload{ // Publish RoundDeleted
 		RoundID: event.RoundID,
 		State:   rounddb.RoundStateDeleted,
 	})
@@ -156,7 +161,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, event *roundevents.Round
 }
 
 // StartRound handles the RoundStartedEvent (triggered by the scheduler).
-func (s *RoundService) StartRound(ctx context.Context, event *roundevents.RoundStartedEvent) error {
+func (s *RoundService) StartRound(ctx context.Context, event *roundevents.RoundStartedPayload) error { // Using RoundStartedPayload
 	// 1. Fetch the round from the database
 	round, err := s.RoundDB.GetRound(ctx, event.RoundID)
 	if err != nil {
@@ -185,7 +190,7 @@ func (s *RoundService) StartRound(ctx context.Context, event *roundevents.RoundS
 	}
 
 	// 4. Publish a RoundStartedEvent with the participants
-	err = s.publishEvent(ctx, roundevents.RoundStartedSubject, &roundevents.RoundStartedEvent{
+	err = s.publishEvent(ctx, roundevents.RoundStarted, &roundevents.RoundStartedPayload{ // Publish RoundStarted
 		RoundID:      event.RoundID,
 		Participants: participants,
 	})

@@ -1,25 +1,26 @@
 package roundservice
 
 import (
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"context"
+
+	"log/slog"
+
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 )
 
 // RoundService handles round-related logic.
 type RoundService struct {
-	RoundDB    rounddb.RoundDB
-	Publisher  message.Publisher
-	Subscriber message.Subscriber
-	logger     watermill.LoggerAdapter
+	RoundDB  rounddb.RoundDB
+	eventBus shared.EventBus
+	logger   *slog.Logger
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(publisher message.Publisher, subscriber message.Subscriber, db rounddb.RoundDB, logger watermill.LoggerAdapter) Service {
+func NewRoundService(ctx context.Context, eventBus shared.EventBus, db rounddb.RoundDB, logger *slog.Logger) Service {
 	return &RoundService{
-		RoundDB:    db,
-		Publisher:  publisher,
-		Subscriber: subscriber,
-		logger:     logger,
+		RoundDB:  db,
+		eventBus: eventBus,
+		logger:   logger,
 	}
 }

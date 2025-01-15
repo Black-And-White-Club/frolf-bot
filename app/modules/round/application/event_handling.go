@@ -6,110 +6,120 @@ import (
 	"fmt"
 	"time"
 
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// getTagNumber retrieves the tag number for a participant from the leaderboard module.
-func (s *RoundService) getTagNumber(ctx context.Context, discordID string) (*int, error) {
-	// 1. Create a Watermill message with a correlation ID
-	correlationID := watermill.NewUUID()
-	msg := message.NewMessage(correlationID, nil)
+const defaultGetTagNumberTimeout = 5 * time.Second // Define a reasonable default timeout
 
-	// 2. Publish GetTagNumberRequest event
-	req := roundevents.GetTagNumberRequest{
+func (s *RoundService) getTagNumber(ctx context.Context, discordID string, timeout ...time.Duration) (*int, error) {
+	// Determine the effective timeout
+	effectiveTimeout := defaultGetTagNumberTimeout
+	if len(timeout) > 0 {
+		effectiveTimeout = timeout[0]
+	}
+
+	// Create a context with timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, effectiveTimeout)
+	defer cancel()
+
+	// 1. Publish the GetTagNumberRequest event
+	req := roundevents.GetTagNumberRequestPayload{
 		DiscordID: discordID,
 	}
+
 	reqData, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal GetTagNumberRequest: %w", err)
 	}
-	msg.Payload = reqData
 
-	if err := s.Publisher.Publish(roundevents.GetTagNumberRequestSubject, msg); err != nil {
+	msg := message.NewMessage(watermill.NewUUID(), reqData)
+
+	if err := s.eventBus.Publish(ctxWithTimeout, roundevents.GetTagNumberRequest, msg); err != nil {
 		return nil, fmt.Errorf("failed to publish GetTagNumberRequest: %w", err)
 	}
 
-	// 3. Create a subscriber for the response
-	messages, err := s.Subscriber.Subscribe(ctx, roundevents.GetTagNumberResponseSubject)
+	// 2. Subscribe to the GetTagNumberResponse
+	responseChan := make(chan roundevents.GetTagNumberResponsePayload, 1) // Buffered to prevent blocking
+	defer close(responseChan)
+
+	err = s.eventBus.Subscribe(ctxWithTimeout, roundevents.LeaderboardStreamName, roundevents.GetTagNumberResponse, func(ctx context.Context, msg *message.Message) error {
+		var resp roundevents.GetTagNumberResponsePayload
+		if err := json.Unmarshal(msg.Payload, &resp); err != nil {
+			return fmt.Errorf("failed to unmarshal GetTagNumberResponse: %w", err)
+		}
+		select {
+		case responseChan <- resp:
+		default: // Avoid blocking in case of a rare double-send
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to GetTagNumberResponse: %w", err)
 	}
 
-	// 4. Receive the response with the matching correlation ID (with timeout and nil check)
-	var respMsg *message.Message
+	// 3. Wait for the response or timeout
 	select {
-	case respMsg = <-messages:
-		if respMsg == nil {
-			return nil, fmt.Errorf("received nil message")
+	case resp := <-responseChan:
+		if resp.Error != "" {
+			return nil, fmt.Errorf("error from GetTagNumberResponse: %s", resp.Error)
 		}
-		if respMsg.UUID != correlationID {
-			respMsg.Nack()
-			return nil, fmt.Errorf("correlation id mismatch")
+		if resp.TagNumber == 0 {
+			return nil, nil // TagNumber is zero, return nil as per the expected behavior
 		}
-	case <-time.After(5 * time.Second):
+		return &resp.TagNumber, nil
+	case <-ctxWithTimeout.Done():
+		// Use the exact error message expected by the test
 		return nil, fmt.Errorf("timeout waiting for response")
 	}
-
-	// 5. Unmarshal the response
-	var resp roundevents.GetTagNumberResponseEvent
-	if err := json.Unmarshal(respMsg.Payload, &resp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal GetTagNumberResponse: %w", err)
-	}
-
-	if resp.TagNumber == 0 { // Check if the tag number is 0 (meaning no tag)
-		return nil, nil // No tag number found
-	}
-
-	return &resp.TagNumber, nil
 }
 
 // getUserRole retrieves the role of a user from the user module.
 func (s *RoundService) getUserRole(ctx context.Context, discordID string) (string, error) {
-	// 1. Create a Watermill message with a correlation ID
-	correlationID := watermill.NewUUID()
-	msg := message.NewMessage(correlationID, nil)
-
-	// 2. Publish GetUserRoleRequestEvent
-	req := roundevents.GetUserRoleRequestEvent{
+	// 1. Publish GetUserRoleRequest event
+	req := roundevents.GetUserRoleRequestPayload{
 		DiscordID: discordID,
 	}
+
+	// Create a Watermill message
+	msg := message.NewMessage(watermill.NewUUID(), nil)
+
+	// Marshal the request payload into the message
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal GetUserRoleRequestEvent: %w", err)
+		return "", fmt.Errorf("failed to marshal GetUserRoleRequest: %w", err)
 	}
 	msg.Payload = reqData
 
-	if err := s.Publisher.Publish(roundevents.GetUserRoleRequestSubject, msg); err != nil {
-		return "", fmt.Errorf("failed to publish GetUserRoleRequestEvent: %w", err)
+	if err := s.eventBus.Publish(ctx, roundevents.GetUserRoleRequest, msg); err != nil {
+		return "", fmt.Errorf("failed to publish GetUserRoleRequest: %w", err)
 	}
 
-	// 3. Create a subscriber for the response
-	subscriber, err := s.Subscriber.Subscribe(ctx, roundevents.GetUserRoleResponseSubject)
+	// 2. Subscribe to the response (using a separate subscriber)
+	responseChan := make(chan roundevents.GetUserRoleResponsePayload)
+	err = s.eventBus.Subscribe(ctx, roundevents.UserStreamName, roundevents.GetUserRoleResponse, func(ctx context.Context, msg *message.Message) error {
+		var resp roundevents.GetUserRoleResponsePayload
+		if err := json.Unmarshal(msg.Payload, &resp); err != nil {
+			return fmt.Errorf("failed to unmarshal GetUserRoleResponse: %w", err)
+		}
+		responseChan <- resp
+		return nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to subscribe to GetUserRoleResponseEvent: %w", err)
+		return "", fmt.Errorf("failed to subscribe to GetUserRoleResponse: %w", err)
 	}
 
-	// 4. Receive the response with the matching correlation ID (with timeout and nil check)
-	var respMsg *message.Message
+	// 3. Receive the response (with timeout)
+	var resp roundevents.GetUserRoleResponsePayload
 	select {
-	case respMsg = <-subscriber:
-		if respMsg == nil {
-			return "", fmt.Errorf("received nil message")
-		}
-		if respMsg.UUID != correlationID {
-			respMsg.Nack()
-			return "", fmt.Errorf("correlation id mismatch")
-		}
+	case resp = <-responseChan:
 	case <-time.After(5 * time.Second):
 		return "", fmt.Errorf("timeout waiting for response")
 	}
 
-	// 5. Unmarshal the response
-	var resp roundevents.GetUserRoleResponseEvent
-	if err := json.Unmarshal(respMsg.Payload, &resp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal GetUserRoleResponseEvent: %w", err)
+	if resp.Error != "" {
+		return "", fmt.Errorf("error getting user role: %s", resp.Error)
 	}
 
 	return resp.Role, nil
@@ -120,7 +130,7 @@ func (s *RoundService) scheduleRoundEvents(ctx context.Context, roundID string, 
 	thirtyMinsBefore := startTime.Add(-30 * time.Minute)
 
 	// Schedule one-hour reminder
-	err := s.scheduleEvent(ctx, roundevents.RoundReminderSubject, &roundevents.RoundReminderEvent{
+	err := s.scheduleEvent(ctx, roundevents.RoundReminder, &roundevents.RoundReminderPayload{
 		RoundID:      roundID,
 		ReminderType: "one_hour",
 	}, oneHourBefore)
@@ -129,7 +139,7 @@ func (s *RoundService) scheduleRoundEvents(ctx context.Context, roundID string, 
 	}
 
 	// Schedule 30-minute reminder
-	err = s.scheduleEvent(ctx, roundevents.RoundReminderSubject, &roundevents.RoundReminderEvent{
+	err = s.scheduleEvent(ctx, roundevents.RoundReminder, &roundevents.RoundReminderPayload{
 		RoundID:      roundID,
 		ReminderType: "thirty_minutes",
 	}, thirtyMinsBefore)
@@ -138,7 +148,7 @@ func (s *RoundService) scheduleRoundEvents(ctx context.Context, roundID string, 
 	}
 
 	// Schedule round start
-	err = s.scheduleEvent(ctx, roundevents.RoundStartedSubject, &roundevents.RoundStartedEvent{
+	err = s.scheduleEvent(ctx, roundevents.RoundStarted, &roundevents.RoundStartedPayload{
 		RoundID: roundID,
 	}, startTime)
 	if err != nil {
@@ -148,7 +158,7 @@ func (s *RoundService) scheduleRoundEvents(ctx context.Context, roundID string, 
 	return nil
 }
 
-func (s *RoundService) scheduleEvent(_ context.Context, subject string, event any, deliveryTime time.Time) error {
+func (s *RoundService) scheduleEvent(ctx context.Context, subject string, event any, deliveryTime time.Time) error {
 	// 1. Marshal the event data
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -159,22 +169,20 @@ func (s *RoundService) scheduleEvent(_ context.Context, subject string, event an
 	msg := message.NewMessage(watermill.NewUUID(), data)
 	msg.Metadata.Set("Nats-Delivery-Time", deliveryTime.UTC().Format(time.RFC3339))
 
-	// 3. Publish the message to JetStream
-	if err := s.Publisher.Publish(subject, msg); err != nil {
-		return fmt.Errorf("failed to publish scheduled event: %w", err)
-	}
-
-	return nil
+	// 3. Publish the message
+	return s.eventBus.Publish(ctx, subject, msg) // Directly return the error from Publish
 }
 
 // publishEvent publishes an event to the given subject.
-func (s *RoundService) publishEvent(_ context.Context, subject string, event any) error {
+func (s *RoundService) publishEvent(ctx context.Context, subject string, event any) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	if err := s.Publisher.Publish(subject, message.NewMessage(watermill.NewUUID(), data)); err != nil {
+	msg := message.NewMessage(watermill.NewUUID(), data)
+
+	if err := s.eventBus.Publish(ctx, subject, msg); err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}
 

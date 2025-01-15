@@ -1,15 +1,18 @@
 package roundhandlers
 
 import (
+	"context"
+
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// RoundHandlers handles round-related events.
+// Handlers handles round-related events.
 type Handlers interface {
-	HandleCreateRound(msg *message.Message) error
-	HandleUpdateRound(msg *message.Message) error
-	HandleDeleteRound(msg *message.Message) error
-	HandleParticipantResponse(msg *message.Message) error
-	HandleScoreUpdated(msg *message.Message) error
-	HandleFinalizeRound(msg *message.Message) error
+	HandleCreateRound(ctx context.Context, msg *message.Message) error
+	HandleUpdateRound(ctx context.Context, msg *message.Message) error
+	HandleDeleteRound(ctx context.Context, msg *message.Message) error
+	HandleParticipantResponse(ctx context.Context, msg *message.Message) error
+	HandleScoreUpdated(ctx context.Context, msg *message.Message) error
+	HandleFinalizeRound(ctx context.Context, msg *message.Message) error
+	HandleStartRound(ctx context.Context, msg *message.Message) error
 }

@@ -1,4 +1,4 @@
-// app/modules/round/db/models.go
+// models.go
 package rounddb
 
 import (

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill"
@@ -232,6 +233,27 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
 				leaderboardevents.GetTagByDiscordIDRequestSubject,
 				leaderboardevents.CheckTagAvailabilityRequestSubject,
 				leaderboardevents.CheckTagAvailabilityResponseSubject,
+			}
+		} else if streamName == roundevents.RoundStreamName {
+			subjects = []string{
+				roundevents.RoundCreateRequest,
+				roundevents.RoundCreated,
+				roundevents.RoundUpdateRequest,
+				roundevents.RoundUpdated,
+				roundevents.RoundDeleteRequest,
+				roundevents.RoundDeleted,
+				roundevents.ParticipantResponse,
+				roundevents.ScoreUpdated,
+				roundevents.RoundFinalized,
+				roundevents.GetUserRoleRequest,
+				roundevents.GetUserRoleResponse,
+				roundevents.RoundReminder,
+				roundevents.RoundStateUpdated,
+				roundevents.RoundStarted,
+				roundevents.GetTagNumberRequest,
+				roundevents.GetTagNumberResponse,
+				roundevents.ParticipantJoined,
+				roundevents.ProcessRoundScoresRequest,
 			}
 		} else {
 			return fmt.Errorf("unknown stream name: %s", streamName)

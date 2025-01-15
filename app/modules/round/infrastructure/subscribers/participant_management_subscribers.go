@@ -4,50 +4,23 @@ import (
 	"context"
 	"fmt"
 
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/events"
+	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // SubscribeToParticipantManagementEvents subscribes to participant management events.
-func (s *RoundSubscribers) SubscribeToParticipantManagementEvents(ctx context.Context) error {
-	messages, err := s.Subscriber.Subscribe(ctx, roundevents.ParticipantResponseSubject)
-	if err != nil {
+func (s *RoundEventSubscribers) SubscribeToParticipantManagementEvents(ctx context.Context) error {
+	if err := s.eventBus.Subscribe(ctx, roundevents.RoundStreamName, roundevents.ParticipantResponse, func(ctx context.Context, msg *message.Message) error {
+		return s.handlers.HandleParticipantResponse(ctx, msg) // Pass context to the handler
+	}); err != nil {
 		return fmt.Errorf("failed to subscribe to ParticipantResponseEvent events: %w", err)
 	}
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg := <-messages:
-				if err := s.Handlers.HandleParticipantResponse(msg); err != nil {
-					msg.Nack()
-				} else {
-					msg.Ack()
-				}
-			}
-		}
-	}()
-
-	scoreMessages, err := s.Subscriber.Subscribe(ctx, roundevents.ScoreUpdatedSubject)
-	if err != nil {
+	if err := s.eventBus.Subscribe(ctx, roundevents.RoundStreamName, roundevents.ScoreUpdated, func(ctx context.Context, msg *message.Message) error {
+		return s.handlers.HandleScoreUpdated(ctx, msg) // Pass context to the handler
+	}); err != nil {
 		return fmt.Errorf("failed to subscribe to ScoreUpdatedEvent events: %w", err)
 	}
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg := <-scoreMessages:
-				if err := s.Handlers.HandleScoreUpdated(msg); err != nil {
-					msg.Nack()
-				} else {
-					msg.Ack()
-				}
-			}
-		}
-	}()
 
 	return nil
 }

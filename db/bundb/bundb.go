@@ -8,6 +8,7 @@ import (
 	"log"
 
 	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/uptrace/bun"
@@ -17,8 +18,8 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB *userdb.UserDBImpl
-	// RoundDB       *rounddb.RoundDBImpl
+	UserDB  *userdb.UserDBImpl
+	RoundDB *rounddb.RoundDBImpl
 	// ScoreDB       *scoredb.ScoreDBImpl
 	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
 	db            *bun.DB
@@ -46,8 +47,8 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	}
 
 	dbService := &DBService{
-		UserDB: &userdb.UserDBImpl{DB: db},
-		// RoundDB:       &rounddb.RoundDBImpl{DB: db},
+		UserDB:  &userdb.UserDBImpl{DB: db},
+		RoundDB: &rounddb.RoundDBImpl{DB: db},
 		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
 		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
 		db:            db,
@@ -58,7 +59,7 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	log.Println("NewBunDBService - Registering models")
 	// Use the correct model types from their respective modules
 	db.RegisterModel(&userdb.User{})
-	// db.RegisterModel(&rounddb.Round{})
+	db.RegisterModel(&rounddb.Round{})
 	// db.RegisterModel(&scoredb.Score{})
 	db.RegisterModel(&leaderboarddb.Leaderboard{})
 	log.Println("NewBunDBService - Models registered successfully")

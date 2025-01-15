@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/db"
+	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
