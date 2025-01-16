@@ -2,115 +2,64 @@ package scoresubscribers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log/slog"
 
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/events"
-	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/handlers"
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/service"
-	"github.com/ThreeDotsLabs/watermill"
+	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
+	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/handlers"
+	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// ScoreSubscribers subscribes to round-related events.
+// ScoreSubscribers subscribes to score-related events.
 type ScoreSubscribers struct {
-	Subscriber message.Subscriber
-	logger     watermill.LoggerAdapter
-	Handlers   scorehandlers.Handlers
-	Service    scoreservice.Service
+	eventBus shared.EventBus
+	handlers scorehandlers.Handlers
+	logger   *slog.Logger
 }
 
 // NewScoreSubscribers creates a new ScoreSubscribers instance.
-func NewScoreSubscribers(subscriber message.Subscriber, logger watermill.LoggerAdapter, handlers scorehandlers.Handlers, service scoreservice.Service) *ScoreSubscribers {
+func NewSubscribers(eventBus shared.EventBus, handlers scorehandlers.Handlers, logger *slog.Logger) Subscribers {
 	return &ScoreSubscribers{
-		Subscriber: subscriber,
-		logger:     logger,
-		Handlers:   handlers,
-		Service:    service,
+		eventBus: eventBus,
+		handlers: handlers,
+		logger:   logger,
 	}
 }
 
-// SubscribeToScoreEvents subscribes to score-related events and routes them to handlers.
+// SubscribeToScoreEvents subscribes to score-related events using the EventBus.
 func (s *ScoreSubscribers) SubscribeToScoreEvents(ctx context.Context) error {
-	eventSubscriptions := []struct {
-		subject string
-		handler func(context.Context, *message.Message) error
-	}{
-		{
-			subject: scoreevents.ScoresReceivedEventSubject,
-			handler: s.handleScoresReceived,
-		},
-		{
-			subject: scoreevents.ScoreCorrectedEventSubject,
-			handler: s.Handlers.HandleScoreCorrected,
-		},
+	s.logger.Debug("Subscribing to ScoresReceivedEvent")
+	if err := s.eventBus.Subscribe(ctx, scoreevents.ScoreStreamName, scoreevents.ScoresReceivedEventSubject, func(ctx context.Context, msg *message.Message) error {
+		s.logger.Info("ScoresReceivedEvent handler invoked")
+		s.logger.Debug("Message received", slog.Any("msg", msg))
+
+		if err := s.handlers.HandleScoresReceived(ctx, msg); err != nil {
+			s.logger.Error("Failed to handle ScoresReceivedEvent", "error", err) // Log the error
+		}
+		return nil // Do not return the error
+	}); err != nil {
+		return fmt.Errorf("failed to subscribe to ScoresReceivedEvent: %w", err)
 	}
 
-	for _, event := range eventSubscriptions {
-		s.logger.Info("Subscribing to events", watermill.LogFields{"subject": event.subject})
-		msgs, err := s.Subscriber.Subscribe(ctx, event.subject)
-		if err != nil {
-			s.logger.Error("Failed to subscribe to events", err, watermill.LogFields{"subject": event.subject})
-			return fmt.Errorf("failed to subscribe to %s events: %w", event.subject, err)
+	s.logger.Debug("Subscribing to ScoreCorrectedEvent")
+	if err := s.eventBus.Subscribe(ctx, scoreevents.ScoreStreamName, scoreevents.ScoreCorrectedEventSubject, func(ctx context.Context, msg *message.Message) error {
+		if err := s.handlers.HandleScoreCorrected(ctx, msg); err != nil {
+			s.logger.Error("Failed to handle ScoreCorrectedEvent", "error", err) // Log the error
 		}
-		s.logger.Info("Successfully subscribed to events", watermill.LogFields{"subject": event.subject})
+		return nil // Do not return the error
+	}); err != nil {
+		return fmt.Errorf("failed to subscribe to ScoreCorrectedEvent: %w", err)
+	}
 
-		go processEventMessages(ctx, msgs, event.handler, s.logger)
+	s.logger.Debug("Subscribing to ProcessedScoresEvent")
+	if err := s.eventBus.Subscribe(ctx, scoreevents.ScoreStreamName, scoreevents.ProcessedScoresEventSubject, func(ctx context.Context, msg *message.Message) error {
+		s.logger.Info("Received ProcessedScoresEvent", slog.String("payload", string(msg.Payload)))
+		msg.Ack()
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to subscribe to ProcessedScoresEvent: %w", err)
 	}
 
 	return nil
-}
-
-func (s *ScoreSubscribers) handleScoresReceived(ctx context.Context, msg *message.Message) error {
-	var event scoreevents.ScoresReceivedEvent
-	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		return fmt.Errorf("failed to unmarshal ScoresReceivedEvent: %w", err)
-	}
-
-	if err := s.Service.ProcessRoundScores(ctx, event); err != nil {
-		return fmt.Errorf("failed to process round scores: %w", err)
-	}
-
-	return nil
-}
-
-func processEventMessages(
-	ctx context.Context,
-	messages <-chan *message.Message,
-	handler func(context.Context, *message.Message) error,
-	logger watermill.LoggerAdapter,
-) {
-	logger.Info("Starting message processing", nil)
-	defer logger.Info("Exiting message processing", nil)
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Context cancelled, exiting message processing", nil)
-			return
-		case msg, ok := <-messages:
-			if !ok {
-				logger.Info("Messages channel closed, exiting message processing", nil)
-				return
-			}
-
-			logger.Info("Received event", watermill.LogFields{
-				"message_id": msg.UUID,
-				"payload":    string(msg.Payload),
-			})
-
-			if err := handler(ctx, msg); err != nil {
-				logger.Error("Error handling event", err, watermill.LogFields{
-					"message_id": msg.UUID,
-				})
-				msg.Nack()
-				continue
-			}
-
-			logger.Info("Event handled successfully", watermill.LogFields{
-				"message_id": msg.UUID,
-			})
-			msg.Ack()
-		}
-	}
 }

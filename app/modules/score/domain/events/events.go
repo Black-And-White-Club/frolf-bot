@@ -1,5 +1,21 @@
 package scoreevents
 
+// Stream names
+const (
+	ScoreStreamName       = "score"
+	RoundStreamName       = "round"
+	UserStreamName        = "user"
+	LeaderboardStreamName = "leaderboard"
+)
+
+// Score-related events
+const (
+	ScoresReceivedEventSubject    = "score.received"
+	ScoreCorrectedEventSubject    = "score.corrected"
+	ProcessedScoresEventSubject   = "score.processed"
+	LeaderboardUpdateEventSubject = "leaderboard.update"
+)
+
 // ScoresReceivedEvent represents the event when scores are received from the round module.
 type ScoresReceivedEvent struct {
 	RoundID string  `json:"round_id"`
@@ -25,12 +41,14 @@ type ScoreCorrectedEvent struct {
 	DiscordID string `json:"discord_id"`
 	NewScore  int    `json:"new_score"`
 	TagNumber string `json:"tag_number"`
+	Error     string `json:"error,omitempty"` // Add Error field
+	Success   bool   `json:"success"`         // Add Success field
 }
 
-const (
-	ScoresReceivedEventSubject    = "score.received"
-	LeaderboardUpdateEventSubject = "leaderboard.update"
-	ScoreCorrectedEventSubject    = "score.corrected"
-	ProcessedScoresEventSubject   = "score.processed"
-	ScoreStream                   = "score"
-)
+// ProcessedScoresEvent represents an event indicating that scores have been processed.
+type ProcessedScoresEvent struct {
+	RoundID string  `json:"round_id"`
+	Scores  []Score `json:"scores"`
+	Error   string  `json:"error,omitempty"` // Add Error field
+	Success bool    `json:"success"`         // Add Success field
+}

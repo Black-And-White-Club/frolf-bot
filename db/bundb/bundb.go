@@ -9,6 +9,7 @@ import (
 
 	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
+	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/uptrace/bun"
@@ -18,9 +19,9 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB  *userdb.UserDBImpl
-	RoundDB *rounddb.RoundDBImpl
-	// ScoreDB       *scoredb.ScoreDBImpl
+	UserDB        *userdb.UserDBImpl
+	RoundDB       *rounddb.RoundDBImpl
+	ScoreDB       *scoredb.ScoreDBImpl
 	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
 	db            *bun.DB
 }
@@ -60,7 +61,7 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	// Use the correct model types from their respective modules
 	db.RegisterModel(&userdb.User{})
 	db.RegisterModel(&rounddb.Round{})
-	// db.RegisterModel(&scoredb.Score{})
+	db.RegisterModel(&scoredb.Score{})
 	db.RegisterModel(&leaderboarddb.Leaderboard{})
 	log.Println("NewBunDBService - Models registered successfully")
 

@@ -16,6 +16,8 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
+	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
@@ -33,6 +35,7 @@ type App struct {
 	UserModule        *user.Module
 	LeaderboardModule *leaderboard.Module
 	RoundModule       *round.Module
+	ScoreModule       *score.Module
 	DB                *bundb.DBService
 	EventBus          shared.EventBus
 }
@@ -86,6 +89,9 @@ func (app *App) Initialize(ctx context.Context) error {
 	if err := app.EventBus.CreateStream(context.Background(), roundevents.RoundStreamName); err != nil {
 		return fmt.Errorf("failed to create round stream: %w", err)
 	}
+	if err := app.EventBus.CreateStream(context.Background(), scoreevents.ScoreStreamName); err != nil {
+		return fmt.Errorf("failed to create score stream: %w", err)
+	}
 
 	// Initialize User Module
 	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB.UserDB, app.EventBus)
@@ -108,10 +114,18 @@ func (app *App) Initialize(ctx context.Context) error {
 	}
 	app.RoundModule = roundModule
 
+	// Initialize Score Module
+	scoreModule, err := score.NewScoreModule(ctx, cfg, app.Logger, app.DB.ScoreDB, app.EventBus)
+	if err != nil {
+		return fmt.Errorf("failed to initialize score module: %w", err)
+	}
+	app.ScoreModule = scoreModule
+
 	// Wait for subscribers to be ready
 	<-userModule.SubscribersReady
 	<-leaderboardModule.SubscribersReady
 	<-roundModule.SubscribersReady
+	<-scoreModule.SubscribersReady
 
 	// Add a delay here
 	time.Sleep(100 * time.Millisecond)

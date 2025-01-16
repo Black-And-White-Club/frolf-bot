@@ -12,6 +12,7 @@ const (
 	RoundStreamName       = "round"
 	UserStreamName        = "user"
 	LeaderboardStreamName = "leaderboard"
+	ScoreStreamName       = "score"
 )
 
 // Round-related events

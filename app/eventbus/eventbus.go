@@ -9,6 +9,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
 	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
+	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/ThreeDotsLabs/watermill"
@@ -254,6 +255,13 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
 				roundevents.GetTagNumberResponse,
 				roundevents.ParticipantJoined,
 				roundevents.ProcessRoundScoresRequest,
+			}
+		} else if streamName == scoreevents.ScoreStreamName { // Add score stream subjects
+			subjects = []string{
+				scoreevents.ScoresReceivedEventSubject,
+				scoreevents.ScoreCorrectedEventSubject,
+				scoreevents.ProcessedScoresEventSubject,
+				scoreevents.LeaderboardUpdateEventSubject,
 			}
 		} else {
 			return fmt.Errorf("unknown stream name: %s", streamName)
