@@ -68,17 +68,3 @@ func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, event any) *gomock.Ca
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, event)
 }
-
-// Start mocks base method.
-func (m *MockService) Start(ctx context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockServiceMockRecorder) Start(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockService)(nil).Start), ctx)
-}

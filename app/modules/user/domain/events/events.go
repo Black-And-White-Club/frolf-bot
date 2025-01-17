@@ -22,6 +22,7 @@ const (
 	GetUserRoleResponse    = "user.get.role.response"
 	GetUserRequest         = "user.get.request"
 	GetUserResponse        = "user.get.response"
+	UserSignupFailed       = "user.signup.failed" // New error event
 )
 
 // Leaderboard-related events (used by user module, published to the leaderboard stream)
@@ -102,4 +103,9 @@ type CheckTagAvailabilityResponsePayload struct {
 type TagAssignedResponsePayload struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
+}
+
+// UserSignupFailedPayload is published when user signup fails.
+type UserSignupFailedPayload struct {
+	Reason string `json:"reason"`
 }
