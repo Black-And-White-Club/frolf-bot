@@ -1,111 +1,134 @@
-package events
+package userevents
 
 import (
+	"time"
+
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 )
 
 // Stream names
 const (
-	UserStreamName        = "user"
-	LeaderboardStreamName = "leaderboard"
+	UserStreamName                         = "user"
+	LeaderboardTagAvailabilityCheckRequest = "leaderboard.tag.availability.check.request"
 )
 
-// User-related events (published to the user stream)
+// Event names
 const (
-	UserSignupRequest      = "user.signup.request"
-	UserSignupResponse     = "user.signup.response"
-	UserCreated            = "user.created"
-	UserRoleUpdateRequest  = "user.role.update.request"
-	UserRoleUpdateResponse = "user.role.update.response"
-	UserRoleUpdated        = "user.role.updated"
-	GetUserRoleRequest     = "user.get.role.request"
-	GetUserRoleResponse    = "user.get.role.response"
-	GetUserRequest         = "user.get.request"
-	GetUserResponse        = "user.get.response"
-	UserSignupFailed       = "user.signup.failed" // New error event
+	UserSignupRequest            = "user.signup.request"
+	UserSignupFailed             = "user.signup.failed"
+	UserCreated                  = "user.created"
+	UserCreationFailed           = "user.creation.failed"
+	UserRoleUpdateRequest        = "user.role.update.request"
+	UpdateUserRoleRequested      = "user.role.update.requested"
+	UserRoleUpdated              = "user.role.updated"
+	UserRoleUpdateFailed         = "user.role.update.failed"
+	GetUserRoleRequest           = "user.get.role.request"
+	GetUserRoleResponse          = "user.get.role.response"
+	GetUserRoleFailed            = "user.get.role.failed"
+	GetUserRequest               = "user.get.request"
+	GetUserResponse              = "user.get.response"
+	GetUserFailed                = "user.get.failed"
+	UserPermissionsCheckRequest  = "user.permissions.check.request"
+	UserPermissionsCheckResponse = "user.permissions.check.response"
+	UserPermissionsCheckFailed   = "user.permissions.check.failed"
 )
 
-// Leaderboard-related events (used by user module, published to the leaderboard stream)
-const (
-	CheckTagAvailabilityRequest  = "leaderboard.check.tag.availability.request"
-	CheckTagAvailabilityResponse = "leaderboard.check.tag.availability.response"
-	TagAssignedRequest           = "leaderboard.tag.assigned.request"
-	TagAssignedResponse          = "leaderboard.tag.assigned.response"
-)
+// BaseEventPayload is a struct that can be embedded in other event structs to provide common fields.
+type BaseEventPayload struct {
+	EventID   string    `json:"event_id"`
+	Timestamp time.Time `json:"timestamp"`
+}
 
-// User Events Payloads
+// Payload types
+
 type UserSignupRequestPayload struct {
 	DiscordID usertypes.DiscordID `json:"discord_id"`
 	TagNumber int                 `json:"tag_number,omitempty"`
 }
 
-type UserSignupResponsePayload struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+type UserSignupFailedPayload struct {
+	Reason string `json:"reason"`
 }
 
 type UserCreatedPayload struct {
-	DiscordID usertypes.DiscordID    `json:"discord_id"`
-	TagNumber int                    `json:"tag_number,omitempty"`
-	Role      usertypes.UserRoleEnum `json:"role"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	TagNumber *int                `json:"tag_number,omitempty"`
+}
+
+type UserCreationFailedPayload struct {
+	Reason string `json:"reason"`
 }
 
 type UserRoleUpdateRequestPayload struct {
-	DiscordID usertypes.DiscordID    `json:"discord_id"`
-	NewRole   usertypes.UserRoleEnum `json:"new_role"`
+	DiscordID   usertypes.DiscordID `json:"discord_id"`
+	Role        string              `json:"role"`
+	RequesterID string              `json:"requester_id"`
 }
 
-type UserRoleUpdateResponsePayload struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+type UpdateUserRoleRequestedPayload struct {
+	DiscordID   usertypes.DiscordID `json:"discord_id"`
+	Role        string              `json:"role"`
+	RequesterID string              `json:"requester_id"`
 }
 
 type UserRoleUpdatedPayload struct {
-	DiscordID usertypes.DiscordID `json:"discord_id"`
-	NewRole   string              `json:"new_role"`
+	DiscordID string `json:"discord_id"`
+	Role      string `json:"role"`
+}
+
+type UserRoleUpdateFailedPayload struct {
+	DiscordID string `json:"discord_id"`
+	Role      string `json:"role"`
+	Reason    string `json:"reason"`
 }
 
 type GetUserRoleRequestPayload struct {
-	DiscordID usertypes.DiscordID `json:"discord_id"`
+	DiscordID string `json:"discord_id"`
 }
 
 type GetUserRoleResponsePayload struct {
-	DiscordID usertypes.DiscordID    `json:"discord_id"`
-	Role      usertypes.UserRoleEnum `json:"role"`
-	Error     string                 `json:"error,omitempty"`
+	DiscordID string `json:"discord_id"`
+	Role      string `json:"role"`
+}
+
+type GetUserRoleFailedPayload struct {
+	DiscordID string `json:"discord_id"`
+	Reason    string `json:"reason"`
 }
 
 type GetUserRequestPayload struct {
-	DiscordID usertypes.DiscordID `json:"discord_id"`
+	DiscordID string `json:"discord_id"`
 }
 
 type GetUserResponsePayload struct {
-	User  usertypes.User `json:"user"`
-	Error string         `json:"error,omitempty"`
+	User *usertypes.UserData `json:"user"`
 }
 
-// Leaderboard Request Payloads (initiated by the user module)
+type GetUserFailedPayload struct {
+	DiscordID string `json:"discord_id"`
+	Reason    string `json:"reason"`
+}
+
+type UserPermissionsCheckRequestPayload struct {
+	DiscordID   usertypes.DiscordID `json:"discord_id"`
+	Role        string              `json:"role"`
+	RequesterID string              `json:"requester_id"`
+}
+
+type UserPermissionsCheckResponsePayload struct {
+	HasPermission bool   `json:"has_permission"`
+	DiscordID     string `json:"discord_id"`
+	Role          string `json:"role"`
+	RequesterID   string `json:"requester_id"`
+}
+
+type UserPermissionsCheckFailedPayload struct {
+	Reason      string              `json:"reason"`
+	DiscordID   usertypes.DiscordID `json:"discord_id"`
+	Role        string              `json:"role"`
+	RequesterID string              `json:"requester_id"`
+}
+
 type CheckTagAvailabilityRequestPayload struct {
 	TagNumber int `json:"tag_number"`
-}
-
-type TagAssignedRequestPayload struct {
-	DiscordID usertypes.DiscordID `json:"discord_id"`
-	TagNumber int                 `json:"tag_number"`
-}
-
-// Leaderboard Response Payloads (received by the user module from the leaderboard module)
-type CheckTagAvailabilityResponsePayload struct {
-	IsAvailable bool   `json:"is_available"`
-	Error       string `json:"error,omitempty"`
-}
-
-type TagAssignedResponsePayload struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
-}
-
-// UserSignupFailedPayload is published when user signup fails.
-type UserSignupFailedPayload struct {
-	Reason string `json:"reason"`
 }

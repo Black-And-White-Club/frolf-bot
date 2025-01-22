@@ -29,15 +29,25 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user usertypes.User) error
 
 // GetUserByDiscordID retrieves a user by Discord ID.
 func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (usertypes.User, error) {
-	var user User
+	var dbUser User // Use the database model to retrieve data
+
 	err := db.DB.NewSelect().
-		Model(&user).
+		Model(&dbUser).
 		Where("discord_id = ?", discordID).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	return &user, nil
+
+	// Convert *userdb.User to usertypes.User (UserData)
+	user := usertypes.UserData{
+		ID:        dbUser.ID,
+		Name:      dbUser.Name,
+		DiscordID: dbUser.DiscordID,
+		Role:      dbUser.Role,
+	}
+
+	return user, nil
 }
 
 // GetUserRole retrieves the role of a user by their Discord ID.

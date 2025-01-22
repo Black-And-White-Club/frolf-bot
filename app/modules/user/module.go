@@ -2,65 +2,56 @@ package user
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
-	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/handlers"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
-	usersubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/subscribers"
-	userinterfaces "github.com/Black-And-White-Club/tcr-bot/app/modules/user/interfaces"
+	userrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/router"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Module represents the user module.
 type Module struct {
 	EventBus         shared.EventBus
 	UserService      userservice.Service
-	Handlers         userinterfaces.Handlers
-	Subscribers      usersubscribers.UserEventSubscriber
 	logger           *slog.Logger
 	config           *config.Config
-	SubscribersReady chan struct{} // Add a channel to signal readiness
+	UserRouter       *userrouter.UserRouter // Use the UserRouter
+	SubscribersReady chan struct{}
 }
 
 // NewUserModule initializes the user module.
-func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus shared.EventBus) (*Module, error) {
-	logger.Info("user.NewUserModule called") // Log function call
+func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+	logger.Info("user.NewUserModule called")
 
 	// Initialize user service.
-	userService := userservice.NewUserService(userDB, eventBus, logger)
+	userService, err := userservice.NewUserService(userDB, eventBus, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user service: %w", err)
+	}
 
-	// Initialize user handlers.
-	userHandlers := userhandlers.NewHandlers(userService, eventBus, logger)
+	// Initialize user router.
+	userRouter := userrouter.NewUserRouter(logger)
 
-	// Initialize user subscribers.
-	userSubscribers := usersubscribers.NewSubscribers(eventBus, userHandlers, logger)
+	// Configure the router
+	if err := userRouter.Configure(router, userService); err != nil {
+		return nil, fmt.Errorf("failed to configure user router: %w", err)
+	}
 
 	module := &Module{
 		EventBus:         eventBus,
 		UserService:      userService,
-		Handlers:         userHandlers,
-		Subscribers:      userSubscribers,
 		logger:           logger,
 		config:           cfg,
+		UserRouter:       userRouter,
 		SubscribersReady: make(chan struct{}),
 	}
 
-	// Start the subscription process in a separate goroutine.
-	go func() {
-		subscriberCtx := context.Background()
-
-		if err := module.Subscribers.SubscribeToUserEvents(subscriberCtx, eventBus, userHandlers, logger); err != nil {
-			logger.Error("Failed to subscribe to user events", slog.Any("error", err))
-			return
-		}
-
-		logger.Info("User module subscribers are ready")
-
-		// Signal that initialization is complete
-		close(module.SubscribersReady)
-	}()
+	// Signal that initialization is complete
+	close(module.SubscribersReady)
 
 	return module, nil
 }

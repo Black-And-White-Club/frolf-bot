@@ -2,83 +2,171 @@ package userservice
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
-	"log/slog"
-
-	eventbusmock "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
+	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
 )
 
-func TestUserServiceImpl_createUser(t *testing.T) {
+func TestUserServiceImpl_CreateUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserDB := mocks.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-	logger := slog.Default()
+	mockUserDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	testDiscordID := usertypes.DiscordID("12345")
+	testTag := 123
+	testCorrelationID := watermill.NewUUID()
+	testCtx := context.Background() // No need to set correlation ID here
 
 	type fields struct {
-		UserDB   *mocks.MockUserDB
-		eventBus *eventbusmock.MockEventBus
+		UserDB   *userdb.MockUserDB
+		eventBus *eventbusmocks.MockEventBus
 		logger   *slog.Logger
 	}
 	type args struct {
 		ctx       context.Context
+		msg       *message.Message // Include msg in args
 		discordID usertypes.DiscordID
-		role      usertypes.UserRoleEnum
+		tag       *int
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
 		wantErr bool
+		setup   func(f fields, args args)
 	}{
 		{
-			name: "Success",
+			name: "Successful User Creation",
 			fields: fields{
 				UserDB:   mockUserDB,
 				eventBus: mockEventBus,
 				logger:   logger,
 			},
 			args: args{
-				ctx:       context.Background(),
-				discordID: usertypes.DiscordID("12345"),
-				role:      usertypes.UserRoleRattler,
+				ctx:       testCtx,
+				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				discordID: testDiscordID,
+				tag:       &testTag,
 			},
 			wantErr: false,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
+				f.UserDB.EXPECT().
+					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					Return(nil).
+					Times(1)
+
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreated, gomock.Any()).
+					DoAndReturn(func(ctx context.Context, topic string, msg *message.Message) error {
+						if topic != userevents.UserCreated {
+							t.Errorf("Expected topic %s, got %s", userevents.UserCreated, topic)
+						}
+
+						var payload userevents.UserCreatedPayload
+						err := json.Unmarshal(msg.Payload, &payload)
+						if err != nil {
+							t.Fatalf("failed to unmarshal message payload: %v", err)
+						}
+
+						if payload.DiscordID != testDiscordID {
+							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
+						}
+
+						if payload.TagNumber == nil || *payload.TagNumber != testTag {
+							t.Errorf("Expected tag number %d, got %v", testTag, payload.TagNumber)
+						}
+
+						// Check correlation ID
+						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+						if correlationID != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
+						}
+
+						return nil
+					}).
+					Times(1)
+			},
 		},
 		{
-			name: "Error - CreateUser Fails",
+			name: "Database Error",
 			fields: fields{
 				UserDB:   mockUserDB,
 				eventBus: mockEventBus,
 				logger:   logger,
 			},
 			args: args{
-				ctx:       context.Background(),
-				discordID: usertypes.DiscordID("12345"),
-				role:      usertypes.UserRoleRattler,
+				ctx:       testCtx,
+				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				discordID: testDiscordID,
+				tag:       &testTag,
 			},
-			wantErr: true,
+			wantErr: false,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+				f.UserDB.EXPECT().
+					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					Return(errors.New("database error")).
+					Times(1)
+
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreationFailed, gomock.Any()).
+					DoAndReturn(func(ctx context.Context, topic string, msg *message.Message) error {
+						if topic != userevents.UserCreationFailed {
+							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						}
+
+						// Check correlation ID
+						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+						if correlationID != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
+						}
+
+						return nil
+					}).
+					Times(1)
+			},
 		},
 		{
-			name: "Error - Publish UserCreated Fails",
+			name: "UserCreated Event Publish Error",
 			fields: fields{
 				UserDB:   mockUserDB,
 				eventBus: mockEventBus,
 				logger:   logger,
 			},
 			args: args{
-				ctx:       context.Background(),
-				discordID: usertypes.DiscordID("12345"),
-				role:      usertypes.UserRoleRattler,
+				ctx:       testCtx,
+				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				discordID: testDiscordID,
+				tag:       &testTag,
 			},
 			wantErr: true,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
+				f.UserDB.EXPECT().
+					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					Return(nil).
+					Times(1)
+
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreated, gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1)
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -89,93 +177,263 @@ func TestUserServiceImpl_createUser(t *testing.T) {
 				logger:   tt.fields.logger,
 			}
 
-			switch tt.name {
-			case "Success":
-				tt.fields.UserDB.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil)
-				tt.fields.eventBus.EXPECT().Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()).Return(nil)
-			case "Error - CreateUser Fails":
-				tt.fields.UserDB.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(errors.New("database error"))
-			case "Error - Publish UserCreated Fails":
-				tt.fields.UserDB.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil)
-				tt.fields.eventBus.EXPECT().Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()).Return(errors.New("event bus error"))
+			// Call setup function to configure mocks before each test case
+			if tt.setup != nil {
+				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.createUser(tt.args.ctx, tt.args.discordID, tt.args.role); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.createUser() error = %v, wantErr %v", err, tt.wantErr)
+			if err := s.CreateUser(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag); (err != nil) != tt.wantErr {
+				t.Errorf("UserServiceImpl.CreateUser() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestUserServiceImpl_publishUserCreated(t *testing.T) {
+func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmock.NewMockEventBus(ctrl)
-	logger := slog.Default()
+	mockUserDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	testDiscordID := usertypes.DiscordID("12345")
+	testTag := 123
+	testCorrelationID := watermill.NewUUID()
+	testCtx := context.Background()
 
 	type fields struct {
-		UserDB   *mocks.MockUserDB
-		eventBus *eventbusmock.MockEventBus
+		UserDB   *userdb.MockUserDB
+		eventBus *eventbusmocks.MockEventBus
 		logger   *slog.Logger
 	}
 	type args struct {
-		ctx     context.Context
-		payload events.UserCreatedPayload
+		ctx           context.Context
+		msg           *message.Message
+		correlationID string
+		discordID     usertypes.DiscordID
+		tag           *int
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
 		wantErr bool
+		setup   func(f fields, args args)
 	}{
 		{
-			name: "Success",
+			name: "Successful Publish",
 			fields: fields{
+				UserDB:   mockUserDB,
 				eventBus: mockEventBus,
 				logger:   logger,
 			},
 			args: args{
-				ctx: context.Background(),
-				payload: events.UserCreatedPayload{
-					DiscordID: "12345",
-					Role:      usertypes.UserRoleRattler,
-				},
+				ctx:           testCtx,
+				msg:           message.NewMessage(testCorrelationID, nil),
+				correlationID: testCorrelationID,
+				discordID:     testDiscordID,
+				tag:           &testTag,
 			},
 			wantErr: false,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreated, gomock.Any()).
+					DoAndReturn(func(ctx context.Context, topic string, msg *message.Message) error {
+						if topic != userevents.UserCreated {
+							t.Errorf("Expected topic %s, got %s", userevents.UserCreated, topic)
+						}
+
+						var payload userevents.UserCreatedPayload
+						err := json.Unmarshal(msg.Payload, &payload)
+						if err != nil {
+							t.Fatalf("failed to unmarshal message payload: %v", err)
+						}
+
+						if payload.DiscordID != testDiscordID {
+							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
+						}
+
+						if payload.TagNumber == nil || *payload.TagNumber != testTag {
+							t.Errorf("Expected tag number %d, got %v", testTag, payload.TagNumber)
+						}
+
+						// Check correlation ID
+						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+						if correlationID != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
+						}
+
+						return nil
+					}).
+					Times(1)
+			},
 		},
 		{
-			name: "Error - Publish Fails",
+			name: "Publish Error",
 			fields: fields{
+				UserDB:   mockUserDB,
 				eventBus: mockEventBus,
 				logger:   logger,
 			},
 			args: args{
-				ctx: context.Background(),
-				payload: events.UserCreatedPayload{
-					DiscordID: "12345",
-					Role:      usertypes.UserRoleRattler,
-				},
+				ctx:           testCtx,
+				msg:           message.NewMessage(testCorrelationID, nil),
+				correlationID: testCorrelationID,
+				discordID:     testDiscordID,
+				tag:           &testTag,
 			},
 			wantErr: true,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreated, gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1)
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &UserServiceImpl{
+				UserDB:   tt.fields.UserDB,
 				eventBus: tt.fields.eventBus,
 				logger:   tt.fields.logger,
 			}
 
-			switch tt.name {
-			case "Success":
-				tt.fields.eventBus.EXPECT().Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()).Return(nil)
-			case "Error - Publish Fails":
-				tt.fields.eventBus.EXPECT().Publish(gomock.Any(), gomock.Eq(events.UserStreamName), gomock.Any()).Return(errors.New("event bus error"))
+			// Call setup function to configure mocks before each test case
+			if tt.setup != nil {
+				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.publishUserCreated(tt.args.ctx, tt.args.payload); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.publishUserCreated() error = %v, wantErr %v", err, tt.wantErr)
+			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag); (err != nil) != tt.wantErr {
+				t.Errorf("UserServiceImpl.PublishUserCreated() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestUserServiceImpl_PublishUserCreationFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	testDiscordID := usertypes.DiscordID("12345")
+	testTag := 123
+	testCorrelationID := watermill.NewUUID()
+	testReason := "Test Reason"
+	testCtx := context.Background()
+
+	type fields struct {
+		UserDB   *userdb.MockUserDB
+		eventBus *eventbusmocks.MockEventBus
+		logger   *slog.Logger
+	}
+	type args struct {
+		ctx           context.Context
+		msg           *message.Message
+		correlationID string
+		discordID     usertypes.DiscordID
+		tag           *int
+		reason        string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+		setup   func(f fields, args args)
+	}{
+		{
+			name: "Successful Publish",
+			fields: fields{
+				UserDB:   mockUserDB,
+				eventBus: mockEventBus,
+				logger:   logger,
+			},
+			args: args{
+				ctx:           testCtx,
+				msg:           message.NewMessage(testCorrelationID, nil),
+				correlationID: testCorrelationID,
+				discordID:     testDiscordID,
+				tag:           &testTag,
+				reason:        testReason,
+			},
+			wantErr: false,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreationFailed, gomock.Any()).
+					DoAndReturn(func(ctx context.Context, topic string, msg *message.Message) error {
+						if topic != userevents.UserCreationFailed {
+							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						}
+
+						var payload userevents.UserCreationFailedPayload
+						err := json.Unmarshal(msg.Payload, &payload)
+						if err != nil {
+							t.Fatalf("failed to unmarshal message payload: %v", err)
+						}
+
+						if payload.Reason != testReason {
+							t.Errorf("Expected reason %s, got %s", testReason, payload.Reason)
+						}
+
+						// Check correlation ID
+						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+						if correlationID != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
+						}
+
+						return nil
+					}).
+					Times(1)
+			},
+		},
+		{
+			name: "Publish Error",
+			fields: fields{
+				UserDB:   mockUserDB,
+				eventBus: mockEventBus,
+				logger:   logger,
+			},
+			args: args{
+				ctx:           testCtx,
+				msg:           message.NewMessage(testCorrelationID, nil),
+				correlationID: testCorrelationID,
+				discordID:     testDiscordID,
+				tag:           &testTag,
+				reason:        testReason,
+			},
+			wantErr: true,
+			setup: func(f fields, args args) {
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+				f.eventBus.EXPECT().
+					Publish(args.ctx, userevents.UserCreationFailed, gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &UserServiceImpl{
+				UserDB:   tt.fields.UserDB,
+				eventBus: tt.fields.eventBus,
+				logger:   tt.fields.logger,
+			}
+
+			// Call setup function to configure mocks before each test case
+			if tt.setup != nil {
+				tt.setup(tt.fields, tt.args)
+			}
+
+			if err := s.PublishUserCreationFailed(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag, tt.args.reason); (err != nil) != tt.wantErr {
+				t.Errorf("UserServiceImpl.PublishUserCreationFailed() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

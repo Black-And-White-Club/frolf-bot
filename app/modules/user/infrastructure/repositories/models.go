@@ -11,7 +11,7 @@ type User struct {
 	ID            int64                  `bun:"id,pk,autoincrement" json:"id"`
 	Name          string                 `bun:"name" json:"name"`
 	DiscordID     usertypes.DiscordID    `bun:"discord_id,unique"`
-	Role          usertypes.UserRoleEnum `bun:"role,notnull" json:"role"`
+	Role          usertypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
 }
 
 // Add these methods to your User struct

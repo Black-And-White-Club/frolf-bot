@@ -13,18 +13,15 @@ import (
 
 	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // App holds the application components.
@@ -38,6 +35,7 @@ type App struct {
 	ScoreModule       *score.Module
 	DB                *bundb.DBService
 	EventBus          shared.EventBus
+	js                jetstream.JetStream // New JetStream context
 }
 
 // Initialize initializes the application.
@@ -65,32 +63,28 @@ func (app *App) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
+	// Connect to NATS
+	nc, err := nats.Connect(app.Config.NATS.URL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+	defer nc.Close()
+
+	// Get JetStream context using the new JetStream API
+	app.js, err = jetstream.Connect(nc)
+	if err != nil {
+		return fmt.Errorf("failed to connect to JetStream: %w", err)
+	}
+
+	// Create streams (using new JetStream API)
+	if err := app.createStreams(ctx); err != nil {
+		return fmt.Errorf("failed to create streams: %w", err)
+	}
+
 	// Initialize EventBus
-	app.EventBus, err = eventbus.NewEventBus(ctx, cfg.NATS.URL, app.Logger)
+	app.EventBus, err = eventbus.NewEventBus(ctx, cfg.Nats.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create event bus: %w", err)
-	}
-
-	// Create the Watermill router
-	watermillLogger := watermill.NewSlogLogger(app.Logger)
-	router, err := message.NewRouter(message.RouterConfig{}, watermillLogger)
-	if err != nil {
-		return fmt.Errorf("failed to create Watermill router: %w", err)
-	}
-	app.Router = router
-
-	// Create streams before initializing modules
-	if err := app.EventBus.CreateStream(context.Background(), userevents.UserStreamName); err != nil {
-		return fmt.Errorf("failed to create user stream: %w", err)
-	}
-	if err := app.EventBus.CreateStream(context.Background(), leaderboardevents.LeaderboardStreamName); err != nil {
-		return fmt.Errorf("failed to create leaderboard stream: %w", err)
-	}
-	if err := app.EventBus.CreateStream(context.Background(), roundevents.RoundStreamName); err != nil {
-		return fmt.Errorf("failed to create round stream: %w", err)
-	}
-	if err := app.EventBus.CreateStream(context.Background(), scoreevents.ScoreStreamName); err != nil {
-		return fmt.Errorf("failed to create score stream: %w", err)
 	}
 
 	// Initialize User Module

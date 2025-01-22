@@ -6,17 +6,16 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+// EventBus defines the interface for an event bus that can publish and subscribe to messages.
 type EventBus interface {
-	// Publish publishes a Watermill message to the specified stream.
-	// The message metadata should contain the "subject" key with the event type string.
-	Publish(ctx context.Context, streamName string, msg *message.Message) error
+	// Publish publishes a message to the specified topic.
+	// The payload will be marshaled into JSON.
+	Publish(ctx context.Context, topic string, payload interface{}) error
 
-	// Subscribe subscribes a handler function to a specific stream and subject.
-	Subscribe(ctx context.Context, streamName string, subject string, handler func(ctx context.Context, msg *message.Message) error) error
+	// Subscribe subscribes to a topic and returns a channel of messages.
+	Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error)
 
-	// CreateStream creates a stream with the given name.
-	CreateStream(ctx context.Context, streamName string) error
-
-	// Close closes the underlying resources held by the EventBus implementation.
+	// Close closes the underlying resources held by the EventBus implementation
+	// (e.g., publisher, subscriber connections).
 	Close() error
 }

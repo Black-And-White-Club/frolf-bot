@@ -55,44 +55,31 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockEventBus)(nil).Close))
 }
 
-// CreateStream mocks base method.
-func (m *MockEventBus) CreateStream(ctx context.Context, streamName string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateStream", ctx, streamName)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateStream indicates an expected call of CreateStream.
-func (mr *MockEventBusMockRecorder) CreateStream(ctx, streamName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStream", reflect.TypeOf((*MockEventBus)(nil).CreateStream), ctx, streamName)
-}
-
 // Publish mocks base method.
-func (m *MockEventBus) Publish(ctx context.Context, streamName string, msg *message.Message) error {
+func (m *MockEventBus) Publish(ctx context.Context, topic string, payload any) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Publish", ctx, streamName, msg)
+	ret := m.ctrl.Call(m, "Publish", ctx, topic, payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Publish indicates an expected call of Publish.
-func (mr *MockEventBusMockRecorder) Publish(ctx, streamName, msg any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Publish(ctx, topic, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), ctx, streamName, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), ctx, topic, payload)
 }
 
 // Subscribe mocks base method.
-func (m *MockEventBus) Subscribe(ctx context.Context, streamName, subject string, handler func(context.Context, *message.Message) error) error {
+func (m *MockEventBus) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", ctx, streamName, subject, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Subscribe", ctx, topic)
+	ret0, _ := ret[0].(<-chan *message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Subscribe indicates an expected call of Subscribe.
-func (mr *MockEventBusMockRecorder) Subscribe(ctx, streamName, subject, handler any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Subscribe(ctx, topic any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockEventBus)(nil).Subscribe), ctx, streamName, subject, handler)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockEventBus)(nil).Subscribe), ctx, topic)
 }
