@@ -219,7 +219,6 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 					GetUserByDiscordID(a.ctx, usertypes.DiscordID(a.requesterID)).
 					Return(&usertypes.UserData{
 						ID:        1,
-						Name:      "test",
 						DiscordID: usertypes.DiscordID(a.requesterID),
 						Role:      testRole,
 					}, nil).
@@ -339,7 +338,6 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 					GetUserByDiscordID(a.ctx, usertypes.DiscordID(a.requesterID)).
 					Return(&usertypes.UserData{
 						ID:        1,
-						Name:      "test",
 						DiscordID: usertypes.DiscordID(a.requesterID),
 						Role:      "some_other_role", // Assuming this is different from testRole
 					}, nil).

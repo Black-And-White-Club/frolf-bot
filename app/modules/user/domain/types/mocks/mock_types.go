@@ -68,20 +68,6 @@ func (mr *MockUserMockRecorder) GetID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetID", reflect.TypeOf((*MockUser)(nil).GetID))
 }
 
-// GetName mocks base method.
-func (m *MockUser) GetName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetName indicates an expected call of GetName.
-func (mr *MockUserMockRecorder) GetName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockUser)(nil).GetName))
-}
-
 // GetRole mocks base method.
 func (m *MockUser) GetRole() usertypes.UserRoleEnum {
 	m.ctrl.T.Helper()

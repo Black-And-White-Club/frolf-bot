@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,7 +43,7 @@ func (m *MockUserDB) EXPECT() *MockUserDBMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockUserDB) CreateUser(ctx context.Context, user usertypes.User) error {
+func (m *MockUserDB) CreateUser(ctx context.Context, user *userdb.User) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, user)
 	ret0, _ := ret[0].(error)
@@ -56,10 +57,10 @@ func (mr *MockUserDBMockRecorder) CreateUser(ctx, user any) *gomock.Call {
 }
 
 // GetUserByDiscordID mocks base method.
-func (m *MockUserDB) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (usertypes.User, error) {
+func (m *MockUserDB) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*userdb.User, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserByDiscordID", ctx, discordID)
-	ret0, _ := ret[0].(usertypes.User)
+	ret0, _ := ret[0].(*userdb.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

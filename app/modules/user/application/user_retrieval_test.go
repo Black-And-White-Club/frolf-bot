@@ -210,7 +210,6 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 	testDiscordID := usertypes.DiscordID("12345")
 	testUser := &usertypes.UserData{
 		ID:        1,
-		Name:      "Test User",
 		DiscordID: testDiscordID,
 		Role:      usertypes.UserRoleAdmin,
 	}
