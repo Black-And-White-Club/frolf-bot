@@ -13,7 +13,7 @@ type UserHandlers struct {
 }
 
 // NewUserHandlers creates a new UserHandlers.
-func NewUserHandlers(userService userservice.Service, logger *slog.Logger) *UserHandlers {
+func NewUserHandlers(userService userservice.Service, logger *slog.Logger) Handlers {
 	return &UserHandlers{
 		userService: userService,
 		logger:      logger,

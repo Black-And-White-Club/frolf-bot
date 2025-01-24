@@ -13,6 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
+	shared "github.com/Black-And-White-Club/tcr-bot/app/shared"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -56,18 +58,17 @@ func (mr *MockRouterMockRecorder) Close() *gomock.Call {
 }
 
 // Configure mocks base method.
-func (m *MockRouter) Configure(ctx context.Context) (*message.Router, error) {
+func (m *MockRouter) Configure(router *message.Router, userService userservice.Service, eventBus shared.EventBus) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Configure", ctx)
-	ret0, _ := ret[0].(*message.Router)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Configure", router, userService, eventBus)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Configure indicates an expected call of Configure.
-func (mr *MockRouterMockRecorder) Configure(ctx any) *gomock.Call {
+func (mr *MockRouterMockRecorder) Configure(router, userService, eventBus any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Configure", reflect.TypeOf((*MockRouter)(nil).Configure), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Configure", reflect.TypeOf((*MockRouter)(nil).Configure), router, userService, eventBus)
 }
 
 // Run mocks base method.

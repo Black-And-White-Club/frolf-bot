@@ -2,6 +2,7 @@ package userdb
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -14,40 +15,54 @@ type UserDBImpl struct {
 	DB *bun.DB
 }
 
-// CreateUser creates a new user.
-func (db *UserDBImpl) CreateUser(ctx context.Context, user usertypes.User) error {
+func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 	if db.DB == nil {
 		return errors.New("database connection is not initialized")
 	}
 
-	_, err := db.DB.NewInsert().Model(user).Exec(ctx)
+	fmt.Println("Starting user insertion:", user)
+
+	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
+		fmt.Println("Transaction start failed:", err)
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	_, err = tx.NewInsert().Model(user).Exec(ctx)
+	if err != nil {
+		fmt.Println("Insert query failed:", err)
+		_ = tx.Rollback()
 		return fmt.Errorf("failed to create user: %w", err)
 	}
+
+	fmt.Println("Insert query successful. Committing transaction.")
+
+	if err := tx.Commit(); err != nil {
+		fmt.Println("Transaction commit failed:", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	fmt.Println("User insertion and commit successful!")
 	return nil
 }
 
 // GetUserByDiscordID retrieves a user by Discord ID.
-func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (usertypes.User, error) {
-	var dbUser User // Use the database model to retrieve data
+func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error) {
+	var dbUser User
 
 	err := db.DB.NewSelect().
 		Model(&dbUser).
 		Where("discord_id = ?", discordID).
 		Scan(ctx)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// User not found, return nil without an error
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Convert *userdb.User to usertypes.User (UserData)
-	user := usertypes.UserData{
-		ID:        dbUser.ID,
-		Name:      dbUser.Name,
-		DiscordID: dbUser.DiscordID,
-		Role:      dbUser.Role,
-	}
-
-	return user, nil
+	return &dbUser, nil
 }
 
 // GetUserRole retrieves the role of a user by their Discord ID.

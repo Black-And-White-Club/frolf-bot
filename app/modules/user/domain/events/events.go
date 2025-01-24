@@ -10,6 +10,14 @@ import (
 const (
 	UserStreamName                         = "user"
 	LeaderboardTagAvailabilityCheckRequest = "leaderboard.tag.availability.check.request"
+	UserCreatedDLQ                         = "user.created.dlq"            // DLQ for UserCreated
+	UserCreationFailedDLQ                  = "user.creation.failed.dlq"    // DLQ for UserCreationFailed
+	UserRoleUpdatedDLQ                     = "user.role.updated.dlq"       // DLQ for UserRoleUpdated
+	UserRoleUpdateFailedDLQ                = "user.role.update.failed.dlq" // DLQ for UserRoleUpdateFailed
+	GetUserRoleResponseDLQ                 = "user.get.role.response.dlq"  // DLQ for GetUserRoleResponse
+	GetUserResponseDLQ                     = "user.get.response.dlq"       // DLQ for GetUserResponse
+	GetUserRoleFailedDLQ                   = "user.get.role.failed.dlq"    // DLQ for GetUserRoleFailed
+	GetUserFailedDLQ                       = "user.get.failed.dlq"         // DLQ for GetUserFailed
 )
 
 // Event names
@@ -56,7 +64,9 @@ type UserCreatedPayload struct {
 }
 
 type UserCreationFailedPayload struct {
-	Reason string `json:"reason"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	Reason    string              `json:"reason"`
+	TagNumber *int                `json:"tag_number,omitempty"`
 }
 
 type UserRoleUpdateRequestPayload struct {

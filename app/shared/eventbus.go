@@ -10,7 +10,7 @@ import (
 type EventBus interface {
 	// Publish publishes a message to the specified topic.
 	// The payload will be marshaled into JSON.
-	Publish(ctx context.Context, topic string, payload interface{}) error
+	Publish(topic string, messages ...*message.Message) error
 
 	// Subscribe subscribes to a topic and returns a channel of messages.
 	Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error)

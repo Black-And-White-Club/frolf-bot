@@ -11,6 +11,7 @@ import (
 	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
+	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -30,45 +31,51 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 	testCtx := context.Background()
 
 	type fields struct {
-		UserDB   *userdb.MockUserDB
-		eventBus *eventbusmocks.MockEventBus
-		logger   *slog.Logger
+		UserDB    *userdb.MockUserDB
+		eventBus  *eventbusmocks.MockEventBus
+		logger    *slog.Logger
+		eventUtil eventutil.EventUtil
 	}
 	type args struct {
-		ctx           context.Context
-		msg           *message.Message
-		tagNumber     int
-		correlationID string
+		ctx       context.Context
+		msg       *message.Message
+		tagNumber int
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
 		wantErr bool
-		setup   func(f fields, args args)
+		setup   func(f fields, a args)
 	}{
 		{
 			name: "Successful CheckTagAvailability",
 			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+				UserDB:    mockUserDB,
+				eventBus:  mockEventBus,
+				logger:    logger,
+				eventUtil: eventutil.NewEventUtil(), // Initialize eventUtil
 			},
 			args: args{
-				ctx:           testCtx,
-				msg:           message.NewMessage(testCorrelationID, nil),
-				tagNumber:     testTagNumber,
-				correlationID: testCorrelationID,
+				ctx:       testCtx,
+				msg:       message.NewMessage(testCorrelationID, nil),
+				tagNumber: testTagNumber,
 			},
 			wantErr: false,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+			setup: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				f.eventBus.EXPECT().
-					Publish(args.ctx, userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()).
-					DoAndReturn(func(ctx context.Context, topic string, msg *message.Message) error {
+					Publish(userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()). // Expect one message
+					DoAndReturn(func(topic string, msgs ...*message.Message) error {
 						if topic != userevents.LeaderboardTagAvailabilityCheckRequest {
 							t.Errorf("Expected topic %s, got %s", userevents.LeaderboardTagAvailabilityCheckRequest, topic)
 						}
+
+						if len(msgs) != 1 {
+							t.Fatalf("Expected 1 message, got %d", len(msgs))
+						}
+
+						msg := msgs[0]
 
 						var payload userevents.CheckTagAvailabilityRequestPayload
 						err := json.Unmarshal(msg.Payload, &payload)
@@ -80,12 +87,14 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 							t.Errorf("Expected tag number %d, got %d", testTagNumber, payload.TagNumber)
 						}
 
-						if msg.UUID == args.correlationID {
+						// UUID should be different
+						if msg.UUID == a.msg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
 							t.Errorf("Expected new message UUID, but it matched correlation ID: %s", msg.UUID)
 						}
 
-						if mid := msg.Metadata.Get(middleware.CorrelationIDMetadataKey); mid != args.correlationID {
-							t.Errorf("Expected correlation ID %s, got %s", args.correlationID, mid)
+						// Check correlation ID
+						if mid := msg.Metadata.Get(middleware.CorrelationIDMetadataKey); mid != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, mid)
 						}
 
 						return nil
@@ -96,21 +105,21 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 		{
 			name: "Failed to Publish Event",
 			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+				UserDB:    mockUserDB,
+				eventBus:  mockEventBus,
+				logger:    logger,
+				eventUtil: eventutil.NewEventUtil(), // Initialize eventUtil
 			},
 			args: args{
-				ctx:           testCtx,
-				msg:           message.NewMessage(testCorrelationID, nil),
-				tagNumber:     testTagNumber,
-				correlationID: testCorrelationID,
+				ctx:       testCtx,
+				msg:       message.NewMessage(testCorrelationID, nil),
+				tagNumber: testTagNumber,
 			},
 			wantErr: true,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, args.correlationID)
+			setup: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				f.eventBus.EXPECT().
-					Publish(args.ctx, userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()).
+					Publish(userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()).
 					Return(errors.New("publish error")).
 					Times(1)
 			},
@@ -119,9 +128,10 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &UserServiceImpl{
-				UserDB:   tt.fields.UserDB,
-				eventBus: tt.fields.eventBus,
-				logger:   tt.fields.logger,
+				UserDB:    tt.fields.UserDB,
+				eventBus:  tt.fields.eventBus,
+				logger:    tt.fields.logger,
+				eventUtil: tt.fields.eventUtil, // Use the mock in the UserServiceImpl
 			}
 
 			// Call setup function to configure mocks before each test case

@@ -56,17 +56,22 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 }
 
 // Publish mocks base method.
-func (m *MockEventBus) Publish(ctx context.Context, topic string, payload any) error {
+func (m *MockEventBus) Publish(topic string, messages ...*message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Publish", ctx, topic, payload)
+	varargs := []any{topic}
+	for _, a := range messages {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Publish", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Publish indicates an expected call of Publish.
-func (mr *MockEventBusMockRecorder) Publish(ctx, topic, payload any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) Publish(topic any, messages ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), ctx, topic, payload)
+	varargs := append([]any{topic}, messages...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), varargs...)
 }
 
 // Subscribe mocks base method.

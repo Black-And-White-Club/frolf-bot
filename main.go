@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// Initialize the application
-	os.Setenv("WATERMILL_DEBUG", "1")
+	os.Setenv("WATERMILL_DEBUG", "1") // Enable Watermill debug logs
 	application := &app.App{}
 
 	// Initialize the logger before calling application.Initialize

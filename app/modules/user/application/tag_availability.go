@@ -24,13 +24,28 @@ func (s *UserServiceImpl) CheckTagAvailability(ctx context.Context, msg *message
 		TagNumber: tagNumber,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
+	// Create a new message for the outgoing event
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 
-	if err := s.eventBus.Publish(ctx, userevents.LeaderboardTagAvailabilityCheckRequest, msg); err != nil {
+	// Use eventutil.PropagateMetadata to copy the correlation ID
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
+
+	// Publish the new message using s.eventBus.Publish
+	if err := s.eventBus.Publish(userevents.LeaderboardTagAvailabilityCheckRequest, newMsg); err != nil {
+		s.logger.Error("Failed to publish CheckTagAvailabilityRequest event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish CheckTagAvailabilityRequest event: %w", err)
 	}
 

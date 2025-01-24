@@ -19,15 +19,15 @@ func (id DiscordID) IsValid() bool {
 // User interface
 type User interface {
 	GetID() int64
-	GetName() string
+	// GetName() string
 	GetDiscordID() DiscordID
 	GetRole() UserRoleEnum // Change this to UserRoleEnum
 }
 
 // UserData struct implementing the User interface
 type UserData struct {
-	ID        int64        `json:"id"`
-	Name      string       `json:"name"`
+	ID int64 `json:"id"`
+	// Name      string       `json:"name"`
 	DiscordID DiscordID    `json:"discord_id"`
 	Role      UserRoleEnum `json:"role"` // Use UserRoleEnum here
 }
@@ -36,9 +36,9 @@ func (u UserData) GetID() int64 {
 	return u.ID
 }
 
-func (u UserData) GetName() string {
-	return u.Name
-}
+// func (u UserData) GetName() string {
+// 	return u.Name
+// }
 
 func (u UserData) GetDiscordID() DiscordID {
 	return u.DiscordID

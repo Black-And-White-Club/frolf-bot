@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
@@ -13,17 +14,15 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// Module represents the user module.
 type Module struct {
-	EventBus         shared.EventBus
-	UserService      userservice.Service
-	logger           *slog.Logger
-	config           *config.Config
-	UserRouter       *userrouter.UserRouter // Use the UserRouter
-	SubscribersReady chan struct{}
+	EventBus    shared.EventBus
+	UserService userservice.Service
+	logger      *slog.Logger
+	config      *config.Config
+	UserRouter  *userrouter.UserRouter
+	cancelFunc  context.CancelFunc
 }
 
-// NewUserModule initializes the user module.
 func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("user.NewUserModule called")
 
@@ -34,34 +33,45 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger,
 	}
 
 	// Initialize user router.
-	userRouter := userrouter.NewUserRouter(logger)
+	userRouter := userrouter.NewUserRouter(logger, router, eventBus)
 
-	// Configure the router
-	if err := userRouter.Configure(router, userService); err != nil {
+	// Configure the router with user service.
+	if err := userRouter.Configure(userService); err != nil {
 		return nil, fmt.Errorf("failed to configure user router: %w", err)
 	}
 
 	module := &Module{
-		EventBus:         eventBus,
-		UserService:      userService,
-		logger:           logger,
-		config:           cfg,
-		UserRouter:       userRouter,
-		SubscribersReady: make(chan struct{}),
+		EventBus:    eventBus,
+		UserService: userService,
+		logger:      logger,
+		config:      cfg,
+		UserRouter:  userRouter, // Set the UserRouter
 	}
-
-	// Signal that initialization is complete
-	close(module.SubscribersReady)
 
 	return module, nil
 }
 
-// IsInitialized checks if the subscribers are ready.
-func (m *Module) IsInitialized() bool {
-	select {
-	case <-m.SubscribersReady:
-		return true
-	default:
-		return false
+func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
+	m.logger.Info("Starting user module")
+
+	// Create a context that can be canceled
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancelFunc = cancel
+	defer cancel()
+
+	// Keep this goroutine alive until the context is canceled
+	<-ctx.Done()
+	m.logger.Info("User module goroutine stopped")
+}
+
+func (m *Module) Close() error {
+	m.logger.Info("Stopping user module")
+
+	// Cancel any other running operations
+	if m.cancelFunc != nil {
+		m.cancelFunc()
 	}
+
+	m.logger.Info("User module stopped")
+	return nil
 }

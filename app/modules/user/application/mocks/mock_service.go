@@ -71,17 +71,17 @@ func (mr *MockServiceMockRecorder) CheckUserPermissions(ctx, msg, userID, role, 
 }
 
 // CheckUserPermissionsInDB mocks base method.
-func (m *MockService) CheckUserPermissionsInDB(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string) error {
+func (m *MockService) CheckUserPermissionsInDB(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckUserPermissionsInDB", ctx, discordID, role, requesterID, correlationID)
+	ret := m.ctrl.Call(m, "CheckUserPermissionsInDB", ctx, msg, discordID, role, requesterID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CheckUserPermissionsInDB indicates an expected call of CheckUserPermissionsInDB.
-func (mr *MockServiceMockRecorder) CheckUserPermissionsInDB(ctx, discordID, role, requesterID, correlationID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CheckUserPermissionsInDB(ctx, msg, discordID, role, requesterID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserPermissionsInDB", reflect.TypeOf((*MockService)(nil).CheckUserPermissionsInDB), ctx, discordID, role, requesterID, correlationID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserPermissionsInDB", reflect.TypeOf((*MockService)(nil).CheckUserPermissionsInDB), ctx, msg, discordID, role, requesterID)
 }
 
 // CreateUser mocks base method.
@@ -155,31 +155,31 @@ func (mr *MockServiceMockRecorder) PublishUserCreationFailed(ctx, msg, discordID
 }
 
 // PublishUserPermissionsCheckFailed mocks base method.
-func (m *MockService) PublishUserPermissionsCheckFailed(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID, reason string) error {
+func (m *MockService) PublishUserPermissionsCheckFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, reason string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishUserPermissionsCheckFailed", ctx, discordID, role, requesterID, correlationID, reason)
+	ret := m.ctrl.Call(m, "PublishUserPermissionsCheckFailed", ctx, msg, discordID, role, requesterID, reason)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishUserPermissionsCheckFailed indicates an expected call of PublishUserPermissionsCheckFailed.
-func (mr *MockServiceMockRecorder) PublishUserPermissionsCheckFailed(ctx, discordID, role, requesterID, correlationID, reason any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PublishUserPermissionsCheckFailed(ctx, msg, discordID, role, requesterID, reason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishUserPermissionsCheckFailed", reflect.TypeOf((*MockService)(nil).PublishUserPermissionsCheckFailed), ctx, discordID, role, requesterID, correlationID, reason)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishUserPermissionsCheckFailed", reflect.TypeOf((*MockService)(nil).PublishUserPermissionsCheckFailed), ctx, msg, discordID, role, requesterID, reason)
 }
 
 // PublishUserPermissionsCheckResponse mocks base method.
-func (m *MockService) PublishUserPermissionsCheckResponse(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string, hasPermission bool, reason string) error {
+func (m *MockService) PublishUserPermissionsCheckResponse(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string, hasPermission bool, reason string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishUserPermissionsCheckResponse", ctx, discordID, role, requesterID, correlationID, hasPermission, reason)
+	ret := m.ctrl.Call(m, "PublishUserPermissionsCheckResponse", ctx, msg, discordID, role, requesterID, hasPermission, reason)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishUserPermissionsCheckResponse indicates an expected call of PublishUserPermissionsCheckResponse.
-func (mr *MockServiceMockRecorder) PublishUserPermissionsCheckResponse(ctx, discordID, role, requesterID, correlationID, hasPermission, reason any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PublishUserPermissionsCheckResponse(ctx, msg, discordID, role, requesterID, hasPermission, reason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishUserPermissionsCheckResponse", reflect.TypeOf((*MockService)(nil).PublishUserPermissionsCheckResponse), ctx, discordID, role, requesterID, correlationID, hasPermission, reason)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishUserPermissionsCheckResponse", reflect.TypeOf((*MockService)(nil).PublishUserPermissionsCheckResponse), ctx, msg, discordID, role, requesterID, hasPermission, reason)
 }
 
 // PublishUserRoleUpdateFailed mocks base method.
@@ -225,15 +225,15 @@ func (mr *MockServiceMockRecorder) UpdateUserRole(ctx, msg, userID, role, reques
 }
 
 // UpdateUserRoleInDatabase mocks base method.
-func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, userID, role, correlationID string) error {
+func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID, role string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUserRoleInDatabase", ctx, userID, role, correlationID)
+	ret := m.ctrl.Call(m, "UpdateUserRoleInDatabase", ctx, msg, userID, role)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateUserRoleInDatabase indicates an expected call of UpdateUserRoleInDatabase.
-func (mr *MockServiceMockRecorder) UpdateUserRoleInDatabase(ctx, userID, role, correlationID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateUserRoleInDatabase(ctx, msg, userID, role any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRoleInDatabase", reflect.TypeOf((*MockService)(nil).UpdateUserRoleInDatabase), ctx, userID, role, correlationID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRoleInDatabase", reflect.TypeOf((*MockService)(nil).UpdateUserRoleInDatabase), ctx, msg, userID, role)
 }

@@ -8,6 +8,8 @@ import (
 
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
@@ -21,10 +23,10 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		slog.String("correlation_id", correlationID),
 	)
 
-	// Create the user in the database
-	user := &usertypes.UserData{
+	// Create the user in the database using the userdb.User model
+	user := &userdb.User{
 		DiscordID: discordID,
-		Role:      usertypes.UserRoleRattler,
+		// Role will be set to the default value by the database
 	}
 
 	// Attempt to create the user and handle potential errors
@@ -38,14 +40,14 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		// Publish a UserCreationFailed event
 		if pubErr := s.PublishUserCreationFailed(ctx, msg, discordID, tag, err.Error()); pubErr != nil {
 			// Handle error if publishing the failure event fails
-			return fmt.Errorf("failed to publish UserCreationFailed event: %w", pubErr)
+			return fmt.Errorf("failed to create user and publish UserCreationFailed event: %w", pubErr)
 		}
 
 		// Return nil as we've handled the database error by publishing an event
 		return nil
 	}
 
-	s.logger.Info("User created successfully",
+	s.logger.Info("CALLED FROM SERVICE User created successfully",
 		slog.String("discord_id", string(discordID)),
 		slog.String("correlation_id", correlationID),
 	)
@@ -56,55 +58,99 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 
 // PublishUserCreated publishes a UserCreated event.
 func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int) error {
+	// Get correlationID from message metadata
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	payload := userevents.UserCreatedPayload{
+
+	// Prepare the event payload
+	eventPayload := &userevents.UserCreatedPayload{
 		DiscordID: discordID,
 	}
-
 	if tag != nil {
-		payload.TagNumber = tag
+		eventPayload.TagNumber = tag
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	// Marshal the payload to JSON
+	payloadBytes, err := json.Marshal(eventPayload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+		s.logger.Error("Failed to marshal UserCreatedPayload",
+			slog.Any("error", err),
+			slog.String("correlation_id", correlationID),
+		)
+		return fmt.Errorf("failed to marshal UserCreatedPayload: %w", err)
 	}
 
-	msg = message.NewMessage(correlationID, payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserCreated, msg); err != nil {
+	// Create a new message with the payload
+	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Set the correlation ID for the new message
+	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+
+	// Set the Nats-Msg-Id for deduplication using msg.UUID
+	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
+
+	// Publish the event
+	if err := s.eventBus.Publish(userevents.UserCreated, newMessage); err != nil {
 		s.logger.Error("Failed to publish UserCreated event",
 			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),
 		)
-		// Consider implementing a retry mechanism or a dead-letter queue here
 		return fmt.Errorf("failed to publish UserCreated event: %w", err)
 	}
 
-	s.logger.Info("Published UserCreated event", slog.String("correlation_id", correlationID))
+	s.logger.Info("Published UserCreated event",
+		slog.String("correlation_id", correlationID),
+		slog.String("message_id", newMessage.UUID),
+	)
 
 	return nil
 }
 
 // PublishUserCreationFailed publishes a UserCreationFailed event.
 func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int, reason string) error {
+	// Get correlationID from message metadata
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	payload := userevents.UserCreationFailedPayload{
-		Reason: reason,
+
+	// Prepare the event payload
+	eventPayload := &userevents.UserCreationFailedPayload{
+		DiscordID: discordID,
+		Reason:    reason,
+	}
+	if tag != nil {
+		eventPayload.TagNumber = tag
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	// Marshal the payload to JSON
+	payloadBytes, err := json.Marshal(eventPayload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+		s.logger.Error("Failed to marshal UserCreationFailedPayload",
+			slog.Any("error", err),
+			slog.String("correlation_id", correlationID),
+		)
+		return fmt.Errorf("failed to marshal UserCreationFailedPayload: %w", err)
 	}
 
-	msg = message.NewMessage(correlationID, payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	// Create a new message with the payload
+	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
 
-	if err := s.eventBus.Publish(ctx, userevents.UserCreationFailed, msg); err != nil {
+	// Set the correlation ID for the new message
+	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+
+	// Set the Nats-Msg-Id for deduplication using msg.UUID
+	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
+
+	// Publish the event
+	if err := s.eventBus.Publish(userevents.UserCreationFailed, newMessage); err != nil {
+		s.logger.Error("Failed to publish UserCreationFailed event",
+			slog.Any("error", err),
+			slog.String("correlation_id", correlationID),
+		)
 		return fmt.Errorf("failed to publish UserCreationFailed event: %w", err)
 	}
 
-	s.logger.Info("UserCreationFailed event published", slog.String("correlationID", correlationID))
+	s.logger.Info("Published UserCreationFailed event",
+		slog.String("correlation_id", correlationID),
+		slog.String("message_id", newMessage.UUID),
+	)
+
 	return nil
 }

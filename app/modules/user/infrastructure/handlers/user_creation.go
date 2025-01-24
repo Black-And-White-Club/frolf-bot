@@ -7,10 +7,20 @@ import (
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
 func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) error {
+	h.logger.Info("HandleUserSignupRequest triggered",
+		slog.String("message_id", msg.UUID),
+		slog.String("correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey)),
+	)
+
+	// Log the entire message for debugging
+	h.logger.Debug("Message details", slog.Any("message", msg))
+
+	// Your existing message handling code
 	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.UserSignupRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal UserSignupRequest event: %w", err)
@@ -30,7 +40,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) error {
 		return fmt.Errorf("failed to process UserSignupRequest: %w", err)
 	}
 
-	h.logger.Info("User signup request processed", slog.String("correlation_id", correlationID))
+	h.logger.Info("User signup request processed CALLED FROM HANDLER", slog.String("correlation_id", correlationID))
 
 	return nil
 }
@@ -56,6 +66,7 @@ func (h *UserHandlers) HandleUserCreated(msg *message.Message) error {
 
 // HandleUserCreationFailed handles the UserCreationFailed event.
 func (h *UserHandlers) HandleUserCreationFailed(msg *message.Message) error {
+	h.logger.Info("HandleUserCreationFailed called", "message_id", msg.UUID)
 	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.UserCreationFailedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal UserCreationFailed event: %w", err)

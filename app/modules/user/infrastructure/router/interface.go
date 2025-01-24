@@ -7,8 +7,9 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+// Router interface for user routing.
 type Router interface {
-	Configure(router *message.Router, userService userservice.Service) error
+	Configure(router *message.Router, userService userservice.Service, subscriber message.Subscriber) error
 	Run(ctx context.Context) error
 	Close() error
 }

@@ -62,13 +62,24 @@ func (s *UserServiceImpl) publishGetUserRoleResponse(ctx context.Context, msg *m
 		Role:      string(role),
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	s.eventUtil.PropagateMetadata(msg, newMsg) // Use eventutil to copy metadata
 
-	if err := s.eventBus.Publish(ctx, userevents.GetUserRoleResponse, msg); err != nil {
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.GetUserRoleResponse, newMsg); err != nil {
+		s.logger.Error("Failed to publish GetUserRoleResponse event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish GetUserRoleResponse event: %w", err)
 	}
 
@@ -83,13 +94,24 @@ func (s *UserServiceImpl) publishGetUserResponse(ctx context.Context, msg *messa
 		User: user.(*usertypes.UserData),
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	s.eventUtil.PropagateMetadata(msg, newMsg) // Use eventutil to copy metadata
 
-	if err := s.eventBus.Publish(ctx, userevents.GetUserResponse, msg); err != nil {
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.GetUserResponse, newMsg); err != nil {
+		s.logger.Error("Failed to publish GetUserResponse event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish GetUserResponse event: %w", err)
 	}
 
@@ -105,13 +127,24 @@ func (s *UserServiceImpl) publishGetUserRoleFailed(ctx context.Context, msg *mes
 		Reason:    reason,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	s.eventUtil.PropagateMetadata(msg, newMsg) // Use eventutil to copy metadata
 
-	if err := s.eventBus.Publish(ctx, userevents.GetUserRoleFailed, msg); err != nil {
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.GetUserRoleFailed, newMsg); err != nil {
+		s.logger.Error("Failed to publish GetUserRoleFailed event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish GetUserRoleFailed event: %w", err)
 	}
 
@@ -127,13 +160,24 @@ func (s *UserServiceImpl) publishGetUserFailed(ctx context.Context, msg *message
 		Reason:    reason,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	s.eventUtil.PropagateMetadata(msg, newMsg) // Use eventutil to copy metadata
 
-	if err := s.eventBus.Publish(ctx, userevents.GetUserFailed, msg); err != nil {
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.GetUserFailed, newMsg); err != nil {
+		s.logger.Error("Failed to publish GetUserFailed event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish GetUserFailed event: %w", err)
 	}
 

@@ -116,7 +116,7 @@ func TestUserHandlers_HandleUserPermissionsCheckResponse(t *testing.T) {
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				mockUserService.EXPECT().
-					UpdateUserRoleInDatabase(gomock.Any(), "123456789012345678", "admin", "test-correlation-id").
+					UpdateUserRoleInDatabase(gomock.Any(), args.msg, "123456789012345678", "admin").
 					Return(nil).
 					Times(1)
 				mockUserService.EXPECT().
@@ -156,7 +156,7 @@ func TestUserHandlers_HandleUserPermissionsCheckResponse(t *testing.T) {
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				mockUserService.EXPECT().
-					UpdateUserRoleInDatabase(gomock.Any(), "123456789012345678", "admin", "test-correlation-id").
+					UpdateUserRoleInDatabase(gomock.Any(), args.msg, "123456789012345678", "admin").
 					Return(errors.New("database error")).
 					Times(1)
 				mockUserService.EXPECT().

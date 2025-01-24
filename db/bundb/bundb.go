@@ -19,11 +19,11 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB        *userdb.UserDBImpl
-	RoundDB       *rounddb.RoundDBImpl
-	ScoreDB       *scoredb.ScoreDBImpl
-	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
-	db            *bun.DB
+	UserDB *userdb.UserDBImpl
+	// RoundDB       *rounddb.RoundDBImpl
+	// ScoreDB       *scoredb.ScoreDBImpl
+	// LeaderboardDB *leaderboarddb.LeaderboardDBImpl
+	db *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -48,11 +48,11 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	}
 
 	dbService := &DBService{
-		UserDB:  &userdb.UserDBImpl{DB: db},
-		RoundDB: &rounddb.RoundDBImpl{DB: db},
+		UserDB: &userdb.UserDBImpl{DB: db},
+		// RoundDB: &rounddb.RoundDBImpl{DB: db},
 		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
-		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
-		db:            db,
+		// LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
+		db: db,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)

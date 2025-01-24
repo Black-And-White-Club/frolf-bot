@@ -28,8 +28,7 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 		logger:      logger,
 	}
 
-	testUserID := usertypes.DiscordID("123456789012345678") // Valid Discord ID
-	testRole := usertypes.UserRoleEnum("admin")             // Use the enum type
+	testDiscordID := usertypes.DiscordID("123456789012345678") // Valid Discord ID
 	testRequesterID := "requester456"
 	testCorrelationID := watermill.NewUUID()
 
@@ -45,14 +44,15 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 		{
 			name: "Successful Permission Check Request",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testUserID, testRole, testRequesterID))),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
 			},
 			wantErr: false,
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
+				// Mock expects the corrected arguments
 				mockUserService.EXPECT().
-					CheckUserPermissionsInDB(gomock.Any(), testUserID, testRole, testRequesterID, testCorrelationID). // Expect the enum type
+					CheckUserPermissionsInDB(gomock.Any(), args.msg, testDiscordID, usertypes.UserRoleAdmin, testRequesterID). // Use the correct enum value
 					Return(nil).
 					Times(1)
 			},
@@ -68,14 +68,14 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 		{
 			name: "CheckUserPermissionsInDB Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testUserID, testRole, testRequesterID))),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
 			},
 			wantErr: true,
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 				mockUserService.EXPECT().
-					CheckUserPermissionsInDB(gomock.Any(), testUserID, testRole, testRequesterID, testCorrelationID). // Expect the enum type
+					CheckUserPermissionsInDB(gomock.Any(), args.msg, testDiscordID, usertypes.UserRoleAdmin, testRequesterID). // Use the correct enum value
 					Return(errors.New("database error")).
 					Times(1)
 			},
@@ -111,7 +111,7 @@ func TestUserHandlers_HandleUserPermissionsCheckFailed(t *testing.T) {
 	testCorrelationID := watermill.NewUUID()
 
 	t.Run("Successful Handling of Permissions Check Failed", func(t *testing.T) {
-		msg := message.NewMessage(testCorrelationID, []byte(`{"user_id":"user123", "role":"admin", "requester_id":"requester456", "reason":"Some reason"}`))
+		msg := message.NewMessage(testCorrelationID, []byte(`{"discord_id":"123456789012345678", "role":"admin", "requester_id":"requester456", "reason":"Some reason"}`))
 		msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 		err := h.HandleUserPermissionsCheckFailed(msg)

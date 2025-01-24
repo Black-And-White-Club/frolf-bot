@@ -7,35 +7,28 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
 	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // App holds the application components.
 type App struct {
-	Config            *config.Config
-	Logger            *slog.Logger
-	Router            *message.Router
-	UserModule        *user.Module
-	LeaderboardModule *leaderboard.Module
-	RoundModule       *round.Module
-	ScoreModule       *score.Module
-	DB                *bundb.DBService
-	EventBus          shared.EventBus
-	js                jetstream.JetStream // New JetStream context
+	Config      *config.Config
+	Logger      *slog.Logger
+	Router      *message.Router
+	UserModule  *user.Module
+	RouterReady chan struct{} // Channel to signal when the main router is ready
+	DB          *bundb.DBService
+	EventBus    shared.EventBus
 }
 
 // Initialize initializes the application.
@@ -57,75 +50,64 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	app.Logger.Info("App Initialize started")
 
-	// Initialize database
+	/// Initialize database
 	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// Connect to NATS
-	nc, err := nats.Connect(app.Config.NATS.URL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-	defer nc.Close()
+	// Create Watermill logger
+	watermillLogger := watermill.NewSlogLogger(app.Logger)
 
-	// Get JetStream context using the new JetStream API
-	app.js, err = jetstream.Connect(nc)
-	if err != nil {
-		return fmt.Errorf("failed to connect to JetStream: %w", err)
-	}
+	// Create a message deduplicator
+	deduplicator := middleware.Deduplicator(middleware.Deduplicator{})
 
-	// Create streams (using new JetStream API)
-	if err := app.createStreams(ctx); err != nil {
-		return fmt.Errorf("failed to create streams: %w", err)
+	// Create Router
+	router, err := message.NewRouter(message.RouterConfig{}, watermillLogger)
+	if err != nil {
+		return fmt.Errorf("failed to create Watermill router: %w", err)
 	}
+	app.Router = router
+
+	// Add Middleware
+	app.Router.AddMiddleware(
+		middleware.CorrelationID, // Generate or propagate correlation ID
+		deduplicator.Middleware,  // Deduplicate messages
+		middleware.Recoverer,     // Recover from panics
+	)
 
 	// Initialize EventBus
-	app.EventBus, err = eventbus.NewEventBus(ctx, cfg.Nats.URL, app.Logger)
+	eventBus, err := eventbus.NewEventBus(ctx, app.Config.NATS.URL, app.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
+	app.EventBus = eventBus
+	app.EventBus = eventBus
+
+	// Initialize modules and register handlers
+	if err := app.initializeModules(ctx, cfg, app.Logger, app.DB, app.EventBus, app.Router); err != nil {
+		return fmt.Errorf("failed to initialize modules: %w", err)
+	}
+
+	app.Logger.Info("All modules initialized successfully")
+
+	return nil
+}
+
+func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus shared.EventBus, router *message.Router) error {
+	logger.Info("Entering initializeModules")
 
 	// Initialize User Module
-	userModule, err := user.NewUserModule(ctx, cfg, app.Logger, app.DB.UserDB, app.EventBus)
+	userModule, err := user.NewUserModule(ctx, cfg, logger, db.UserDB, eventBus, router)
 	if err != nil {
+		logger.Error("Failed to initialize user module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
 
-	// Initialize Leaderboard Module
-	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, app.Logger, app.DB.LeaderboardDB, app.EventBus)
-	if err != nil {
-		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
-	}
-	app.LeaderboardModule = leaderboardModule
+	logger.Info("User module initialized successfully")
 
-	// Initialize Round Module
-	roundModule, err := round.NewRoundModule(ctx, cfg, app.Logger, app.DB.RoundDB, app.EventBus)
-	if err != nil {
-		return fmt.Errorf("failed to initialize round module: %w", err)
-	}
-	app.RoundModule = roundModule
-
-	// Initialize Score Module
-	scoreModule, err := score.NewScoreModule(ctx, cfg, app.Logger, app.DB.ScoreDB, app.EventBus)
-	if err != nil {
-		return fmt.Errorf("failed to initialize score module: %w", err)
-	}
-	app.ScoreModule = scoreModule
-
-	// Wait for subscribers to be ready
-	<-userModule.SubscribersReady
-	<-leaderboardModule.SubscribersReady
-	<-roundModule.SubscribersReady
-	<-scoreModule.SubscribersReady
-
-	// Add a delay here
-	time.Sleep(100 * time.Millisecond)
-
-	app.Logger.Info("All modules initialized successfully")
-
+	logger.Info("Exiting initializeModules")
 	return nil
 }
 
@@ -133,8 +115,6 @@ func (app *App) Initialize(ctx context.Context) error {
 func (app *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	var wg sync.WaitGroup
 
 	// Handle OS signals
 	interrupt := make(chan os.Signal, 1)
@@ -145,36 +125,67 @@ func (app *App) Run(ctx context.Context) error {
 		cancel()
 	}()
 
-	// Start the router
-	wg.Add(1)
+	// Start the Watermill router in a separate goroutine
 	go func() {
-		defer wg.Done()
+		app.Logger.Info("Starting main Watermill router in goroutine")
 		if err := app.Router.Run(ctx); err != nil {
 			app.Logger.Error("Error running Watermill router", slog.Any("error", err))
-			cancel()
+			cancel() // Signal other goroutines to stop
 		}
+		app.Logger.Info("Main Watermill router stopped")
 	}()
 
-	// Wait for graceful shutdown
-	wg.Wait()
+	// Wait for the main router to start running
+	app.Logger.Info("Waiting for main router to start running")
+	select {
+	case <-app.Router.Running():
+		app.Logger.Info("Main router started and running")
+	case <-time.After(time.Second * 5): // Increased timeout
+		app.Logger.Error("Timeout waiting for main router to start")
+		cancel()
+		return fmt.Errorf("timeout waiting for main router to start")
+	}
 
-	app.Close()
+	// Start modules
+	app.UserModule.Run(ctx, nil)
+
+	// Keep the main goroutine alive until the context is canceled.
+	// This could be due to an interrupt signal or an error in the router.
+	<-ctx.Done()
+
+	// Perform a graceful shutdown
+	app.Logger.Info("Shutting down...")
+	if err := app.Close(); err != nil {
+		return err
+	}
+
 	app.Logger.Info("Graceful shutdown complete.")
-
 	return nil
 }
 
-// Close shuts down all resources.
-func (app *App) Close() {
+func (app *App) Close() error {
+	app.Logger.Info("Starting app.Close()")
+
+	// Close modules first
+	app.Logger.Info("Closing user module")
+	app.UserModule.Close()
+
+	// Then close the Watermill router
 	if app.Router != nil {
+		app.Logger.Info("Closing Watermill router")
 		if err := app.Router.Close(); err != nil {
 			app.Logger.Error("Error closing Watermill router", slog.Any("error", err))
 		}
 	}
 
+	// Finally, close the event bus
 	if app.EventBus != nil {
+		app.Logger.Info("Closing event bus")
 		if err := app.EventBus.Close(); err != nil {
 			app.Logger.Error("Error closing event bus", slog.Any("error", err))
 		}
 	}
+
+	app.Logger.Info("Finished app.Close()")
+	return nil
 }

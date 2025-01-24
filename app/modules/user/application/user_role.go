@@ -24,19 +24,33 @@ func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Messa
 	)
 
 	// Publish a UserPermissionsCheckRequest event
-	payloadBytes, err := json.Marshal(userevents.UserPermissionsCheckRequestPayload{
+	eventPayload := userevents.UserPermissionsCheckRequestPayload{
 		DiscordID:   userID,
 		Role:        role,
 		RequesterID: requesterID,
-	})
+	}
+
+	payloadBytes, err := json.Marshal(eventPayload)
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	// Use correlationID for the message
-	msg = message.NewMessage(correlationID, payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserPermissionsCheckRequest, msg); err != nil {
+	// Create a new message for the outgoing event
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Copy the correlation ID to the new message's metadata
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.UserPermissionsCheckRequest, newMsg); err != nil {
+		s.logger.Error("Failed to publish UserPermissionsCheckRequest event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish UserPermissionsCheckRequest event: %w", err)
 	}
 
@@ -45,7 +59,8 @@ func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Messa
 }
 
 // UpdateUserRoleInDatabase updates the user's role in the database.
-func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID string, role, correlationID string) error {
+func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID string, role string) error {
+	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	err := s.UserDB.UpdateUserRole(ctx, usertypes.DiscordID(userID), usertypes.UserRoleEnum(role))
 	if err != nil {
 		s.logger.Error("Failed to update user role in database",
@@ -73,12 +88,24 @@ func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *messa
 		Role:      role,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserRoleUpdated, msg); err != nil {
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Copy the correlation ID to the new message's metadata
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.UserRoleUpdated, newMsg); err != nil {
+		s.logger.Error("Failed to publish UserRoleUpdated event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish UserRoleUpdated event: %w", err)
 	}
 
@@ -102,12 +129,24 @@ func (s *UserServiceImpl) PublishUserRoleUpdateFailed(ctx context.Context, msg *
 		Reason:    reason,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg = message.NewMessage(correlationID, payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserRoleUpdateFailed, msg); err != nil {
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Copy the correlation ID to the new message's metadata
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.UserRoleUpdateFailed, newMsg); err != nil {
+		s.logger.Error("Failed to publish UserRoleUpdateFailed event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish UserRoleUpdateFailed event: %w", err)
 	}
 

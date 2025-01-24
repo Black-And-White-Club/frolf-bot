@@ -32,24 +32,41 @@ func (s *UserServiceImpl) CheckUserPermissions(ctx context.Context, msg *message
 
 	payloadBytes, err := json.Marshal(eventPayload)
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	// Create a new message for the UserPermissionsCheckRequest event
-	msg = message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	// Create a new message for the outgoing event
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Copy the correlation ID to the new message's metadata
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+
+	// Set the context on the new message
+	newMsg.SetContext(ctx)
 
 	// Publish the event
-	if err := s.eventBus.Publish(ctx, userevents.UserPermissionsCheckRequest, msg); err != nil {
+	if err := s.eventBus.Publish(userevents.UserPermissionsCheckRequest, newMsg); err != nil {
+		s.logger.Error("Failed to publish UserPermissionsCheckRequest event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish UserPermissionsCheckRequest event: %w", err)
 	}
 
-	s.logger.Info("Published UserPermissionsCheckRequest event", slog.String("correlation_id", correlationID))
+	s.logger.Info("Published UserPermissionsCheckRequest event",
+		slog.String("correlation_id", correlationID),
+	)
 	return nil
 }
 
 // CheckUserPermissionsInDB checks if the requesting user has the required permissions in the database
-func (s *UserServiceImpl) CheckUserPermissionsInDB(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string) error {
+func (s *UserServiceImpl) CheckUserPermissionsInDB(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error {
+	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+
 	s.logger.Info("Checking user permissions in DB",
 		slog.String("user_id", string(discordID)),
 		slog.String("role", string(role)),
@@ -65,7 +82,9 @@ func (s *UserServiceImpl) CheckUserPermissionsInDB(ctx context.Context, discordI
 			slog.Any("error", err),
 		)
 		// Publish a UserPermissionsCheckFailed event
-		return fmt.Errorf("failed to get requesting user: %w", s.PublishUserPermissionsCheckFailed(ctx, discordID, role, requesterID, correlationID, "Failed to get requesting user"))
+		return fmt.Errorf("failed to get requesting user: %w",
+			s.PublishUserPermissionsCheckFailed(ctx, msg, discordID, role, requesterID, "Failed to get requesting user"),
+		)
 	}
 
 	// Check if the requesting user has the required role
@@ -76,15 +95,18 @@ func (s *UserServiceImpl) CheckUserPermissionsInDB(ctx context.Context, discordI
 			slog.String("required_role", string(role)),
 		)
 		// Publish a UserPermissionsCheckFailed event
-		return fmt.Errorf("requester does not have required role: %w", s.PublishUserPermissionsCheckFailed(ctx, discordID, role, requesterID, correlationID, "Requester does not have required role"))
+		return fmt.Errorf("requester does not have required role: %w",
+			s.PublishUserPermissionsCheckFailed(ctx, msg, discordID, role, requesterID, "Requester does not have required role"),
+		)
 	}
 
 	// Publish a UserPermissionsCheckResponse event indicating permission granted
-	return s.PublishUserPermissionsCheckResponse(ctx, discordID, role, requesterID, correlationID, true, "")
+	return s.PublishUserPermissionsCheckResponse(ctx, msg, discordID, role, requesterID, true, "")
 }
 
 // PublishUserPermissionsCheckResponse publishes a UserPermissionsCheckResponse event.
-func (s *UserServiceImpl) PublishUserPermissionsCheckResponse(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string, hasPermission bool, reason string) error {
+func (s *UserServiceImpl) PublishUserPermissionsCheckResponse(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string, hasPermission bool, reason string) error {
+	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Publishing UserPermissionsCheckResponse event",
 		slog.String("correlation_id", correlationID),
 		slog.Bool("has_permission", hasPermission),
@@ -98,45 +120,66 @@ func (s *UserServiceImpl) PublishUserPermissionsCheckResponse(ctx context.Contex
 		RequesterID:   requesterID,
 	})
 	if err != nil {
+		s.logger.Error("Failed to marshal event payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserPermissionsCheckResponse, msg); err != nil {
+	// Create a new message for the outgoing event
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Copy the correlation ID to the new message's metadata
+	s.eventUtil.PropagateMetadata(msg, newMsg)
+	newMsg.SetContext(ctx)
+
+	if err := s.eventBus.Publish(userevents.UserPermissionsCheckResponse, newMsg); err != nil {
+		s.logger.Error("Failed to publish UserPermissionsCheckResponse event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish UserPermissionsCheckResponse event: %w", err)
 	}
 
-	s.logger.Info("Published UserPermissionsCheckResponse event", slog.String("correlation_id", correlationID))
+	s.logger.Info("Published UserPermissionsCheckResponse event",
+		slog.String("correlation_id", correlationID),
+		slog.String("message_id", newMsg.UUID),
+	)
 	return nil
 }
 
-// PublishUserPermissionsCheckFailed publishes a UserPermissionsCheckFailed event.
-func (s *UserServiceImpl) PublishUserPermissionsCheckFailed(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID, reason string) error {
-	s.logger.Info("Publishing UserPermissionsCheckFailed event",
-		slog.String("discord_id", string(discordID)),
-		slog.String("role", string(role)),
-		slog.String("requester_id", requesterID),
-		slog.String("correlation_id", correlationID),
-		slog.String("reason", reason),
-	)
+func (s *UserServiceImpl) PublishUserPermissionsCheckFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string, reason string) error {
+	// Extract correlation ID from the original message
+	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 
-	payloadBytes, err := json.Marshal(userevents.UserPermissionsCheckFailedPayload{
-		Reason:      reason,
+	payload := userevents.UserPermissionsCheckFailedPayload{
 		DiscordID:   discordID,
 		Role:        string(role),
 		RequesterID: requesterID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to marshal event payload: %w", err)
+		Reason:      reason,
 	}
 
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlation_id", correlationID)
-	if err := s.eventBus.Publish(ctx, userevents.UserPermissionsCheckFailed, msg); err != nil {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create a new message with the correlation ID
+	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	newMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+
+	// Publish the event
+	if err := s.eventBus.Publish(userevents.UserPermissionsCheckFailed, newMsg); err != nil {
 		return fmt.Errorf("failed to publish UserPermissionsCheckFailed event: %w", err)
 	}
 
-	s.logger.Info("Published UserPermissionsCheckFailed event", slog.String("correlation_id", correlationID))
+	s.logger.Info("Published UserPermissionsCheckFailed event",
+		slog.String("correlation_id", correlationID),
+		slog.String("discord_id", string(discordID)),
+		slog.String("role", string(role)),
+		slog.String("requester_id", requesterID),
+		slog.String("reason", reason),
+	)
 	return nil
 }

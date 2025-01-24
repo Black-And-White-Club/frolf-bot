@@ -15,7 +15,7 @@ type Service interface {
 
 	// User Role
 	UpdateUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, role, requesterID string) error
-	UpdateUserRoleInDatabase(ctx context.Context, userID string, role, correlationID string) error
+	UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID string, role string) error
 	PublishUserRoleUpdated(ctx context.Context, msg *message.Message, userID, role string) error
 	PublishUserRoleUpdateFailed(ctx context.Context, msg *message.Message, userID, role, reason string) error
 
@@ -25,9 +25,9 @@ type Service interface {
 
 	// User Permissions
 	CheckUserPermissions(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error
-	CheckUserPermissionsInDB(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string) error
-	PublishUserPermissionsCheckResponse(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID string, hasPermission bool, reason string) error
-	PublishUserPermissionsCheckFailed(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, correlationID, reason string) error
+	CheckUserPermissionsInDB(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error
+	PublishUserPermissionsCheckResponse(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string, hasPermission bool, reason string) error
+	PublishUserPermissionsCheckFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, reason string) error
 
 	// Tag Availability
 	CheckTagAvailability(ctx context.Context, msg *message.Message, tagNumber int) error
