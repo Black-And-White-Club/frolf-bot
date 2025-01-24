@@ -12,6 +12,7 @@ import (
 	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
@@ -208,11 +209,6 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	testDiscordID := usertypes.DiscordID("12345")
-	testUser := &usertypes.UserData{
-		ID:        1,
-		DiscordID: testDiscordID,
-		Role:      usertypes.UserRoleAdmin,
-	}
 	testCorrelationID := watermill.NewUUID()
 	testCtx := context.Background()
 
@@ -251,6 +247,12 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			setup: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
+				testUser := &userdbtypes.User{
+					ID:        1,
+					DiscordID: testDiscordID,
+					Role:      usertypes.UserRoleAdmin,
+				}
+
 				f.UserDB.EXPECT().
 					GetUserByDiscordID(a.ctx, testDiscordID).
 					Return(testUser, nil).
@@ -275,9 +277,15 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
+						expectedUser := &usertypes.UserData{
+							ID:        testUser.ID,
+							DiscordID: testUser.DiscordID,
+							Role:      testUser.Role,
+						}
+
 						// Compare the entire UserData struct
-						if !reflect.DeepEqual(payload.User, testUser) {
-							t.Errorf("Expected user %+v, got %+v", testUser, payload.User)
+						if !reflect.DeepEqual(payload.User, expectedUser) {
+							t.Errorf("Expected user %+v, got %+v", expectedUser, payload.User)
 						}
 
 						// Check correlation ID
@@ -340,6 +348,12 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			wantErr: true,
 			setup: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+
+				testUser := &userdbtypes.User{
+					ID:        1,
+					DiscordID: testDiscordID,
+					Role:      usertypes.UserRoleAdmin,
+				}
 
 				f.UserDB.EXPECT().
 					GetUserByDiscordID(a.ctx, testDiscordID).

@@ -24,13 +24,19 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	)
 
 	// Create the user in the database using the userdb.User model
-	user := &userdb.User{
+	user_data := usertypes.UserData{
 		DiscordID: discordID,
-		// Role will be set to the default value by the database
+		Role:      usertypes.UserRoleRattler,
+	}
+
+	// Convert user_data to userdb.User type
+	user := userdb.User{
+		DiscordID: user_data.DiscordID,
+		Role:      user_data.Role,
 	}
 
 	// Attempt to create the user and handle potential errors
-	if err := s.UserDB.CreateUser(ctx, user); err != nil {
+	if err := s.UserDB.CreateUser(ctx, &user); err != nil {
 		s.logger.Error("Failed to create user",
 			slog.Any("error", err),
 			slog.String("discord_id", string(discordID)),

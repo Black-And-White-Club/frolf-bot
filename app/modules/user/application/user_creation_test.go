@@ -11,7 +11,9 @@ import (
 	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
+
 	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -67,7 +69,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			setup: func(f fields, args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
 					Return(nil).
 					Times(1)
 
@@ -126,7 +128,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			setup: func(f fields, args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
 					Return(errors.New("database error")).
 					Times(1)
 
@@ -163,7 +165,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			setup: func(f fields, args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &usertypes.UserData{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
 					Return(nil).
 					Times(1)
 

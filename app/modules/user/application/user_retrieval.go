@@ -8,6 +8,7 @@ import (
 
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -88,10 +89,16 @@ func (s *UserServiceImpl) publishGetUserRoleResponse(ctx context.Context, msg *m
 }
 
 // publishGetUserResponse publishes a GetUserResponse event.
-func (s *UserServiceImpl) publishGetUserResponse(ctx context.Context, msg *message.Message, user usertypes.User) error {
+// publishGetUserResponse publishes a GetUserResponse event.
+func (s *UserServiceImpl) publishGetUserResponse(ctx context.Context, msg *message.Message, user *userdb.User) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+	userData := &usertypes.UserData{
+		ID:        user.ID,
+		DiscordID: user.DiscordID,
+		Role:      user.Role,
+	}
 	payloadBytes, err := json.Marshal(userevents.GetUserResponsePayload{
-		User: user.(*usertypes.UserData),
+		User: userData,
 	})
 	if err != nil {
 		s.logger.Error("Failed to marshal event payload",

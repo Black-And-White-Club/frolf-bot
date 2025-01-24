@@ -12,6 +12,7 @@ import (
 	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
 	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	userdbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
@@ -217,7 +218,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 				// Mock successful retrieval of user
 				f.UserDB.EXPECT().
 					GetUserByDiscordID(a.ctx, usertypes.DiscordID(a.requesterID)).
-					Return(&usertypes.UserData{
+					Return(&userdbtypes.User{
 						ID:        1,
 						DiscordID: usertypes.DiscordID(a.requesterID),
 						Role:      testRole,
@@ -336,7 +337,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 				// Mock successful retrieval of user with incorrect role
 				f.UserDB.EXPECT().
 					GetUserByDiscordID(a.ctx, usertypes.DiscordID(a.requesterID)).
-					Return(&usertypes.UserData{
+					Return(&userdbtypes.User{
 						ID:        1,
 						DiscordID: usertypes.DiscordID(a.requesterID),
 						Role:      "some_other_role", // Assuming this is different from testRole
