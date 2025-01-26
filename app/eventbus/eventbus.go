@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,6 +136,10 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
 		subjects = []string{
 			"user.>", // This captures all events prefixed with "user."
 		}
+	case "leaderboard":
+		subjects = []string{
+			"leaderboard.>", // This captures all events prefixed with "leaderboard."
+		}
 	default:
 		return fmt.Errorf("unknown stream name: %s", streamName)
 	}
@@ -172,9 +177,19 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
 func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	eb.logger.Info("Entering Subscribe", slog.String("topic", topic))
 
-	// Sanitize the topic name for the consumer name
-	consumerName := fmt.Sprintf("consumer-%s", strings.ReplaceAll(topic, ".", "_"))
-	streamName := "user" // Assuming your stream name is 'user'
+	// Determine the stream name based on the topic
+	var streamName string
+	switch {
+	case strings.HasPrefix(topic, "user."):
+		streamName = "user"
+	case strings.HasPrefix(topic, "leaderboard."):
+		streamName = "leaderboard"
+	default:
+		return nil, fmt.Errorf("unknown topic: %s", topic)
+	}
+
+	// Use a durable consumer name specific to the topic
+	consumerName := fmt.Sprintf("consumer-%s", sanitize(topic))
 
 	// Check if the stream exists
 	_, err := eb.js.Stream(ctx, streamName)
@@ -183,10 +198,10 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 		return nil, fmt.Errorf("stream not found: %w", err)
 	}
 
-	// Create or update a consumer for the stream
+	// Create or update a consumer for the stream, subscribing to the specific topic
 	cons, err := eb.js.CreateOrUpdateConsumer(ctx, streamName, jetstream.ConsumerConfig{
 		Durable:       consumerName,
-		FilterSubject: topic,
+		FilterSubject: topic,                       // Subscribe to the exact topic
 		AckPolicy:     jetstream.AckExplicitPolicy, // Ensure explicit acknowledgment
 	})
 	if err != nil {
@@ -219,6 +234,7 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 
 	// Start a goroutine to handle JetStream messages
 	go func() {
+		eb.logger.Info("Starting consumer goroutine", slog.String("consumer_name", consumerName), slog.String("stream", streamName), slog.String("topic", topic))
 		defer close(messages) // Close messages channel when the goroutine exits
 
 		for {
@@ -234,7 +250,7 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 			}
 
 			// Convert JetStream message to Watermill message
-			watermillMsg := message.NewMessage(watermill.NewUUID(), jetStreamMsg.Data())
+			watermillMsg := message.NewMessage(string(jetStreamMsg.Headers().Get("Nats-Msg-Id")), jetStreamMsg.Data())
 
 			// Add JetStream metadata to the Watermill message
 			meta, err := jetStreamMsg.Metadata()
@@ -287,6 +303,22 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 	return messages, nil
 }
 
+// Helper function to determine a suitable filter subject
+func getFilterSubject(topic string) string {
+	switch {
+	case strings.HasPrefix(topic, "user.permissions."):
+		return "user.permissions.*" // Matches user.permissions.check, user.permissions.response, etc.
+	case strings.HasPrefix(topic, "user.role."):
+		return "user.role.*" // Matches user.role.update.request, user.role.update.failed, etc
+	case strings.HasPrefix(topic, "user."):
+		return "user.>" // For other user events, use wildcard to capture all subtopics
+	case strings.HasPrefix(topic, "leaderboard."):
+		return "leaderboard.>" // For leaderboard events, use wildcard
+	default:
+		return topic // Default to the exact topic if no specific pattern is matched
+	}
+}
+
 func streamSubjectsMatch(existing, new []string) bool {
 	if len(existing) != len(new) {
 		return false
@@ -303,8 +335,15 @@ func streamSubjectsMatch(existing, new []string) bool {
 	return true
 }
 
+// Helper function to sanitize a string to make it a valid NATS subject part
+func sanitize(s string) string {
+	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
+	return reg.ReplaceAllString(s, "")
+}
+
 func (eb *eventBus) createStreamsAndDLQs(ctx context.Context) error {
-	streams := []string{"user"}
+	// Add the "leaderboard" stream to the list of streams to be created
+	streams := []string{"user", "leaderboard"}
 
 	for _, stream := range streams {
 		if err := eb.CreateStream(ctx, stream); err != nil {
@@ -349,7 +388,8 @@ func (eb *eventBus) Publish(topic string, messages ...*message.Message) error {
 		}
 
 		// Set Nats-Msg-Id for JetStream deduplication
-		dedupKey := fmt.Sprintf("%s-%s", msg.UUID, topic) // Generate a deterministic dedup key
+		dedupKey := fmt.Sprintf("%s-%s", msg.UUID, sanitize(topic))
+		msg.Metadata.Set("topic", topic)
 		msg.Metadata.Set("Nats-Msg-Id", dedupKey)
 
 		err := eb.publisher.Publish(topic, msg)

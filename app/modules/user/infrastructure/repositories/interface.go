@@ -12,5 +12,5 @@ type UserDB interface {
 	CreateUser(ctx context.Context, user *User) error
 	GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error)
 	GetUserRole(ctx context.Context, discordID usertypes.DiscordID) (usertypes.UserRoleEnum, error)
-	UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, newRole usertypes.UserRoleEnum) error
+	UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error
 }

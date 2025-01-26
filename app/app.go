@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
@@ -22,13 +23,14 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config      *config.Config
-	Logger      *slog.Logger
-	Router      *message.Router
-	UserModule  *user.Module
-	RouterReady chan struct{} // Channel to signal when the main router is ready
-	DB          *bundb.DBService
-	EventBus    shared.EventBus
+	Config            *config.Config
+	Logger            *slog.Logger
+	Router            *message.Router
+	UserModule        *user.Module
+	LeaderboardModule *leaderboard.Module // Add Leaderboard module
+	RouterReady       chan struct{}       // Channel to signal when the main router is ready
+	DB                *bundb.DBService
+	EventBus          shared.EventBus
 }
 
 // Initialize initializes the application.
@@ -82,7 +84,6 @@ func (app *App) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
 	app.EventBus = eventBus
-	app.EventBus = eventBus
 
 	// Initialize modules and register handlers
 	if err := app.initializeModules(ctx, cfg, app.Logger, app.DB, app.EventBus, app.Router); err != nil {
@@ -104,8 +105,16 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
-
 	logger.Info("User module initialized successfully")
+
+	// Initialize Leaderboard Module
+	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, logger, db.LeaderboardDB, eventBus, router)
+	if err != nil {
+		logger.Error("Failed to initialize leaderboard module", slog.Any("error", err))
+		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
+	}
+	app.LeaderboardModule = leaderboardModule
+	logger.Info("Leaderboard module initialized successfully")
 
 	logger.Info("Exiting initializeModules")
 	return nil
@@ -148,6 +157,7 @@ func (app *App) Run(ctx context.Context) error {
 
 	// Start modules
 	app.UserModule.Run(ctx, nil)
+	app.LeaderboardModule.Run(ctx, nil)
 
 	// Keep the main goroutine alive until the context is canceled.
 	// This could be due to an interrupt signal or an error in the router.
@@ -169,6 +179,9 @@ func (app *App) Close() error {
 	// Close modules first
 	app.Logger.Info("Closing user module")
 	app.UserModule.Close()
+
+	app.Logger.Info("Closing leaderboard module")
+	app.LeaderboardModule.Close()
 
 	// Then close the Watermill router
 	if app.Router != nil {

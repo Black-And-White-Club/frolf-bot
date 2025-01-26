@@ -10,6 +10,7 @@ import (
 
 	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
 	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
 	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
@@ -28,6 +29,7 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 
 	testTagNumber := 123
 	testCorrelationID := watermill.NewUUID()
+	testDiscordID := "123456789012345678" // Valid Discord ID
 	testCtx := context.Background()
 
 	type fields struct {
@@ -54,18 +56,17 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 				UserDB:    mockUserDB,
 				eventBus:  mockEventBus,
 				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Initialize eventUtil
+				eventUtil: eventutil.NewEventUtil(),
 			},
 			args: args{
 				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
+				msg:       createTestMessageWithMetadata(testCorrelationID, testDiscordID),
 				tagNumber: testTagNumber,
 			},
 			wantErr: false,
 			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				f.eventBus.EXPECT().
-					Publish(userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()). // Expect one message
+					Publish(userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
 						if topic != userevents.LeaderboardTagAvailabilityCheckRequest {
 							t.Errorf("Expected topic %s, got %s", userevents.LeaderboardTagAvailabilityCheckRequest, topic)
@@ -77,7 +78,7 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 
 						msg := msgs[0]
 
-						var payload userevents.CheckTagAvailabilityRequestPayload
+						var payload userevents.TagAvailabilityCheckRequestedPayload
 						err := json.Unmarshal(msg.Payload, &payload)
 						if err != nil {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
@@ -87,9 +88,8 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 							t.Errorf("Expected tag number %d, got %d", testTagNumber, payload.TagNumber)
 						}
 
-						// UUID should be different
-						if msg.UUID == a.msg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-							t.Errorf("Expected new message UUID, but it matched correlation ID: %s", msg.UUID)
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) {
+							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
 						}
 
 						// Check correlation ID
@@ -108,16 +108,15 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 				UserDB:    mockUserDB,
 				eventBus:  mockEventBus,
 				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Initialize eventUtil
+				eventUtil: eventutil.NewEventUtil(),
 			},
 			args: args{
 				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
+				msg:       createTestMessageWithMetadata(testCorrelationID, testDiscordID),
 				tagNumber: testTagNumber,
 			},
 			wantErr: true,
 			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				f.eventBus.EXPECT().
 					Publish(userevents.LeaderboardTagAvailabilityCheckRequest, gomock.Any()).
 					Return(errors.New("publish error")).
@@ -131,7 +130,7 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 				UserDB:    tt.fields.UserDB,
 				eventBus:  tt.fields.eventBus,
 				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil, // Use the mock in the UserServiceImpl
+				eventUtil: tt.fields.eventUtil,
 			}
 
 			// Call setup function to configure mocks before each test case
@@ -139,9 +138,175 @@ func TestUserServiceImpl_CheckTagAvailability(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.CheckTagAvailability(tt.args.ctx, tt.args.msg, tt.args.tagNumber); (err != nil) != tt.wantErr {
+			if err := s.CheckTagAvailability(tt.args.ctx, tt.args.msg, tt.args.tagNumber, usertypes.DiscordID(testDiscordID)); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.CheckTagAvailability() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
+}
+
+func TestUserServiceImpl_HandleTagUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	eventUtil := eventutil.NewEventUtil()
+
+	// Use a valid Discord ID format
+	testDiscordID := "123456789012345678"
+	testTagNumber := 123
+	testCorrelationID := watermill.NewUUID()
+	testReason := "tag not available"
+
+	type fields struct {
+		UserDB    *userdb.MockUserDB
+		eventBus  *eventbusmocks.MockEventBus
+		logger    *slog.Logger
+		eventUtil eventutil.EventUtil
+	}
+	type args struct {
+		ctx       context.Context
+		msg       *message.Message
+		tagNumber int
+		discordID usertypes.DiscordID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+		setup   func(f fields, a args)
+	}{
+		{
+			name: "Successful Tag Unavailable",
+			fields: fields{
+				UserDB:    mockUserDB,
+				eventBus:  mockEventBus,
+				logger:    logger,
+				eventUtil: eventUtil,
+			},
+			args: args{
+				ctx: context.Background(),
+				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagUnavailablePayload{
+					DiscordID: usertypes.DiscordID(testDiscordID), // Set a valid Discord ID here
+					TagNumber: testTagNumber,
+					Reason:    testReason,
+				}),
+				tagNumber: testTagNumber,
+				discordID: usertypes.DiscordID(testDiscordID), // Pass it here
+			},
+			wantErr: false,
+			setup: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+				// Expect the service to publish a UserCreationFailed event
+				f.eventBus.EXPECT().
+					Publish(userevents.UserCreationFailed, gomock.Any()).
+					DoAndReturn(func(topic string, msgs ...*message.Message) error {
+						if topic != userevents.UserCreationFailed {
+							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						}
+
+						if len(msgs) != 1 {
+							t.Fatalf("Expected 1 message, got %d", len(msgs))
+						}
+
+						msg := msgs[0]
+
+						// Verify the correlation ID
+						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+						if correlationID != testCorrelationID {
+							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
+						}
+
+						// Verify the payload
+						var payload userevents.UserCreationFailedPayload
+						err := json.Unmarshal(msg.Payload, &payload)
+						if err != nil {
+							t.Fatalf("Failed to unmarshal message payload: %v", err)
+						}
+
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) {
+							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
+						}
+
+						if payload.TagNumber == nil || *payload.TagNumber != testTagNumber {
+							t.Errorf("Expected TagNumber %d, got %v", testTagNumber, payload.TagNumber)
+						}
+
+						if payload.Reason != testReason {
+							t.Errorf("Expected Reason '%s', got '%s'", testReason, payload.Reason)
+						}
+
+						return nil
+					}).
+					Times(1)
+			},
+		},
+		{
+			name: "Publish UserCreationFailed Error",
+			fields: fields{
+				UserDB:    mockUserDB,
+				eventBus:  mockEventBus,
+				logger:    logger,
+				eventUtil: eventUtil,
+			},
+			args: args{
+				ctx: context.Background(),
+				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagUnavailablePayload{
+					DiscordID: usertypes.DiscordID(testDiscordID), // Set a valid Discord ID here
+					TagNumber: testTagNumber,
+					Reason:    testReason,
+				}),
+				tagNumber: testTagNumber,
+				discordID: usertypes.DiscordID(testDiscordID), // Pass it here
+			},
+			wantErr: true,
+			setup: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+				// Expect the service to publish a UserCreationFailed event, but simulate an error
+				f.eventBus.EXPECT().
+					Publish(userevents.UserCreationFailed, gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &UserServiceImpl{
+				UserDB:    tt.fields.UserDB,
+				eventBus:  tt.fields.eventBus,
+				logger:    tt.fields.logger,
+				eventUtil: tt.fields.eventUtil,
+			}
+			if tt.setup != nil {
+				tt.setup(tt.fields, tt.args)
+			}
+			if err := s.TagUnavailable(tt.args.ctx, tt.args.msg, tt.args.tagNumber, tt.args.discordID); (err != nil) != tt.wantErr {
+				t.Errorf("UserServiceImpl.HandleTagUnavailable() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// Helper function to create a test message with a payload and correlation ID in metadata
+func createTestMessageWithPayload(t *testing.T, correlationID string, payload interface{}) *message.Message {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Failed to marshal payload: %v", err)
+	}
+	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	msg.Metadata = make(message.Metadata)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	return msg
+}
+
+// Helper function to create a test message with metadata
+func createTestMessageWithMetadata(correlationID string, discordID string) *message.Message {
+	msg := message.NewMessage(watermill.NewUUID(), nil)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	msg.Metadata.Set("discord_id", discordID)
+	return msg
 }

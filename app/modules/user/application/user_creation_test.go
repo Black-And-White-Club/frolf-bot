@@ -61,15 +61,17 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			},
 			args: args{
 				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				msg:       message.NewMessage(testCorrelationID, nil),
 				discordID: testDiscordID,
 				tag:       &testTag,
 			},
 			wantErr: false,
 			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+
+				// Update the mock expectation
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
 					Return(nil).
 					Times(1)
 
@@ -120,15 +122,17 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			},
 			args: args{
 				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				msg:       message.NewMessage(testCorrelationID, nil),
 				discordID: testDiscordID,
 				tag:       &testTag,
 			},
 			wantErr: false,
 			setup: func(f fields, args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+
+				// Fix the mock expectation to omit the Role field
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
 					Return(errors.New("database error")).
 					Times(1)
 
@@ -324,7 +328,7 @@ func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag); (err != nil) != tt.wantErr {
+			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, string(tt.args.discordID), tt.args.tag); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.PublishUserCreated() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

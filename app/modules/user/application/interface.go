@@ -9,15 +9,15 @@ import (
 
 type Service interface {
 	// User Creation
-	CreateUser(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int) error
-	PublishUserCreated(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int) error
-	PublishUserCreationFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int, reason string) error
+	CreateUser(context.Context, *message.Message, usertypes.DiscordID, *int) error
+	PublishUserCreated(context.Context, *message.Message, string, *int) error
+	PublishUserCreationFailed(context.Context, *message.Message, usertypes.DiscordID, *int, string) error
 
 	// User Role
-	UpdateUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, role, requesterID string) error
-	UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID string, role string) error
-	PublishUserRoleUpdated(ctx context.Context, msg *message.Message, userID, role string) error
-	PublishUserRoleUpdateFailed(ctx context.Context, msg *message.Message, userID, role, reason string) error
+	UpdateUserRole(context.Context, *message.Message, usertypes.DiscordID, usertypes.UserRoleEnum, string) error
+	UpdateUserRoleInDatabase(context.Context, *message.Message, usertypes.DiscordID, usertypes.UserRoleEnum) error
+	PublishUserRoleUpdated(context.Context, *message.Message, usertypes.DiscordID, usertypes.UserRoleEnum) error
+	PublishUserRoleUpdateFailed(context.Context, *message.Message, usertypes.DiscordID, usertypes.UserRoleEnum, string) error
 
 	// User Retrieval
 	GetUserRole(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID) error
@@ -30,5 +30,6 @@ type Service interface {
 	PublishUserPermissionsCheckFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID, reason string) error
 
 	// Tag Availability
-	CheckTagAvailability(ctx context.Context, msg *message.Message, tagNumber int) error
+	CheckTagAvailability(ctx context.Context, msg *message.Message, tagNumber int, discordID usertypes.DiscordID) error
+	TagUnavailable(ctx context.Context, msg *message.Message, tagNumber int, discordID usertypes.DiscordID) error
 }

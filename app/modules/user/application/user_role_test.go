@@ -91,7 +91,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != testRole || payload.RequesterID != testRequesterID {
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.RequesterID != testRequesterID {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -144,7 +144,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.UpdateUserRole(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.role, tt.args.requesterID); (err != nil) != tt.wantErr {
+			if err := s.UpdateUserRole(tt.args.ctx, tt.args.msg, tt.args.discordID, usertypes.UserRoleEnum(tt.args.role), tt.args.requesterID); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.UpdateUserRole() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -240,7 +240,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.UpdateUserRoleInDatabase(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.role); (err != nil) != tt.wantErr {
+			if err := s.UpdateUserRoleInDatabase(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.discordID), usertypes.UserRoleEnum(tt.args.role)); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.UpdateUserRoleInDatabase() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -316,7 +316,7 @@ func TestUserServiceImpl_PublishUserRoleUpdated(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != testDiscordID || payload.Role != testRole {
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -368,7 +368,7 @@ func TestUserServiceImpl_PublishUserRoleUpdated(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.PublishUserRoleUpdated(tt.args.ctx, tt.args.msg, tt.args.userID, tt.args.role); (err != nil) != tt.wantErr {
+			if err := s.PublishUserRoleUpdated(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.userID), usertypes.UserRoleEnum(tt.args.role)); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.PublishUserRoleUpdated() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -446,7 +446,7 @@ func TestUserServiceImpl_PublishUserRoleUpdateFailed(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != testDiscordID || payload.Role != testRole || payload.Reason != testReason {
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.Reason != testReason {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -498,7 +498,7 @@ func TestUserServiceImpl_PublishUserRoleUpdateFailed(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.PublishUserRoleUpdateFailed(tt.args.ctx, tt.args.msg, tt.args.userID, tt.args.role, tt.args.reason); (err != nil) != tt.wantErr {
+			if err := s.PublishUserRoleUpdateFailed(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.userID), usertypes.UserRoleEnum(tt.args.role), tt.args.reason); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.PublishUserRoleUpdateFailed() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

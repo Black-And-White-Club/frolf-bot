@@ -9,28 +9,59 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleCheckTagAvailabilityRequest handles the CheckTagAvailabilityRequest event.
-func (h *UserHandlers) HandleCheckTagAvailabilityRequest(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.CheckTagAvailabilityRequestPayload](msg, h.logger)
+// HandleTagAvailable handles the TagAvailable event.
+func (h *UserHandlers) HandleTagAvailable(msg *message.Message) error {
+	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.TagAvailablePayload](msg, h.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal CheckTagAvailabilityRequest event: %w", err)
+		return fmt.Errorf("failed to unmarshal TagAvailablePayload: %w", err)
 	}
 
-	h.logger.Info("Received CheckTagAvailabilityRequest event",
+	h.logger.Info("HandleTagAvailable triggered",
 		slog.String("correlation_id", correlationID),
+		slog.String("message_id", msg.UUID),
+	) // Add this log
+
+	h.logger.Info("Received TagAvailable event",
+		slog.String("correlation_id", correlationID),
+		slog.String("discord_id", string(payload.DiscordID)),
 		slog.Int("tag_number", payload.TagNumber),
 	)
 
-	// Call the service function to check the tag availability.
-	if err := h.userService.CheckTagAvailability(msg.Context(), msg, payload.TagNumber); err != nil {
-		h.logger.Error("Failed to check tag availability",
+	// Call the service function to create the user
+	if err := h.userService.CreateUser(msg.Context(), msg, payload.DiscordID, &payload.TagNumber); err != nil {
+		h.logger.Error("Failed to create user",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
 		)
-		return fmt.Errorf("failed to check tag availability: %w", err)
+		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	h.logger.Info("CheckTagAvailabilityRequest processed", slog.String("correlation_id", correlationID))
+	h.logger.Info("TagAvailable event processed", slog.String("correlation_id", correlationID))
+	return nil
+}
 
+// HandleTagUnavailable handles the TagUnavailable event.
+func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) error {
+	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.TagUnavailablePayload](msg, h.logger)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal TagUnavailablePayload: %w", err)
+	}
+
+	h.logger.Info("Received TagUnavailable event",
+		slog.String("correlation_id", correlationID),
+		slog.String("discord_id", string(payload.DiscordID)),
+		slog.Int("tag_number", payload.TagNumber),
+	)
+
+	// Call the service function to handle the tag unavailability
+	if err := h.userService.TagUnavailable(msg.Context(), msg, payload.TagNumber, payload.DiscordID); err != nil {
+		h.logger.Error("Failed to handle TagUnavailable",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("failed to handle TagUnavailable: %w", err)
+	}
+
+	h.logger.Info("TagUnavailable event processed", slog.String("correlation_id", correlationID))
 	return nil
 }

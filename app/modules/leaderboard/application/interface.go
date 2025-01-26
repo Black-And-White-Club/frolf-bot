@@ -4,14 +4,26 @@ import (
 	"context"
 
 	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Service handles leaderboard logic.
 type Service interface {
-	UpdateLeaderboard(ctx context.Context, event leaderboardevents.LeaderboardUpdateEvent) error
-	AssignTag(ctx context.Context, event leaderboardevents.TagAssignedEvent) error
-	SwapTags(ctx context.Context, requestorID, targetID string) error
-	GetLeaderboard(ctx context.Context) ([]leaderboardevents.LeaderboardEntry, error)
-	GetTagByDiscordID(ctx context.Context, discordID string) (int, error)
-	CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error)
+	// Leaderboard Updates
+	RoundFinalized(ctx context.Context, msg *message.Message) error
+	LeaderboardUpdateRequested(ctx context.Context, msg *message.Message) error
+
+	// Tag Assignment
+	TagAssigned(ctx context.Context, msg *message.Message) error
+	TagAssignmentRequested(ctx context.Context, msg *message.Message) error
+	PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error
+
+	// Tag Swapping
+	TagSwapRequested(ctx context.Context, msg *message.Message) error
+	TagSwapInitiated(ctx context.Context, msg *message.Message) error
+
+	// Other Operations
+	GetLeaderboardRequest(ctx context.Context, msg *message.Message) error
+	GetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error
+	TagAvailabilityCheckRequested(ctx context.Context, msg *message.Message) error
 }

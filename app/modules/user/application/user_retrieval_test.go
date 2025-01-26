@@ -93,11 +93,11 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != string(testDiscordID) {
+						if payload.DiscordID != testDiscordID {
 							t.Errorf("Expected User ID %s, got %s", testDiscordID, payload.DiscordID)
 						}
 
-						if payload.Role != string(testRole) {
+						if usertypes.UserRoleEnum(payload.Role) != testRole {
 							t.Errorf("Expected role %s, got %s", testRole, payload.Role)
 						}
 

@@ -26,7 +26,7 @@ func (s *UserServiceImpl) CheckUserPermissions(ctx context.Context, msg *message
 	// Publish a UserPermissionsCheckRequest event
 	eventPayload := userevents.UserPermissionsCheckRequestPayload{
 		DiscordID:   discordID,
-		Role:        string(role),
+		Role:        role,
 		RequesterID: requesterID,
 	}
 
@@ -115,8 +115,8 @@ func (s *UserServiceImpl) PublishUserPermissionsCheckResponse(ctx context.Contex
 
 	payloadBytes, err := json.Marshal(userevents.UserPermissionsCheckResponsePayload{
 		HasPermission: hasPermission,
-		DiscordID:     string(discordID),
-		Role:          string(role),
+		DiscordID:     discordID,
+		Role:          role,
 		RequesterID:   requesterID,
 	})
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *UserServiceImpl) PublishUserPermissionsCheckFailed(ctx context.Context,
 
 	payload := userevents.UserPermissionsCheckFailedPayload{
 		DiscordID:   discordID,
-		Role:        string(role),
+		Role:        role,
 		RequesterID: requesterID,
 		Reason:      reason,
 	}

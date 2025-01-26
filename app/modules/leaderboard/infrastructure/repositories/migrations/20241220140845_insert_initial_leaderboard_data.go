@@ -19,7 +19,7 @@ func init() {
 		// Insert initial leaderboard data
 		initialLeaderboard := &leaderboarddb.Leaderboard{
 			LeaderboardData: make(map[int]string),
-			Active:          true,
+			IsActive:        true,
 		}
 		if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {
 			return err
@@ -47,7 +47,7 @@ func init() {
 func createInitialData(ctx context.Context, db *bun.DB) error {
 	initialLeaderboard := &leaderboarddb.Leaderboard{
 		LeaderboardData: make(map[int]string), // Initialize LeaderboardData as an empty map
-		Active:          true,
+		IsActive:        true,
 	}
 	if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {
 		return err

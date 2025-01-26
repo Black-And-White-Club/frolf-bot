@@ -2,68 +2,73 @@ package leaderboard
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync"
 
 	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/application"
-	leaderboardhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/handlers"
 	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
-	leaderboardsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/subscribers"
+	leaderboardrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/router"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// Module represents the leaderboard module.
 type Module struct {
-	EventBus         shared.EventBus
-	Service          leaderboardservice.Service
-	Handlers         leaderboardhandlers.Handlers
-	Subscribers      leaderboardsubscribers.Subscribers
-	logger           *slog.Logger
-	config           *config.Config
-	SubscribersReady chan struct{}
+	EventBus           shared.EventBus
+	LeaderboardService leaderboardservice.Service
+	logger             *slog.Logger
+	config             *config.Config
+	LeaderboardRouter  *leaderboardrouter.LeaderboardRouter
+	cancelFunc         context.CancelFunc
 }
 
-// NewLeaderboardModule creates a new LeaderboardModule with the provided dependencies.
-func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus shared.EventBus) (*Module, error) {
-	// Initialize leaderboard service and handlers
+func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+	logger.Info("leaderboard.NewLeaderboardModule called")
+
+	// Initialize leaderboard service.
 	leaderboardService := leaderboardservice.NewLeaderboardService(leaderboardDB, eventBus, logger)
-	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, eventBus, logger)
 
-	// Initialize leaderboard subscribers
-	leaderboardSubscribers := leaderboardsubscribers.NewLeaderboardSubscribers(eventBus, leaderboardHandlers, logger)
+	// Initialize leaderboard router.
+	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus)
 
-	module := &Module{
-		EventBus:         eventBus,
-		Service:          leaderboardService,
-		Handlers:         leaderboardHandlers,
-		Subscribers:      leaderboardSubscribers,
-		logger:           logger,
-		config:           cfg,
-		SubscribersReady: make(chan struct{}),
+	// Configure the router with the leaderboard service.
+	if err := leaderboardRouter.Configure(leaderboardService); err != nil {
+		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)
 	}
 
-	// Subscribe to leaderboard events in a separate goroutine
-	go func() {
-		subscriberCtx := context.Background() // Use a background context for subscribers
-
-		if err := module.Subscribers.SubscribeToLeaderboardEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to leaderboard events", "error", err)
-			return
-		}
-
-		logger.Info("Leaderboard module subscribers are ready")
-		close(module.SubscribersReady)
-	}()
+	module := &Module{
+		EventBus:           eventBus,
+		LeaderboardService: leaderboardService,
+		logger:             logger,
+		config:             cfg,
+		LeaderboardRouter:  leaderboardRouter, // Set the LeaderboardRouter
+	}
 
 	return module, nil
 }
 
-// IsInitialized safely checks module initialization
-func (m *Module) IsInitialized() bool {
-	select {
-	case <-m.SubscribersReady:
-		return true
-	default:
-		return false
+func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
+	m.logger.Info("Starting leaderboard module")
+
+	// Create a context that can be canceled
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancelFunc = cancel
+	defer cancel()
+
+	// Keep this goroutine alive until the context is canceled
+	<-ctx.Done()
+	m.logger.Info("Leaderboard module goroutine stopped")
+}
+
+func (m *Module) Close() error {
+	m.logger.Info("Stopping leaderboard module")
+
+	// Cancel any other running operations
+	if m.cancelFunc != nil {
+		m.cancelFunc()
 	}
+
+	m.logger.Info("Leaderboard module stopped")
+	return nil
 }

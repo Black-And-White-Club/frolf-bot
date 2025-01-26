@@ -14,18 +14,18 @@ import (
 )
 
 // UpdateUserRole starts the user role update process by publishing a UserPermissionsCheckRequest event.
-func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, role, requesterID string) error {
+func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Starting user role update process",
-		slog.String("user_id", string(userID)),
-		slog.String("role", role),
+		slog.String("user_id", string(discordID)),
+		slog.String("role", string(role)),
 		slog.String("requester_id", requesterID),
 		slog.String("correlation_id", correlationID),
 	)
 
 	// Publish a UserPermissionsCheckRequest event
 	eventPayload := userevents.UserPermissionsCheckRequestPayload{
-		DiscordID:   userID,
+		DiscordID:   discordID,
 		Role:        role,
 		RequesterID: requesterID,
 	}
@@ -59,13 +59,13 @@ func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Messa
 }
 
 // UpdateUserRoleInDatabase updates the user's role in the database.
-func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID string, role string) error {
+func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	err := s.UserDB.UpdateUserRole(ctx, usertypes.DiscordID(userID), usertypes.UserRoleEnum(role))
+	err := s.UserDB.UpdateUserRole(ctx, usertypes.DiscordID(discordID), usertypes.UserRoleEnum(role))
 	if err != nil {
 		s.logger.Error("Failed to update user role in database",
-			slog.String("user_id", userID),
-			slog.String("role", role),
+			slog.String("user_id", string(discordID)),
+			slog.String("role", string(role)),
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
 		)
@@ -75,16 +75,16 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *mes
 }
 
 // PublishUserRoleUpdated publishes a UserRoleUpdated event.
-func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *message.Message, userID, role string) error {
+func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Publishing UserRoleUpdated event",
-		slog.String("user_id", userID),
-		slog.String("role", role),
+		slog.String("user_id", string(discordID)),
+		slog.String("role", string(role)),
 		slog.String("correlation_id", correlationID),
 	)
 
 	payloadBytes, err := json.Marshal(userevents.UserRoleUpdatedPayload{
-		DiscordID: userID,
+		DiscordID: discordID,
 		Role:      role,
 	})
 	if err != nil {
@@ -114,17 +114,17 @@ func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *messa
 }
 
 // PublishUserRoleUpdateFailed publishes a UserRoleUpdateFailed event.
-func (s *UserServiceImpl) PublishUserRoleUpdateFailed(ctx context.Context, msg *message.Message, userID, role, reason string) error {
+func (s *UserServiceImpl) PublishUserRoleUpdateFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, reason string) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Publishing UserRoleUpdateFailed event",
-		slog.String("user_id", userID),
-		slog.String("role", role),
+		slog.String("user_id", string(discordID)),
+		slog.String("role", string(role)),
 		slog.String("correlation_id", correlationID),
 		slog.String("reason", reason),
 	)
 
 	payloadBytes, err := json.Marshal(userevents.UserRoleUpdateFailedPayload{
-		DiscordID: userID,
+		DiscordID: discordID,
 		Role:      role,
 		Reason:    reason,
 	})

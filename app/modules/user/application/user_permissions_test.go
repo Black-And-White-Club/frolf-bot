@@ -97,7 +97,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 							t.Errorf("Expected user ID %s, got %s", testDiscordID, payload.DiscordID)
 						}
 
-						if payload.Role != testRole {
+						if payload.Role != usertypes.UserRoleEnum(testRole) {
 							t.Errorf("Expected role %s, got %s", testRole, payload.Role)
 						}
 
@@ -245,7 +245,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != string(a.discordID) || payload.Role != string(a.role) || payload.RequesterID != a.requesterID || !payload.HasPermission {
+						if payload.DiscordID != a.discordID || payload.Role != a.role || payload.RequesterID != a.requesterID || !payload.HasPermission {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -477,7 +477,7 @@ func TestUserServiceImpl_PublishUserPermissionsCheckResponse(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != string(a.discordID) || payload.Role != string(a.role) || payload.RequesterID != a.requesterID || !payload.HasPermission {
+						if payload.DiscordID != a.discordID || payload.Role != a.role || payload.RequesterID != a.requesterID || !payload.HasPermission {
 							t.Errorf("Payload does not match expected values")
 						}
 

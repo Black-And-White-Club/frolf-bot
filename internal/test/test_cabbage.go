@@ -51,10 +51,11 @@ func main() {
 	// Generate a correlation ID and message UUID
 	correlationID := watermill.NewUUID()
 	messageUUID := watermill.NewUUID()
-
+	tagNumber := 2
 	// Create the payload
 	payload := userevents.UserSignupRequestPayload{
-		DiscordID: "999", // Replace with test Discord ID
+		DiscordID: "13", // Replace with test Discord ID
+		TagNumber: &tagNumber,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -68,8 +69,8 @@ func main() {
 	// Set the correlation ID in the metadata
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
 
-	// Set the Nats-Msg-Id for deduplication
-	msg.Metadata.Set("Nats-Msg-Id", messageUUID)
+	// Remove the following line:
+	// msg.Metadata.Set("Nats-Msg-Id", messageUUID)
 
 	// Add a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -24,15 +24,13 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	)
 
 	// Create the user in the database using the userdb.User model
-	user_data := usertypes.UserData{
-		DiscordID: discordID,
-		Role:      usertypes.UserRoleRattler,
+	userData := usertypes.UserData{
+		DiscordID: usertypes.DiscordID(discordID),
 	}
 
 	// Convert user_data to userdb.User type
 	user := userdb.User{
-		DiscordID: user_data.DiscordID,
-		Role:      user_data.Role,
+		DiscordID: userData.DiscordID,
 	}
 
 	// Attempt to create the user and handle potential errors
@@ -53,23 +51,23 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		return nil
 	}
 
-	s.logger.Info("CALLED FROM SERVICE User created successfully",
+	s.logger.Info("User created successfully",
 		slog.String("discord_id", string(discordID)),
 		slog.String("correlation_id", correlationID),
 	)
 
 	// Publish a UserCreated event
-	return s.PublishUserCreated(ctx, msg, discordID, tag)
+	return s.PublishUserCreated(ctx, msg, string(discordID), tag)
 }
 
 // PublishUserCreated publishes a UserCreated event.
-func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int) error {
+func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.Message, discordID string, tag *int) error {
 	// Get correlationID from message metadata
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 
 	// Prepare the event payload
 	eventPayload := &userevents.UserCreatedPayload{
-		DiscordID: discordID,
+		DiscordID: usertypes.DiscordID(discordID),
 	}
 	if tag != nil {
 		eventPayload.TagNumber = tag
@@ -93,6 +91,11 @@ func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.M
 
 	// Set the Nats-Msg-Id for deduplication using msg.UUID
 	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
+
+	// Copy the discord ID from the original message metadata
+	if discordID := msg.Metadata.Get("discord_id"); discordID != "" {
+		newMessage.Metadata.Set("discord_id", discordID)
+	}
 
 	// Publish the event
 	if err := s.eventBus.Publish(userevents.UserCreated, newMessage); err != nil {
@@ -118,7 +121,7 @@ func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *me
 
 	// Prepare the event payload
 	eventPayload := &userevents.UserCreationFailedPayload{
-		DiscordID: discordID,
+		DiscordID: discordID, // This is where you set the DiscordID
 		Reason:    reason,
 	}
 	if tag != nil {
@@ -140,9 +143,6 @@ func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *me
 
 	// Set the correlation ID for the new message
 	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-
-	// Set the Nats-Msg-Id for deduplication using msg.UUID
-	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
 
 	// Publish the event
 	if err := s.eventBus.Publish(userevents.UserCreationFailed, newMessage); err != nil {

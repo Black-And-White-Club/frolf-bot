@@ -1,98 +1,178 @@
 package leaderboardevents
 
-import "fmt"
+import (
+	leaderboardtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/types"
+)
 
 // Stream names
 const (
 	LeaderboardStreamName = "leaderboard"
 	UserStreamName        = "user"
+	RoundStreamName       = "round"
+	ScoreStreamName       = "score"
 )
 
 // Leaderboard-related events
 const (
-	LeaderboardUpdatedSubject           = "leaderboard.updated"
-	TagAssignedSubject                  = "leaderboard.tag.assigned"
-	TagSwapRequestedSubject             = "leaderboard.tag.swap.requested"
-	GetLeaderboardRequestSubject        = "leaderboard.get.leaderboard.request"
-	GetTagByDiscordIDRequestSubject     = "leaderboard.get.tag.by.discord.id.request"
-	CheckTagAvailabilityRequestSubject  = "leaderboard.check.tag.availability.request"
-	GetLeaderboardResponseSubject       = "leaderboard.get.leaderboard.response"
-	GetTagByDiscordIDResponseSubject    = "leaderboard.get.tag.by.discord.id.response"
-	CheckTagAvailabilityResponseSubject = "leaderboard.check.tag.availability.response"
+	// Leaderboard Update
+	RoundFinalized             = "leaderboard.round.finalized"  // From Score module
+	LeaderboardUpdateRequested = "leaderboard.update.requested" // Internal to Leaderboard module
+	LeaderboardUpdated         = "leaderboard.updated"          // Internal or external
+	LeaderboardUpdateFailed    = "leaderboard.update.failed"    // Internal or external
+	DeactivateOldLeaderboard   = "leaderboard.deactivate"       // Internal
+
+	// Tag Assignment
+	LeaderboardTagAvailabilityCheckRequest = "leaderboard.tag.availability.check.request" // From User module
+	LeaderboardTagAssignmentRequested      = "leaderboard.tag.assignment.requested"       // Internal to Leaderboard module
+	LeaderboardTagAssignmentFailed         = "leaderboard.tag.assignment.failed"          // Internal to Leaderboard module
+	TagAssigned                            = "leaderboard.tag.assigned"                   // Internal to Leaderboard module
+	TagAvailable                           = "leaderboard.tag.available"                  // Internal to Leaderboard module
+	TagUnavailable                         = "leaderboard.tag.unavailable"
+
+	// Tag Swap
+	TagSwapRequested = "leaderboard.tag.swap.requested" // External
+	TagSwapInitiated = "leaderboard.tag.swap.initiated" // Internal
+	TagSwapFailed    = "leaderboard.tag.swap.failed"    // Internal
+	TagSwapProcessed = "leaderboard.tag.swap.processed" // Internal
+
+	// Leaderboard Requests
+	GetLeaderboardRequest  = "leaderboard.get.request"
+	GetLeaderboardResponse = "leaderboard.get.response"
+
+	// Tag Requests
+	GetTagByDiscordIDRequest  = "leaderboard.get.tag.by.discord.id.request"
+	GetTagByDiscordIDResponse = "leaderboard.get.tag.by.discord.id.response"
 )
 
-// LeaderboardUpdateEvent is published when the leaderboard needs to be updated.
-type LeaderboardUpdateEvent struct {
-	Scores []Score `json:"scores"`
+// -- Event Payloads --
+
+// RoundFinalizedPayload is the payload for the RoundFinalized event.
+type RoundFinalizedPayload struct {
+	RoundID               string   `json:"round_id"`
+	SortedParticipantTags TagOrder `json:"sorted_participant_tags"` // Slice of "tag:discordID" strings
 }
 
-// Score represents a single score entry with DiscordID, TagNumber, and Score.
-type Score struct {
-	DiscordID string `json:"discord_id"`
-	TagNumber string `json:"tag_number"`
-	Score     int    `json:"score"`
+// TagAssignedPayload is the payload for the TagAssigned event.
+type TagAssignedPayload struct {
+	DiscordID    leaderboardtypes.DiscordID `json:"discord_id"`
+	TagNumber    int                        `json:"tag_number"`
+	AssignmentID string                     `json:"assignment_id"`
 }
 
-// TagAssignedEvent is published when a user signs up with a tag.
-type TagAssignedEvent struct {
-	DiscordID string `json:"discord_id"`
-	TagNumber int    `json:"tag_number"`
+// TagAvailablePayload is the payload for the TagAvailable event.
+type TagAvailablePayload struct {
+	DiscordID    leaderboardtypes.DiscordID `json:"discord_id"`
+	TagNumber    int                        `json:"tag_number"`
+	AssignmentID string                     `json:"assignment_id"`
 }
 
-// TagSwapRequestEvent is published when a user wants to swap their tag with another.
-type TagSwapRequestEvent struct {
+// TagUnavailablePayload is the payload for the TagUnavailable event.
+type TagUnavailablePayload struct {
+	DiscordID leaderboardtypes.DiscordID `json:"discord_id"`
+	TagNumber int                        `json:"tag_number"`
+	Reason    string                     `json:"reason"`
+}
+
+// TagAssignmentRequestedPayload is the payload for the TagAssignmentRequested event.
+type TagAssignmentRequestedPayload struct {
+	DiscordID  leaderboardtypes.DiscordID `json:"discord_id"`
+	TagNumber  int                        `json:"tag_number"`
+	UpdateID   string                     `json:"update_id"`
+	Source     string                     `json:"source"`
+	UpdateType string                     `json:"update_type"`
+}
+
+// LeaderboardUpdateRequestedPayload is the payload for the LeaderboardUpdateRequested event.
+type LeaderboardUpdateRequestedPayload struct {
+	RoundID               string   `json:"round_id"`
+	SortedParticipantTags []string `json:"sorted_participant_tags"`
+	Source                string   `json:"source"`    // "round", "manual"
+	UpdateID              string   `json:"update_id"` // round ID or manual update identifier
+}
+
+// LeaderboardUpdatedPayload is the payload for the LeaderboardUpdated event.
+type LeaderboardUpdatedPayload struct {
+	LeaderboardID int64  `json:"leaderboard_id"`
+	RoundID       string `json:"round_id"`
+}
+
+// LeaderboardUpdateFailedPayload is the payload for the LeaderboardUpdateFailed event.
+type LeaderboardUpdateFailedPayload struct {
+	RoundID string `json:"round_id"`
+	Reason  string `json:"reason"` // Reason for the failure
+}
+
+// DeactivateOldLeaderboardPayload is the payload for the DeactivateOldLeaderboard event.
+type DeactivateOldLeaderboardPayload struct {
+	LeaderboardID int64 `json:"leaderboard_id"`
+}
+
+// TagAssignmentFailedPayload is the payload for the TagAssignmentFailed event.
+type TagAssignmentFailedPayload struct {
+	DiscordID  leaderboardtypes.DiscordID `json:"discord_id"`
+	TagNumber  int                        `json:"tag_number"`
+	UpdateID   string                     `json:"update_id"`
+	Source     string                     `json:"source"`
+	UpdateType string                     `json:"update_type"`
+	Reason     string                     `json:"reason"`
+}
+
+// TagSwapRequestedPayload is the payload for the TagSwapRequested event.
+type TagSwapRequestedPayload struct {
 	RequestorID string `json:"requestor_id"`
 	TargetID    string `json:"target_id"`
 }
 
+// TagSwapInitiatedPayload is the payload for the TagSwapInitiated event.
+type TagSwapInitiatedPayload struct {
+	RequestorID string `json:"requestor_id"`
+	TargetID    string `json:"target_id"`
+}
+
+// TagSwapFailedPayload is the payload for the TagSwapFailed event.
+type TagSwapFailedPayload struct {
+	RequestorID string `json:"requestor_id"`
+	TargetID    string `json:"target_id"`
+	Reason      string `json:"reason"`
+}
+
+// TagSwapProcessedPayload is the payload for the TagSwapProcessed event.
+type TagSwapProcessedPayload struct {
+	RequestorID string `json:"requestor_id"`
+	TargetID    string `json:"target_id"`
+}
+
+// GetLeaderboardRequestPayload is the payload for the GetLeaderboardRequest event.
+type GetLeaderboardRequestPayload struct{} // Empty, as no data is needed for this request
+
 // LeaderboardEntry represents an entry on the leaderboard.
 type LeaderboardEntry struct {
-	TagNumber string `json:"tag_number"`
-	DiscordID string `json:"discord_id"`
+	TagNumber string                     `json:"tag_number"`
+	DiscordID leaderboardtypes.DiscordID `json:"discord_id"`
 }
 
-// GetLeaderboardRequestEvent is published when another module wants to get the entire leaderboard.
-type GetLeaderboardRequestEvent struct{}
-
-// GetTagByDiscordIDRequestEvent is published when another module wants to get a tag by Discord ID.
-type GetTagByDiscordIDRequestEvent struct {
-	DiscordID string `json:"discord_id"`
-}
-
-// CheckTagAvailabilityRequestEvent is published when another module wants to check if a tag is available.
-type CheckTagAvailabilityRequestEvent struct {
-	TagNumber int `json:"tag_number"`
-}
-
-// GetLeaderboardResponseEvent is published in response to a GetLeaderboardRequestEvent.
-type GetLeaderboardResponseEvent struct {
+// GetLeaderboardResponsePayload is the payload for the GetLeaderboardResponse event.
+type GetLeaderboardResponsePayload struct {
 	Leaderboard []LeaderboardEntry `json:"leaderboard"`
 }
 
-// GetTagByDiscordIDResponseEvent is published in response to a GetTagByDiscordIDRequestEvent.
-type GetTagByDiscordIDResponseEvent struct {
-	TagNumber string `json:"tag_number"`
+// GetTagByDiscordIDRequestPayload is the payload for the GetTagByDiscordIDRequest event.
+type GetTagByDiscordIDRequestPayload struct {
+	DiscordID leaderboardtypes.DiscordID `json:"discord_id"`
 }
 
-// CheckTagAvailabilityResponseEvent represents a response to a tag availability check.
-type CheckTagAvailabilityResponseEvent struct {
-	IsAvailable bool `json:"is_available"`
+// GetTagByDiscordIDResponsePayload is the payload for the GetTagByDiscordIDResponse event.
+type GetTagByDiscordIDResponsePayload struct {
+	TagNumber int `json:"tag_number"`
 }
 
-// --- Errors ---
-
-type ErrTagAlreadyAssigned struct {
-	TagNumber int
+// TagAvailabilityCheckRequestedPayload is the payload for the TagAvailabilityCheckRequested event.
+type TagAvailabilityCheckRequestedPayload struct {
+	TagNumber int                        `json:"tag_number"`
+	DiscordID leaderboardtypes.DiscordID `json:"discord_id"`
 }
 
-func (e *ErrTagAlreadyAssigned) Error() string {
-	return fmt.Sprintf("tag number %d is already assigned", e.TagNumber)
-}
+// -- Helper Types --
 
-type ErrLeaderboardUpdateFailed struct {
-	Reason string
-}
-
-func (e *ErrLeaderboardUpdateFailed) Error() string {
-	return fmt.Sprintf("leaderboard update failed: %s", e.Reason)
-}
+// TagOrder represents the order of tags.
+type TagOrder []string

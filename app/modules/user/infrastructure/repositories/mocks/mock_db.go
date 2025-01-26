@@ -87,15 +87,15 @@ func (mr *MockUserDBMockRecorder) GetUserRole(ctx, discordID any) *gomock.Call {
 }
 
 // UpdateUserRole mocks base method.
-func (m *MockUserDB) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, newRole usertypes.UserRoleEnum) error {
+func (m *MockUserDB) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUserRole", ctx, discordID, newRole)
+	ret := m.ctrl.Call(m, "UpdateUserRole", ctx, discordID, role)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateUserRole indicates an expected call of UpdateUserRole.
-func (mr *MockUserDBMockRecorder) UpdateUserRole(ctx, discordID, newRole any) *gomock.Call {
+func (mr *MockUserDBMockRecorder) UpdateUserRole(ctx, discordID, role any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRole", reflect.TypeOf((*MockUserDB)(nil).UpdateUserRole), ctx, discordID, newRole)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRole", reflect.TypeOf((*MockUserDB)(nil).UpdateUserRole), ctx, discordID, role)
 }

@@ -10,88 +10,89 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// UserDBImpl is an implementation of the UserDB interface using bun.
+var (
+	ErrUserNotFound = errors.New("user not found")
+)
+
+// UserDB is a repository for user data operations.
 type UserDBImpl struct {
 	DB *bun.DB
 }
 
+// CreateUser creates a new user within a transaction.
 func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
-	if db.DB == nil {
-		return errors.New("database connection is not initialized")
-	}
-
-	fmt.Println("Starting user insertion:", user)
-
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Println("Transaction start failed:", err)
-		return fmt.Errorf("failed to start transaction: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	defer tx.Rollback() // Rollback is safe to call even if tx is committed
 
 	_, err = tx.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
-		fmt.Println("Insert query failed:", err)
-		_ = tx.Rollback()
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	fmt.Println("Insert query successful. Committing transaction.")
-
 	if err := tx.Commit(); err != nil {
-		fmt.Println("Transaction commit failed:", err)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	fmt.Println("User insertion and commit successful!")
 	return nil
 }
 
-// GetUserByDiscordID retrieves a user by Discord ID.
-func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error) {
-	var dbUser User
-
-	err := db.DB.NewSelect().
-		Model(&dbUser).
-		Where("discord_id = ?", discordID).
-		Scan(ctx)
+// UpdateUserRole updates the role of an existing user within a transaction.
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
+	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// User not found, return nil without an error
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Rollback is safe to call even if tx is committed
+
+	if !role.IsValid() {
+		return fmt.Errorf("invalid user role: %s", role)
 	}
 
-	return &dbUser, nil
-}
-
-// GetUserRole retrieves the role of a user by their Discord ID.
-func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
-	var user User
-	err := db.DB.NewSelect().
-		Model(&user).
-		Where("discord_id = ?", discordID).
-		Scan(ctx)
-	if err != nil {
-		// Use UserRoleRattler as the default/fallback role
-		return usertypes.UserRoleRattler, fmt.Errorf("failed to get user role: %w", err)
-	}
-	return user.Role, nil
-}
-
-// UpdateUserRole updates the role of a user by their Discord ID.
-func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, newRole usertypes.UserRoleEnum) error {
-	// Use newRole.IsValid() from the interface
-	if !newRole.IsValid() {
-		return fmt.Errorf("invalid user role: %s", newRole)
-	}
-	_, err := db.DB.NewUpdate().
-		Model(&User{}).
-		Set("role = ?", newRole). // Use newRole directly
+	_, err = tx.NewUpdate().
+		Model((*User)(nil)).
+		Set("role = ?", role).
 		Where("discord_id = ?", discordID).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update user role: %w", err)
 	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
+}
+
+// GetUserByDiscordID retrieves a user by their Discord ID.
+func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error) {
+	user := &User{}
+	err := db.DB.NewSelect().Model(user).Where("discord_id = ?", discordID).Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound // Now returning a specific error
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+// GetUserRole retrieves the role of a user by their Discord ID.
+func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
+	user := &User{}
+	err := db.DB.NewSelect().
+		Model(user).
+		Column("role").
+		Where("discord_id = ?", discordID).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrUserNotFound // Now returning a specific error
+		}
+		return "", err
+	}
+	return user.Role, nil
 }

@@ -1,17 +1,19 @@
 package leaderboardhandlers
 
 import (
-	"context"
-
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// Handlers interface to uncouple handlers from specific implementations.
+// Handlers defines the interface for leaderboard event handlers.
 type Handlers interface {
-	HandleLeaderboardUpdate(ctx context.Context, msg *message.Message) error
-	HandleTagAssigned(ctx context.Context, msg *message.Message) error
-	HandleTagSwapRequest(ctx context.Context, msg *message.Message) error
-	HandleGetLeaderboardRequest(ctx context.Context, msg *message.Message) error
-	HandleGetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error
-	HandleCheckTagAvailabilityRequest(ctx context.Context, msg *message.Message) error
+	HandleRoundFinalized(msg *message.Message) error
+	HandleLeaderboardUpdateRequested(msg *message.Message) error
+	HandleTagAssigned(msg *message.Message) error
+	HandleTagAssignmentRequested(msg *message.Message) error
+	HandleTagSwapRequested(msg *message.Message) error
+	HandleTagSwapInitiated(msg *message.Message) error
+	HandleGetLeaderboardRequest(msg *message.Message) error
+	HandleGetTagByDiscordIDRequest(msg *message.Message) error
+	HandleTagAvailabilityCheckRequested(msg *message.Message) error
+	HandleAssignTag(msg *message.Message) error
 }

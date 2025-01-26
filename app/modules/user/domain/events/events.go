@@ -8,7 +8,8 @@ import (
 
 // Stream names
 const (
-	UserStreamName                         = "user"
+	UserStreamName = "user"
+	// Note: Changed to use the request/response pattern consistently
 	LeaderboardTagAvailabilityCheckRequest = "leaderboard.tag.availability.check.request"
 	UserCreatedDLQ                         = "user.created.dlq"            // DLQ for UserCreated
 	UserCreationFailedDLQ                  = "user.creation.failed.dlq"    // DLQ for UserCreationFailed
@@ -22,23 +23,27 @@ const (
 
 // Event names
 const (
-	UserSignupRequest            = "user.signup.request"
-	UserSignupFailed             = "user.signup.failed"
-	UserCreated                  = "user.created"
-	UserCreationFailed           = "user.creation.failed"
-	UserRoleUpdateRequest        = "user.role.update.request"
-	UpdateUserRoleRequested      = "user.role.update.requested"
-	UserRoleUpdated              = "user.role.updated"
-	UserRoleUpdateFailed         = "user.role.update.failed"
-	GetUserRoleRequest           = "user.get.role.request"
-	GetUserRoleResponse          = "user.get.role.response"
-	GetUserRoleFailed            = "user.get.role.failed"
-	GetUserRequest               = "user.get.request"
-	GetUserResponse              = "user.get.response"
-	GetUserFailed                = "user.get.failed"
-	UserPermissionsCheckRequest  = "user.permissions.check.request"
-	UserPermissionsCheckResponse = "user.permissions.check.response"
-	UserPermissionsCheckFailed   = "user.permissions.check.failed"
+	CreateUserRequested           = "user.create.requested"
+	UserSignupRequest             = "user.signup.request"
+	UserSignupFailed              = "user.signup.failed"
+	UserCreated                   = "user.created"
+	UserCreationFailed            = "user.creation.failed"
+	UserRoleUpdateRequest         = "user.role.update.request"
+	UpdateUserRoleRequested       = "user.role.update.requested"
+	UserRoleUpdated               = "user.role.updated"
+	UserRoleUpdateFailed          = "user.role.update.failed"
+	GetUserRoleRequest            = "user.get.role.request"
+	GetUserRoleResponse           = "user.get.role.response"
+	GetUserRoleFailed             = "user.get.role.failed"
+	GetUserRequest                = "user.get.request"
+	GetUserResponse               = "user.get.response"
+	GetUserFailed                 = "user.get.failed"
+	UserPermissionsCheckRequest   = "user.permissions.check.request"
+	UserPermissionsCheckResponse  = "user.permissions.check.response"
+	UserPermissionsCheckFailed    = "user.permissions.check.failed"
+	TagAvailable                  = "user.tag.available"   // ADDED
+	TagUnavailable                = "user.tag.unavailable" // ADDED
+	TagAvailabilityCheckRequested = "user.tag.availability.check.requested"
 )
 
 // BaseEventPayload is a struct that can be embedded in other event structs to provide common fields.
@@ -49,9 +54,14 @@ type BaseEventPayload struct {
 
 // Payload types
 
+type CreateUserRequestedPayload struct {
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	TagNumber *int                `json:"tag_number"`
+}
+
 type UserSignupRequestPayload struct {
 	DiscordID usertypes.DiscordID `json:"discord_id"`
-	TagNumber int                 `json:"tag_number,omitempty"`
+	TagNumber *int                `json:"tag_number,omitempty"`
 }
 
 type UserSignupFailedPayload struct {
@@ -70,44 +80,44 @@ type UserCreationFailedPayload struct {
 }
 
 type UserRoleUpdateRequestPayload struct {
-	DiscordID   usertypes.DiscordID `json:"discord_id"`
-	Role        string              `json:"role"`
-	RequesterID string              `json:"requester_id"`
+	DiscordID   usertypes.DiscordID    `json:"discord_id"`
+	Role        usertypes.UserRoleEnum `json:"role"`
+	RequesterID string                 `json:"requester_id"`
 }
 
 type UpdateUserRoleRequestedPayload struct {
-	DiscordID   usertypes.DiscordID `json:"discord_id"`
-	Role        string              `json:"role"`
-	RequesterID string              `json:"requester_id"`
+	DiscordID   usertypes.DiscordID    `json:"discord_id"`
+	Role        usertypes.UserRoleEnum `json:"role"`
+	RequesterID string                 `json:"requester_id"`
 }
 
 type UserRoleUpdatedPayload struct {
-	DiscordID string `json:"discord_id"`
-	Role      string `json:"role"`
+	DiscordID usertypes.DiscordID    `json:"discord_id"`
+	Role      usertypes.UserRoleEnum `json:"role"`
 }
 
 type UserRoleUpdateFailedPayload struct {
-	DiscordID string `json:"discord_id"`
-	Role      string `json:"role"`
-	Reason    string `json:"reason"`
+	DiscordID usertypes.DiscordID    `json:"discord_id"`
+	Role      usertypes.UserRoleEnum `json:"role"`
+	Reason    string                 `json:"reason"`
 }
 
 type GetUserRoleRequestPayload struct {
-	DiscordID string `json:"discord_id"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
 }
 
 type GetUserRoleResponsePayload struct {
-	DiscordID string `json:"discord_id"`
-	Role      string `json:"role"`
+	DiscordID usertypes.DiscordID    `json:"discord_id"`
+	Role      usertypes.UserRoleEnum `json:"role"`
 }
 
 type GetUserRoleFailedPayload struct {
-	DiscordID string `json:"discord_id"`
-	Reason    string `json:"reason"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	Reason    string              `json:"reason"`
 }
 
 type GetUserRequestPayload struct {
-	DiscordID string `json:"discord_id"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
 }
 
 type GetUserResponsePayload struct {
@@ -115,30 +125,45 @@ type GetUserResponsePayload struct {
 }
 
 type GetUserFailedPayload struct {
-	DiscordID string `json:"discord_id"`
-	Reason    string `json:"reason"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	Reason    string              `json:"reason"`
 }
 
 type UserPermissionsCheckRequestPayload struct {
-	DiscordID   usertypes.DiscordID `json:"discord_id"`
-	Role        string              `json:"role"`
-	RequesterID string              `json:"requester_id"`
+	DiscordID   usertypes.DiscordID    `json:"discord_id"`
+	Role        usertypes.UserRoleEnum `json:"role"`
+	RequesterID string                 `json:"requester_id"`
 }
 
 type UserPermissionsCheckResponsePayload struct {
-	HasPermission bool   `json:"has_permission"`
-	DiscordID     string `json:"discord_id"`
-	Role          string `json:"role"`
-	RequesterID   string `json:"requester_id"`
+	HasPermission bool                   `json:"has_permission"`
+	DiscordID     usertypes.DiscordID    `json:"discord_id"`
+	Role          usertypes.UserRoleEnum `json:"role"`
+	RequesterID   string                 `json:"requester_id"`
 }
 
 type UserPermissionsCheckFailedPayload struct {
-	Reason      string              `json:"reason"`
-	DiscordID   usertypes.DiscordID `json:"discord_id"`
-	Role        string              `json:"role"`
-	RequesterID string              `json:"requester_id"`
+	Reason      string                 `json:"reason"`
+	DiscordID   usertypes.DiscordID    `json:"discord_id"`
+	Role        usertypes.UserRoleEnum `json:"role"`
+	RequesterID string                 `json:"requester_id"`
 }
 
-type CheckTagAvailabilityRequestPayload struct {
-	TagNumber int `json:"tag_number"`
+// TagAvailabilityCheckRequestedPayload is the payload for the TagAvailabilityCheckRequested event.
+type TagAvailabilityCheckRequestedPayload struct {
+	TagNumber int                 `json:"tag_number"`
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+}
+
+// TagAvailablePayload is the payload for the TagAvailable event.
+type TagAvailablePayload struct {
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	TagNumber int                 `json:"tag_number"`
+}
+
+// TagUnavailablePayload is the payload for the TagUnavailable event.
+type TagUnavailablePayload struct {
+	DiscordID usertypes.DiscordID `json:"discord_id"`
+	TagNumber int                 `json:"tag_number"`
+	Reason    string              `json:"reason"`
 }
