@@ -16,7 +16,7 @@ type Service interface {
 	// Tag Assignment
 	TagAssigned(ctx context.Context, msg *message.Message) error
 	TagAssignmentRequested(ctx context.Context, msg *message.Message) error
-	PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error
+	PublishTagAvailable(_ context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error
 
 	// Tag Swapping
 	TagSwapRequested(ctx context.Context, msg *message.Message) error

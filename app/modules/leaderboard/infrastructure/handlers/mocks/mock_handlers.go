@@ -40,20 +40,6 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 	return m.recorder
 }
 
-// HandleAssignTag mocks base method.
-func (m *MockHandlers) HandleAssignTag(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleAssignTag", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleAssignTag indicates an expected call of HandleAssignTag.
-func (mr *MockHandlersMockRecorder) HandleAssignTag(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleAssignTag", reflect.TypeOf((*MockHandlers)(nil).HandleAssignTag), msg)
-}
-
 // HandleGetLeaderboardRequest mocks base method.
 func (m *MockHandlers) HandleGetLeaderboardRequest(msg *message.Message) error {
 	m.ctrl.T.Helper()

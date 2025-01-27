@@ -15,5 +15,4 @@ type Handlers interface {
 	HandleGetLeaderboardRequest(msg *message.Message) error
 	HandleGetTagByDiscordIDRequest(msg *message.Message) error
 	HandleTagAvailabilityCheckRequested(msg *message.Message) error
-	HandleAssignTag(msg *message.Message) error
 }

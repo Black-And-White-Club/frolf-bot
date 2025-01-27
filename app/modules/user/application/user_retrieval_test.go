@@ -312,13 +312,13 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				msg:       message.NewMessage(testCorrelationID, nil),
 				discordID: testDiscordID,
 			},
-			wantErr: true,
+			wantErr: false, // Now we don't expect an error because we handle it by publishing an event
 			setup: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 				f.UserDB.EXPECT().
 					GetUserByDiscordID(a.ctx, testDiscordID).
-					Return(nil, errors.New("database error")).
+					Return(nil, userdbtypes.ErrUserNotFound). // Return the specific error
 					Times(1)
 
 				f.eventBus.EXPECT().
@@ -327,6 +327,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 						if topic != userevents.GetUserFailed {
 							t.Errorf("Expected topic %s, got %s", userevents.GetUserFailed, topic)
 						}
+						// Add assertions for message content if necessary
 						return nil
 					}).
 					Times(1)

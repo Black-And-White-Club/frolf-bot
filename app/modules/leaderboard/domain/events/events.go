@@ -22,12 +22,12 @@ const (
 	DeactivateOldLeaderboard   = "leaderboard.deactivate"       // Internal
 
 	// Tag Assignment
-	LeaderboardTagAvailabilityCheckRequest = "leaderboard.tag.availability.check.request" // From User module
-	LeaderboardTagAssignmentRequested      = "leaderboard.tag.assignment.requested"       // Internal to Leaderboard module
-	LeaderboardTagAssignmentFailed         = "leaderboard.tag.assignment.failed"          // Internal to Leaderboard module
-	TagAssigned                            = "leaderboard.tag.assigned"                   // Internal to Leaderboard module
-	TagAvailable                           = "leaderboard.tag.available"                  // Internal to Leaderboard module
-	TagUnavailable                         = "leaderboard.tag.unavailable"
+	TagAvailabilityCheckRequest       = "leaderboard.tag.availability.check.request" // From User module
+	LeaderboardTagAssignmentRequested = "leaderboard.tag.assignment.requested"       // Internal to Leaderboard module
+	LeaderboardTagAssignmentFailed    = "leaderboard.tag.assignment.failed"          // Internal to Leaderboard module
+	TagAssigned                       = "leaderboard.tag.assigned"                   // Internal to Leaderboard module
+	TagAvailable                      = "leaderboard.tag.available"                  // Internal to Leaderboard module
+	TagUnavailable                    = "user.tag.unavailable"
 
 	// Tag Swap
 	TagSwapRequested = "leaderboard.tag.swap.requested" // External

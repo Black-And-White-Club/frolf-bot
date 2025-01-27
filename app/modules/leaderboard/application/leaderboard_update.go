@@ -51,7 +51,7 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 	currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get active leaderboard", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
+		return fmt.Errorf("failed to get active leaderboard: %w", err) // Handle this error according to your application's needs
 	}
 
 	// 2. Generate the updated leaderboard.
@@ -78,18 +78,31 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 	})
 	if err != nil {
 		s.logger.Error("Failed to create new leaderboard", "error", err, "correlation_id", correlationID)
-		return s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error())
+		// Publish LeaderboardUpdateFailed event
+		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error()); pubErr != nil {
+			s.logger.Error("Failed to publish LeaderboardUpdateFailed event", "error", pubErr, "correlation_id", correlationID)
+		}
+		return nil // Error handled gracefully
 	}
 
 	// 5. Deactivate the current leaderboard entry.
 	if err := s.LeaderboardDB.DeactivateLeaderboard(ctx, currentLeaderboard.ID); err != nil {
 		s.logger.Error("Failed to deactivate current leaderboard", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		// Publish LeaderboardUpdateFailed event
+		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error()); pubErr != nil {
+			s.logger.Error("Failed to publish LeaderboardUpdateFailed event", "error", pubErr, "correlation_id", correlationID)
+		}
+		return nil // Error handled gracefully
 	}
 
 	// 6. Publish LeaderboardUpdated
 	if err := s.publishLeaderboardUpdated(ctx, msg, newLeaderboardID, eventPayload.RoundID); err != nil {
 		s.logger.Error("Failed to publish LeaderboardUpdated event", "error", err, "correlation_id", correlationID)
+		// Publish LeaderboardUpdateFailed event
+		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error()); pubErr != nil {
+			s.logger.Error("Failed to publish LeaderboardUpdateFailed event", "error", pubErr, "correlation_id", correlationID)
+		}
+		return nil // Error handled gracefully
 	}
 
 	return nil

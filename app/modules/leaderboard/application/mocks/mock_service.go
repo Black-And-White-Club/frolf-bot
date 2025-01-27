@@ -85,17 +85,17 @@ func (mr *MockServiceMockRecorder) LeaderboardUpdateRequested(ctx, msg any) *gom
 }
 
 // PublishTagAvailable mocks base method.
-func (m *MockService) PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error {
+func (m *MockService) PublishTagAvailable(arg0 context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishTagAvailable", ctx, msg, payload)
+	ret := m.ctrl.Call(m, "PublishTagAvailable", arg0, msg, payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishTagAvailable indicates an expected call of PublishTagAvailable.
-func (mr *MockServiceMockRecorder) PublishTagAvailable(ctx, msg, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PublishTagAvailable(arg0, msg, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishTagAvailable", reflect.TypeOf((*MockService)(nil).PublishTagAvailable), ctx, msg, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishTagAvailable", reflect.TypeOf((*MockService)(nil).PublishTagAvailable), arg0, msg, payload)
 }
 
 // RoundFinalized mocks base method.

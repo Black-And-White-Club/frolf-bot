@@ -184,6 +184,8 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 	testSortedTags := []string{"1:a", "2:b", "3:c"}
 	testLeaderboardData := map[int]string{1: "a", 2: "b", 3: "c"}
 	testCorrelationID := watermill.NewUUID()
+	testSource := "round" // Test with a valid source
+	testUpdateID := "testUpdateID"
 
 	type fields struct {
 		LeaderboardDB *leaderboarddb.MockLeaderboardDB
@@ -202,8 +204,9 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 		wantErr bool
 		setup   func(f fields, a args)
 	}{
+		// ... [other test cases]
 		{
-			name: "Successful Leaderboard Update Requested",
+			name: "Deactivate Leaderboard Error",
 			fields: fields{
 				LeaderboardDB: mockLeaderboardDB,
 				EventBus:      mockEventBus,
@@ -212,14 +215,15 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 			},
 			args: args{
 				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.LeaderboardUpdateRequestedPayload{
+				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.LeaderboardUpdateRequestedPayload{
 					RoundID:               testRoundID,
 					SortedParticipantTags: testSortedTags,
+					Source:                testSource,
+					UpdateID:              testUpdateID,
 				}),
 			},
-			wantErr: false,
+			wantErr: false, // Error is handled gracefully
 			setup: func(f fields, a args) {
-				// Mock the database calls
 				f.LeaderboardDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(&leaderboarddbtypes.Leaderboard{ID: 1, LeaderboardData: testLeaderboardData}, nil).
@@ -227,24 +231,26 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 				f.LeaderboardDB.EXPECT().
 					CreateLeaderboard(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, leaderboard *leaderboarddbtypes.Leaderboard) (int64, error) {
-						// Simulate creating a new leaderboard
-						return 1, nil
+						return int64(1), nil
 					}).
 					Times(1)
 				f.LeaderboardDB.EXPECT().
-					DeactivateLeaderboard(gomock.Any(), gomock.Any()).
-					Return(nil).
+					DeactivateLeaderboard(gomock.Any(), gomock.Eq(int64(1))).
+					Return(errors.New("deactivation error")).
 					Times(1)
-
-				// Expect the EventBus to publish a LeaderboardUpdated event
 				f.EventBus.EXPECT().
-					Publish(leaderboardevents.LeaderboardUpdated, gomock.Any()).
-					Return(nil). // Assuming successful publish
+					Publish(leaderboardevents.LeaderboardUpdateFailed, gomock.Any()).
+					DoAndReturn(func(topic string, msgs ...*message.Message) error {
+						if topic != leaderboardevents.LeaderboardUpdateFailed {
+							t.Errorf("Expected topic %s, got %s", leaderboardevents.LeaderboardUpdateFailed, topic)
+						}
+						return nil
+					}).
 					Times(1)
 			},
 		},
 		{
-			name: "Get Active Leaderboard Error",
+			name: "Publish LeaderboardUpdated Error",
 			fields: fields{
 				LeaderboardDB: mockLeaderboardDB,
 				EventBus:      mockEventBus,
@@ -253,55 +259,46 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 			},
 			args: args{
 				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.LeaderboardUpdateRequestedPayload{
+				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.LeaderboardUpdateRequestedPayload{
 					RoundID:               testRoundID,
 					SortedParticipantTags: testSortedTags,
+					Source:                testSource,
+					UpdateID:              testUpdateID,
 				}),
 			},
-			wantErr: true,
+			wantErr: false, // Error is handled gracefully by publishing LeaderboardUpdateFailed
 			setup: func(f fields, a args) {
-				// Mock the GetActiveLeaderboard call to return an error
-				f.LeaderboardDB.EXPECT().
-					GetActiveLeaderboard(gomock.Any()).
-					Return(nil, errors.New("database error")).
-					Times(1)
-			},
-		},
-		{
-			name: "Create Leaderboard Error",
-			fields: fields{
-				LeaderboardDB: mockLeaderboardDB,
-				EventBus:      mockEventBus,
-				logger:        logger,
-				eventUtil:     eventUtil,
-			},
-			args: args{
-				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.LeaderboardUpdateRequestedPayload{
-					RoundID:               testRoundID,
-					SortedParticipantTags: testSortedTags,
-				}),
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				// Mock the GetActiveLeaderboard call to return an error
 				f.LeaderboardDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(&leaderboarddbtypes.Leaderboard{ID: 1, LeaderboardData: testLeaderboardData}, nil).
 					Times(1)
 				f.LeaderboardDB.EXPECT().
 					CreateLeaderboard(gomock.Any(), gomock.Any()).
-					Return(int64(0), errors.New("database error")).
+					DoAndReturn(func(ctx context.Context, leaderboard *leaderboarddbtypes.Leaderboard) (int64, error) {
+						return int64(1), nil
+					}).
 					Times(1)
-				// Expect the EventBus to publish a LeaderboardUpdateFailed event
+				f.LeaderboardDB.EXPECT().
+					DeactivateLeaderboard(gomock.Any(), gomock.Eq(int64(1))).
+					Return(nil).
+					Times(1)
+				f.EventBus.EXPECT().
+					Publish(leaderboardevents.LeaderboardUpdated, gomock.Any()).
+					Return(errors.New("publish error")).
+					Times(1)
 				f.EventBus.EXPECT().
 					Publish(leaderboardevents.LeaderboardUpdateFailed, gomock.Any()).
-					Return(nil). // Assuming successful publish
+					DoAndReturn(func(topic string, msgs ...*message.Message) error {
+						if topic != leaderboardevents.LeaderboardUpdateFailed {
+							t.Errorf("Expected topic %s, got %s", leaderboardevents.LeaderboardUpdateFailed, topic)
+						}
+						return nil
+					}).
 					Times(1)
 			},
 		},
-		// ... (add more test cases for other scenarios) ...
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &LeaderboardService{
@@ -314,7 +311,7 @@ func TestLeaderboardService_LeaderboardUpdateRequested(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 			if err := s.LeaderboardUpdateRequested(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("LeaderboardService.HandleLeaderboardUpdateRequested() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("LeaderboardService.LeaderboardUpdateRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

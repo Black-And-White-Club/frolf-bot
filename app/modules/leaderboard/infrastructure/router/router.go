@@ -33,7 +33,7 @@ func (r *LeaderboardRouter) Configure(
 	leaderboardService leaderboardservice.Service,
 ) error {
 	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, r.logger)
-	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers); err != nil {
+	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers, leaderboardService); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
@@ -43,22 +43,23 @@ func (r *LeaderboardRouter) Configure(
 func (r *LeaderboardRouter) RegisterHandlers(
 	ctx context.Context,
 	handlers *leaderboardhandlers.LeaderboardHandlers, // Use a pointer to LeaderboardHandlers
+	leaderboardService leaderboardservice.Service,
 ) error {
 	r.logger.Info("Entering RegisterHandlers for Leaderboard")
 
 	// Define the mapping of event topics to handler functions.
 	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
-		leaderboardevents.RoundFinalized:                         handlers.HandleRoundFinalized,
-		leaderboardevents.LeaderboardUpdateRequested:             handlers.HandleLeaderboardUpdateRequested,
-		leaderboardevents.TagAssigned:                            handlers.HandleTagAssigned,
-		leaderboardevents.TagSwapRequested:                       handlers.HandleTagSwapRequested,
-		leaderboardevents.TagSwapInitiated:                       handlers.HandleTagSwapInitiated,
-		leaderboardevents.GetLeaderboardRequest:                  handlers.HandleGetLeaderboardRequest,
-		leaderboardevents.GetTagByDiscordIDRequest:               handlers.HandleGetTagByDiscordIDRequest,
-		leaderboardevents.LeaderboardTagAvailabilityCheckRequest: handlers.HandleTagAvailabilityCheckRequested,
-		leaderboardevents.LeaderboardTagAssignmentRequested:      handlers.HandleTagAssignmentRequested,
+		leaderboardevents.RoundFinalized:                    handlers.HandleRoundFinalized,
+		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
+		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
+		leaderboardevents.TagSwapInitiated:                  handlers.HandleTagSwapInitiated,
+		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,
+		leaderboardevents.GetTagByDiscordIDRequest:          handlers.HandleGetTagByDiscordIDRequest,
+		leaderboardevents.TagAssigned:                       handlers.HandleTagAssigned,
+		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
+		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignmentRequested, // Add this line
 	}
-
+	fmt.Println("eventsToHandlers:", eventsToHandlers) // Print the map contents
 	// Register each handler in the router.
 	for topic, handlerFunc := range eventsToHandlers {
 		handlerName := fmt.Sprintf("leaderboard.module.handle.%s.%s", topic, watermill.NewUUID())

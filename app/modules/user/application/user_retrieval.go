@@ -53,14 +53,21 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, dis
 				slog.String("discord_id", string(discordID)),
 				slog.String("correlation_id", correlationID),
 			)
-			// Publish a GetUserFailed event
-			return s.publishGetUserFailed(ctx, msg, usertypes.DiscordID(discordID), "user not found")
+			// Publish a GetUserFailed event when the user is not found
+			if pubErr := s.publishGetUserFailed(ctx, msg, discordID, "user not found"); pubErr != nil {
+				return fmt.Errorf("failed to get user and publish GetUserFailed event: %w", pubErr)
+			}
+			return nil // User not found is a handled error case
 		}
 		s.logger.Error("Failed to get user",
 			slog.Any("error", err),
 			slog.String("discord_id", string(discordID)),
 			slog.String("correlation_id", correlationID),
 		)
+		// Publish a GetUserFailed event for other database errors
+		if pubErr := s.publishGetUserFailed(ctx, msg, discordID, "failed to get user from database"); pubErr != nil {
+			return fmt.Errorf("failed to get user and publish GetUserFailed event: %w", pubErr)
+		}
 		return fmt.Errorf("failed to get user: %w", err)
 	}
 

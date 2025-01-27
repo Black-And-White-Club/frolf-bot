@@ -161,15 +161,17 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			},
 			args: args{
 				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil), // Create message here
+				msg:       message.NewMessage(testCorrelationID, nil),
 				discordID: testDiscordID,
-				tag:       &testTag,
+				tag:       &testTag, // tag should be provided
 			},
 			wantErr: true,
 			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID) // Set correlation ID in metadata
+				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
+
+				// Expectation for CreateUser - Role is removed
 				f.UserDB.EXPECT().
-					CreateUser(args.ctx, &userdbtypes.User{DiscordID: testDiscordID, Role: usertypes.UserRoleRattler}).
+					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
 					Return(nil).
 					Times(1)
 

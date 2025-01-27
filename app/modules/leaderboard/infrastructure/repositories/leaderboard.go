@@ -64,6 +64,9 @@ func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber
 	if err != nil {
 		return false, err
 	}
+
+	fmt.Println("CheckTagAvailability: tagNumber =", tagNumber, "exists =", exists) // Add this log
+
 	return !exists, nil
 }
 

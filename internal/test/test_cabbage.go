@@ -51,10 +51,10 @@ func main() {
 	// Generate a correlation ID and message UUID
 	correlationID := watermill.NewUUID()
 	messageUUID := watermill.NewUUID()
-	tagNumber := 2
+	tagNumber := 3
 	// Create the payload
 	payload := userevents.UserSignupRequestPayload{
-		DiscordID: "13", // Replace with test Discord ID
+		DiscordID: "144", // Replace with test Discord ID
 		TagNumber: &tagNumber,
 	}
 
