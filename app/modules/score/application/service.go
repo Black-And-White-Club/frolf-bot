@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"strconv"
 
 	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
 	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -24,7 +22,7 @@ type ScoreService struct {
 }
 
 // NewScoreService creates a new ScoreService.
-func NewScoreService(eventBus shared.EventBus, db scoredb.ScoreDB, logger *slog.Logger) *ScoreService {
+func NewScoreService(eventBus shared.EventBus, db scoredb.ScoreDB, logger *slog.Logger) Service {
 	return &ScoreService{
 		ScoreDB:  db,
 		EventBus: eventBus,
@@ -33,7 +31,7 @@ func NewScoreService(eventBus shared.EventBus, db scoredb.ScoreDB, logger *slog.
 }
 
 // ProcessRoundScores processes scores received from the round module.
-func (s *ScoreService) ProcessRoundScores(ctx context.Context, event scoreevents.ScoresReceivedEvent) error {
+func (s *ScoreService) ProcessRoundScores(ctx context.Context, event scoreevents.ProcessRoundScoresRequestPayload) error {
 	// 1. Convert and sort scores
 	scores, err := s.prepareScores(event.Scores)
 	if err != nil {
@@ -50,18 +48,12 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, event scoreevents
 }
 
 // CorrectScore handles score corrections (manual updates).
-func (s *ScoreService) CorrectScore(ctx context.Context, event scoreevents.ScoreCorrectedEvent) error {
-	// 1. Update the score in the database
-	tagNum, err := strconv.Atoi(event.TagNumber)
-	if err != nil {
-		return fmt.Errorf("invalid tag number: %w", err)
-	}
-
+func (s *ScoreService) CorrectScore(ctx context.Context, event scoreevents.ScoreUpdateRequestPayload) error {
 	score := scoredb.Score{
-		DiscordID: event.DiscordID,
+		DiscordID: event.Participant,
 		RoundID:   event.RoundID,
-		Score:     event.NewScore,
-		TagNumber: tagNum,
+		Score:     *event.Score,
+		TagNumber: event.TagNumber,
 	}
 
 	if err := s.ScoreDB.UpdateOrAddScore(ctx, &score); err != nil {
@@ -84,20 +76,16 @@ func (s *ScoreService) CorrectScore(ctx context.Context, event scoreevents.Score
 }
 
 // prepareScores converts, sorts, and returns scores for further processing.
-func (s *ScoreService) prepareScores(eventScores []scoreevents.Score) ([]scoredb.Score, error) {
+func (s *ScoreService) prepareScores(eventScores []scoreevents.ParticipantScore) ([]scoredb.Score, error) {
 	var scores []scoredb.Score
 	for _, score := range eventScores {
-		tagNum, err := strconv.Atoi(score.TagNumber)
-		if err != nil {
-			return nil, fmt.Errorf("invalid tag number: %w", err)
-		}
 		scores = append(scores, scoredb.Score{
 			DiscordID: score.DiscordID,
-			Score:     score.Score,
-			TagNumber: tagNum,
+			Score:     int(score.Score),
+			TagNumber: score.TagNumber,
 		})
 	}
-	return s.sortScores(scores), nil
+	return scores, nil
 }
 
 // sortScores sorts scores by score (ascending) and tag number (descending).
@@ -112,17 +100,17 @@ func (s *ScoreService) sortScores(scores []scoredb.Score) []scoredb.Score {
 }
 
 // publishLeaderboardUpdate publishes a leaderboard update event.
-func (s *ScoreService) publishLeaderboardUpdate(ctx context.Context, roundID string, scores []scoredb.Score) error {
-	var eventScores []scoreevents.Score
+func (s *ScoreService) publishLeaderboardUpdate(_ context.Context, roundID string, scores []scoredb.Score) error {
+	var eventScores []scoreevents.ParticipantScore
 	for _, score := range scores {
-		eventScores = append(eventScores, scoreevents.Score{
+		eventScores = append(eventScores, scoreevents.ParticipantScore{
 			DiscordID: score.DiscordID,
-			Score:     score.Score,
-			TagNumber: strconv.Itoa(score.TagNumber),
+			Score:     float64(score.Score),
+			TagNumber: score.TagNumber,
 		})
 	}
 
-	event := scoreevents.LeaderboardUpdateEvent{
+	event := scoreevents.LeaderboardUpdateRequestedPayload{
 		RoundID: roundID,
 		Scores:  eventScores,
 	}
@@ -133,9 +121,9 @@ func (s *ScoreService) publishLeaderboardUpdate(ctx context.Context, roundID str
 	}
 
 	msg := message.NewMessage(watermill.NewUUID(), eventData)
-	msg.Metadata.Set("subject", scoreevents.LeaderboardUpdateEventSubject)
+	msg.Metadata.Set("correlation_id", watermill.NewUUID())
 
-	if err := s.EventBus.Publish(ctx, scoreevents.LeaderboardStreamName, msg); err != nil {
+	if err := s.EventBus.Publish(scoreevents.LeaderboardUpdateRequested, msg); err != nil {
 		return fmt.Errorf("failed to publish leaderboard update event: %w", err)
 	}
 

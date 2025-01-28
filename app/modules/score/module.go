@@ -2,66 +2,74 @@ package score
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync"
 
 	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/application"
-	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/handlers"
 	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
-	scoresubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/subscribers"
+	scorerouter "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/router"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Module represents the score module.
 type Module struct {
-	EventBus         shared.EventBus
-	Service          scoreservice.Service
-	Handlers         scorehandlers.Handlers
-	Subscribers      scoresubscribers.Subscribers
-	logger           *slog.Logger
-	config           *config.Config
-	SubscribersReady chan struct{} // Channel to signal subscriber readiness
+	EventBus     shared.EventBus
+	ScoreService scoreservice.Service
+	logger       *slog.Logger
+	config       *config.Config
+	ScoreRouter  *scorerouter.ScoreRouter
+	cancelFunc   context.CancelFunc
 }
 
-func NewScoreModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, scoreDB scoredb.ScoreDB, eventBus shared.EventBus) (*Module, error) {
-	scoreService := scoreservice.NewScoreService(eventBus, scoreDB, logger)
-	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, eventBus, logger)
-	scoreSubscribers := scoresubscribers.NewSubscribers(eventBus, scoreHandlers, logger)
+func NewScoreModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, scoreDB scoredb.ScoreDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+	logger.Info("score.NewScoreModule called")
 
-	module := &Module{
-		EventBus:         eventBus,
-		Service:          scoreService,
-		Handlers:         scoreHandlers,
-		Subscribers:      scoreSubscribers,
-		logger:           logger,
-		config:           cfg,
-		SubscribersReady: make(chan struct{}), // Initialize the channel
+	// Initialize score service.
+	scoreService := scoreservice.NewScoreService(eventBus, scoreDB, logger)
+
+	// Initialize score router.
+	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus)
+
+	// Configure the router with the score service.
+	if err := scoreRouter.Configure(scoreService); err != nil {
+		return nil, fmt.Errorf("failed to configure score router: %w", err)
 	}
 
-	// Start the subscription process in a separate goroutine
-	go func() {
-		subscriberCtx := context.Background()
-
-		if err := module.Subscribers.SubscribeToScoreEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to score events", slog.Any("error", err))
-			return
-		}
-
-		logger.Info("Score module subscribers are ready")
-
-		// Signal that subscribers are ready
-		close(module.SubscribersReady)
-	}()
+	module := &Module{
+		EventBus:     eventBus,
+		ScoreService: scoreService,
+		logger:       logger,
+		config:       cfg,
+		ScoreRouter:  scoreRouter, // Set the ScoreRouter
+	}
 
 	return module, nil
 }
 
-// IsInitialized safely checks module initialization
-func (m *Module) IsInitialized() bool {
-	select {
-	case <-m.SubscribersReady:
-		return true
-	default:
-		return false
+func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
+	m.logger.Info("Starting score module")
+
+	// Create a context that can be canceled
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancelFunc = cancel
+	defer cancel()
+
+	// Keep this goroutine alive until the context is canceled
+	<-ctx.Done()
+	m.logger.Info("Score module goroutine stopped")
+}
+
+func (m *Module) Close() error {
+	m.logger.Info("Stopping score module")
+
+	// Cancel any other running operations
+	if m.cancelFunc != nil {
+		m.cancelFunc()
 	}
+
+	m.logger.Info("Score module stopped")
+	return nil
 }

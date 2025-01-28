@@ -19,9 +19,9 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB  *userdb.UserDBImpl
-	RoundDB *rounddb.RoundDBImpl
-	// ScoreDB       *scoredb.ScoreDBImpl
+	UserDB        *userdb.UserDBImpl
+	RoundDB       *rounddb.RoundDBImpl
+	ScoreDB       *scoredb.ScoreDBImpl
 	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
 	db            *bun.DB
 }

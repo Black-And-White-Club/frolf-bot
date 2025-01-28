@@ -24,7 +24,7 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID string, scores []S
 	// Insert JSON blob into the database with roundID and source
 	_, err = db.DB.NewInsert().
 		Model(&map[string]interface{}{"round_id": roundID, "scores_json": jsonData, "source": source}).
-		Table("scores").
+		Table("scores_log"). // I suggest you change this table name to something like `scores_log` to distinguish from the `scores` table
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to insert scores: %w", err)

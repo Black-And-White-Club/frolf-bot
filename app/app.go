@@ -13,6 +13,7 @@ import (
 	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
@@ -28,9 +29,10 @@ type App struct {
 	Logger            *slog.Logger
 	Router            *message.Router
 	UserModule        *user.Module
-	LeaderboardModule *leaderboard.Module // Add Leaderboard module
-	RoundModule       *round.Module       // Add Round module
-	RouterReady       chan struct{}       // Channel to signal when the main router is ready
+	LeaderboardModule *leaderboard.Module
+	RoundModule       *round.Module
+	ScoreModule       *score.Module // Add Score module
+	RouterReady       chan struct{} // Channel to signal when the main router is ready
 	DB                *bundb.DBService
 	EventBus          shared.EventBus
 }
@@ -127,6 +129,15 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 	app.RoundModule = roundModule
 	logger.Info("Round module initialized successfully")
 
+	// Initialize Score Module
+	scoreModule, err := score.NewScoreModule(ctx, cfg, logger, db.ScoreDB, eventBus, router)
+	if err != nil {
+		logger.Error("Failed to initialize score module", slog.Any("error", err))
+		return fmt.Errorf("failed to initialize score module: %w", err)
+	}
+	app.ScoreModule = scoreModule
+	logger.Info("Score module initialized successfully")
+
 	logger.Info("Exiting initializeModules")
 	return nil
 }
@@ -170,6 +181,7 @@ func (app *App) Run(ctx context.Context) error {
 	app.UserModule.Run(ctx, nil)
 	app.LeaderboardModule.Run(ctx, nil)
 	app.RoundModule.Run(ctx, nil)
+	app.ScoreModule.Run(ctx, nil)
 
 	// Keep the main goroutine alive until the context is canceled.
 	// This could be due to an interrupt signal or an error in the router.
@@ -197,6 +209,9 @@ func (app *App) Close() error {
 
 	app.Logger.Info("Closing round module")
 	app.RoundModule.Close()
+
+	app.Logger.Info("Closing score module")
+	app.ScoreModule.Close()
 
 	// Then close the Watermill router
 	if app.Router != nil {

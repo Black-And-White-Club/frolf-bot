@@ -33,7 +33,7 @@ func (r *LeaderboardRouter) Configure(
 	leaderboardService leaderboardservice.Service,
 ) error {
 	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, r.logger)
-	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers, leaderboardService); err != nil {
+	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
@@ -42,8 +42,7 @@ func (r *LeaderboardRouter) Configure(
 // RegisterHandlers registers the event handlers for the leaderboard module.
 func (r *LeaderboardRouter) RegisterHandlers(
 	ctx context.Context,
-	handlers *leaderboardhandlers.LeaderboardHandlers, // Use a pointer to LeaderboardHandlers
-	leaderboardService leaderboardservice.Service,
+	handlers leaderboardhandlers.Handlers, // Use a pointer to LeaderboardHandlers
 ) error {
 	r.logger.Info("Entering RegisterHandlers for Leaderboard")
 

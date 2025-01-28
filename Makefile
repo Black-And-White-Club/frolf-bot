@@ -20,6 +20,7 @@ USER_DIR := ./app/modules/user
 LB_DIR := ./app/modules/leaderboard
 ROUND_DIR := ./app/modules/round
 EVENTBUS_DIR := ./app/eventbus
+SCORE_DIR := ./app/modules/score
 
 # User module mock generation
 mocks-user:
@@ -46,9 +47,16 @@ mocks-round:
 	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/router/interface.go -destination=$(ROUND_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/repositories/interface.go -destination=$(ROUND_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
 
+# Score module mock generation
+mocks-score:
+	$(MOCKGEN) -source=$(SCORE_DIR)/application/interface.go -destination=$(SCORE_DIR)/application/mocks/mock_service.go -package=mocks
+	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/handlers/interface.go -destination=$(SCORE_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
+	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/router/interface.go -destination=$(SCORE_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
+	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/repositories/interface.go -destination=$(SCORE_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
+
 # EventBus mock generation
 mocks-eventbus:
 	$(MOCKGEN) -source=./app/shared/eventbus.go -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
 
 # Generate all mocks for user and eventbus
-mocks-all: mocks-user mocks-eventbus mocks-leaderboard
+mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score

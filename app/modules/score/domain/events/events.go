@@ -8,47 +8,56 @@ const (
 	LeaderboardStreamName = "leaderboard"
 )
 
-// Score-related events
+// Event subjects.
 const (
-	ScoresReceivedEventSubject    = "score.received"
-	ScoreCorrectedEventSubject    = "score.corrected"
-	ProcessedScoresEventSubject   = "score.processed"
-	LeaderboardUpdateEventSubject = "leaderboard.update"
+	ProcessRoundScoresRequest  = "round.process.scores.request" // Event from round module
+	LeaderboardUpdateRequested = "leaderboard.update.request"   // Event to leaderboard module
+	ScoreCorrectionRequest     = "score.correction.request"     // Event for manual score correction
+	ScoreCorrectionError       = "score.correction.error"
+	ScoreCorrectionSuccess     = "score.correction.success"
 )
 
-// ScoresReceivedEvent represents the event when scores are received from the round module.
-type ScoresReceivedEvent struct {
-	RoundID string  `json:"round_id"`
-	Scores  []Score `json:"scores"`
+// --- Payloads ---
+
+// ProcessRoundScoresRequestPayload is the payload for the ProcessRoundScoresRequest event.
+type ProcessRoundScoresRequestPayload struct {
+	RoundID string             `json:"round_id"`
+	Scores  []ParticipantScore `json:"scores"`
 }
 
-// Score represents a single score entry with DiscordID, TagNumber, and Score.
-type Score struct {
-	DiscordID string `json:"discord_id"`
-	TagNumber string `json:"tag_number"`
-	Score     int    `json:"score"`
+// ParticipantScore represents a single score entry with DiscordID, TagNumber, and Score.
+// Changed Score to float64
+type ParticipantScore struct {
+	DiscordID string  `json:"discord_id"`
+	TagNumber int     `json:"tag_number"`
+	Score     float64 `json:"score"`
 }
 
-// LeaderboardUpdateEvent represents an event triggered to update the leaderboard.
-type LeaderboardUpdateEvent struct {
-	RoundID string  `json:"round_id"`
-	Scores  []Score `json:"scores"`
+// LeaderboardUpdateRequestedPayload is the payload for the LeaderboardUpdateRequested event.
+type LeaderboardUpdateRequestedPayload struct {
+	RoundID string             `json:"round_id"`
+	Scores  []ParticipantScore `json:"scores"`
 }
 
-// ScoreCorrectedEvent represents an event for a corrected score.
-type ScoreCorrectedEvent struct {
+// ScoreUpdateRequestPayload is the payload for the ScoreCorrectionRequested event.
+type ScoreUpdateRequestPayload struct {
+	RoundID     string `json:"round_id"`
+	Participant string `json:"participant"` // Discord ID of the participant
+	Score       *int   `json:"score"`       // New score (cannot be nil in this context)
+	TagNumber   int    `json:"tag_number"`
+}
+
+// ScoreUpdateErrorPayload is the payload for the ScoreCorrectionError event
+type ScoreUpdateErrorPayload struct {
+	CorrelationID string                     `json:"correlation_id"`
+	Request       *ScoreUpdateRequestPayload `json:"score_update_request"` // Include original request
+	Error         string                     `json:"error"`
+}
+
+// ScoreUpdateSuccessPayload is the payload for the ScoreCorrectionSuccess event.
+type ScoreUpdateSuccessPayload struct {
 	RoundID   string `json:"round_id"`
 	DiscordID string `json:"discord_id"`
 	NewScore  int    `json:"new_score"`
 	TagNumber string `json:"tag_number"`
-	Error     string `json:"error,omitempty"` // Add Error field
-	Success   bool   `json:"success"`         // Add Success field
-}
-
-// ProcessedScoresEvent represents an event indicating that scores have been processed.
-type ProcessedScoresEvent struct {
-	RoundID string  `json:"round_id"`
-	Scores  []Score `json:"scores"`
-	Error   string  `json:"error,omitempty"` // Add Error field
-	Success bool    `json:"success"`         // Add Success field
 }

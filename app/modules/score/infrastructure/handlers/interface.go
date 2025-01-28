@@ -1,13 +1,11 @@
 package scorehandlers
 
 import (
-	"context"
-
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// Handlers interface to uncouple handlers from specific implementations.
+// Handlers interface defines the methods that a set of score handlers should implement.
 type Handlers interface {
-	HandleScoreCorrected(ctx context.Context, msg *message.Message) error
-	HandleScoresReceived(ctx context.Context, msg *message.Message) error
+	HandleProcessRoundScoresRequest(msg *message.Message) error
+	HandleScoreUpdateRequest(msg *message.Message) error
 }

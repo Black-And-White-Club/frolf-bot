@@ -33,7 +33,7 @@ func (r *RoundRouter) Configure(
 	roundService roundservice.Service,
 ) error {
 	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger).(*roundhandlers.RoundHandlers)
-	if err := r.RegisterHandlers(context.Background(), roundHandlers, roundService); err != nil {
+	if err := r.RegisterHandlers(context.Background(), roundHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
@@ -42,8 +42,7 @@ func (r *RoundRouter) Configure(
 // RegisterHandlers registers the event handlers for the round module.
 func (r *RoundRouter) RegisterHandlers(
 	ctx context.Context,
-	handlers *roundhandlers.RoundHandlers, // Use a pointer to RoundHandlers
-	roundService roundservice.Service,
+	handlers roundhandlers.Handlers, // Use a pointer to RoundHandlers
 ) error {
 	r.logger.Info("Entering RegisterHandlers for Round")
 
