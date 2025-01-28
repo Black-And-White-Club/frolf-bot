@@ -3,7 +3,7 @@ package userrouter
 import (
 	"context"
 
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

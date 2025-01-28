@@ -3,7 +3,7 @@ package leaderboardrouter
 import (
 	"context"
 
-	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/application"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

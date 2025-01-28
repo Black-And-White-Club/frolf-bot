@@ -3,7 +3,7 @@ package roundhandlers
 import (
 	"log/slog"
 
-	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 )
 
 // RoundHandlers handles round-related events.

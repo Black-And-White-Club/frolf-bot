@@ -6,16 +6,16 @@ import (
 	"log/slog"
 	"sync"
 
-	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/application"
-	leaderboarddb "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories"
-	leaderboardrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
+	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Module struct {
-	EventBus           shared.EventBus
+	EventBus           eventbus.EventBus
 	LeaderboardService leaderboardservice.Service
 	logger             *slog.Logger
 	config             *config.Config
@@ -23,7 +23,7 @@ type Module struct {
 	cancelFunc         context.CancelFunc
 }
 
-func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("leaderboard.NewLeaderboardModule called")
 
 	// Initialize leaderboard service.

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

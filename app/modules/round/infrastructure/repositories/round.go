@@ -7,7 +7,7 @@ import (
 
 	"github.com/uptrace/bun"
 
-	roundtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/types"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 )
 
 // RoundDBImpl is the concrete implementation of the RoundDB interface using bun.

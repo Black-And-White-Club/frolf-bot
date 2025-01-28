@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"sort"
 
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -17,12 +17,12 @@ import (
 // ScoreService handles score processing logic.
 type ScoreService struct {
 	ScoreDB  scoredb.ScoreDB
-	EventBus shared.EventBus
+	EventBus eventbus.EventBus
 	logger   *slog.Logger
 }
 
 // NewScoreService creates a new ScoreService.
-func NewScoreService(eventBus shared.EventBus, db scoredb.ScoreDB, logger *slog.Logger) Service {
+func NewScoreService(eventBus eventbus.EventBus, db scoredb.ScoreDB, logger *slog.Logger) Service {
 	return &ScoreService{
 		ScoreDB:  db,
 		EventBus: eventBus,

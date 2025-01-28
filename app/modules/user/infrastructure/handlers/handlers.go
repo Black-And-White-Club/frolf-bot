@@ -3,7 +3,7 @@ package userhandlers
 import (
 	"log/slog"
 
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
 
 // UserHandlers handles user-related events.

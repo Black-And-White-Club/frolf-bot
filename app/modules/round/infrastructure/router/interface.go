@@ -3,7 +3,7 @@ package roundrouter
 import (
 	"context"
 
-	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app"
+	"github.com/Black-And-White-Club/frolf-bot/app"
 )
 
 func main() {

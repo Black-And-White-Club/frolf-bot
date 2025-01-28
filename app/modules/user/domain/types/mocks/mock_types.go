@@ -12,7 +12,7 @@ package mocks
 import (
 	reflect "reflect"
 
-	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	gomock "go.uber.org/mock/gomock"
 )
 

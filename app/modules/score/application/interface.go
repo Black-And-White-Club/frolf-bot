@@ -3,7 +3,7 @@ package scoreservice
 import (
 	"context"
 
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 )
 
 // Service is the interface for score service, as you provided

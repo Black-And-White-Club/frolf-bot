@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 

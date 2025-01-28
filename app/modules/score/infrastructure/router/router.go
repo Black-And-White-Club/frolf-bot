@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/application"
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
-	scorehandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/handlers"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
+	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

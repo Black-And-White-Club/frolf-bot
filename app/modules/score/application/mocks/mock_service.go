@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	gomock "go.uber.org/mock/gomock"
 )
 

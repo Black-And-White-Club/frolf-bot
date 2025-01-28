@@ -3,21 +3,21 @@ package userservice
 import (
 	"log/slog"
 
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 )
 
 // UserServiceImpl handles user-related logic.
 type UserServiceImpl struct {
 	UserDB    userdb.UserDB
-	eventBus  shared.EventBus
+	eventBus  eventbus.EventBus
 	logger    *slog.Logger
 	eventUtil eventutil.EventUtil
 }
 
 // NewUserService creates a new UserService.
-func NewUserService(db userdb.UserDB, eventBus shared.EventBus, logger *slog.Logger) (Service, error) {
+func NewUserService(db userdb.UserDB, eventBus eventbus.EventBus, logger *slog.Logger) (Service, error) {
 	return &UserServiceImpl{
 		UserDB:    db,
 		eventBus:  eventBus,

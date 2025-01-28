@@ -8,12 +8,12 @@ import (
 	"reflect"
 	"testing"
 
-	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
-	scoredbtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	scoredbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
@@ -27,7 +27,7 @@ func TestNewScoreService(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	type args struct {
-		eventBus shared.EventBus
+		eventBus eventbus.EventBus
 		db       scoredb.MockScoreDB
 		logger   *slog.Logger
 	}

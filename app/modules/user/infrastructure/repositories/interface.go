@@ -3,7 +3,7 @@ package userdb
 import (
 	"context"
 
-	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 )
 
 // UserDB is an interface for interacting with the user database.

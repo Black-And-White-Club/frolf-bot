@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/application/mocks"
-	scoreevents "github.com/Black-And-White-Club/tcr-bot/app/modules/score/domain/events"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

@@ -3,7 +3,7 @@ package leaderboardservice
 import (
 	"context"
 
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

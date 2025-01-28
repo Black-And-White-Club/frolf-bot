@@ -16,7 +16,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	nc "github.com/nats-io/nats.go"
 
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 )
 
 func main() {

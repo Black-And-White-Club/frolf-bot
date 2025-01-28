@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )

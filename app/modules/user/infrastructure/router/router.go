@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	userhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/handlers"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	userhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/handlers"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

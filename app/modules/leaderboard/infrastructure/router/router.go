@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/application"
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
-	leaderboardhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/handlers"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )

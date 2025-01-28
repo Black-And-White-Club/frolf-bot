@@ -6,17 +6,17 @@ import (
 	"log/slog"
 	"sync"
 
-	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application"
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
-	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
+	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Module represents the round module.
 type Module struct {
-	EventBus     shared.EventBus
+	EventBus     eventbus.EventBus
 	RoundService roundservice.Service
 	logger       *slog.Logger
 	config       *config.Config
@@ -25,7 +25,7 @@ type Module struct {
 }
 
 // NewRoundModule creates a new instance of the Round module.
-func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("round.NewRoundModule called")
 
 	// Initialize round service.

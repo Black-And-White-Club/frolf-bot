@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application/mocks"
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
-	roundtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/types"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

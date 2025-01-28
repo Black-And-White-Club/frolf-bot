@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	eventbusmocks "github.com/Black-And-White-Club/tcr-bot/app/eventbus/mocks"
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"go.uber.org/mock/gomock"
 )
 

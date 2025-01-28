@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
