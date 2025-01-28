@@ -2,86 +2,75 @@ package round
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync"
 
 	roundservice "github.com/Black-And-White-Club/tcr-bot/app/modules/round/application"
-	roundhandlers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/handlers"
 	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
-	roundsubscribers "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/subscribers"
+	roundrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/router"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Module represents the round module.
 type Module struct {
-	EventBus         shared.EventBus
-	RoundService     roundservice.Service
-	Handlers         roundhandlers.Handlers
-	Subscribers      roundsubscribers.Subscribers
-	logger           *slog.Logger
-	config           *config.Config
-	SubscribersReady chan struct{}
+	EventBus     shared.EventBus
+	RoundService roundservice.Service
+	logger       *slog.Logger
+	config       *config.Config
+	RoundRouter  *roundrouter.RoundRouter
+	cancelFunc   context.CancelFunc
 }
 
 // NewRoundModule creates a new instance of the Round module.
-func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus shared.EventBus) (*Module, error) {
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("round.NewRoundModule called")
 
 	// Initialize round service.
-	roundService := roundservice.NewRoundService(ctx, eventBus, roundDB, logger)
+	roundService := roundservice.NewRoundService(roundDB, eventBus, logger)
 
-	// Initialize round handlers.
-	roundHandlers := roundhandlers.NewRoundHandlers(roundService, &eventBus, logger)
+	// Initialize round router.
+	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus)
 
-	// Initialize round subscribers.
-	roundSubscribers := roundsubscribers.NewRoundSubscribers(eventBus, roundHandlers, logger) // Pass the handler directly
-
-	module := &Module{
-		EventBus:         eventBus,
-		RoundService:     roundService,
-		Handlers:         roundHandlers,
-		Subscribers:      roundSubscribers,
-		logger:           logger,
-		config:           cfg,
-		SubscribersReady: make(chan struct{}),
+	// Configure the router with the round service.
+	if err := roundRouter.Configure(roundService); err != nil {
+		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
 
-	// Start the subscription process in a separate goroutine.
-	go func() {
-		subscriberCtx := context.Background()
-
-		if err := module.Subscribers.SubscribeToRoundManagementEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to round management events", slog.Any("error", err))
-			return
-		}
-		if err := module.Subscribers.SubscribeToParticipantManagementEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to participant management events", slog.Any("error", err))
-			return
-		}
-		if err := module.Subscribers.SubscribeToRoundFinalizationEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to round finalization events", slog.Any("error", err))
-			return
-		}
-		if err := module.Subscribers.SubscribeToRoundStartedEvents(subscriberCtx); err != nil {
-			logger.Error("Failed to subscribe to round started events", slog.Any("error", err))
-			return
-		}
-
-		logger.Info("Round module subscribers are ready")
-
-		// Signal that initialization is complete
-		close(module.SubscribersReady)
-	}()
+	module := &Module{
+		EventBus:     eventBus,
+		RoundService: roundService,
+		logger:       logger,
+		config:       cfg,
+		RoundRouter:  roundRouter, // Set the RoundRouter
+	}
 
 	return module, nil
 }
 
-// IsInitialized checks if the subscribers are ready.
-func (m *Module) IsInitialized() bool {
-	select {
-	case <-m.SubscribersReady:
-		return true
-	default:
-		return false
+func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
+	m.logger.Info("Starting round module")
+
+	// Create a context that can be canceled
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancelFunc = cancel
+	defer cancel()
+
+	// Keep this goroutine alive until the context is canceled
+	<-ctx.Done()
+	m.logger.Info("Round module goroutine stopped")
+}
+
+func (m *Module) Close() error {
+	m.logger.Info("Stopping round module")
+
+	// Cancel any other running operations
+	if m.cancelFunc != nil {
+		m.cancelFunc()
 	}
+
+	m.logger.Info("Round module stopped")
+	return nil
 }

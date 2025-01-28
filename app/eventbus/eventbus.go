@@ -140,6 +140,10 @@ func (eb *eventBus) CreateStream(ctx context.Context, streamName string) error {
 		subjects = []string{
 			"leaderboard.>", // This captures all events prefixed with "leaderboard."
 		}
+	case "round":
+		subjects = []string{
+			"round.>", // This captures all events prefixed with "round."
+		}
 	default:
 		return fmt.Errorf("unknown stream name: %s", streamName)
 	}
@@ -184,6 +188,8 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 		streamName = "user"
 	case strings.HasPrefix(topic, "leaderboard."):
 		streamName = "leaderboard"
+	case strings.HasPrefix(topic, "round."):
+		streamName = "round"
 	default:
 		return nil, fmt.Errorf("unknown topic: %s", topic)
 	}
@@ -303,22 +309,6 @@ func (eb *eventBus) Subscribe(ctx context.Context, topic string) (<-chan *messag
 	return messages, nil
 }
 
-// Helper function to determine a suitable filter subject
-func getFilterSubject(topic string) string {
-	switch {
-	case strings.HasPrefix(topic, "user.permissions."):
-		return "user.permissions.*" // Matches user.permissions.check, user.permissions.response, etc.
-	case strings.HasPrefix(topic, "user.role."):
-		return "user.role.*" // Matches user.role.update.request, user.role.update.failed, etc
-	case strings.HasPrefix(topic, "user."):
-		return "user.>" // For other user events, use wildcard to capture all subtopics
-	case strings.HasPrefix(topic, "leaderboard."):
-		return "leaderboard.>" // For leaderboard events, use wildcard
-	default:
-		return topic // Default to the exact topic if no specific pattern is matched
-	}
-}
-
 func streamSubjectsMatch(existing, new []string) bool {
 	if len(existing) != len(new) {
 		return false
@@ -343,7 +333,7 @@ func sanitize(s string) string {
 
 func (eb *eventBus) createStreamsAndDLQs(ctx context.Context) error {
 	// Add the "leaderboard" stream to the list of streams to be created
-	streams := []string{"user", "leaderboard"}
+	streams := []string{"user", "leaderboard", "round"}
 
 	for _, stream := range streams {
 		if err := eb.CreateStream(ctx, stream); err != nil {

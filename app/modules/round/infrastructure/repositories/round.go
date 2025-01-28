@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/uptrace/bun"
+
+	roundtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/types"
 )
 
 // RoundDBImpl is the concrete implementation of the RoundDB interface using bun.
@@ -14,8 +16,8 @@ type RoundDBImpl struct {
 }
 
 // CreateRound creates a new round in the database.
-func (r *RoundDBImpl) CreateRound(ctx context.Context, round *Round) error { // Accept the Round model
-	_, err := r.DB.NewInsert().
+func (db *RoundDBImpl) CreateRound(ctx context.Context, round *roundtypes.Round) error {
+	_, err := db.DB.NewInsert().
 		Model(round).
 		Exec(ctx)
 	if err != nil {
@@ -25,12 +27,11 @@ func (r *RoundDBImpl) CreateRound(ctx context.Context, round *Round) error { // 
 }
 
 // GetRound retrieves a specific round by ID.
-func (r *RoundDBImpl) GetRound(ctx context.Context, roundID string) (*Round, error) {
-	var round Round
-	err := r.DB.NewSelect().
+func (db *RoundDBImpl) GetRound(ctx context.Context, roundID string) (*roundtypes.Round, error) {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
 		Model(&round).
 		Where("id = ?", roundID).
-		Relation("Participants").
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch round: %w", err)
@@ -39,29 +40,11 @@ func (r *RoundDBImpl) GetRound(ctx context.Context, roundID string) (*Round, err
 }
 
 // UpdateRound updates an existing round in the database.
-func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID string, round *Round) error {
-	updateQuery := r.DB.NewUpdate().
+func (db *RoundDBImpl) UpdateRound(ctx context.Context, roundID string, round *roundtypes.Round) error {
+	_, err := db.DB.NewUpdate().
 		Model(round).
-		Where("id = ?", roundID)
-
-	// Dynamically add Set clauses based on non-zero values
-	if round.Title != "" {
-		updateQuery = updateQuery.Set("title = ?", round.Title)
-	}
-	if round.Location != "" {
-		updateQuery = updateQuery.Set("location = ?", round.Location)
-	}
-	if round.EventType != nil {
-		updateQuery = updateQuery.Set("event_type = ?", round.EventType)
-	}
-	if !round.Date.IsZero() {
-		updateQuery = updateQuery.Set("date = ?", round.Date)
-	}
-	if !round.Time.IsZero() {
-		updateQuery = updateQuery.Set("time = ?", round.Time)
-	}
-
-	_, err := updateQuery.Exec(ctx)
+		Where("id = ?", roundID).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update round: %w", err)
 	}
@@ -69,14 +52,14 @@ func (r *RoundDBImpl) UpdateRound(ctx context.Context, roundID string, round *Ro
 }
 
 // DeleteRound "soft deletes" a round by setting its state to DELETED.
-func (r *RoundDBImpl) DeleteRound(ctx context.Context, roundID string) error {
-	return r.UpdateRoundState(ctx, roundID, RoundStateDeleted)
+func (db *RoundDBImpl) DeleteRound(ctx context.Context, roundID string) error {
+	return db.UpdateRoundState(ctx, roundID, roundtypes.RoundStateDeleted)
 }
 
 // UpdateParticipant updates a participant's response or tag number in a round.
-func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID string, participant Participant) error {
-	var round Round
-	err := r.DB.NewSelect().
+func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID string, participant roundtypes.RoundParticipant) error {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
 		Model(&round).
 		Where("id = ?", roundID).
 		Scan(ctx)
@@ -88,11 +71,17 @@ func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID string, par
 	found := false
 	for i, p := range round.Participants {
 		if p.DiscordID == participant.DiscordID {
-			if participant.Response != "" { // Update response if provided
+			// Update response if provided
+			if participant.Response != "" {
 				round.Participants[i].Response = participant.Response
 			}
-			if participant.TagNumber != nil { // Update tag number if provided
+			// Update tag number if provided
+			if participant.TagNumber != 0 {
 				round.Participants[i].TagNumber = participant.TagNumber
+			}
+			// Update score if provided
+			if participant.Score != nil {
+				round.Participants[i].Score = participant.Score
 			}
 			found = true
 			break
@@ -103,10 +92,10 @@ func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID string, par
 		round.Participants = append(round.Participants, participant)
 	}
 
-	_, err = r.DB.NewUpdate().
+	_, err = db.DB.NewUpdate().
 		Model(&round).
+		Set("participants = ?", round.Participants).
 		Where("id = ?", roundID).
-		Column("participants").
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update participant response: %w", err)
@@ -116,9 +105,10 @@ func (r *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID string, par
 }
 
 // UpdateRoundState updates the state of a round.
-func (r *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID string, state RoundState) error {
-	_, err := r.DB.NewUpdate().
-		Model((*Round)(nil)).
+func (db *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID string, state roundtypes.RoundState) error {
+	var round roundtypes.Round
+	_, err := db.DB.NewUpdate().
+		Model(&round).
 		Set("state = ?", state).
 		Where("id = ?", roundID).
 		Exec(ctx)
@@ -129,11 +119,13 @@ func (r *RoundDBImpl) UpdateRoundState(ctx context.Context, roundID string, stat
 }
 
 // GetUpcomingRounds retrieves rounds that are upcoming within the given time range.
-func (r *RoundDBImpl) GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*Round, error) {
-	var rounds []*Round
-	err := r.DB.NewSelect().
+func (db *RoundDBImpl) GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*roundtypes.Round, error) {
+	var rounds []*roundtypes.Round
+	err := db.DB.NewSelect().
 		Model(&rounds).
-		Where("state = ? AND date = ? AND time BETWEEN ? AND ?", RoundStateUpcoming, now.Format("2006-01-02"), now.Format("15:04"), oneHourFromNow.Format("15:04")).
+		Where("state = ?", roundtypes.RoundStateUpcoming).
+		Where("start_time >= ?", now).
+		Where("start_time <= ?", oneHourFromNow).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch upcoming rounds: %w", err)
@@ -142,14 +134,17 @@ func (r *RoundDBImpl) GetUpcomingRounds(ctx context.Context, now, oneHourFromNow
 }
 
 // UpdateParticipantScore updates the score for a participant in a round.
-func (r *RoundDBImpl) UpdateParticipantScore(ctx context.Context, roundID, participantID string, score int) error {
-	// 1. Fetch the round
-	round, err := r.GetRound(ctx, roundID)
+func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, roundID string, participantID string, score int) error {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
+		Model(&round).
+		Where("id = ?", roundID).
+		Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get round: %w", err)
+		return fmt.Errorf("failed to fetch round: %w", err)
 	}
 
-	// 2. Find the participant and update their score
+	// Find the participant and update their score
 	found := false
 	for i, p := range round.Participants {
 		if p.DiscordID == participantID {
@@ -162,11 +157,11 @@ func (r *RoundDBImpl) UpdateParticipantScore(ctx context.Context, roundID, parti
 		return fmt.Errorf("participant not found in round")
 	}
 
-	// 3. Update the round in the database
-	_, err = r.DB.NewUpdate().
-		Model(round).
+	// Update the round in the database
+	_, err = db.DB.NewUpdate().
+		Model(&round).
+		Set("participants = ?", round.Participants). // Let bun handle marshaling
 		Where("id = ?", roundID).
-		Column("participants"). // Update the participants column
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update participant score: %w", err)
@@ -176,23 +171,30 @@ func (r *RoundDBImpl) UpdateParticipantScore(ctx context.Context, roundID, parti
 }
 
 // GetParticipantsWithResponses retrieves participants with the specified responses from a round.
-func (r *RoundDBImpl) GetParticipantsWithResponses(ctx context.Context, roundID string, responses ...Response) ([]Participant, error) {
-	var participants []Participant
-	err := r.DB.NewSelect().
-		Model(&participants).
-		Where("round_id = ?", roundID). // Assuming you have a round_id field in the Participant struct
-		Where("response IN (?)", bun.In(responses)).
+func (db *RoundDBImpl) GetParticipantsWithResponses(ctx context.Context, roundID string, responses ...roundtypes.Response) ([]roundtypes.RoundParticipant, error) {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
+		Model(&round).
+		Where("id = ?", roundID).
 		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch participants: %w", err)
+		return nil, fmt.Errorf("failed to fetch round: %w", err)
+	}
+	var participants []roundtypes.RoundParticipant
+	for _, p := range round.Participants {
+		for _, r := range responses {
+			if p.Response == r {
+				participants = append(participants, p)
+			}
+		}
 	}
 	return participants, nil
 }
 
 // GetRoundState retrieves the state of a round.
-func (r *RoundDBImpl) GetRoundState(ctx context.Context, roundID string) (RoundState, error) {
-	var round Round
-	err := r.DB.NewSelect().
+func (db *RoundDBImpl) GetRoundState(ctx context.Context, roundID string) (roundtypes.RoundState, error) {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
 		Model(&round).
 		Column("state").
 		Where("id = ?", roundID).
@@ -203,31 +205,28 @@ func (r *RoundDBImpl) GetRoundState(ctx context.Context, roundID string) (RoundS
 	return round.State, nil
 }
 
-type ScoreUpdateType int
-
-const (
-	ScoreUpdateTypeRegular ScoreUpdateType = iota
-	ScoreUpdateTypeManual
-)
-
 // LogRound logs the round data by updating the existing round entry.
-func (r *RoundDBImpl) LogRound(ctx context.Context, round *Round, updateType ScoreUpdateType) error {
-	updateQuery := r.DB.NewUpdate().
+func (db *RoundDBImpl) LogRound(ctx context.Context, round *roundtypes.Round) error {
+	_, err := db.DB.NewUpdate().
 		Model(round).
-		Where("id = ?", round.ID)
-
-	if updateType == ScoreUpdateTypeRegular {
-		// For regular updates, update the entire Participants array
-		updateQuery = updateQuery.Set("participants = ?", round.Participants)
-	} else {
-		// For manual updates, append the new score to the Participants array
-		// Assuming the new score is in round.Participants[0]
-		updateQuery = updateQuery.Set("participants = jsonb_insert(participants, '{0}', ?)", round.Participants[0])
-	}
-
-	_, err := updateQuery.Exec(ctx)
+		Where("id = ?", round.ID).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to log round: %w", err)
 	}
 	return nil
+}
+
+// GetParticipants retrieves all participants from a round.
+func (db *RoundDBImpl) GetParticipants(ctx context.Context, roundID string) ([]roundtypes.RoundParticipant, error) {
+	var round roundtypes.Round
+	err := db.DB.NewSelect().
+		Model(&round).
+		Where("id = ?", roundID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch round: %w", err)
+	}
+
+	return round.Participants, nil
 }

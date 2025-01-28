@@ -12,6 +12,7 @@ import (
 
 	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
+	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
 	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
 	"github.com/Black-And-White-Club/tcr-bot/app/shared"
 	"github.com/Black-And-White-Club/tcr-bot/config"
@@ -28,6 +29,7 @@ type App struct {
 	Router            *message.Router
 	UserModule        *user.Module
 	LeaderboardModule *leaderboard.Module // Add Leaderboard module
+	RoundModule       *round.Module       // Add Round module
 	RouterReady       chan struct{}       // Channel to signal when the main router is ready
 	DB                *bundb.DBService
 	EventBus          shared.EventBus
@@ -116,6 +118,15 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 	app.LeaderboardModule = leaderboardModule
 	logger.Info("Leaderboard module initialized successfully")
 
+	// Initialize Round Module
+	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router)
+	if err != nil {
+		logger.Error("Failed to initialize round module", slog.Any("error", err))
+		return fmt.Errorf("failed to initialize round module: %w", err)
+	}
+	app.RoundModule = roundModule
+	logger.Info("Round module initialized successfully")
+
 	logger.Info("Exiting initializeModules")
 	return nil
 }
@@ -158,6 +169,7 @@ func (app *App) Run(ctx context.Context) error {
 	// Start modules
 	app.UserModule.Run(ctx, nil)
 	app.LeaderboardModule.Run(ctx, nil)
+	app.RoundModule.Run(ctx, nil)
 
 	// Keep the main goroutine alive until the context is canceled.
 	// This could be due to an interrupt signal or an error in the router.
@@ -182,6 +194,9 @@ func (app *App) Close() error {
 
 	app.Logger.Info("Closing leaderboard module")
 	app.LeaderboardModule.Close()
+
+	app.Logger.Info("Closing round module")
+	app.RoundModule.Close()
 
 	// Then close the Watermill router
 	if app.Router != nil {
