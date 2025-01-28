@@ -1,0 +1,11 @@
+postgres:
+  dsn: "postgres://postgres:postgres@localhost:5432/tcr-bot?sslmode=disable"
+  log_statement: "all"
+  log_min_duration_statement: 0
+
+nats:
+  url: "nats://localhost:4222"
+
+discord:
+  token: "YOUR_DISCORD_BOT_TOKEN"
+# ... other configuration settings ...
