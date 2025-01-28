@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared/logging"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

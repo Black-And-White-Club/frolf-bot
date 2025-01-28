@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
+	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 

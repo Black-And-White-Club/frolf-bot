@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	userevents "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/events"
-	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

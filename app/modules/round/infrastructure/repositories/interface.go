@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	roundtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/types"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 )
 
 // RoundDB is the interface for interacting with the rounds database.

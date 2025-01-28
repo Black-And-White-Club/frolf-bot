@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	leaderboarddomain "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain"
-	leaderboardevents "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/events"
-	leaderboardtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 

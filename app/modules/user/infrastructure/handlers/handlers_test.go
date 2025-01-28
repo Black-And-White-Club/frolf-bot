@@ -7,7 +7,7 @@ import (
 
 	"reflect"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/user/application/mocks"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.uber.org/mock/gomock"
 )
 

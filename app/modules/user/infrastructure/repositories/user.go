@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	usertypes "github.com/Black-And-White-Club/tcr-bot/app/modules/user/domain/types"
+	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	"github.com/uptrace/bun"
 )
 

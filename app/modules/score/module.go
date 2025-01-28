@@ -6,17 +6,17 @@ import (
 	"log/slog"
 	"sync"
 
-	scoreservice "github.com/Black-And-White-Club/tcr-bot/app/modules/score/application"
-	scoredb "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories"
-	scorerouter "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
+	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	scorerouter "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/router"
+	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Module represents the score module.
 type Module struct {
-	EventBus     shared.EventBus
+	EventBus     eventbus.EventBus
 	ScoreService scoreservice.Service
 	logger       *slog.Logger
 	config       *config.Config
@@ -24,7 +24,7 @@ type Module struct {
 	cancelFunc   context.CancelFunc
 }
 
-func NewScoreModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, scoreDB scoredb.ScoreDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+func NewScoreModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, scoreDB scoredb.ScoreDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("score.NewScoreModule called")
 
 	// Initialize score service.

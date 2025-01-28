@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -16,10 +16,10 @@ import (
 	"github.com/urfave/cli/v2"
 
 	// Import for migrator creation
-	leaderboardmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
-	roundmigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories/migrations"
-	scoremigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/score/infrastructure/repositories/migrations"
-	usermigrations "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories/migrations"
+	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
+	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
+	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
+	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
 func main() {

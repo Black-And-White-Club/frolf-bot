@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	roundevents "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/events"
-	roundtypes "github.com/Black-And-White-Club/tcr-bot/app/modules/round/domain/types"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared/logging"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )

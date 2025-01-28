@@ -10,14 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Black-And-White-Club/tcr-bot/app/eventbus"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/round"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/score"
-	"github.com/Black-And-White-Club/tcr-bot/app/modules/user"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/config"
-	"github.com/Black-And-White-Club/tcr-bot/db/bundb"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/score"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/user"
+	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -34,7 +33,7 @@ type App struct {
 	ScoreModule       *score.Module // Add Score module
 	RouterReady       chan struct{} // Channel to signal when the main router is ready
 	DB                *bundb.DBService
-	EventBus          shared.EventBus
+	EventBus          eventbus.EventBus
 }
 
 // Initialize initializes the application.
@@ -99,7 +98,7 @@ func (app *App) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus shared.EventBus, router *message.Router) error {
+func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus eventbus.EventBus, router *message.Router) error {
 	logger.Info("Entering initializeModules")
 
 	// Initialize User Module

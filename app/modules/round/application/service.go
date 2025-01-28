@@ -7,10 +7,10 @@ import (
 
 	"log/slog"
 
-	rounddb "github.com/Black-And-White-Club/tcr-bot/app/modules/round/infrastructure/repositories"
-	roundutil "github.com/Black-And-White-Club/tcr-bot/app/modules/round/utils"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -19,14 +19,14 @@ import (
 // RoundService handles round-related logic.
 type RoundService struct {
 	RoundDB        rounddb.RoundDB
-	EventBus       shared.EventBus
+	EventBus       eventbus.EventBus
 	logger         *slog.Logger
 	eventUtil      eventutil.EventUtil
 	roundValidator roundutil.RoundValidator
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(db rounddb.RoundDB, eventBus shared.EventBus, logger *slog.Logger) Service {
+func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger *slog.Logger) Service {
 	return &RoundService{
 		RoundDB:        db,
 		EventBus:       eventBus,

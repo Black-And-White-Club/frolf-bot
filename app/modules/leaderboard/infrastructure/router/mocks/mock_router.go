@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	leaderboardservice "github.com/Black-And-White-Club/tcr-bot/app/modules/leaderboard/application"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )

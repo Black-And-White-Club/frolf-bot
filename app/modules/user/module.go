@@ -6,16 +6,16 @@ import (
 	"log/slog"
 	"sync"
 
-	userservice "github.com/Black-And-White-Club/tcr-bot/app/modules/user/application"
-	userdb "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/repositories"
-	userrouter "github.com/Black-And-White-Club/tcr-bot/app/modules/user/infrastructure/router"
-	"github.com/Black-And-White-Club/tcr-bot/app/shared"
-	"github.com/Black-And-White-Club/tcr-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	userrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/router"
+	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Module struct {
-	EventBus    shared.EventBus
+	EventBus    eventbus.EventBus
 	UserService userservice.Service
 	logger      *slog.Logger
 	config      *config.Config
@@ -23,7 +23,7 @@ type Module struct {
 	cancelFunc  context.CancelFunc
 }
 
-func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus shared.EventBus, router *message.Router) (*Module, error) {
+func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
 	logger.Info("user.NewUserModule called")
 
 	// Initialize user service.
