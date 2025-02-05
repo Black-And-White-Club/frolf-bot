@@ -7,6 +7,7 @@ import (
 
 	"log/slog"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
@@ -23,10 +24,11 @@ type RoundService struct {
 	logger         *slog.Logger
 	eventUtil      eventutil.EventUtil
 	roundValidator roundutil.RoundValidator
+	ErrorReporter  errors.ErrorReporterInterface
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger *slog.Logger) Service {
+func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger *slog.Logger, errorReporter errors.ErrorReporterInterface) Service {
 	return &RoundService{
 		RoundDB:        db,
 		EventBus:       eventBus,
@@ -51,12 +53,17 @@ func (s *RoundService) publishEvent(msg *message.Message, eventName string, payl
 	}
 
 	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage)
 
-	// Set Nats-Msg-Id for JetStream deduplication
-	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID+"-"+eventName)
+	// Preserve correlation ID
+	if correlationID == "" {
+		correlationID = watermill.NewUUID() // Generate a new correlation ID if it's missing
+	}
+	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID) // Use middleware.CorrelationIDMetadataKey
 
-	// Set caused_by metadata to the name of the calling function
+	// Use `Nats-Msg-Id` for deduplication (optional, but recommended)
+	newMessage.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-%s", correlationID, eventName))
+
+	// (Optional) Set caused_by metadata to the name of the calling function
 	newMessage.Metadata.Set("caused_by", getCallerFunctionName())
 
 	if err := s.EventBus.Publish(eventName, newMessage); err != nil {

@@ -30,11 +30,10 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		payload interface{}
 	}
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(t *testing.T)
+		name        string
+		args        args
+		expectErr   bool
+		mockExpects func(*eventbusmocks.MockEventBus)
 	}{
 		{
 			name: "Successful round events scheduling",
@@ -44,19 +43,19 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					Round: roundtypes.Round{
 						ID:        "some-round-id",
 						Title:     "Test Round",
-						StartTime: time.Now().Add(time.Hour + time.Minute), // Start time is more than an hour away
+						Location:  "Test Location",
+						StartTime: time.Now().Add(2 * time.Hour), // Start time is more than an hour away
 						State:     roundtypes.RoundStateUpcoming,
 					},
 				},
 			},
-			expectedEvent: roundevents.RoundScheduled,
-			expectErr:     false,
-			mockExpects: func(t *testing.T) {
+			expectErr: false,
+			mockExpects: func(mockEventBus *eventbusmocks.MockEventBus) {
 				// Expect the one-hour reminder event
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundReminder), gomock.Any()).
+					Publish(gomock.Eq(roundevents.DelayedMessagesSubject), gomock.Any()).
 					DoAndReturn(func(topic string, msg *message.Message) error {
-						if topic != roundevents.RoundReminder {
+						if topic != roundevents.DelayedMessagesSubject {
 							return fmt.Errorf("unexpected topic: %s", topic)
 						}
 						var payload roundevents.RoundReminderPayload
@@ -66,39 +65,18 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 						if payload.RoundID != "some-round-id" {
 							return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
 						}
-						if payload.ReminderType != "one_hour" {
+						if payload.ReminderType != "1h" {
 							return fmt.Errorf("unexpected reminder type: %s", payload.ReminderType)
 						}
 						return nil
 					}).
-					MinTimes(0)
-
-				// Expect the 30-minute reminder event
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundReminder), gomock.Any()).
-					DoAndReturn(func(topic string, msg *message.Message) error {
-						if topic != roundevents.RoundReminder {
-							return fmt.Errorf("unexpected topic: %s", topic)
-						}
-						var payload roundevents.RoundReminderPayload
-						if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-							return fmt.Errorf("failed to unmarshal payload: %w", err)
-						}
-						if payload.RoundID != "some-round-id" {
-							return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
-						}
-						if payload.ReminderType != "thirty_minutes" {
-							return fmt.Errorf("unexpected reminder type: %s", payload.ReminderType)
-						}
-						return nil
-					}).
-					MinTimes(0)
+					Times(1)
 
 				// Expect the round start event
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundStarted), gomock.Any()).
+					Publish(gomock.Eq(roundevents.DelayedMessagesSubject), gomock.Any()).
 					DoAndReturn(func(topic string, msg *message.Message) error {
-						if topic != roundevents.RoundStarted {
+						if topic != roundevents.DelayedMessagesSubject {
 							return fmt.Errorf("unexpected topic: %s", topic)
 						}
 						var payload roundevents.RoundStartedPayload
@@ -110,7 +88,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 						}
 						return nil
 					}).
-					MinTimes(0)
+					Times(1)
 
 				// Expect the round scheduled event
 				mockEventBus.EXPECT().
@@ -119,12 +97,12 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 						if topic != roundevents.RoundScheduled {
 							return fmt.Errorf("unexpected topic: %s", topic)
 						}
-						var payload roundevents.RoundScheduledPayload
+						var payload roundevents.RoundStoredPayload
 						if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 							return fmt.Errorf("failed to unmarshal payload: %w", err)
 						}
-						if payload.RoundID != "some-round-id" {
-							return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
+						if payload.Round.ID != "some-round-id" {
+							return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
 						}
 						return nil
 					}).
@@ -138,7 +116,56 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				payload: "invalid json",
 			},
 			expectErr: true,
-			mockExpects: func(t *testing.T) {
+			mockExpects: func(mockEventBus *eventbusmocks.MockEventBus) {
+				// No expectations for invalid payload
+			},
+		},
+		{
+			name: "Failed to publish reminder",
+			args: args{
+				ctx: context.Background(),
+				payload: roundevents.RoundStoredPayload{
+					Round: roundtypes.Round{
+						ID:        "some-round-id",
+						Title:     "Test Round",
+						Location:  "Test Location",
+						StartTime: time.Now().Add(2 * time.Hour),
+						State:     roundtypes.RoundStateUpcoming,
+					},
+				},
+			},
+			expectErr: true,
+			mockExpects: func(mockEventBus *eventbusmocks.MockEventBus) {
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.DelayedMessagesSubject), gomock.Any()).
+					Return(fmt.Errorf("publish error")).
+					Times(1)
+			},
+		},
+		{
+			name: "Failed to publish round start",
+			args: args{
+				ctx: context.Background(),
+				payload: roundevents.RoundStoredPayload{
+					Round: roundtypes.Round{
+						ID:        "some-round-id",
+						Title:     "Test Round",
+						Location:  "Test Location",
+						StartTime: time.Now().Add(2 * time.Hour),
+						State:     roundtypes.RoundStateUpcoming,
+					},
+				},
+			},
+			expectErr: true,
+			mockExpects: func(mockEventBus *eventbusmocks.MockEventBus) {
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.DelayedMessagesSubject), gomock.Any()).
+					Return(nil).
+					Times(1)
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.DelayedMessagesSubject), gomock.Any()).
+					Return(fmt.Errorf("publish error")).
+					Times(1)
 			},
 		},
 	}
@@ -150,7 +177,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
 
-			tt.mockExpects(t)
+			tt.mockExpects(mockEventBus)
 
 			s := &RoundService{
 				EventBus:  mockEventBus,

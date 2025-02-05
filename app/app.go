@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
@@ -34,6 +35,7 @@ type App struct {
 	RouterReady       chan struct{} // Channel to signal when the main router is ready
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
+	ErrorReporter     errors.ErrorReporterInterface
 }
 
 // Initialize initializes the application.
@@ -120,7 +122,7 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 	logger.Info("Leaderboard module initialized successfully")
 
 	// Initialize Round Module
-	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router)
+	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router, app.ErrorReporter)
 	if err != nil {
 		logger.Error("Failed to initialize round module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize round module: %w", err)

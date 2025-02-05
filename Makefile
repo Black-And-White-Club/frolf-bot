@@ -57,7 +57,7 @@ mocks-score:
 
 # EventBus mock generation
 mocks-eventbus:
-	$(MOCKGEN) github.com/Black-And-White-Club/frolf-bot-shared/eventbus EventBus -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
-
+	$(MOCKGEN) -source=../frolf-bot-shared/eventbus/eventbus.go -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
+	
 # Generate all mocks for user and eventbus
 mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score

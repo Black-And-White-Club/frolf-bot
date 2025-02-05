@@ -11,7 +11,6 @@ type Service interface {
 	// Create Round
 	ValidateRoundRequest(ctx context.Context, msg *message.Message) error
 	ParseDateTime(ctx context.Context, msg *message.Message) error
-	CreateRoundEntity(ctx context.Context, msg *message.Message) error
 	StoreRound(ctx context.Context, msg *message.Message) error
 	ScheduleRoundEvents(ctx context.Context, msg *message.Message) error
 	PublishRoundCreated(ctx context.Context, msg *message.Message) error
@@ -29,6 +28,9 @@ type Service interface {
 	CheckUserAuthorization(ctx context.Context, msg *message.Message) error
 	UserRoleCheckResult(ctx context.Context, msg *message.Message) error
 	DeleteRound(ctx context.Context, msg *message.Message) error
+
+	// Start Round
+	ProcessRoundStart(msg *message.Message) error
 
 	// Join Round
 	ValidateParticipantJoinRequest(ctx context.Context, msg *message.Message) error
@@ -49,4 +51,7 @@ type Service interface {
 	RequestTagNumber(ctx context.Context, msg *message.Message) error
 	TagNumberRequest(ctx context.Context, msg *message.Message) error
 	TagNumberResponse(ctx context.Context, msg *message.Message) error
+
+	// Round Reminder
+	ProcessRoundReminder(msg *message.Message) error
 }

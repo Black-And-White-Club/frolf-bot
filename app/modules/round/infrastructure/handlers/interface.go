@@ -9,7 +9,6 @@ type Handlers interface {
 	HandleRoundCreateRequest(msg *message.Message) error
 	HandleRoundValidated(msg *message.Message) error
 	HandleRoundDateTimeParsed(msg *message.Message) error
-	HandleRoundEntityCreated(msg *message.Message) error
 	HandleRoundStored(msg *message.Message) error
 	HandleRoundScheduled(msg *message.Message) error
 
@@ -26,6 +25,11 @@ type Handlers interface {
 	HandleRoundToDeleteFetched(msg *message.Message) error
 	HandleRoundUserRoleCheckResult(msg *message.Message) error
 	HandleRoundDeleteAuthorized(msg *message.Message) error
+
+	// Start Round
+	HandleRoundStarted(msg *message.Message) error
+	HandleRoundReminder(msg *message.Message) error
+	HandleScheduleRoundEvents(msg *message.Message) error
 
 	// Join Round
 	HandleRoundParticipantJoinRequest(msg *message.Message) error

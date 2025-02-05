@@ -260,7 +260,7 @@ func TestRoundHandlers_HandleRoundDateTimeParsed(t *testing.T) {
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CreateRoundEntity(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().StoreRound(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -298,7 +298,7 @@ func TestRoundHandlers_HandleRoundDateTimeParsed(t *testing.T) {
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CreateRoundEntity(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().StoreRound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}

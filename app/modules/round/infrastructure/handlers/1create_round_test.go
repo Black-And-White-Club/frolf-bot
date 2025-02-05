@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
@@ -15,108 +14,6 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
 )
-
-func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRoundService := roundservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		RoundService *roundservice.MockService
-		logger       *slog.Logger
-	}
-
-	type args struct {
-		msg *message.Message
-	}
-
-	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
-	}{
-		{
-			name: "Successful round entity created handling",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEntityCreatedPayload{
-					Round: roundtypes.Round{
-						ID:        "some-round-id",
-						Title:     "Test Round",
-						StartTime: time.Now(),
-						State:     roundtypes.RoundStateUpcoming,
-					},
-				}),
-			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().StoreRound(gomock.Any(), a.msg).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Unmarshal error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
-		},
-		{
-			name: "Service layer error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEntityCreatedPayload{
-					Round: roundtypes.Round{
-						ID:        "some-round-id",
-						Title:     "Test Round",
-						StartTime: time.Now(),
-						State:     roundtypes.RoundStateUpcoming,
-					},
-				}),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().StoreRound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &RoundHandlers{
-				RoundService: tt.fields.RoundService,
-				logger:       tt.fields.logger,
-			}
-
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
-			}
-
-			if err := h.HandleRoundEntityCreated(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundEntityCreated() error = %v, wantErr %v", err, tt.expectErr)
-			}
-		})
-	}
-}
 
 func TestRoundHandlers_HandleRoundStored(t *testing.T) {
 	ctrl := gomock.NewController(t)

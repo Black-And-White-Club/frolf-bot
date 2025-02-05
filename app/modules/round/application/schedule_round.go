@@ -1,6 +1,7 @@
 package roundservice
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,103 +12,84 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
-// -- Service Functions for Scheduling Round Events --
-
-// ScheduleRoundEvents schedules the reminder and start events for the round.
+// ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
 func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundStoredPayload: %w", err)
 	}
 
-	oneHourBefore := eventPayload.Round.StartTime.Add(-1 * time.Hour)
-	thirtyMinsBefore := eventPayload.Round.StartTime.Add(-30 * time.Minute)
+	roundID := eventPayload.Round.ID
 
-	// Schedule one-hour reminder
-	if err := s.scheduleEvent(ctx, msg, roundevents.RoundReminder, roundevents.RoundReminderPayload{
-		RoundID:      eventPayload.Round.ID,
-		ReminderType: "one_hour",
-	}, oneHourBefore); err != nil {
-		return fmt.Errorf("failed to schedule one-hour reminder: %w", err)
+	// Prepare reusable JSON encoder & buffer for performance optimization
+	var payloadBuf bytes.Buffer
+	encoder := json.NewEncoder(&payloadBuf)
+
+	payloadBuf.Reset() // Clear buffer for reuse
+
+	reminderPayload := roundevents.RoundReminderPayload{
+		RoundID:      roundID,
+		ReminderType: "1h",
+		RoundTitle:   eventPayload.Round.Title,
+		StartTime:    eventPayload.Round.StartTime,
+		Location:     eventPayload.Round.Location,
 	}
 
-	// Schedule 30-minute reminder
-	if err := s.scheduleEvent(ctx, msg, roundevents.RoundReminder, roundevents.RoundReminderPayload{
-		RoundID:      eventPayload.Round.ID,
-		ReminderType: "thirty_minutes",
-	}, thirtyMinsBefore); err != nil {
-		return fmt.Errorf("failed to schedule thirty-minutes reminder: %w", err)
+	// Encode into buffer to reduce memory allocations
+	if err := encoder.Encode(reminderPayload); err != nil {
+		s.logger.Error("Failed to encode reminder payload", "error", err)
+		return fmt.Errorf("failed to encode reminder payload: %w", err)
 	}
 
-	// Schedule round start
-	if err := s.scheduleEvent(ctx, msg, roundevents.RoundStarted, roundevents.RoundStartedPayload{
-		RoundID: eventPayload.Round.ID,
-	}, eventPayload.Round.StartTime); err != nil {
+	payloadBytes := payloadBuf.Bytes()
+	reminderMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	reminderMsg.Metadata.Set("correlationID", roundID)
+	reminderMsg.Metadata.Set("Execute-At", eventPayload.Round.StartTime.Add(-1*time.Hour).Format(time.RFC3339))
+	reminderMsg.Metadata.Set("Original-Subject", roundevents.RoundReminder)
+	reminderMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-1h-reminder", roundID))
+
+	if err := s.EventBus.Publish(roundevents.DelayedMessagesSubject, reminderMsg); err != nil {
+		s.logger.Error("Failed to schedule reminder", "error", err, "round_id", roundID, "reminder_type", "1h")
+		return fmt.Errorf("failed to schedule 1h reminder: %w", err)
+	}
+
+	payloadBuf.Reset()
+
+	startPayload := roundevents.RoundStartedPayload{
+		RoundID:   roundID,
+		Title:     eventPayload.Round.Title,
+		Location:  eventPayload.Round.Location,
+		StartTime: eventPayload.Round.StartTime,
+	}
+
+	if err := encoder.Encode(startPayload); err != nil {
+		s.logger.Error("Failed to encode round start payload", "error", err)
+		return fmt.Errorf("failed to encode round start payload: %w", err)
+	}
+
+	startPayloadBytes := payloadBuf.Bytes()
+	startMsg := message.NewMessage(watermill.NewUUID(), startPayloadBytes)
+	startMsg.Metadata.Set("correlationID", roundID)
+	startMsg.Metadata.Set("Execute-At", eventPayload.Round.StartTime.Format(time.RFC3339))
+	startMsg.Metadata.Set("Original-Subject", roundevents.RoundStarted)
+	startMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-round-start", roundID))
+
+	if err := s.EventBus.Publish(roundevents.DelayedMessagesSubject, startMsg); err != nil {
+		s.logger.Error("Failed to schedule round start", "error", err, "round_id", roundID)
 		return fmt.Errorf("failed to schedule round start: %w", err)
 	}
 
-	// Publish "round.scheduled" event
-	if err := s.publishEvent(msg, roundevents.RoundScheduled, roundevents.RoundScheduledPayload{
-		RoundID: eventPayload.Round.ID,
-	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.scheduled event", map[string]interface{}{})
+	scheduledMsg := message.NewMessage(watermill.NewUUID(), msg.Payload)
+	scheduledMsg.Metadata.Set("correlationID", roundID)
+
+	if err := s.EventBus.Publish(roundevents.RoundScheduled, scheduledMsg); err != nil {
+		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.scheduled event", nil)
 		return fmt.Errorf("failed to publish round.scheduled event: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round events scheduled", map[string]interface{}{"round_id": eventPayload.Round.ID})
-
-	return nil
-}
-
-// -- Helper functions --
-// scheduleEvent is a helper function to schedule events (used by ScheduleRoundEvents).
-func (s *RoundService) scheduleEvent(ctx context.Context, msg *message.Message, eventName string, payload interface{}, scheduledTime time.Time) error {
-	// We will use the correlation ID from the incoming message to propagate it to the new message
-	correlationID := middleware.MessageCorrelationID(msg)
-
-	// Calculate the delay until the scheduled time
-	delay := time.Until(scheduledTime)
-	if delay < 0 {
-		return fmt.Errorf("scheduled time is in the past")
-	}
-
-	// Marshal the payload
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal event payload: %w", err)
-	}
-
-	// Create a new message with a unique UUID
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-
-	// Set the Nats-Msg-Id for JetStream deduplication
-	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID+"-"+eventName)
-
-	// Propagate the correlation ID from the original message to the new message
-	middleware.SetCorrelationID(correlationID, newMessage)
-
-	// Use a goroutine to publish the message after the delay
-	go func(ctx context.Context) {
-		select {
-		case <-time.After(delay):
-			if err := s.EventBus.Publish(eventName, newMessage); err != nil {
-				logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish scheduled event", map[string]interface{}{
-					"event": eventName,
-				})
-			} else {
-				logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published scheduled event", map[string]interface{}{
-					"event": eventName,
-				})
-			}
-		case <-ctx.Done():
-			logging.LogInfoWithMetadata(ctx, s.logger, msg, "Context cancelled, not publishing scheduled event", map[string]interface{}{
-				"event": eventName,
-			})
-		}
-	}(ctx)
+	s.logger.Info("Round events scheduled successfully", "round_id", roundID)
 
 	return nil
 }
