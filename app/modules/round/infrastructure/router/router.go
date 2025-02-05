@@ -52,9 +52,8 @@ func (r *RoundRouter) RegisterHandlers(
 		roundevents.RoundCreateRequest:  handlers.HandleRoundCreateRequest,
 		roundevents.RoundValidated:      handlers.HandleRoundValidated,
 		roundevents.RoundDateTimeParsed: handlers.HandleRoundDateTimeParsed,
-		roundevents.RoundEntityCreated:  handlers.HandleRoundEntityCreated,
 		roundevents.RoundStored:         handlers.HandleRoundStored,
-		roundevents.RoundScheduled:      handlers.HandleRoundScheduled,
+		roundevents.RoundScheduled:      handlers.HandleScheduleRoundEvents,
 
 		// Update Round
 		roundevents.RoundUpdateRequest:   handlers.HandleRoundUpdateRequest,
@@ -70,22 +69,17 @@ func (r *RoundRouter) RegisterHandlers(
 		roundevents.RoundDeleteAuthorized:    handlers.HandleRoundDeleteAuthorized,
 		roundevents.RoundUserRoleCheckResult: handlers.HandleRoundUserRoleCheckResult,
 
+		// Start Round
+		roundevents.RoundStarted: handlers.HandleRoundStarted,
+
+		// Remind Round
+		roundevents.RoundReminder: handlers.HandleRoundReminder,
+
 		// Join Round
 		roundevents.RoundParticipantJoinRequest:   handlers.HandleRoundParticipantJoinRequest,
 		roundevents.RoundParticipantJoinValidated: handlers.HandleRoundParticipantJoinValidated,
 		roundevents.RoundTagNumberFound:           handlers.HandleRoundTagNumberFound,
 		roundevents.RoundTagNumberNotFound:        handlers.HandleRoundTagNumberNotFound,
-
-		// Score Round
-		roundevents.RoundScoreUpdateRequest:      handlers.HandleRoundScoreUpdateRequest,
-		roundevents.RoundScoreUpdateValidated:    handlers.HandleRoundScoreUpdateValidated,
-		roundevents.RoundParticipantScoreUpdated: handlers.HandleRoundParticipantScoreUpdated,
-		roundevents.RoundAllScoresSubmitted:      handlers.HandleRoundAllScoresSubmitted,
-		roundevents.RoundFinalized:               handlers.HandleRoundFinalized,
-
-		// Tag Retrieval
-		roundevents.RoundTagNumberRequest:           handlers.HandleRoundTagNumberRequest,
-		roundevents.LeaderboardGetTagNumberResponse: handlers.HandleLeaderboardGetTagNumberResponse,
 	}
 
 	// Register each handler in the router.

@@ -97,20 +97,6 @@ func (mr *MockServiceMockRecorder) CheckUserAuthorization(ctx, msg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserAuthorization", reflect.TypeOf((*MockService)(nil).CheckUserAuthorization), ctx, msg)
 }
 
-// CreateRoundEntity mocks base method.
-func (m *MockService) CreateRoundEntity(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateRoundEntity", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateRoundEntity indicates an expected call of CreateRoundEntity.
-func (mr *MockServiceMockRecorder) CreateRoundEntity(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRoundEntity", reflect.TypeOf((*MockService)(nil).CreateRoundEntity), ctx, msg)
-}
-
 // DeleteRound mocks base method.
 func (m *MockService) DeleteRound(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
@@ -207,6 +193,34 @@ func (m *MockService) ParticipantTagNotFound(ctx context.Context, msg *message.M
 func (mr *MockServiceMockRecorder) ParticipantTagNotFound(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantTagNotFound", reflect.TypeOf((*MockService)(nil).ParticipantTagNotFound), ctx, msg)
+}
+
+// ProcessRoundReminder mocks base method.
+func (m *MockService) ProcessRoundReminder(msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessRoundReminder", msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ProcessRoundReminder indicates an expected call of ProcessRoundReminder.
+func (mr *MockServiceMockRecorder) ProcessRoundReminder(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundReminder", reflect.TypeOf((*MockService)(nil).ProcessRoundReminder), msg)
+}
+
+// ProcessRoundStart mocks base method.
+func (m *MockService) ProcessRoundStart(msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessRoundStart", msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ProcessRoundStart indicates an expected call of ProcessRoundStart.
+func (mr *MockServiceMockRecorder) ProcessRoundStart(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), msg)
 }
 
 // PublishRoundCreated mocks base method.

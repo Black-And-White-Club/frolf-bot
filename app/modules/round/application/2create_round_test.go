@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -12,7 +13,6 @@ import (
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -35,8 +35,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 		name          string
 		args          args
 		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		shouldPublish bool
 	}{
 		{
 			name: "Successful round storage",
@@ -44,68 +43,33 @@ func TestRoundService_StoreRound(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundEntityCreatedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-uuid",
-						Title:     "Valid Title",
-						StartTime: time.Date(2023, 12, 25, 10, 0, 0, 0, time.UTC),
+						ID:        "some-round-id",
+						Title:     "Test Round",
+						Location:  "Test Location",
+						StartTime: time.Now().Add(2 * time.Hour),
+						State:     roundtypes.RoundStateUpcoming,
 					},
 				},
 			},
 			expectedEvent: roundevents.RoundStored,
-			expectErr:     false,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundStored), gomock.Any()).Return(nil).Times(1)
-			},
+			shouldPublish: true,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
-			},
-			expectedEvent: roundevents.RoundError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundError), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Database error",
+			name: "Duplicate round",
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundEntityCreatedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-uuid",
-						Title:     "Valid Title",
-						StartTime: time.Date(2023, 12, 25, 10, 0, 0, 0, time.UTC),
-					},
-				},
-			},
-			expectedEvent: roundevents.RoundError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundError), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Publish RoundStored event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundEntityCreatedPayload{
-					Round: roundtypes.Round{
-						ID:        "some-uuid",
-						Title:     "Valid Title",
-						StartTime: time.Date(2023, 12, 25, 10, 0, 0, 0, time.UTC),
+						ID:        "duplicate-round-id",
+						Title:     "Test Round",
+						Location:  "Test Location",
+						StartTime: time.Now().Add(2 * time.Hour),
+						State:     roundtypes.RoundStateUpcoming,
 					},
 				},
 			},
 			expectedEvent: "",
-			expectErr:     true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundStored), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
+			shouldPublish: false,
 		},
 	}
 
@@ -116,24 +80,43 @@ func TestRoundService_StoreRound(t *testing.T) {
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
 
-			tt.mockExpects()
+			// Set up mock expectations
+			if tt.name == "Successful round storage" {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq("some-round-id")).
+					Return(nil, sql.ErrNoRows).
+					Times(1)
+				mockRoundDB.EXPECT().
+					CreateRound(gomock.Any(), gomock.Any()).
+					Return(nil).
+					Times(1)
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(tt.expectedEvent), gomock.Any()).
+					Times(1)
+			} else if tt.name == "Duplicate round" {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq("duplicate-round-id")).
+					Return(&roundtypes.Round{}, nil).
+					Times(1)
+			}
 
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				EventBus: mockEventBus,
+				RoundDB:  mockRoundDB,
+				logger:   logger,
 			}
 
 			// Call the service function
 			err := s.StoreRound(tt.args.ctx, msg)
-			if tt.expectErr {
-				if err == nil {
-					t.Error("StoreRound() expected error, got none")
-				}
-			} else {
+			if tt.shouldPublish {
 				if err != nil {
 					t.Errorf("StoreRound() unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Error("StoreRound() expected error, got none")
+				} else if err.Error() != "round already exists" {
+					t.Errorf("StoreRound() unexpected error message: %v", err)
 				}
 			}
 		})
@@ -171,11 +154,9 @@ func TestRoundService_PublishRoundCreated(t *testing.T) {
 			expectErr:     false,
 			mockExpects: func() {
 				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq("some-uuid")).Return(&roundtypes.Round{
-					ID:        "some-uuid",
-					Title:     "Valid Title",
-					StartTime: time.Date(2023, 12, 25, 10, 0, 0, 0, time.UTC),
+					ID: "some-uuid",
 				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundCreated), gomock.Any()).Return(nil).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundCreated), gomock.Any()).Times(1)
 			},
 		},
 		{
@@ -184,11 +165,9 @@ func TestRoundService_PublishRoundCreated(t *testing.T) {
 				ctx:     context.Background(),
 				payload: "invalid json",
 			},
-			expectedEvent: roundevents.RoundError,
+			expectedEvent: "",
 			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundError), gomock.Any()).Return(nil).Times(1)
-			},
+			mockExpects:   func() {},
 		},
 		{
 			name: "Database error",
@@ -198,11 +177,10 @@ func TestRoundService_PublishRoundCreated(t *testing.T) {
 					RoundID: "some-uuid",
 				},
 			},
-			expectedEvent: roundevents.RoundError,
+			expectedEvent: "",
 			expectErr:     true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq("some-uuid")).Return(nil, fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundError), gomock.Any()).Return(nil).Times(1)
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq("some-uuid")).Return(nil, fmt.Errorf("database error")).Times(1)
 			},
 		},
 		{
@@ -217,9 +195,7 @@ func TestRoundService_PublishRoundCreated(t *testing.T) {
 			expectErr:     true,
 			mockExpects: func() {
 				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq("some-uuid")).Return(&roundtypes.Round{
-					ID:        "some-uuid",
-					Title:     "Valid Title",
-					StartTime: time.Date(2023, 12, 25, 10, 0, 0, 0, time.UTC),
+					ID: "some-uuid",
 				}, nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundCreated), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
 			},
@@ -236,10 +212,9 @@ func TestRoundService_PublishRoundCreated(t *testing.T) {
 			tt.mockExpects()
 
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				EventBus: mockEventBus,
+				RoundDB:  mockRoundDB,
+				logger:   logger,
 			}
 
 			// Call the service function

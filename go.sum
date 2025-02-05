@@ -1,7 +1,7 @@
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.1 h1:qVioEqB2YvlH+ctn4Vo1Y+eLYdEIfOUrGpPP8X/6mF4=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.1/go.mod h1:In3J8Mp7YBQhYVL1RwKNOd8UM87QBXpew2yH3IK9EvQ=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.2 h1:852lJA/UOoVmneAilNI93zfQQ+z2Kfs68eVqueAi7Gk=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.2/go.mod h1:sAYZZbreDLDnzFAFX5lkYLNEW4lQ0WIFQrpB6opOvMI=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.13 h1:6u1anT01lmLAW5SmO5LnLHXvitVHmdDXFfU9Leibtcw=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.13/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.14 h1:o14ZBeipTp/WLYnCWWDZNyGT1W5ppdckzebddJdhqQE=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.14/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/ThreeDotsLabs/watermill v1.4.4 h1:aLClMl6EYIOQy4BML9yb2VpTekbynDatvQbXGp7idCU=
 github.com/ThreeDotsLabs/watermill v1.4.4/go.mod h1:lBnrLbxOjeMRgcJbv+UiZr8Ylz8RkJ4m6i/VN/Nk+to=
 github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2 h1:9d7Vb2gepq73Rn/aKaAJWbBiJzS6nDyOm4O353jVsTM=
@@ -54,8 +54,9 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/puzpuzpuz/xsync/v3 v3.4.0 h1:DuVBAdXuGFHv8adVXjWWZ63pJq+NRXOWVXlKDBZ+mJ4=
 github.com/puzpuzpuz/xsync/v3 v3.4.0/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
-github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
+github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
+github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncjaFoBhdsK/akog=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sony/gobreaker v1.0.0 h1:feX5fGGXSl3dYd4aHZItw+FpHLvvoaqkawKjVNiFMNQ=

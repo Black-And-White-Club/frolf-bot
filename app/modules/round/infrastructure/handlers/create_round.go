@@ -54,28 +54,6 @@ func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
 }
 
 func (h *RoundHandlers) HandleRoundDateTimeParsed(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundDateTimeParsedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundDateTimeParsedPayload: %w", err)
-	}
-
-	h.logger.Info("Received RoundDateTimeParsed event",
-		slog.String("correlation_id", correlationID),
-	)
-
-	if err := h.RoundService.CreateRoundEntity(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundDateTimeParsed event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundDateTimeParsed event: %w", err)
-	}
-
-	h.logger.Info("RoundDateTimeParsed event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) error {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundEntityCreatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundEntityCreatedPayload: %w", err)
