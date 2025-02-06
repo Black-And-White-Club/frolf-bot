@@ -1,6 +1,7 @@
 package roundhandlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -115,76 +116,75 @@ func TestRoundHandlers_HandleRoundEntityUpdated(t *testing.T) {
 	}
 }
 
-func TestRoundHandlers_HandleRoundUpdated(t *testing.T) {
+func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRoundService := roundservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.Default()
 
 	type fields struct {
 		RoundService *roundservice.MockService
 		logger       *slog.Logger
 	}
-
 	type args struct {
 		msg *message.Message
 	}
-
 	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
+		name        string
+		fields      fields
+		args        args
+		wantErr     bool
+		mockExpects func()
 	}{
 		{
-			name: "Successful round updated handling",
+			name: "Successful handling of RoundScheduleUpdate event",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdatedPayload{
-					RoundID: "some-round-id",
-				}),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundScheduleUpdatePayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
 			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().PublishRoundUpdated(gomock.Any(), a.msg).Return(nil).Times(1)
+			wantErr: false,
+			mockExpects: func() {
+				mockRoundService.EXPECT().UpdateScheduledRoundEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "Unmarshal error",
+			name: "Failed to unmarshal RoundScheduleUpdatePayload",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
 			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
+			wantErr:     true,
+			mockExpects: func() {},
 		},
 		{
-			name: "Service layer error",
+			name: "Failed to update scheduled round events",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdatedPayload{
-					RoundID: "some-round-id",
-				}),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundScheduleUpdatePayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
 			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().PublishRoundUpdated(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			wantErr: true,
+			mockExpects: func() {
+				mockRoundService.EXPECT().UpdateScheduledRoundEvents(gomock.Any(), gomock.Any()).Return(fmt.Errorf("update error")).Times(1)
 			},
 		},
 	}
@@ -195,13 +195,9 @@ func TestRoundHandlers_HandleRoundUpdated(t *testing.T) {
 				RoundService: tt.fields.RoundService,
 				logger:       tt.fields.logger,
 			}
-
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
-			}
-
-			if err := h.HandleRoundUpdated(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundUpdated() error = %v, wantErr %v", err, tt.expectErr)
+			tt.mockExpects()
+			if err := h.HandleRoundScheduleUpdate(tt.args.msg); (err != nil) != tt.wantErr {
+				t.Errorf("RoundHandlers.HandleRoundScheduleUpdate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

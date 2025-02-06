@@ -11,6 +11,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -162,6 +163,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
 	logger := slog.Default()
 
 	type args struct {
@@ -198,39 +200,44 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					},
 				},
 			},
-			expectedEvent: roundevents.RoundEntityUpdated,
+			expectedEvent: roundevents.RoundUpdated,
 			expectErr:     false,
 			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundEntityUpdated), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
-					if topic != roundevents.RoundEntityUpdated {
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
+					ID:        "some-round-id",
+					Title:     "Old Title",
+					Location:  "Old Location",
+					EventType: func() *string { s := "Old Type"; return &s }(),
+					StartTime: time.Now(),
+					State:     roundtypes.RoundStateUpcoming,
+				}, nil).Times(1)
+				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).DoAndReturn(
+					func(ctx context.Context, roundID string, round *roundtypes.Round) error {
+						if round.Title != "New Title" {
+							return fmt.Errorf("unexpected title: %s", round.Title)
+						}
+						if round.Location != "New Location" {
+							return fmt.Errorf("unexpected location: %s", round.Location)
+						}
+						if *round.EventType != "New Type" {
+							return fmt.Errorf("unexpected event type: %s", *round.EventType)
+						}
+						return nil
+					},
+				).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdated), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
+					if topic != roundevents.RoundUpdated {
 						return fmt.Errorf("unexpected topic: %s", topic)
 					}
 
-					var payload roundevents.RoundEntityUpdatedPayload
+					var payload roundevents.RoundUpdatedPayload
 					err := json.Unmarshal(msg.Payload, &payload)
 					if err != nil {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.Round.ID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
-					}
-
-					if payload.Round.Title != "New Title" {
-						return fmt.Errorf("unexpected title: %s", payload.Round.Title)
-					}
-
-					if payload.Round.Location != "New Location" {
-						return fmt.Errorf("unexpected location: %s", payload.Round.Location)
-					}
-
-					if *payload.Round.EventType != "New Type" {
-						return fmt.Errorf("unexpected event type: %s", *payload.Round.EventType)
-					}
-
-					expectedTime := time.Date(2024, time.January, 27, 10, 30, 0, 0, time.UTC)
-					if !payload.Round.StartTime.Equal(expectedTime) {
-						return fmt.Errorf("unexpected start time: %v", payload.Round.StartTime)
+					if payload.RoundID != "some-round-id" {
+						return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
 					}
 
 					return nil
@@ -243,13 +250,48 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				ctx:     context.Background(),
 				payload: "invalid json",
 			},
-			expectErr: true,
+			expectedEvent: roundevents.RoundUpdateError,
+			expectErr:     true,
 			mockExpects: func() {
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "Publish RoundEntityUpdated event fails",
+			name: "Database error",
+			args: args{
+				ctx: context.Background(),
+				payload: roundevents.RoundFetchedPayload{
+					Round: roundtypes.Round{
+						ID:        "some-round-id",
+						Title:     "Old Title",
+						Location:  "Old Location",
+						EventType: func() *string { s := "Old Type"; return &s }(),
+						StartTime: time.Now(),
+						State:     roundtypes.RoundStateUpcoming,
+					},
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+						RoundID: "some-round-id",
+						Title:   func() *string { s := "New Title"; return &s }(),
+					},
+				},
+			},
+			expectedEvent: roundevents.RoundUpdateError,
+			expectErr:     true,
+			mockExpects: func() {
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
+					ID:        "some-round-id",
+					Title:     "Old Title",
+					Location:  "Old Location",
+					EventType: func() *string { s := "Old Type"; return &s }(),
+					StartTime: time.Now(),
+					State:     roundtypes.RoundStateUpcoming,
+				}, nil).Times(1)
+				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).Return(fmt.Errorf("db error")).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "Publish RoundUpdated event fails",
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundFetchedPayload{
@@ -269,7 +311,16 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			},
 			expectErr: true,
 			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundEntityUpdated), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
+					ID:        "some-round-id",
+					Title:     "Old Title",
+					Location:  "Old Location",
+					EventType: func() *string { s := "Old Type"; return &s }(),
+					StartTime: time.Now(),
+					State:     roundtypes.RoundStateUpcoming,
+				}, nil).Times(1)
+				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).Return(nil).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdated), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
 			},
 		},
 	}
@@ -284,9 +335,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			tt.mockExpects()
 
 			s := &RoundService{
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				RoundDB:  mockRoundDB,
+				EventBus: mockEventBus,
+				logger:   logger,
 			}
 
 			// Call the service function

@@ -146,70 +146,94 @@ func TestRoundService_DeleteRound(t *testing.T) {
 	logger := slog.Default()
 
 	type args struct {
-		ctx     context.Context
-		payload interface{}
+		ctx context.Context
+		msg *message.Message
 	}
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		name        string
+		args        args
+		wantErr     bool
+		mockExpects func()
 	}{
 		{
 			name: "Successful round deletion",
 			args: args{
 				ctx: context.Background(),
-				payload: roundevents.RoundDeleteAuthorizedPayload{
-					RoundID: "some-uuid",
-				},
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
 			},
-			expectedEvent: roundevents.RoundDeleted,
-			expectErr:     false,
+			wantErr: false,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), gomock.Eq("some-uuid")).Return(nil).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
 			name: "Invalid payload",
 			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
 			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
+			wantErr: true,
 			mockExpects: func() {
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "Database error",
+			name: "Failed to delete round from database",
 			args: args{
 				ctx: context.Background(),
-				payload: roundevents.RoundDeleteAuthorizedPayload{
-					RoundID: "some-uuid",
-				},
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
 			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
+			wantErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), gomock.Eq("some-uuid")).Return(fmt.Errorf("db error")).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(fmt.Errorf("db error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "Publish RoundDeleted event fails",
+			name: "Failed to cancel scheduled messages",
 			args: args{
 				ctx: context.Background(),
-				payload: roundevents.RoundDeleteAuthorizedPayload{
-					RoundID: "some-uuid",
-				},
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
 			},
-			expectedEvent: "",
-			expectErr:     true,
+			wantErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), gomock.Eq("some-uuid")).Return(nil).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(fmt.Errorf("cancel error")).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "Failed to publish round.deleted event",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: "some-uuid",
+					})
+					return payload
+				}()),
+			},
+			wantErr: true,
+			mockExpects: func() {
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
 			},
 		},
@@ -217,30 +241,16 @@ func TestRoundService_DeleteRound(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
 			tt.mockExpects()
 
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				RoundDB:  mockRoundDB,
+				EventBus: mockEventBus,
+				logger:   logger,
 			}
 
-			// Call the service function
-			err := s.DeleteRound(tt.args.ctx, msg)
-			if tt.expectErr {
-				if err == nil {
-					t.Error("DeleteRound() expected error, got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("DeleteRound() unexpected error: %v", err)
-				}
+			if err := s.DeleteRound(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
+				t.Errorf("RoundService.DeleteRound() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

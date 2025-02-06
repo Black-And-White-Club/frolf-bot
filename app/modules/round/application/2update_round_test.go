@@ -176,3 +176,99 @@ func TestRoundService_StoreRoundUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	logger := slog.Default()
+
+	type args struct {
+		ctx context.Context
+		msg *message.Message
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantErr     bool
+		mockExpects func()
+	}{
+		{
+			name: "Successful update of scheduled round events",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundUpdatedPayload{
+						RoundID: "some-round-id",
+					})
+					return payload
+				}()),
+			},
+			wantErr: false,
+			mockExpects: func() {
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-round-id").Return(nil).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundScheduleUpdate), gomock.Any()).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "Invalid payload",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
+			},
+			wantErr:     true,
+			mockExpects: func() {},
+		},
+		{
+			name: "Failed to cancel existing scheduled events",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundUpdatedPayload{
+						RoundID: "some-round-id",
+					})
+					return payload
+				}()),
+			},
+			wantErr: true,
+			mockExpects: func() {
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-round-id").Return(fmt.Errorf("cancel error")).Times(1)
+			},
+		},
+		{
+			name: "Failed to publish round.schedule.update event",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundUpdatedPayload{
+						RoundID: "some-round-id",
+					})
+					return payload
+				}()),
+			},
+			wantErr: true,
+			mockExpects: func() {
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-round-id").Return(nil).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundScheduleUpdate), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockExpects()
+
+			s := &RoundService{
+				RoundDB:  mockRoundDB,
+				EventBus: mockEventBus,
+				logger:   logger,
+			}
+
+			if err := s.UpdateScheduledRoundEvents(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
+				t.Errorf("RoundService.UpdateScheduledRoundEvents() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
