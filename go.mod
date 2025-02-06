@@ -1,6 +1,6 @@
 module github.com/Black-And-White-Club/frolf-bot
 
-go 1.23.2
+go 1.23.5
 
 require (
 	github.com/Black-And-White-Club/frolf-bot-shared v0.0.16
