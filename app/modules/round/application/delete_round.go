@@ -50,17 +50,22 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 	}
 
 	if err := s.RoundDB.DeleteRound(ctx, eventPayload.RoundID); err != nil {
-		// Pass RoundID in the error payload
 		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
 	}
 
-	// Publish "round.deleted" event
-	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload(eventPayload)); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.deleted event", map[string]interface{}{"error": err.Error()})
-		return fmt.Errorf("failed to publish round.deleted event: %w", err)
+	if err := s.EventBus.CancelScheduledMessage(ctx, eventPayload.RoundID); err != nil {
+		s.logger.Error("Failed to cancel scheduled messages", "error", err)
+		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round deleted from database", map[string]interface{}{"round_id": eventPayload.RoundID})
+	// If publishing `round.deleted` fails, return the error immediately
+	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload(eventPayload)); err != nil {
+		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.deleted event", map[string]interface{}{"error": err.Error()})
+		return fmt.Errorf("failed to publish round.deleted event: %w", err) // ✅ Ensure error is returned
+	}
+
+	// Success message should only be logged if everything succeeds
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round deleted from database and scheduled messages canceled", map[string]interface{}{"round_id": eventPayload.RoundID})
 	return nil
 }
 
@@ -73,10 +78,8 @@ func (s *RoundService) publishRoundDeleteError(msg *message.Message, input round
 	}
 
 	if pubErr := s.publishEvent(msg, roundevents.RoundDeleteError, payload); pubErr != nil {
-		logging.LogErrorWithMetadata(context.Background(), s.logger, msg, "Failed to publish round.delete.error event", map[string]interface{}{
-			"original_error": err.Error(),
-		})
-		return fmt.Errorf("failed to publish round.delete.error event: %w, original error: %w", pubErr, err)
+		s.logger.Error("Failed to publish round.delete.error event", "error", pubErr)
+		return fmt.Errorf("failed to publish round.delete.error event: %w", pubErr)
 	}
 
 	return err

@@ -237,20 +237,6 @@ func (mr *MockServiceMockRecorder) PublishRoundCreated(ctx, msg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishRoundCreated", reflect.TypeOf((*MockService)(nil).PublishRoundCreated), ctx, msg)
 }
 
-// PublishRoundUpdated mocks base method.
-func (m *MockService) PublishRoundUpdated(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishRoundUpdated", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PublishRoundUpdated indicates an expected call of PublishRoundUpdated.
-func (mr *MockServiceMockRecorder) PublishRoundUpdated(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishRoundUpdated", reflect.TypeOf((*MockService)(nil).PublishRoundUpdated), ctx, msg)
-}
-
 // RequestTagNumber mocks base method.
 func (m *MockService) RequestTagNumber(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
@@ -361,6 +347,20 @@ func (m *MockService) UpdateRoundEntity(ctx context.Context, msg *message.Messag
 func (mr *MockServiceMockRecorder) UpdateRoundEntity(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundEntity", reflect.TypeOf((*MockService)(nil).UpdateRoundEntity), ctx, msg)
+}
+
+// UpdateScheduledRoundEvents mocks base method.
+func (m *MockService) UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateScheduledRoundEvents", ctx, msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateScheduledRoundEvents indicates an expected call of UpdateScheduledRoundEvents.
+func (mr *MockServiceMockRecorder) UpdateScheduledRoundEvents(ctx, msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundEvents", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundEvents), ctx, msg)
 }
 
 // UserRoleCheckResult mocks base method.

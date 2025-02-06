@@ -19,6 +19,15 @@ func (h *RoundHandlers) HandleScheduleRoundEvents(msg *message.Message) error {
 		slog.String("correlation_id", correlationID),
 	)
 
+	// Set metadata to indicate the type of event
+	if msg.Metadata.Get("event_type") == "" {
+		if msg.Metadata.Get("Original-Subject") == roundevents.RoundUpdateValidated {
+			msg.Metadata.Set("event_type", "round.update")
+		} else {
+			msg.Metadata.Set("event_type", "round.creation")
+		}
+	}
+
 	if err := h.RoundService.ScheduleRoundEvents(msg.Context(), msg); err != nil {
 		h.logger.Error("Failed to handle RoundStored event",
 			slog.String("correlation_id", correlationID),
