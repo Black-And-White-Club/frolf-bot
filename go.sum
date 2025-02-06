@@ -1,9 +1,3 @@
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.13 h1:6u1anT01lmLAW5SmO5LnLHXvitVHmdDXFfU9Leibtcw=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.13/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.14 h1:o14ZBeipTp/WLYnCWWDZNyGT1W5ppdckzebddJdhqQE=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.14/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.15 h1:plKxTy57Tg52hCkeAgbicD0ehu4Hrnqop5Qq8ASK63Q=
-github.com/Black-And-White-Club/frolf-bot-shared v0.0.15/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.16 h1:k94yMHXgkXYW8Ar48qucP5z1udj5CGwPGwMz8g11zyw=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.16/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/ThreeDotsLabs/watermill v1.4.4 h1:aLClMl6EYIOQy4BML9yb2VpTekbynDatvQbXGp7idCU=
