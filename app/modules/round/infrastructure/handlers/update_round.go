@@ -93,23 +93,27 @@ func (h *RoundHandlers) HandleRoundEntityUpdated(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundUpdated(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundUpdatedPayload](msg, h.logger)
+// HandleRoundScheduleUpdate handles the round.schedule.update event.
+func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
+	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundScheduleUpdatePayload](msg, h.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundUpdatedPayload: %w", err)
+		return fmt.Errorf("failed to unmarshal RoundScheduleUpdatePayload: %w", err)
 	}
 
-	h.logger.Info("Received RoundUpdated event",
+	h.logger.Info("Received RoundScheduleUpdate event",
 		slog.String("correlation_id", correlationID),
+		slog.String("round_id", eventPayload.RoundID),
 	)
-	if err := h.RoundService.PublishRoundUpdated(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundUpdated event",
+
+	// Update the scheduled events for the round
+	if err := h.RoundService.UpdateScheduledRoundEvents(msg.Context(), msg); err != nil {
+		h.logger.Error("Failed to handle RoundScheduleUpdate event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
 		)
-		return fmt.Errorf("failed to handle RoundUpdated event: %w", err)
+		return fmt.Errorf("failed to handle RoundScheduleUpdate event: %w", err)
 	}
 
-	h.logger.Info("RoundUpdated event processed", slog.String("correlation_id", correlationID))
+	h.logger.Info("RoundScheduleUpdate event processed", slog.String("correlation_id", correlationID))
 	return nil
 }

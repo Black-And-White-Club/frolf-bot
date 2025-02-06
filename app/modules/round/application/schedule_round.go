@@ -84,9 +84,20 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 	scheduledMsg := message.NewMessage(watermill.NewUUID(), msg.Payload)
 	scheduledMsg.Metadata.Set("correlationID", roundID)
 
-	if err := s.EventBus.Publish(roundevents.RoundScheduled, scheduledMsg); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.scheduled event", nil)
-		return fmt.Errorf("failed to publish round.scheduled event: %w", err)
+	// Determine if this is an initial creation or an update
+	eventType := msg.Metadata.Get("event_type")
+	var publishTopic string
+
+	if eventType == roundevents.RoundCreateRequest {
+		publishTopic = roundevents.RoundScheduled
+	} else if eventType == roundevents.RoundUpdateRequest {
+		publishTopic = roundevents.RoundScheduleUpdate
+	}
+
+	// Publish the appropriate event
+	if err := s.EventBus.Publish(publishTopic, scheduledMsg); err != nil {
+		logging.LogErrorWithMetadata(ctx, s.logger, msg, fmt.Sprintf("Failed to publish %s event", publishTopic), nil)
+		return fmt.Errorf("failed to publish %s event: %w", publishTopic, err)
 	}
 
 	s.logger.Info("Round events scheduled successfully", "round_id", roundID)

@@ -60,7 +60,7 @@ func (r *RoundRouter) RegisterHandlers(
 		roundevents.RoundUpdateValidated: handlers.HandleRoundUpdateValidated,
 		roundevents.RoundFetched:         handlers.HandleRoundFetched,
 		roundevents.RoundEntityUpdated:   handlers.HandleRoundEntityUpdated,
-		roundevents.RoundUpdated:         handlers.HandleRoundUpdated,
+		roundevents.RoundScheduleUpdate:  handlers.HandleRoundScheduleUpdate,
 
 		// Delete Round
 		roundevents.RoundDeleteRequest:       handlers.HandleRoundDeleteRequest,

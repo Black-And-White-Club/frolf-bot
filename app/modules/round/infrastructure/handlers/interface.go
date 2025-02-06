@@ -17,7 +17,7 @@ type Handlers interface {
 	HandleRoundUpdateValidated(msg *message.Message) error
 	HandleRoundFetched(msg *message.Message) error
 	HandleRoundEntityUpdated(msg *message.Message) error
-	HandleRoundUpdated(msg *message.Message) error
+	HandleRoundScheduleUpdate(msg *message.Message) error
 
 	// Delete Round
 	HandleRoundDeleteRequest(msg *message.Message) error

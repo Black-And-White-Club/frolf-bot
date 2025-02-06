@@ -20,8 +20,7 @@ type Service interface {
 	GetRound(ctx context.Context, msg *message.Message) error
 	UpdateRoundEntity(ctx context.Context, msg *message.Message) error
 	StoreRoundUpdate(ctx context.Context, msg *message.Message) error
-	PublishRoundUpdated(ctx context.Context, msg *message.Message) error
-
+	UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error
 	// Delete Round
 	ValidateRoundDeleteRequest(ctx context.Context, msg *message.Message) error
 	CheckRoundExists(ctx context.Context, msg *message.Message) error
