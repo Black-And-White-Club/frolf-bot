@@ -25,17 +25,20 @@ const (
 
 // Round represents a single round in the tournament.
 type Round struct {
-	ID             string             `json:"id"`
-	Title          string             `json:"title"`
-	Location       string             `json:"location"`
-	EventType      *string            `json:"event_type"`
-	StartTime      *time.Time         `json:"start_time"`
-	EndTime        *time.Time         `json:"end_time"`
-	Finalized      bool               `json:"finalized"`
-	CreatedBy      string             `json:"created_by"`
-	State          RoundState         `json:"state"`
-	Participants   []RoundParticipant `json:"participants" bun:",type:jsonb"`
-	DiscordEventID string             `json:"discord_event_id"`
+	ID               string             `json:"id"`
+	Title            string             `json:"title"`
+	Description      *string            `json:"description"`
+	Location         *string            `json:"location"`
+	EventType        *string            `json:"event_type"`
+	StartTime        *time.Time         `json:"start_time"`
+	EndTime          *time.Time         `json:"end_time"`
+	Finalized        bool               `json:"finalized"`
+	CreatedBy        string             `json:"created_by"`
+	State            RoundState         `json:"state"`
+	Participants     []RoundParticipant `json:"participants" bun:",type:jsonb"`
+	DiscordEventID   *string            `json:"discord_event_id"`
+	DiscordChannelID *string            `json:"discord_channel_id"`
+	DiscordGuildID   *string            `json:"discord_guild_id"`
 }
 
 // RoundParticipant represents a participant in a round, including their score.
@@ -67,19 +70,14 @@ func (r *Round) AddParticipant(participant RoundParticipant) {
 	r.Participants = append(r.Participants, participant)
 }
 
-// RoundTimeInput represents the date and time input for creating a round.
-type RoundTimeInput struct {
-	Date string `json:"date" validate:"required"`
-	Time string `json:"time" validate:"required"`
-}
-
 // CreateRoundInput represents the input for creating a new round.
 type CreateRoundInput struct {
 	Title        string             `json:"title" validate:"required"`
-	Location     string             `json:"location"`
+	Description  *string            `json:"description"`
+	Location     *string            `json:"location"`
 	EventType    *string            `json:"event_type"`
-	StartTime    RoundTimeInput     `json:"start_time" validate:"required"`
-	EndTime      RoundTimeInput     `json:"end_time,omitempty"`
+	StartTime    *time.Time         `json:"start_time" validate:"required"`
+	EndTime      *time.Time         `json:"end_time,omitempty"`
 	Participants []ParticipantInput `json:"participants"`
 }
 
@@ -92,12 +90,13 @@ type ParticipantInput struct {
 
 // UpdateRoundInput represents the input for updating a round.
 type UpdateRoundInput struct {
-	RoundID   string     `json:"round_id" validate:"required"`
-	Title     *string    `json:"title,omitempty"`
-	Location  *string    `json:"location,omitempty"`
-	EventType *string    `json:"event_type,omitempty"`
-	StartTime *time.Time `json:"start_time,omitempty"`
-	EndTime   *time.Time `json:"end_time,omitempty"`
+	RoundID     string     `json:"round_id" validate:"required"`
+	Title       *string    `json:"title,omitempty"`
+	Description *string    `json:"description,omitempty"`
+	Location    *string    `json:"location,omitempty"`
+	EventType   *string    `json:"event_type,omitempty"`
+	StartTime   *time.Time `json:"start_time,omitempty"`
+	EndTime     *time.Time `json:"end_time,omitempty"`
 }
 
 // UpdateParticipantResponseInput represents the input for updating a participant's response.

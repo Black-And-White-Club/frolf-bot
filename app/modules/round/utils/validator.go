@@ -38,22 +38,18 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 	if input.Title == "" {
 		errs = append(errs, fmt.Errorf("title cannot be empty"))
 	}
-
-	if input.StartTime.Date == "" || input.StartTime.Time == "" {
-		errs = append(errs, fmt.Errorf("date/time input cannot be empty"))
+	if input.StartTime == nil {
+		errs = append(errs, fmt.Errorf("start time cannot be empty"))
 	}
 
 	// Example: Validate that the date is in the future
-	if input.StartTime.Date < time.Now().Format("2006-01-02") {
+	if input.StartTime != nil && input.StartTime.Before(time.Now()) {
 		errs = append(errs, fmt.Errorf("start date must be in the future"))
 	}
 
 	// Example: Validate that the end time is after the start time
-	if input.EndTime.Date < input.StartTime.Date || (input.EndTime.Date == input.StartTime.Date && input.EndTime.Time <= input.StartTime.Time) {
+	if input.EndTime != nil && input.StartTime != nil && (input.EndTime.Before(*input.StartTime) || input.EndTime.Equal(*input.StartTime)) {
 		errs = append(errs, fmt.Errorf("end time must be after start time"))
 	}
-
-	// Add more validation rules here as needed...
-
 	return errs
 }

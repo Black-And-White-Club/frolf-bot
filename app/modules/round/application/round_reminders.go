@@ -48,7 +48,7 @@ func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
 		RoundID:      payload.RoundID,
 		ReminderType: payload.ReminderType,
 		RoundTitle:   payload.RoundTitle,
-		StartTime:    payload.StartTime.Format(time.RFC3339),
+		StartTime:    payload.StartTime,
 		Location:     payload.Location,
 		UserIDs:      userIDs,
 	}

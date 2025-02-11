@@ -3,17 +3,43 @@ package roundhandlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
-
-	"log/slog"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundservicemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
+)
+
+// --- Constants and Variables for Test Data ---
+const (
+	scheduleHandlerRoundID       = "some-round-id"
+	scheduleHandlerCorrelationID = "some-correlation-id"
+	scheduleHandlerTitle         = "Test Round"
+	scheduleHandlerScheduleError = "scheduling error"
+)
+
+var (
+	scheduleHandlerLocation     = "Test Location"
+	scheduleHandlerEventType    = "casual"
+	scheduleHandlerNow          = time.Now().UTC().Truncate(time.Second)
+	scheduleHandlerStartTime    = &scheduleHandlerNow
+	validScheduleHandlerPayload = roundevents.RoundStoredPayload{
+		Round: roundtypes.Round{
+			ID:        scheduleHandlerRoundID,
+			Title:     scheduleHandlerTitle,
+			Location:  &scheduleHandlerLocation,
+			EventType: &scheduleHandlerEventType,
+			StartTime: scheduleHandlerStartTime,
+			State:     roundtypes.RoundStateUpcoming,
+		},
+	}
 )
 
 func TestRoundHandlers_HandleScheduleRoundEvents(t *testing.T) {
@@ -23,27 +49,16 @@ func TestRoundHandlers_HandleScheduleRoundEvents(t *testing.T) {
 	mockRoundService := roundservicemocks.NewMockService(ctrl)
 	logger := slog.Default()
 
-	type args struct {
-		msg *message.Message
-	}
 	tests := []struct {
 		name        string
-		args        args
+		payload     interface{}
 		mockExpects func()
 		wantErr     bool
+		errMsg      string
 	}{
 		{
-			name: "Successful round scheduling",
-			args: args{
-				msg: createTestMessage(roundevents.RoundStoredPayload{
-					Round: roundtypes.Round{
-						ID:        "some-round-id",
-						Title:     "Test Round",
-						Location:  "Test Location",
-						StartTime: func(t time.Time) *time.Time { return &t }(time.Now().Add(2 * time.Hour)),
-					},
-				}),
-			},
+			name:    "Successful round scheduling",
+			payload: validScheduleHandlerPayload, // Use pre-built payload
 			mockExpects: func() {
 				mockRoundService.EXPECT().
 					ScheduleRoundEvents(gomock.Any(), gomock.Any()).
@@ -53,54 +68,54 @@ func TestRoundHandlers_HandleScheduleRoundEvents(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
-			},
-			mockExpects: func() {},
-			wantErr:     true,
+			name:    "Invalid payload",
+			payload: "invalid json", // Invalid JSON
+			wantErr: true,
+			errMsg:  "failed to unmarshal RoundStoredPayload",
 		},
 		{
-			name: "Failed to schedule round events",
-			args: args{
-				msg: createTestMessage(roundevents.RoundStoredPayload{
-					Round: roundtypes.Round{
-						ID:        "some-round-id",
-						Title:     "Test Round",
-						Location:  "Test Location",
-						StartTime: func(t time.Time) *time.Time { return &t }(time.Now().Add(2 * time.Hour)),
-					},
-				}),
-			},
+			name:    "Failed to schedule round events",
+			payload: validScheduleHandlerPayload, // Use pre-built payload
 			mockExpects: func() {
 				mockRoundService.EXPECT().
 					ScheduleRoundEvents(gomock.Any(), gomock.Any()).
-					Return(fmt.Errorf("scheduling error")).
+					Return(fmt.Errorf(scheduleHandlerScheduleError)). // Simulate scheduling error
 					Times(1)
 			},
 			wantErr: true,
+			errMsg:  "failed to handle RoundStored event: " + scheduleHandlerScheduleError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockExpects()
-
 			h := &RoundHandlers{
 				RoundService: mockRoundService,
 				logger:       logger,
 			}
 
-			if err := h.HandleScheduleRoundEvents(tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("HandleScheduleRoundEvents() error = %v, wantErr %v", err, tt.wantErr)
+			payloadBytes, _ := json.Marshal(tt.payload)
+			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, scheduleHandlerCorrelationID)
+			msg.Metadata.Set("event_type", roundevents.RoundCreateRequest)
+
+			if tt.mockExpects != nil {
+				tt.mockExpects()
+			}
+
+			err := h.HandleScheduleRoundEvents(msg)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("HandleScheduleRoundEvents() expected error, got none")
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("HandleScheduleRoundEvents() error = %v, wantErrMsg containing %v", err, tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("HandleScheduleRoundEvents() unexpected error: %v", err)
+				}
 			}
 		})
 	}
-}
-
-func createTestMessage(payload roundevents.RoundStoredPayload) *message.Message {
-	payloadBytes, _ := json.Marshal(payload)
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlationID", payload.Round.ID)
-	return msg
 }

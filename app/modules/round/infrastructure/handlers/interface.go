@@ -8,7 +8,6 @@ type Handlers interface {
 	// Create Round
 	HandleRoundCreateRequest(msg *message.Message) error
 	HandleRoundValidated(msg *message.Message) error
-	HandleRoundDateTimeParsed(msg *message.Message) error
 	HandleRoundStored(msg *message.Message) error
 	HandleRoundScheduled(msg *message.Message) error
 	HandleUpdateDiscordEventID(msg *message.Message) error

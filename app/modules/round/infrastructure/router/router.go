@@ -49,11 +49,10 @@ func (r *RoundRouter) RegisterHandlers(
 	// Define the mapping of event topics to handler functions.
 	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
 		// Create Round
-		roundevents.RoundCreateRequest:  handlers.HandleRoundCreateRequest,
-		roundevents.RoundValidated:      handlers.HandleRoundValidated,
-		roundevents.RoundDateTimeParsed: handlers.HandleRoundDateTimeParsed,
-		roundevents.RoundStored:         handlers.HandleRoundStored,
-		roundevents.RoundScheduled:      handlers.HandleScheduleRoundEvents,
+		roundevents.RoundCreateRequest: handlers.HandleRoundCreateRequest,
+		roundevents.RoundValidated:     handlers.HandleRoundValidated,
+		roundevents.RoundStored:        handlers.HandleRoundStored,
+		roundevents.RoundScheduled:     handlers.HandleRoundScheduled,
 
 		// Update Discord Event ID
 		roundevents.RoundDiscordEventIDUpdate: handlers.HandleUpdateDiscordEventID,

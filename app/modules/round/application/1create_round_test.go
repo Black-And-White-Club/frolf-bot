@@ -2,8 +2,11 @@ package roundservice
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,250 +22,273 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+const (
+	validTitle       = "Test Round"
+	validRoundID     = "some-round-id"
+	duplicateRoundID = "duplicate-round-id"
+	correlationID    = "some-correlation-id" // Use a constant correlation ID
+	dbErrorMessage   = "some db error"       // Constant for the error message
+)
+
+var (
+	validLocation         = "Test Park"
+	validEventType        = "casual"
+	validDescription      = "Test Description"
+	validDiscordChannelID = "12345"
+	validDiscordGuildID   = "67890"
+
+	now            = time.Now().UTC().Truncate(time.Second) // Truncate for consistent comparisons
+	oneHourLater   = now.Add(1 * time.Hour)
+	validStartTime = now.Add(2 * time.Hour) // Ensure start time is in the future
+	validEndTime   = validStartTime.Add(1 * time.Hour)
+
+	// Define a valid RoundCreateRequestPayload for reuse.
+	validCreatePayload = roundevents.RoundCreateRequestPayload{
+		Title:            validTitle,
+		StartTime:        &validStartTime,
+		EndTime:          &validEndTime,
+		EventType:        &validEventType,
+		Location:         &validLocation,
+		Description:      &validDescription,
+		DiscordChannelID: &validDiscordChannelID,
+		DiscordGuildID:   &validDiscordGuildID,
+		Participants:     []roundtypes.ParticipantInput{},
+	}
+	// Define Round
+	validRound = roundtypes.Round{
+		ID:        validRoundID,
+		Title:     validTitle,
+		Location:  &validLocation,
+		StartTime: &validStartTime,
+		State:     roundtypes.RoundStateUpcoming,
+	}
+	validStoredPayload = roundevents.RoundEntityCreatedPayload{Round: validRound}
+)
+
 func TestRoundService_ValidateRoundRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	logger := slog.Default()
+
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
 	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
-	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *logger, "serviceName", "environment")
+	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	validator := roundutil.NewRoundValidator()
 
 	s := &RoundService{
 		RoundDB:        mockRoundDB,
 		EventBus:       mockEventBus,
-		logger:         logger,
+		logger:         slog.Default(),
 		roundValidator: validator,
 		ErrorReporter:  mockErrorReporter,
 	}
-
 	tests := []struct {
 		name          string
 		payload       interface{}
 		expectedEvent string
 		shouldPublish bool
 		wantErr       bool
+		errMsg        string // More specific error checking
 	}{
 		{
-			name: "Valid request",
-			payload: roundevents.RoundCreateRequestPayload{
-				Title: "Valid Title",
-				DateTime: roundtypes.RoundTimeInput{
-					Date: time.Now().Format("2006-01-02"),
-					Time: time.Now().Format("15:04"),
-				},
-				EndTime: roundtypes.RoundTimeInput{
-					Date: time.Now().Format("2006-01-02"),
-					Time: time.Now().Add(1 * time.Hour).Format("15:04"),
-				},
-				EventType: func() *string { s := "casual"; return &s }(),
-				Location:  "Park",
-			},
+			name:          "Valid request",
+			payload:       validCreatePayload, // Use the constant
 			expectedEvent: roundevents.RoundValidated,
 			shouldPublish: true,
 			wantErr:       false,
 		},
 		{
 			name:          "Invalid payload",
-			payload:       "invalid json",
+			payload:       "invalid json", // Invalid JSON
 			expectedEvent: "",
 			shouldPublish: false,
 			wantErr:       true,
 		},
 		{
 			name: "Missing title",
-			payload: roundevents.RoundCreateRequestPayload{
-				DateTime: roundtypes.RoundTimeInput{
-					Date: time.Now().Format("2006-01-02"),
-					Time: time.Now().Format("15:04"),
-				},
+			payload: roundevents.RoundCreateRequestPayload{ // No title
+				StartTime: &validStartTime,
+				EndTime:   &validEndTime,
 			},
 			expectedEvent: "",
 			shouldPublish: false,
 			wantErr:       true,
+			errMsg:        "validation errors: [title cannot be empty]",
 		},
 		{
-			name: "Missing date",
-			payload: roundevents.RoundCreateRequestPayload{
-				Title: "Valid Title",
-				DateTime: roundtypes.RoundTimeInput{
-					Time: time.Now().Format("15:04"),
-				},
+			name: "Missing start time",
+			payload: roundevents.RoundCreateRequestPayload{ // No StartTime
+				Title:   validTitle,
+				EndTime: &validEndTime,
 			},
 			expectedEvent: "",
 			shouldPublish: false,
 			wantErr:       true,
+			errMsg:        "missing required field: start_time",
 		},
 		{
-			name: "Missing time",
+			name: "Missing end time",
 			payload: roundevents.RoundCreateRequestPayload{
-				Title: "Valid Title",
-				DateTime: roundtypes.RoundTimeInput{
-					Date: time.Now().Format("2006-01-02"),
-				},
+				Title:     "Valid Title",
+				StartTime: &validStartTime,
 			},
-			expectedEvent: "",
-			shouldPublish: false,
-			wantErr:       true,
+			expectedEvent: roundevents.RoundValidated, // EndTime is optional
+			shouldPublish: true,
+			wantErr:       false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
 			payloadBytes, _ := json.Marshal(tt.payload)
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
+			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID) // Use constant
 
-			// Set up mock expectations
 			if tt.shouldPublish {
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(tt.expectedEvent), gomock.Any()).
-					Times(1)
+					Times(1).
+					Return(nil) // Mock successful publishing
 			}
 
-			// Call the service function
 			err := s.ValidateRoundRequest(context.Background(), msg)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateRoundRequest() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("ValidateRoundRequest() expected error, got none")
+				} else if tt.errMsg != "" && err.Error() != tt.errMsg {
+					t.Errorf("ValidateRoundRequest() error = %v, wantErrMsg %v", err, tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ValidateRoundRequest() unexpected error: %v", err)
+				}
 			}
 		})
 	}
 }
 
-func TestRoundService_ParseDateTime(t *testing.T) {
+func TestRoundService_StoreRound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
 	logger := slog.Default()
 
-	type args struct {
-		ctx     context.Context
-		payload interface{}
+	s := &RoundService{
+		EventBus: mockEventBus,
+		RoundDB:  mockRoundDB,
+		logger:   logger,
 	}
+
 	tests := []struct {
 		name          string
-		args          args
+		payload       interface{}
+		mockDBSetup   func()
 		expectedEvent string
 		shouldPublish bool
+		wantErr       bool
+		errMsg        string
 	}{
 		{
-			name: "Valid date and time",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundValidatedPayload{
-					RoundCreateRequestPayload: roundevents.RoundCreateRequestPayload{
-						Title: "Valid Title",
-						DateTime: roundtypes.RoundTimeInput{
-							Date: time.Now().Format("2006-01-02"),
-							Time: time.Now().Format("15:04"),
-						},
-						EndTime: roundtypes.RoundTimeInput{
-							Date: time.Now().Format("2006-01-02"),
-							Time: time.Now().Add(1 * time.Hour).Format("15:04"),
-						},
-					},
-				},
+			name:    "Successful round storage",
+			payload: validStoredPayload,
+			mockDBSetup: func() {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq(validRoundID)).
+					Return(nil, sql.ErrNoRows).
+					Times(1)
+				mockRoundDB.EXPECT().
+					CreateRound(gomock.Any(), gomock.Any()).
+					Return(nil).
+					Times(1)
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.RoundStored), gomock.Any()).
+					Times(1).
+					Return(nil)
 			},
-			expectedEvent: roundevents.RoundDateTimeParsed,
+			expectedEvent: roundevents.RoundStored,
 			shouldPublish: true,
+			wantErr:       false,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
+			name:    "Duplicate round",
+			payload: validStoredPayload,
+			mockDBSetup: func() {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq(validRoundID)).
+					Return(&roundtypes.Round{}, nil). // Simulate round already exists
+					Times(1)
 			},
 			expectedEvent: "",
 			shouldPublish: false,
+			wantErr:       true,
+			errMsg:        "round already exists",
 		},
 		{
-			name: "Invalid date format",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundValidatedPayload{
-					RoundCreateRequestPayload: roundevents.RoundCreateRequestPayload{
-						Title: "Valid Title",
-						DateTime: roundtypes.RoundTimeInput{
-							Date: "invalid-date",
-							Time: time.Now().Format("15:04"),
-						},
-					},
-				},
+			name:    "Database error (GetRound)",
+			payload: validStoredPayload,
+			mockDBSetup: func() {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq(validRoundID)).
+					Return(nil, fmt.Errorf(dbErrorMessage)). // Use the constant here
+					Times(1)
 			},
 			expectedEvent: "",
 			shouldPublish: false,
+			wantErr:       true,
+			errMsg:        "failed to check for existing round: " + dbErrorMessage, // And here
 		},
 		{
-			name: "Invalid time format",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundValidatedPayload{
-					RoundCreateRequestPayload: roundevents.RoundCreateRequestPayload{
-						Title: "Valid Title",
-						DateTime: roundtypes.RoundTimeInput{
-							Date: time.Now().Format("2006-01-02"),
-							Time: "invalid-time",
-						},
-					},
-				},
+			name:    "Database error (CreateRound)",
+			payload: validStoredPayload,
+			mockDBSetup: func() {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq(validRoundID)).
+					Return(nil, sql.ErrNoRows).
+					Times(1)
+				mockRoundDB.EXPECT().
+					CreateRound(gomock.Any(), gomock.Any()).
+					Return(fmt.Errorf(dbErrorMessage)). // Use the constant here
+					Times(1)
 			},
 			expectedEvent: "",
 			shouldPublish: false,
+			wantErr:       true,
+			errMsg:        "failed to store round in database: " + dbErrorMessage, // And here
 		},
 		{
-			name: "Publish DateTimeParsed event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundValidatedPayload{
-					RoundCreateRequestPayload: roundevents.RoundCreateRequestPayload{
-						Title: "Valid Title",
-						DateTime: roundtypes.RoundTimeInput{
-							Date: time.Now().Format("2006-01-02"),
-							Time: time.Now().Format("15:04"),
-						},
-						EndTime: roundtypes.RoundTimeInput{
-							Date: time.Now().Format("2006-01-02"),
-							Time: time.Now().Add(1 * time.Hour).Format("15:04"),
-						},
-					},
-				},
-			},
-			expectedEvent: roundevents.RoundDateTimeParsed,
-			shouldPublish: true,
+			name:          "Invalid Payload",
+			payload:       "invalid",
+			mockDBSetup:   func() {},
+			expectedEvent: "",
+			shouldPublish: false,
+			wantErr:       true,
+			errMsg:        "invalid payload",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
+			payloadBytes, _ := json.Marshal(tt.payload)
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
+			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
 
-			// Set up mock expectations
-			if tt.shouldPublish {
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq(tt.expectedEvent), gomock.Any()).
-					Times(1)
+			if tt.mockDBSetup != nil {
+				tt.mockDBSetup()
 			}
 
-			s := &RoundService{
-				EventBus: mockEventBus,
-				logger:   logger,
-			}
+			err := s.StoreRound(context.Background(), msg)
 
-			// Call the service function
-			err := s.ParseDateTime(tt.args.ctx, msg)
-			if tt.shouldPublish {
-				if err != nil {
-					t.Errorf("ParseDateTime() unexpected error: %v", err)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("StoreRound() expected error, got none")
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("StoreRound() error = %v, wantErrMsg containing %v", err, tt.errMsg)
 				}
 			} else {
-				if err == nil {
-					t.Error("ParseDateTime() expected error, got none")
+				if err != nil {
+					t.Errorf("StoreRound() unexpected error: %v", err)
 				}
 			}
 		})

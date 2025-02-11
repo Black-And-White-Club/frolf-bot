@@ -1,6 +1,7 @@
 package roundhandlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -208,4 +209,16 @@ func TestRoundHandlers_HandleRoundScoreUpdateValidated(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Helper function to create a test message with a payload
+func createTestMessageWithPayload(t *testing.T, correlationID string, payload interface{}) *message.Message {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Failed to marshal payload: %v", err)
+	}
+	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	msg.Metadata = make(message.Metadata)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	return msg
 }
