@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 )
 
 // RoundValidator defines the interface for round validation.
