@@ -71,8 +71,11 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 	if eventPayload.RoundUpdateRequestPayload.Title != nil {
 		existingRound.Title = *eventPayload.RoundUpdateRequestPayload.Title
 	}
+	if eventPayload.RoundUpdateRequestPayload.Description != nil {
+		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Description
+	}
 	if eventPayload.RoundUpdateRequestPayload.Location != nil {
-		existingRound.Location = *eventPayload.RoundUpdateRequestPayload.Location
+		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Location
 	}
 	if eventPayload.RoundUpdateRequestPayload.EventType != nil {
 		existingRound.EventType = eventPayload.RoundUpdateRequestPayload.EventType
@@ -159,7 +162,8 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, msg *mess
 	if err := s.publishEvent(msg, roundevents.RoundScheduleUpdate, roundevents.RoundScheduleUpdatePayload{
 		RoundID: eventPayload.RoundID,
 	}); err != nil {
-		return fmt.Errorf("failed to publish round.schedule.update event: %w", err)
+		s.logger.Error("Failed to publish round.schedule.update", "error", err)
+		return fmt.Errorf("failed to publish event: %w", err)
 	}
 
 	return nil

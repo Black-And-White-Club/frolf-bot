@@ -41,7 +41,7 @@ func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
 		slog.String("correlation_id", correlationID),
 	)
 
-	if err := h.RoundService.ParseDateTime(msg.Context(), msg); err != nil {
+	if err := h.RoundService.StoreRound(msg.Context(), msg); err != nil {
 		h.logger.Error("Failed to handle RoundValidated event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
@@ -50,28 +50,6 @@ func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
 	}
 
 	h.logger.Info("RoundValidated event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-func (h *RoundHandlers) HandleRoundDateTimeParsed(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundEntityCreatedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundEntityCreatedPayload: %w", err)
-	}
-
-	h.logger.Info("Received RoundEntityCreated event",
-		slog.String("correlation_id", correlationID),
-	)
-
-	if err := h.RoundService.StoreRound(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundEntityCreated event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundEntityCreated event: %w", err)
-	}
-
-	h.logger.Info("RoundEntityCreated event processed", slog.String("correlation_id", correlationID))
 	return nil
 }
 

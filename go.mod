@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.23.5
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.22
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.27
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
 	github.com/google/uuid v1.6.0

@@ -107,7 +107,7 @@ func (s *RoundService) createDiscordPayload(eventPayload roundevents.RoundStarte
 		RoundID:      eventPayload.RoundID,
 		Title:        eventPayload.Title,
 		Location:     eventPayload.Location,
-		StartTime:    eventPayload.StartTime.Format(time.RFC3339),
+		StartTime:    eventPayload.StartTime,
 		Participants: discordParticipants,
 	}
 

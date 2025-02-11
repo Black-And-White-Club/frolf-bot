@@ -3,18 +3,56 @@ package roundservice
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
-	"log/slog"
-
+	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 	rounddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
+)
+
+// --- Constants and Variables for Test Data ---
+const (
+	reminderRoundID       = "some-round-id"
+	reminderCorrelationID = "some-correlation-id"
+	reminderType          = "1h"
+	reminderRoundTitle    = "Test Round"
+	reminderUser1         = "user1"
+	reminderUser2         = "user2"
+	reminderDBError       = "database error"
+	reminderPubError      = "publish error"
+)
+
+var (
+	reminderLocation  = "Test Location"
+	reminderNow       = time.Now().UTC().Truncate(time.Second)
+	reminderStartTime = &reminderNow
+
+	//valid reminder
+	validReminderPayload = roundevents.RoundReminderPayload{
+		RoundID:      reminderRoundID,
+		ReminderType: reminderType,
+		RoundTitle:   reminderRoundTitle,
+		StartTime:    reminderStartTime,
+		Location:     &reminderLocation,
+	}
+	//Valid Round
+	validReminderRound = roundtypes.Round{
+		ID: reminderRoundID,
+		Participants: []roundtypes.RoundParticipant{
+			{DiscordID: reminderUser1},
+			{DiscordID: reminderUser2},
+		},
+		Location: &reminderLocation,
+	}
 )
 
 func TestRoundService_ProcessRoundReminder(t *testing.T) {
@@ -23,145 +61,117 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
 	mockRoundDB := rounddbmocks.NewMockRoundDB(ctrl)
+	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	logger := slog.Default()
 
-	type args struct {
-		msg *message.Message
+	s := &RoundService{
+		RoundDB:       mockRoundDB,
+		EventBus:      mockEventBus,
+		logger:        logger,
+		ErrorReporter: mockErrorReporter,
 	}
 	tests := []struct {
-		name        string
-		args        args
-		mockExpects func()
-		wantErr     bool
+		name          string
+		payload       interface{}
+		mockDBSetup   func()
+		expectedEvent string
+		wantErr       bool
+		errMsg        string
 	}{
 		{
-			name: "Successful round reminder processing",
-			args: args{
-				msg: createTestMessage(roundevents.RoundReminderPayload{
-					RoundID:      "some-round-id",
-					ReminderType: "1h",
-					RoundTitle:   "Test Round",
-					StartTime:    time.Now().Add(1 * time.Hour),
-					Location:     "Test Location",
-				}),
-			},
-			mockExpects: func() {
+			name:          "Successful round reminder processing",
+			payload:       validReminderPayload,             // Use pre-built payload
+			expectedEvent: roundevents.DiscordEventsSubject, // Expect publish to Discord
+			wantErr:       false,
+			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
-					GetRound(gomock.Any(), gomock.Eq("some-round-id")).
-					Return(&roundtypes.Round{
-						ID: "some-round-id",
-						Participants: []roundtypes.RoundParticipant{
-							{DiscordID: "user1"},
-							{DiscordID: "user2"},
-						},
-					}, nil).
+					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
+					Return(&validReminderRound, nil). // Return valid round with participants
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
+					Times(1).
+					Return(nil)
+			},
+		},
+		{
+			name:          "Invalid payload",
+			payload:       "invalid json",
+			expectedEvent: "", // No events expected
+			wantErr:       true,
+			errMsg:        "failed to unmarshal RoundReminderPayload",
+			mockDBSetup:   func() {}, // No DB interactions expected
+		},
+		{
+			name:          "Database error",
+			payload:       validReminderPayload,
+			expectedEvent: "",
+			wantErr:       true,
+			errMsg:        "failed to get round from database: " + reminderDBError,
+			mockDBSetup: func() {
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
+					Return(nil, fmt.Errorf(reminderDBError)). // Simulate DB error
 					Times(1)
 			},
-			wantErr: false,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
-			},
-			mockExpects: func() {},
-			wantErr:     true,
-		},
-		{
-			name: "Database error",
-			args: args{
-				msg: createTestMessage(roundevents.RoundReminderPayload{
-					RoundID:      "some-round-id",
-					ReminderType: "1h",
-					RoundTitle:   "Test Round",
-					StartTime:    time.Now().Add(1 * time.Hour),
-					Location:     "Test Location",
-				}),
-			},
-			mockExpects: func() {
+			name:          "No participants",
+			payload:       validReminderPayload,
+			expectedEvent: "",    // No event published to Discord
+			wantErr:       false, // Not an error, just a skipped publish
+			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
-					GetRound(gomock.Any(), gomock.Eq("some-round-id")).
-					Return(nil, fmt.Errorf("database error")).
-					Times(1)
-			},
-			wantErr: true,
-		},
-		{
-			name: "No participants",
-			args: args{
-				msg: createTestMessage(roundevents.RoundReminderPayload{
-					RoundID:      "some-round-id",
-					ReminderType: "1h",
-					RoundTitle:   "Test Round",
-					StartTime:    time.Now().Add(1 * time.Hour),
-					Location:     "Test Location",
-				}),
-			},
-			mockExpects: func() {
-				mockRoundDB.EXPECT().
-					GetRound(gomock.Any(), gomock.Eq("some-round-id")).
-					Return(&roundtypes.Round{
-						ID:           "some-round-id",
+					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
+					Return(&roundtypes.Round{ // Return a round with NO participants
+						ID:           reminderRoundID,
 						Participants: []roundtypes.RoundParticipant{},
 					}, nil).
 					Times(1)
 			},
-			wantErr: false,
 		},
 		{
-			name: "Failed to publish to Discord",
-			args: args{
-				msg: createTestMessage(roundevents.RoundReminderPayload{
-					RoundID:      "some-round-id",
-					ReminderType: "1h",
-					RoundTitle:   "Test Round",
-					StartTime:    time.Now().Add(1 * time.Hour),
-					Location:     "Test Location",
-				}),
-			},
-			mockExpects: func() {
+			name:          "Failed to publish to Discord",
+			payload:       validReminderPayload,
+			expectedEvent: roundevents.DiscordEventsSubject,
+			wantErr:       true,
+			errMsg:        "failed to publish to discord.round.event: " + reminderPubError,
+			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
-					GetRound(gomock.Any(), gomock.Eq("some-round-id")).
-					Return(&roundtypes.Round{
-						ID: "some-round-id",
-						Participants: []roundtypes.RoundParticipant{
-							{DiscordID: "user1"},
-							{DiscordID: "user2"},
-						},
-					}, nil).
+					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
+					Return(&validReminderRound, nil). // Valid round with participants
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
-					Return(fmt.Errorf("publish error")).
+					Return(fmt.Errorf(reminderPubError)). // Simulate publish failure
 					Times(1)
 			},
-			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockExpects()
+			payloadBytes, _ := json.Marshal(tt.payload)
+			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, reminderCorrelationID)
 
-			s := &RoundService{
-				RoundDB:  mockRoundDB,
-				EventBus: mockEventBus,
-				logger:   logger,
+			if tt.mockDBSetup != nil {
+				tt.mockDBSetup()
 			}
 
-			if err := s.ProcessRoundReminder(tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("RoundService.ProcessRoundReminder() error = %v, wantErr %v", err, tt.wantErr)
+			err := s.ProcessRoundReminder(msg)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("ProcessRoundReminder() expected error, got none")
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("ProcessRoundReminder() error = %v, wantErrMsg containing %v", err, tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ProcessRoundReminder() unexpected error: %v", err)
+				}
 			}
 		})
 	}
-}
-
-func createTestMessage(payload roundevents.RoundReminderPayload) *message.Message {
-	payloadBytes, _ := json.Marshal(payload)
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("correlationID", payload.RoundID)
-	return msg
 }

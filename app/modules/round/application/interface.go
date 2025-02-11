@@ -10,7 +10,6 @@ import (
 type Service interface {
 	// Create Round
 	ValidateRoundRequest(ctx context.Context, msg *message.Message) error
-	ParseDateTime(ctx context.Context, msg *message.Message) error
 	StoreRound(ctx context.Context, msg *message.Message) error
 	ScheduleRoundEvents(ctx context.Context, msg *message.Message) error
 	PublishRoundCreated(ctx context.Context, msg *message.Message) error
