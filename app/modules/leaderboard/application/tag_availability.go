@@ -6,9 +6,7 @@ import (
 	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
-	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -89,13 +87,13 @@ func (s *LeaderboardService) publishTagAssigned(_ context.Context, msg *message.
 // publishTagAvailable publishes a TagAvailable event to the User module.
 func (s *LeaderboardService) PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error {
 	// Construct the payload for the user.tag.available event
-	eventPayload := &userevents.TagAvailablePayload{
-		DiscordID: usertypes.DiscordID(payload.DiscordID),
+	eventPayload := &leaderboardevents.TagAvailablePayload{
+		DiscordID: leaderboardtypes.DiscordID(payload.DiscordID),
 		TagNumber: payload.TagNumber,
 	}
 
 	// Publish the new message to the user.tag.available topic
-	if err := s.publishEvent(msg, userevents.TagAvailable, eventPayload); err != nil {
+	if err := s.publishEvent(msg, leaderboardevents.TagAvailable, eventPayload); err != nil {
 		s.logger.Error("Failed to publish TagAvailable event to user stream",
 			"error", err,
 			"correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey),

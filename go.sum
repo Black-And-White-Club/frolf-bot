@@ -4,6 +4,8 @@ github.com/Black-And-White-Club/frolf-bot-shared v0.0.28 h1:l+LMQM+SKiLgA9jWRoQy
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.28/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.29 h1:Yn5MyM6mrK1dAWCeB2BgksRW4ePam6DVOK2bDkbIBEk=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.29/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.30 h1:cRVD+D95h7aeSL27ou/eTa5ngLuI8JY0ZuZilmhKqWg=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.30/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/ThreeDotsLabs/watermill v1.4.4 h1:aLClMl6EYIOQy4BML9yb2VpTekbynDatvQbXGp7idCU=
 github.com/ThreeDotsLabs/watermill v1.4.4/go.mod h1:lBnrLbxOjeMRgcJbv+UiZr8Ylz8RkJ4m6i/VN/Nk+to=
 github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2 h1:9d7Vb2gepq73Rn/aKaAJWbBiJzS6nDyOm4O353jVsTM=

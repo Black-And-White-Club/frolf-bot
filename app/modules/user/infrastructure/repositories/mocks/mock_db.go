@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )

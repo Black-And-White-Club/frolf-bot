@@ -153,20 +153,6 @@ func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, msg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyScoreModule", reflect.TypeOf((*MockService)(nil).NotifyScoreModule), ctx, msg)
 }
 
-// ParseDateTime mocks base method.
-func (m *MockService) ParseDateTime(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParseDateTime", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ParseDateTime indicates an expected call of ParseDateTime.
-func (mr *MockServiceMockRecorder) ParseDateTime(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParseDateTime", reflect.TypeOf((*MockService)(nil).ParseDateTime), ctx, msg)
-}
-
 // ParticipantTagFound mocks base method.
 func (m *MockService) ParticipantTagFound(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
