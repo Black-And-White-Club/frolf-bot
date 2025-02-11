@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )

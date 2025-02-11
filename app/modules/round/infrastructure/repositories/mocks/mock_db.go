@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	gomock "go.uber.org/mock/gomock"
 )
 
