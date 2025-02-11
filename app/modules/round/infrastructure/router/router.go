@@ -55,6 +55,9 @@ func (r *RoundRouter) RegisterHandlers(
 		roundevents.RoundStored:         handlers.HandleRoundStored,
 		roundevents.RoundScheduled:      handlers.HandleScheduleRoundEvents,
 
+		// Update Discord Event ID
+		roundevents.RoundDiscordEventIDUpdate: handlers.HandleUpdateDiscordEventID,
+
 		// Update Round
 		roundevents.RoundUpdateRequest:   handlers.HandleRoundUpdateRequest,
 		roundevents.RoundUpdateValidated: handlers.HandleRoundUpdateValidated,

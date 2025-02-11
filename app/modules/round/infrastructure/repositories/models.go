@@ -5,18 +5,19 @@ import (
 	"time"
 )
 
-// Round represents a single round in the tournament.
+// Round represents a single round in the tournament.// Round represents a single round in the tournament.
 type Round struct {
-	ID           string        `bun:"id,pk,autoincrement"`
-	Title        string        `bun:"title,notnull"`
-	Location     string        `bun:"location"`
-	EventType    *string       `bun:"event_type"`
-	Date         time.Time     `bun:"date,notnull"`
-	Time         time.Time     `bun:"time,notnull"`
-	Finalized    bool          `bun:"finalized,notnull"`
-	CreatorID    string        `bun:"discord_id,notnull"`
-	State        RoundState    `bun:"state,notnull"`
-	Participants []Participant `bun:"participants,type:jsonb"`
+	ID             string        `bun:"id,pk,autoincrement"`
+	Title          string        `bun:"title,notnull"`
+	Location       string        `bun:"location"`
+	EventType      *string       `bun:"event_type"`
+	StartTime      time.Time     `bun:"start_time,notnull"`
+	EndTime        *time.Time    `bun:"end_time"`
+	Finalized      bool          `bun:"finalized,notnull"`
+	CreatorID      string        `bun:"discord_id,notnull"`
+	State          RoundState    `bun:"state,notnull"`
+	Participants   []Participant `bun:"participants,type:jsonb"`
+	DiscordEventID string        `bun:"discord_event_id"`
 }
 
 // Response represents the possible responses for a participant.

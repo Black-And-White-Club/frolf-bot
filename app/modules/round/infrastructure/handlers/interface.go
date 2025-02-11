@@ -11,6 +11,7 @@ type Handlers interface {
 	HandleRoundDateTimeParsed(msg *message.Message) error
 	HandleRoundStored(msg *message.Message) error
 	HandleRoundScheduled(msg *message.Message) error
+	HandleUpdateDiscordEventID(msg *message.Message) error
 
 	// Update Round
 	HandleRoundUpdateRequest(msg *message.Message) error
