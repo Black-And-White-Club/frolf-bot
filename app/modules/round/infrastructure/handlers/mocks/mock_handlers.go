@@ -82,20 +82,6 @@ func (mr *MockHandlersMockRecorder) HandleRoundCreateRequest(msg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundCreateRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundCreateRequest), msg)
 }
 
-// HandleRoundDateTimeParsed mocks base method.
-func (m *MockHandlers) HandleRoundDateTimeParsed(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRoundDateTimeParsed", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleRoundDateTimeParsed indicates an expected call of HandleRoundDateTimeParsed.
-func (mr *MockHandlersMockRecorder) HandleRoundDateTimeParsed(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundDateTimeParsed", reflect.TypeOf((*MockHandlers)(nil).HandleRoundDateTimeParsed), msg)
-}
-
 // HandleRoundDeleteAuthorized mocks base method.
 func (m *MockHandlers) HandleRoundDeleteAuthorized(msg *message.Message) error {
 	m.ctrl.T.Helper()
@@ -444,4 +430,18 @@ func (m *MockHandlers) HandleScheduleRoundEvents(msg *message.Message) error {
 func (mr *MockHandlersMockRecorder) HandleScheduleRoundEvents(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScheduleRoundEvents", reflect.TypeOf((*MockHandlers)(nil).HandleScheduleRoundEvents), msg)
+}
+
+// HandleUpdateDiscordEventID mocks base method.
+func (m *MockHandlers) HandleUpdateDiscordEventID(msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleUpdateDiscordEventID", msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleUpdateDiscordEventID indicates an expected call of HandleUpdateDiscordEventID.
+func (mr *MockHandlersMockRecorder) HandleUpdateDiscordEventID(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateDiscordEventID", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateDiscordEventID), msg)
 }

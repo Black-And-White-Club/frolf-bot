@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"

@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
-	usertypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/domain/types"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
