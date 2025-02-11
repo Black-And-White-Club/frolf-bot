@@ -3,6 +3,7 @@ package roundutil
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/round/domain/types"
 )
@@ -40,6 +41,16 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 
 	if input.StartTime.Date == "" || input.StartTime.Time == "" {
 		errs = append(errs, fmt.Errorf("date/time input cannot be empty"))
+	}
+
+	// Example: Validate that the date is in the future
+	if input.StartTime.Date < time.Now().Format("2006-01-02") {
+		errs = append(errs, fmt.Errorf("start date must be in the future"))
+	}
+
+	// Example: Validate that the end time is after the start time
+	if input.EndTime.Date < input.StartTime.Date || (input.EndTime.Date == input.StartTime.Date && input.EndTime.Time <= input.StartTime.Time) {
+		errs = append(errs, fmt.Errorf("end time must be after start time"))
 	}
 
 	// Add more validation rules here as needed...

@@ -202,3 +202,97 @@ func TestRoundHandlers_HandleRoundScheduled(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundHandlers_HandleUpdateDiscordEventID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRoundService := roundservice.NewMockService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	type fields struct {
+		RoundService *roundservice.MockService
+		logger       *slog.Logger
+	}
+
+	type args struct {
+		msg *message.Message
+	}
+
+	tests := []struct {
+		name          string
+		fields        fields
+		args          args
+		expectedEvent string
+		expectErr     bool
+		mockExpects   func(f fields, a args)
+	}{
+		{
+			name: "Successful Discord event ID update",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEventCreatedPayload{
+					RoundID:        "some-round-id",
+					DiscordEventID: "new-discord-event-id",
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
+				f.RoundService.EXPECT().UpdateDiscordEventID(gomock.Any(), a.msg).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "Unmarshal error",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
+			},
+			expectErr: true,
+			mockExpects: func(f fields, a args) {
+				// No expectations on the service layer as unmarshalling should fail first
+			},
+		},
+		{
+			name: "Service layer error",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEventCreatedPayload{
+					RoundID:        "some-round-id",
+					DiscordEventID: "new-discord-event-id",
+				}),
+			},
+			expectErr: true,
+			mockExpects: func(f fields, a args) {
+				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
+				f.RoundService.EXPECT().UpdateDiscordEventID(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &RoundHandlers{
+				RoundService: tt.fields.RoundService,
+				logger:       tt.fields.logger,
+			}
+
+			if tt.mockExpects != nil {
+				tt.mockExpects(tt.fields, tt.args)
+			}
+
+			if err := h.HandleUpdateDiscordEventID(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleUpdateDiscordEventID() error = %v, wantErr %v", err, tt.expectErr)
+			}
+		})
+	}
+}

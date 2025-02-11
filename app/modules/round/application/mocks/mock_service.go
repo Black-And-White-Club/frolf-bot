@@ -321,6 +321,20 @@ func (mr *MockServiceMockRecorder) TagNumberResponse(ctx, msg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagNumberResponse", reflect.TypeOf((*MockService)(nil).TagNumberResponse), ctx, msg)
 }
 
+// UpdateDiscordEventID mocks base method.
+func (m *MockService) UpdateDiscordEventID(ctx context.Context, msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDiscordEventID", ctx, msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDiscordEventID indicates an expected call of UpdateDiscordEventID.
+func (mr *MockServiceMockRecorder) UpdateDiscordEventID(ctx, msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDiscordEventID", reflect.TypeOf((*MockService)(nil).UpdateDiscordEventID), ctx, msg)
+}
+
 // UpdateParticipantScore mocks base method.
 func (m *MockService) UpdateParticipantScore(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()

@@ -24,7 +24,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 	roundID := eventPayload.Round.ID
 	startTime := eventPayload.Round.StartTime
 
-	if time.Until(startTime) < 0 {
+	if time.Until(*startTime) < 0 {
 		s.logger.Warn("Round start time is in the past, scheduling for immediate execution", "round_id", roundID)
 	}
 
@@ -38,7 +38,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		RoundID:      roundID,
 		ReminderType: "1h",
 		RoundTitle:   eventPayload.Round.Title,
-		StartTime:    startTime,
+		StartTime:    *startTime,
 		Location:     eventPayload.Round.Location,
 	}
 
@@ -65,7 +65,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		RoundID:   roundID,
 		Title:     eventPayload.Round.Title,
 		Location:  eventPayload.Round.Location,
-		StartTime: startTime,
+		StartTime: *startTime,
 	}
 
 	if err := encoder.Encode(startPayload); err != nil {

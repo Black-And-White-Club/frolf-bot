@@ -230,3 +230,16 @@ func (db *RoundDBImpl) GetParticipants(ctx context.Context, roundID string) ([]r
 
 	return round.Participants, nil
 }
+
+// UpdateDiscordEventID updates the DiscordEventID for an existing round.
+func (db *RoundDBImpl) UpdateDiscordEventID(ctx context.Context, roundID string, discordEventID string) error {
+	_, err := db.DB.NewUpdate().
+		Model(&roundtypes.Round{}).
+		Set("discord_event_id =?", discordEventID).
+		Where("id =?", roundID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update discord event ID: %w", err)
+	}
+	return nil
+}

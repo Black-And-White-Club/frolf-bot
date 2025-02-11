@@ -1,5 +1,15 @@
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.16 h1:k94yMHXgkXYW8Ar48qucP5z1udj5CGwPGwMz8g11zyw=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.16/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.17 h1:9/W5Tutwi8DhX8b8DUPMwuz/TQv9an+e/ZugGPyieLg=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.17/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.18 h1:PnkGAAd/SYmViqXXtYONP5BAgkTKmrt3bj6zeUrUlNE=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.18/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.19 h1:QKLz9xeRv8KiEg1UNF6H7SHyZ4MP5TrkyJ8bXKQiehA=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.19/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.20 h1:Z4lFc18eldCGGF2WDgpoleK593mcvJT+L2mlLeJknVs=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.20/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.21 h1:Qh9BIa86MRqc3S5F2mR+WT8cH4SS8CCSWwY2MPEwgDQ=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.21/go.mod h1:VIPyV2OItMpP05h6Hy+qxfRbzcPm0BCma62XMYARCW0=
 github.com/ThreeDotsLabs/watermill v1.4.4 h1:aLClMl6EYIOQy4BML9yb2VpTekbynDatvQbXGp7idCU=
 github.com/ThreeDotsLabs/watermill v1.4.4/go.mod h1:lBnrLbxOjeMRgcJbv+UiZr8Ylz8RkJ4m6i/VN/Nk+to=
 github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2 h1:9d7Vb2gepq73Rn/aKaAJWbBiJzS6nDyOm4O353jVsTM=

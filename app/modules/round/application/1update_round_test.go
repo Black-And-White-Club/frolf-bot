@@ -187,7 +187,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 						Title:     "Old Title",
 						Location:  "Old Location",
 						EventType: func() *string { s := "Old Type"; return &s }(),
-						StartTime: time.Now(),
+						StartTime: func() *time.Time { t := time.Now(); return &t }(),
 						State:     roundtypes.RoundStateUpcoming,
 					},
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
@@ -195,8 +195,8 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 						Title:     func() *string { s := "New Title"; return &s }(),
 						Location:  func() *string { s := "New Location"; return &s }(),
 						EventType: func() *string { s := "New Type"; return &s }(),
-						Date:      func() *time.Time { t := time.Date(2024, time.January, 27, 0, 0, 0, 0, time.UTC); return &t }(),
-						Time:      func() *time.Time { t := time.Date(0, time.January, 1, 10, 30, 0, 0, time.UTC); return &t }(),
+						StartTime: func() *time.Time { t := time.Date(2024, time.January, 27, 0, 0, 0, 0, time.UTC); return &t }(),
+						EndTime:   func() *time.Time { t := time.Date(0, time.January, 1, 10, 30, 0, 0, time.UTC); return &t }(),
 					},
 				},
 			},
@@ -208,7 +208,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					Title:     "Old Title",
 					Location:  "Old Location",
 					EventType: func() *string { s := "Old Type"; return &s }(),
-					StartTime: time.Now(),
+					StartTime: func() *time.Time { t := time.Now(); return &t }(),
 					State:     roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
 				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).DoAndReturn(
@@ -266,7 +266,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 						Title:     "Old Title",
 						Location:  "Old Location",
 						EventType: func() *string { s := "Old Type"; return &s }(),
-						StartTime: time.Now(),
+						StartTime: func() *time.Time { t := time.Now(); return &t }(),
 						State:     roundtypes.RoundStateUpcoming,
 					},
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
@@ -283,7 +283,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					Title:     "Old Title",
 					Location:  "Old Location",
 					EventType: func() *string { s := "Old Type"; return &s }(),
-					StartTime: time.Now(),
+					StartTime: func() *time.Time { t := time.Now(); return &t }(),
 					State:     roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
 				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).Return(fmt.Errorf("db error")).Times(1)
@@ -300,7 +300,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 						Title:     "Old Title",
 						Location:  "Old Location",
 						EventType: func() *string { s := "Old Type"; return &s }(),
-						StartTime: time.Now(),
+						StartTime: func() *time.Time { t := time.Now(); return &t }(),
 						State:     roundtypes.RoundStateUpcoming,
 					},
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
@@ -316,7 +316,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					Title:     "Old Title",
 					Location:  "Old Location",
 					EventType: func() *string { s := "Old Type"; return &s }(),
-					StartTime: time.Now(),
+					StartTime: func() *time.Time { t := time.Now(); return &t }(),
 					State:     roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
 				mockRoundDB.EXPECT().UpdateRound(gomock.Any(), "some-round-id", gomock.Any()).Return(nil).Times(1)

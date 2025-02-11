@@ -118,3 +118,25 @@ func (h *RoundHandlers) HandleRoundScheduled(msg *message.Message) error {
 	h.logger.Info("RoundScheduled event processed", slog.String("correlation_id", correlationID))
 	return nil
 }
+
+func (h *RoundHandlers) HandleUpdateDiscordEventID(msg *message.Message) error {
+	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundEventCreatedPayload](msg, h.logger)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal RoundEventCreatedPayload: %w", err)
+	}
+
+	h.logger.Info("Received RoundEventCreated event",
+		slog.String("correlation_id", correlationID),
+	)
+
+	if err := h.RoundService.UpdateDiscordEventID(msg.Context(), msg); err != nil {
+		h.logger.Error("Failed to handle RoundEventCreated event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("failed to handle RoundEventCreated event: %w", err)
+	}
+
+	h.logger.Info("RoundEventCreated event processed", slog.String("correlation_id", correlationID))
+	return nil
+}

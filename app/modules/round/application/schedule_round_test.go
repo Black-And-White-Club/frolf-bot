@@ -40,12 +40,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					startTime := time.Now().Add(2 * time.Hour)
 					payload, _ := json.Marshal(roundevents.RoundStoredPayload{
 						Round: roundtypes.Round{
 							ID:        "some-uuid",
 							Title:     "Test Round",
 							Location:  "Test Location",
-							StartTime: time.Now().Add(2 * time.Hour),
+							StartTime: &startTime,
 						},
 					})
 					return payload
@@ -71,12 +72,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					startTime := time.Now().Add(2 * time.Hour)
 					payload, _ := json.Marshal(roundevents.RoundStoredPayload{
 						Round: roundtypes.Round{
 							ID:        "some-uuid",
 							Title:     "Test Round",
 							Location:  "Test Location",
-							StartTime: time.Now().Add(2 * time.Hour),
+							StartTime: &startTime,
 						},
 					})
 					return payload
@@ -92,12 +94,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					startTime := time.Now().Add(2 * time.Hour)
 					payload, _ := json.Marshal(roundevents.RoundStoredPayload{
 						Round: roundtypes.Round{
 							ID:        "some-uuid",
 							Title:     "Test Round",
 							Location:  "Test Location",
-							StartTime: time.Now().Add(2 * time.Hour),
+							StartTime: &startTime,
 						},
 					})
 					return payload
@@ -114,12 +117,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					startTime := time.Now().Add(2 * time.Hour)
 					payload, _ := json.Marshal(roundevents.RoundStoredPayload{
 						Round: roundtypes.Round{
 							ID:        "some-uuid",
 							Title:     "Test Round",
 							Location:  "Test Location",
-							StartTime: time.Now().Add(2 * time.Hour),
+							StartTime: &startTime,
 						},
 					})
 					return payload

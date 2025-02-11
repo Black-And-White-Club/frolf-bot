@@ -25,14 +25,17 @@ const (
 
 // Round represents a single round in the tournament.
 type Round struct {
-	ID           string             `json:"id"` // Changed to string for UUIDs
-	Title        string             `json:"title"`
-	Location     string             `json:"location"`
-	EventType    *string            `json:"event_type"`
-	StartTime    time.Time          `json:"start_time"` // Use a single time.Time field
-	State        RoundState         `json:"state"`
-	CreatedBy    string             `json:"created_by"`                     // Changed to CreatedBy
-	Participants []RoundParticipant `json:"participants" bun:",type:jsonb"` // Indicate JSONB for the database
+	ID             string             `json:"id"`
+	Title          string             `json:"title"`
+	Location       string             `json:"location"`
+	EventType      *string            `json:"event_type"`
+	StartTime      *time.Time         `json:"start_time"`
+	EndTime        *time.Time         `json:"end_time"`
+	Finalized      bool               `json:"finalized"`
+	CreatedBy      string             `json:"created_by"`
+	State          RoundState         `json:"state"`
+	Participants   []RoundParticipant `json:"participants" bun:",type:jsonb"`
+	DiscordEventID string             `json:"discord_event_id"`
 }
 
 // RoundParticipant represents a participant in a round, including their score.
@@ -76,6 +79,7 @@ type CreateRoundInput struct {
 	Location     string             `json:"location"`
 	EventType    *string            `json:"event_type"`
 	StartTime    RoundTimeInput     `json:"start_time" validate:"required"`
+	EndTime      RoundTimeInput     `json:"end_time,omitempty"`
 	Participants []ParticipantInput `json:"participants"`
 }
 
@@ -92,7 +96,8 @@ type UpdateRoundInput struct {
 	Title     *string    `json:"title,omitempty"`
 	Location  *string    `json:"location,omitempty"`
 	EventType *string    `json:"event_type,omitempty"`
-	StartTime *time.Time `json:"start_time,omitempty"` // Allow partial updates
+	StartTime *time.Time `json:"start_time,omitempty"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
 }
 
 // UpdateParticipantResponseInput represents the input for updating a participant's response.

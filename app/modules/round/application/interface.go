@@ -14,6 +14,7 @@ type Service interface {
 	StoreRound(ctx context.Context, msg *message.Message) error
 	ScheduleRoundEvents(ctx context.Context, msg *message.Message) error
 	PublishRoundCreated(ctx context.Context, msg *message.Message) error
+	UpdateDiscordEventID(ctx context.Context, msg *message.Message) error
 
 	// Update Round
 	ValidateRoundUpdateRequest(ctx context.Context, msg *message.Message) error

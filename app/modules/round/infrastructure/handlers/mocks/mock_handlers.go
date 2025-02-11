@@ -236,6 +236,20 @@ func (mr *MockHandlersMockRecorder) HandleRoundReminder(msg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundReminder", reflect.TypeOf((*MockHandlers)(nil).HandleRoundReminder), msg)
 }
 
+// HandleRoundScheduleUpdate mocks base method.
+func (m *MockHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleRoundScheduleUpdate", msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleRoundScheduleUpdate indicates an expected call of HandleRoundScheduleUpdate.
+func (mr *MockHandlersMockRecorder) HandleRoundScheduleUpdate(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundScheduleUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleRoundScheduleUpdate), msg)
+}
+
 // HandleRoundScheduled mocks base method.
 func (m *MockHandlers) HandleRoundScheduled(msg *message.Message) error {
 	m.ctrl.T.Helper()
@@ -388,20 +402,6 @@ func (m *MockHandlers) HandleRoundUpdateValidated(msg *message.Message) error {
 func (mr *MockHandlersMockRecorder) HandleRoundUpdateValidated(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundUpdateValidated", reflect.TypeOf((*MockHandlers)(nil).HandleRoundUpdateValidated), msg)
-}
-
-// HandleRoundUpdated mocks base method.
-func (m *MockHandlers) HandleRoundUpdated(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRoundUpdated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleRoundUpdated indicates an expected call of HandleRoundUpdated.
-func (mr *MockHandlersMockRecorder) HandleRoundUpdated(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundUpdated", reflect.TypeOf((*MockHandlers)(nil).HandleRoundUpdated), msg)
 }
 
 // HandleRoundUserRoleCheckResult mocks base method.

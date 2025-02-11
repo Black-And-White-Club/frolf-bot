@@ -164,6 +164,20 @@ func (mr *MockRoundDBMockRecorder) LogRound(ctx, round any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogRound", reflect.TypeOf((*MockRoundDB)(nil).LogRound), ctx, round)
 }
 
+// UpdateDiscordEventID mocks base method.
+func (m *MockRoundDB) UpdateDiscordEventID(ctx context.Context, roundID, discordEventID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDiscordEventID", ctx, roundID, discordEventID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDiscordEventID indicates an expected call of UpdateDiscordEventID.
+func (mr *MockRoundDBMockRecorder) UpdateDiscordEventID(ctx, roundID, discordEventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDiscordEventID", reflect.TypeOf((*MockRoundDB)(nil).UpdateDiscordEventID), ctx, roundID, discordEventID)
+}
+
 // UpdateParticipant mocks base method.
 func (m *MockRoundDB) UpdateParticipant(ctx context.Context, roundID string, participant roundtypes.RoundParticipant) error {
 	m.ctrl.T.Helper()
