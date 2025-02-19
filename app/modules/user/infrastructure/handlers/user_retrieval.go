@@ -19,7 +19,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) error {
 
 	h.logger.Info("Received GetUserRequest event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	// Call the service function to get the user
@@ -33,7 +33,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) error {
 
 	h.logger.Info("GetUserRequest processed",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	return nil
@@ -48,7 +48,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) error {
 
 	h.logger.Info("Received GetUserRoleRequest event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	// Call the service function to get the user role
@@ -62,7 +62,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) error {
 
 	h.logger.Info("GetUserRoleRequest processed",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	return nil

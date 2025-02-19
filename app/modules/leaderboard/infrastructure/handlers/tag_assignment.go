@@ -19,7 +19,7 @@ func (h *LeaderboardHandlers) HandleTagAssignmentRequested(msg *message.Message)
 
 	h.logger.Info("Received TagAssignmentRequested event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.Int("tag_number", payload.TagNumber),
 	)
 
@@ -50,7 +50,7 @@ func (h *LeaderboardHandlers) HandleTagAssigned(msg *message.Message) error {
 
 	h.logger.Info("Received TagAssigned event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.Int("tag_number", payload.TagNumber),
 		slog.String("assignment_id", payload.AssignmentID),
 	)

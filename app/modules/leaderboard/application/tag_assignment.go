@@ -52,7 +52,7 @@ func (s *LeaderboardService) TagAssigned(ctx context.Context, msg *message.Messa
 
 	s.logger.Info("Processing TagAssigned event",
 		"correlation_id", correlationID,
-		"discord_id", eventPayload.DiscordID,
+		"user_id", eventPayload.DiscordID,
 		"tag_number", eventPayload.TagNumber,
 		"assignment_id", eventPayload.AssignmentID,
 	)
@@ -68,7 +68,7 @@ func (s *LeaderboardService) TagAssigned(ctx context.Context, msg *message.Messa
 		s.logger.Error("Failed to publish TagAvailable event",
 			"error", err,
 			"correlation_id", correlationID,
-			"discord_id", eventPayload.DiscordID,
+			"user_id", eventPayload.DiscordID,
 			"tag_number", eventPayload.TagNumber,
 		)
 		return fmt.Errorf("failed to publish TagAvailable event: %w", err)
@@ -76,7 +76,7 @@ func (s *LeaderboardService) TagAssigned(ctx context.Context, msg *message.Messa
 
 	s.logger.Info("TagAssigned processing completed successfully",
 		"correlation_id", correlationID,
-		"discord_id", eventPayload.DiscordID,
+		"user_id", eventPayload.DiscordID,
 		"tag_number", eventPayload.TagNumber,
 	)
 

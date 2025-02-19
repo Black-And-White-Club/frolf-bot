@@ -24,7 +24,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 
 	h.logger.Info("Received UserPermissionsCheckRequest event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
 		slog.String("requester_id", payload.RequesterID),
 	)
@@ -51,7 +51,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 	// Log before calling the service
 	h.logger.Info("Checking user permissions in database",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
 		slog.String("requester_id", payload.RequesterID),
 	)
@@ -69,7 +69,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 	if err != nil {
 		h.logger.Error("Failed during user permissions check in DB",
 			slog.String("correlation_id", correlationID),
-			slog.String("discord_id", string(payload.DiscordID)),
+			slog.String("user_id", string(payload.DiscordID)),
 			slog.String("role", string(payload.Role)),
 			slog.Any("error", err),
 		)
@@ -78,7 +78,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 
 	h.logger.Info("User permissions check request processed successfully",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
 		slog.String("requester_id", payload.RequesterID),
 	)
@@ -95,7 +95,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckFailed(msg *message.Message) er
 
 	h.logger.Error("User permissions check failed",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("requester_id", payload.RequesterID),
 		slog.String("reason", payload.Reason),
 	)

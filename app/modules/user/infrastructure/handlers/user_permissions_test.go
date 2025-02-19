@@ -44,7 +44,7 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 		{
 			name: "Successful Permission Check Request",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
+				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"user_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -68,7 +68,7 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 		{
 			name: "CheckUserPermissionsInDB Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"discord_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
+				msg: message.NewMessage(watermill.NewUUID(), []byte(fmt.Sprintf(`{"user_id":"%s", "role":"%s", "requester_id":"%s"}`, testDiscordID, "Admin", testRequesterID))), // Use "Admin" in the JSON
 			},
 			wantErr: true,
 			setup: func(args args) {
@@ -111,7 +111,7 @@ func TestUserHandlers_HandleUserPermissionsCheckFailed(t *testing.T) {
 	testCorrelationID := watermill.NewUUID()
 
 	t.Run("Successful Handling of Permissions Check Failed", func(t *testing.T) {
-		msg := message.NewMessage(testCorrelationID, []byte(`{"discord_id":"123456789012345678", "role":"admin", "requester_id":"requester456", "reason":"Some reason"}`))
+		msg := message.NewMessage(testCorrelationID, []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456", "reason":"Some reason"}`))
 		msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 		err := h.HandleUserPermissionsCheckFailed(msg)

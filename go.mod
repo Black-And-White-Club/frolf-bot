@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.23.5
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.30
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.36
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
 	github.com/google/uuid v1.6.0
@@ -36,14 +36,13 @@ require (
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.9-0.20240816141633-0a40785b4f41 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	mellium.im/sasl v0.3.2 // indirect
 )

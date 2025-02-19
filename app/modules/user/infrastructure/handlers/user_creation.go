@@ -27,7 +27,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) error {
 
 	h.logger.Info("Received UserSignupRequest event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	// If a tag is provided, check its availability

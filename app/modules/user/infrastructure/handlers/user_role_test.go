@@ -38,7 +38,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "Successful Role Update Request",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -60,7 +60,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "UpdateUserRole Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
 			},
 			wantErr: true,
 			setup: func(args args) {
@@ -110,7 +110,7 @@ func TestUserHandlers_HandleUserPermissionsCheckResponse(t *testing.T) {
 		{
 			name: "Successful Permission Check Response - Has Permission",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678", "role":"admin", "has_permission":true}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "has_permission":true}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -128,7 +128,7 @@ func TestUserHandlers_HandleUserPermissionsCheckResponse(t *testing.T) {
 		{
 			name: "Successful Permission Check Response - No Permission",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678", "role":"admin", "has_permission":false}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "has_permission":false}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -150,7 +150,7 @@ func TestUserHandlers_HandleUserPermissionsCheckResponse(t *testing.T) {
 		{
 			name: "UpdateUserRoleInDatabase Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678", "role":"admin", "has_permission":true}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "has_permission":true}`)),
 			},
 			wantErr: true, // Expecting an error from UpdateUserRoleInDatabase
 			setup: func(args args) {

@@ -22,7 +22,7 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 
 	s.logger.Info("Handling TagAvailabilityCheckRequested event",
 		"correlation_id", correlationID,
-		"discord_id", eventPayload.DiscordID,
+		"user_id", eventPayload.DiscordID,
 		"tag_number", eventPayload.TagNumber,
 	)
 

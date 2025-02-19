@@ -62,7 +62,7 @@ func (s *RoundService) CheckParticipantTag(ctx context.Context, msg *message.Mes
 		return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"discord_id": eventPayload.ParticipantJoinRequestPayload.Participant})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.ParticipantJoinRequestPayload.Participant})
 
 	return nil
 }
