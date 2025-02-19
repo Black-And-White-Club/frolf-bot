@@ -37,7 +37,7 @@ func (s *RoundService) RequestTagNumber(ctx context.Context, msg *message.Messag
 		return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"discord_id": eventPayload.DiscordID})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.DiscordID})
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (s *RoundService) TagNumberRequest(ctx context.Context, msg *message.Messag
 		return fmt.Errorf("failed to publish GetTagNumberRequest to leaderboard: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published GetTagNumberRequest to leaderboard", map[string]interface{}{"discord_id": eventPayload.DiscordID})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published GetTagNumberRequest to leaderboard", map[string]interface{}{"user_id": eventPayload.DiscordID})
 	return nil
 }
 
@@ -98,7 +98,7 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 
 		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.found event", map[string]interface{}{
 			"tag_number": eventPayload.TagNumber,
-			"discord_id": eventPayload.DiscordID,
+			"user_id":    eventPayload.DiscordID,
 		})
 	} else {
 		// Publish round.tag.number.notfound event (or handle as needed)
@@ -110,7 +110,7 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 		}
 
 		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.notfound event", map[string]interface{}{
-			"discord_id": eventPayload.DiscordID,
+			"user_id": eventPayload.DiscordID,
 		})
 	}
 

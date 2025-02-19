@@ -38,7 +38,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		{
 			name: "Successful GetUserRequest",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678"}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -60,7 +60,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		{
 			name: "GetUser Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678"}`)),
 			},
 			wantErr: true,
 			setup: func(args args) {
@@ -110,7 +110,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 		{
 			name: "Successful GetUserRoleRequest",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678"}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
@@ -132,7 +132,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 		{
 			name: "GetUserRole Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"discord_id":"123456789012345678"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678"}`)),
 			},
 			wantErr: true,
 			setup: func(args args) {

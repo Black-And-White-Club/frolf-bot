@@ -307,6 +307,6 @@ func createTestMessageWithPayload(t *testing.T, correlationID string, payload in
 func createTestMessageWithMetadata(correlationID string, discordID string) *message.Message {
 	msg := message.NewMessage(watermill.NewUUID(), nil)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	msg.Metadata.Set("discord_id", discordID)
+	msg.Metadata.Set("user_id", discordID)
 	return msg
 }

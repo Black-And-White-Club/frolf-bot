@@ -17,7 +17,7 @@ import (
 func (s *UserServiceImpl) CheckUserPermissions(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Initiating user permissions check",
-		slog.String("discord_id", string(discordID)),
+		slog.String("user_id", string(discordID)),
 		slog.String("role", string(role)),
 		slog.String("requester_id", requesterID),
 		slog.String("correlation_id", correlationID),
@@ -176,7 +176,7 @@ func (s *UserServiceImpl) PublishUserPermissionsCheckFailed(ctx context.Context,
 
 	s.logger.Info("Published UserPermissionsCheckFailed event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(discordID)),
+		slog.String("user_id", string(discordID)),
 		slog.String("role", string(role)),
 		slog.String("requester_id", requesterID),
 		slog.String("reason", reason),

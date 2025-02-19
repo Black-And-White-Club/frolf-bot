@@ -35,6 +35,6 @@ func (u *User) GetRole() usertypes.UserRoleEnum {
 type UserData struct {
 	ID        int64                  `json:"id"`
 	Name      string                 `json:"name"`
-	DiscordID usertypes.DiscordID    `json:"discord_id"`
+	DiscordID usertypes.DiscordID    `json:"user_id"`
 	Role      usertypes.UserRoleEnum `json:"role"` // Use UserRoleEnum here
 }

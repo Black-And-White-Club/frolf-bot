@@ -43,7 +43,7 @@ const (
 
 // Participant represents a user participating in a round.
 type Participant struct {
-	DiscordID string   `json:"discord_id"`
+	DiscordID string   `json:"user_id"`
 	TagNumber *int     `json:"tag_number"`
 	Response  Response `json:"response"`
 	Score     *int     `json:"score"`

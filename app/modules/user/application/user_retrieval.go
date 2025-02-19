@@ -42,7 +42,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, dis
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 
 	s.logger.Info("Getting user",
-		slog.String("discord_id", string(discordID)),
+		slog.String("user_id", string(discordID)),
 		slog.String("correlation_id", correlationID),
 	)
 
@@ -50,7 +50,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, dis
 	if err != nil {
 		if errors.Is(err, userdb.ErrUserNotFound) {
 			s.logger.Error("User not found",
-				slog.String("discord_id", string(discordID)),
+				slog.String("user_id", string(discordID)),
 				slog.String("correlation_id", correlationID),
 			)
 			// Publish a GetUserFailed event when the user is not found
@@ -61,7 +61,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, dis
 		}
 		s.logger.Error("Failed to get user",
 			slog.Any("error", err),
-			slog.String("discord_id", string(discordID)),
+			slog.String("user_id", string(discordID)),
 			slog.String("correlation_id", correlationID),
 		)
 		// Publish a GetUserFailed event for other database errors

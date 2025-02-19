@@ -19,7 +19,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 
 	s.logger.Info("Creating user",
-		slog.String("discord_id", string(discordID)),
+		slog.String("user_id", string(discordID)),
 		slog.String("correlation_id", correlationID),
 	)
 
@@ -37,7 +37,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	if err := s.UserDB.CreateUser(ctx, &user); err != nil {
 		s.logger.Error("Failed to create user",
 			slog.Any("error", err),
-			slog.String("discord_id", string(discordID)),
+			slog.String("user_id", string(discordID)),
 			slog.String("correlation_id", correlationID),
 		)
 
@@ -52,7 +52,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	}
 
 	s.logger.Info("User created successfully",
-		slog.String("discord_id", string(discordID)),
+		slog.String("user_id", string(discordID)),
 		slog.String("correlation_id", correlationID),
 	)
 
@@ -93,8 +93,8 @@ func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.M
 	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
 
 	// Copy the discord ID from the original message metadata
-	if discordID := msg.Metadata.Get("discord_id"); discordID != "" {
-		newMessage.Metadata.Set("discord_id", discordID)
+	if discordID := msg.Metadata.Get("user_id"); discordID != "" {
+		newMessage.Metadata.Set("user_id", discordID)
 	}
 
 	// Publish the event

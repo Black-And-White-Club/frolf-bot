@@ -42,7 +42,7 @@ func (h *LeaderboardHandlers) HandleGetTagByDiscordIDRequest(msg *message.Messag
 
 	h.logger.Info("Received GetTagByDiscordIDRequest event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 	)
 
 	// Call the service function to handle the event

@@ -47,7 +47,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) 
 
 	h.logger.Info("Received UserPermissionsCheckResponse event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
 		slog.Bool("has_permission", payload.HasPermission),
 	)
@@ -64,7 +64,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) 
 			// If updating the role fails, publish a UserRoleUpdateFailed event
 			h.logger.Error("Failed to update user role in database",
 				slog.String("correlation_id", correlationID),
-				slog.String("discord_id", string(payload.DiscordID)),
+				slog.String("user_id", string(payload.DiscordID)),
 				slog.String("role", string(payload.Role)),
 				slog.Any("error", err),
 			)
@@ -77,7 +77,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) 
 			); pubErr != nil {
 				h.logger.Error("Failed to publish UserRoleUpdateFailed event",
 					slog.String("correlation_id", correlationID),
-					slog.String("discord_id", string(payload.DiscordID)),
+					slog.String("user_id", string(payload.DiscordID)),
 					slog.String("role", string(payload.Role)),
 					slog.Any("error", pubErr),
 				)
@@ -89,7 +89,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) 
 		// If updating the role succeeds, publish a UserRoleUpdated event
 		h.logger.Info("User role updated successfully",
 			slog.String("correlation_id", correlationID),
-			slog.String("discord_id", string(payload.DiscordID)),
+			slog.String("user_id", string(payload.DiscordID)),
 			slog.String("role", string(payload.Role)),
 		)
 		return h.userService.PublishUserRoleUpdated(
@@ -103,7 +103,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) 
 	// If the user does not have permission, publish a UserRoleUpdateFailed event
 	h.logger.Warn("User does not have required permission",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
 	)
 	return h.userService.PublishUserRoleUpdateFailed(

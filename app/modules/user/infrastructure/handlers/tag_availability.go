@@ -23,7 +23,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) error {
 
 	h.logger.Info("Received TagAvailable event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.Int("tag_number", payload.TagNumber),
 	)
 
@@ -49,7 +49,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) error {
 
 	h.logger.Info("Received TagUnavailable event",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.DiscordID)),
+		slog.String("user_id", string(payload.DiscordID)),
 		slog.Int("tag_number", payload.TagNumber),
 	)
 
