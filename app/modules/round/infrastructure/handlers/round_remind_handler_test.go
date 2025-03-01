@@ -2,11 +2,10 @@ package roundhandlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundservicemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
@@ -26,16 +25,10 @@ const (
 )
 
 var (
-	reminderHandlerLocation  = "Test Location" // var for pointer
-	reminderHandlerNow       = time.Now().UTC().Truncate(time.Second)
-	reminderHandlerStartTime = &reminderHandlerNow
-
 	validReminderHandlerPayload = roundevents.RoundReminderPayload{
 		RoundID:      reminderHandlerRoundID,
-		ReminderType: reminderHandlerType,
 		RoundTitle:   reminderHandlerRoundTitle,
-		StartTime:    reminderHandlerStartTime,
-		Location:     &reminderHandlerLocation,
+		ReminderType: reminderHandlerType,
 	}
 )
 
@@ -77,7 +70,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockExpects: func() {
 				mockRoundService.EXPECT().
 					ProcessRoundReminder(gomock.Any()).
-					Return(fmt.Errorf(reminderProcessError)). // Simulate processing error
+					Return(errors.New(reminderProcessError)). // Simulate processing error
 					Times(1)
 			},
 			wantErr: true,

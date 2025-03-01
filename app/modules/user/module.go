@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/router"
@@ -21,9 +23,11 @@ type Module struct {
 	config      *config.Config
 	UserRouter  *userrouter.UserRouter
 	cancelFunc  context.CancelFunc
+	helper      utils.Helpers
+	tracer      observability.Tracer
 }
 
-func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
+func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus eventbus.EventBus, router *message.Router, helpers utils.Helpers) (*Module, error) {
 	logger.Info("user.NewUserModule called")
 
 	// Initialize user service.
@@ -33,7 +37,7 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger,
 	}
 
 	// Initialize user router.
-	userRouter := userrouter.NewUserRouter(logger, router, eventBus)
+	userRouter := userrouter.NewUserRouter(logger, router, eventBus, helpers)
 
 	// Configure the router with user service.
 	if err := userRouter.Configure(userService); err != nil {

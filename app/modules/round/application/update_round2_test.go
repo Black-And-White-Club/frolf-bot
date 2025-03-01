@@ -113,7 +113,7 @@ func TestRoundService_StoreRoundUpdate(t *testing.T) {
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
 					UpdateRound(gomock.Any(), gomock.Eq(storeUpdateRoundID), gomock.Any()).
-					Return(fmt.Errorf(storeUpdateDBError)). // Simulate DB error
+					Return(fmt.Errorf("%s", storeUpdateDBError)). // Simulate DB error
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq("round.update.error"), gomock.Any()).
@@ -134,7 +134,7 @@ func TestRoundService_StoreRoundUpdate(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.RoundUpdated), gomock.Any()).
-					Return(fmt.Errorf(storeUpdatePublishError)). // Simulate publish error
+					Return(fmt.Errorf("%s", storeUpdatePublishError)). // Simulate publish error
 					Times(1)
 			},
 			expectedEvent: roundevents.RoundUpdated, // Event *should* be published
@@ -224,7 +224,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			mockExpects: func() {
 				mockEventBus.EXPECT().
 					CancelScheduledMessage(gomock.Any(), gomock.Eq(storeUpdateRoundID)).
-					Return(fmt.Errorf(storeUpdateCancelError)). // Simulate cancel error
+					Return(fmt.Errorf("failed to cancel existing scheduled events: %s", storeUpdateCancelError)). // Simulate cancel error
 					Times(1)
 			},
 		},
@@ -241,7 +241,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.RoundScheduleUpdate), gomock.Any()).
-					Return(fmt.Errorf(storeUpdatePublishError)).
+					Return(fmt.Errorf("%s", storeUpdatePublishError)).
 					Times(1)
 			},
 		},

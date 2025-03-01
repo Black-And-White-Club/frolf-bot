@@ -10,6 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+// TODO Need to fix this because it's checking the role that is sent, not the one required.
 func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) error {
 	// Unmarshal the payload and extract correlation ID
 	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.UserPermissionsCheckRequestPayload](msg, h.logger)
@@ -26,7 +27,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 		slog.String("correlation_id", correlationID),
 		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
-		slog.String("requester_id", payload.RequesterID),
+		slog.String("requester_id", string(payload.RequesterID)),
 	)
 
 	// Validate the Discord ID
@@ -53,7 +54,7 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 		slog.String("correlation_id", correlationID),
 		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
-		slog.String("requester_id", payload.RequesterID),
+		slog.String("requester_id", string(payload.RequesterID)),
 	)
 
 	// Call the CheckUserPermissionsInDB function
@@ -65,22 +66,32 @@ func (h *UserHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) e
 		payload.RequesterID, // string
 	)
 
-	// Handle errors from the service
 	if err != nil {
-		h.logger.Error("Failed during user permissions check in DB",
-			slog.String("correlation_id", correlationID),
-			slog.String("user_id", string(payload.DiscordID)),
-			slog.String("role", string(payload.Role)),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed during user permissions check in DB: %w", err)
+		// Permission check failed
+		h.logger.Warn("User permissions check failed", slog.Any("error", err))
+
+		// Publish UserPermissionsCheckResponse with HasPermission: false
+		if err := h.userService.PublishUserPermissionsCheckResponse(
+			msg.Context(),
+			msg,
+			payload.DiscordID,
+			payload.Role,
+			payload.RequesterID,
+			false, // HasPermission: false
+			err.Error(),
+		); err != nil {
+			h.logger.Error("Failed to publish UserPermissionsCheckResponse", slog.Any("error", err))
+			return fmt.Errorf("failed to publish UserPermissionsCheckResponse: %w", err)
+		}
+
+		return nil // Return nil to acknowledge the message
 	}
 
 	h.logger.Info("User permissions check request processed successfully",
 		slog.String("correlation_id", correlationID),
 		slog.String("user_id", string(payload.DiscordID)),
 		slog.String("role", string(payload.Role)),
-		slog.String("requester_id", payload.RequesterID),
+		slog.String("requester_id", string(payload.RequesterID)),
 	)
 
 	return nil
@@ -96,13 +107,24 @@ func (h *UserHandlers) HandleUserPermissionsCheckFailed(msg *message.Message) er
 	h.logger.Error("User permissions check failed",
 		slog.String("correlation_id", correlationID),
 		slog.String("user_id", string(payload.DiscordID)),
-		slog.String("requester_id", payload.RequesterID),
+		slog.String("requester_id", string(payload.RequesterID)),
 		slog.String("reason", payload.Reason),
 	)
 
-	// Implement logic to handle the failure, e.g.,
-	// - Notify the user or admin about the failure
-	// - Log details for investigation
+	// Call the service with the necessary arguments
+	err = h.userService.PublishUserPermissionsCheckFailed(
+		msg.Context(),       // Context
+		msg,                 // Message
+		payload.DiscordID,   // Discord ID
+		payload.Role,        // Role
+		payload.RequesterID, // Requester ID
+		payload.Reason,      // Reason for failure
+	)
+	if err != nil {
+		// Handle the error from the service call
+		h.logger.Error("Failed to publish UserPermissionsCheckFailed event", slog.Any("error", err))
+		return fmt.Errorf("failed to publish UserPermissionsCheckFailed event: %w", err)
+	}
 
 	return nil
 }

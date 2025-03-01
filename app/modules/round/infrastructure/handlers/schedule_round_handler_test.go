@@ -2,7 +2,7 @@ package roundhandlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -79,7 +79,7 @@ func TestRoundHandlers_HandleScheduleRoundEvents(t *testing.T) {
 			mockExpects: func() {
 				mockRoundService.EXPECT().
 					ScheduleRoundEvents(gomock.Any(), gomock.Any()).
-					Return(fmt.Errorf(scheduleHandlerScheduleError)). // Simulate scheduling error
+					Return(errors.New(scheduleHandlerScheduleError)). // Simulate scheduling error
 					Times(1)
 			},
 			wantErr: true,

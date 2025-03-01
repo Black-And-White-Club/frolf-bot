@@ -6,10 +6,9 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	errormocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	rounddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
@@ -32,17 +31,12 @@ const (
 )
 
 var (
-	reminderLocation  = "Test Location"
-	reminderNow       = time.Now().UTC().Truncate(time.Second)
-	reminderStartTime = &reminderNow
-
+	reminderLocation = "Test Location"
 	//valid reminder
 	validReminderPayload = roundevents.RoundReminderPayload{
 		RoundID:      reminderRoundID,
-		ReminderType: reminderType,
 		RoundTitle:   reminderRoundTitle,
-		StartTime:    reminderStartTime,
-		Location:     &reminderLocation,
+		ReminderType: reminderType,
 	}
 	//Valid Round
 	validReminderRound = roundtypes.Round{
@@ -61,7 +55,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
 	mockRoundDB := rounddbmocks.NewMockRoundDB(ctrl)
-	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
+	mockErrorReporter := errormocks.NewMockErrorReporterInterface(ctrl)
 	logger := slog.Default()
 
 	s := &RoundService{
@@ -111,7 +105,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
 					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
-					Return(nil, fmt.Errorf(reminderDBError)). // Simulate DB error
+					Return(nil, fmt.Errorf("failed to get round from database: %s", reminderDBError)).
 					Times(1)
 			},
 		},
@@ -143,7 +137,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
-					Return(fmt.Errorf(reminderPubError)). // Simulate publish failure
+					Return(fmt.Errorf("failed to publish to discord.round.event: %s", reminderPubError)). // Simulate publish failure
 					Times(1)
 			},
 		},

@@ -22,10 +22,10 @@ import (
 
 // --- Constants and Variables for Test Data ---
 const (
-	scheduleRoundID       = "some-uuid"
-	scheduleCorrelationID = "some-correlation-id"
-	scheduleTitle         = "Test Round"
-	schedulePublishError  = "publish error"
+	scheduleRoundID              = "some-uuid"
+	scheduleCorrelationID        = "some-correlation-id"
+	scheduleTitle         string = "Test Round"
+	schedulePublishError  string = "publish error"
 )
 
 var (
@@ -95,7 +95,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 			mockExpects: func() {
 				// Expect only the first publish to fail
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf(schedulePublishError)).Times(1)
+				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf("failed to schedule 1h reminder: %s", schedulePublishError)).Times(1)
 			},
 		},
 		{
@@ -107,7 +107,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			mockExpects: func() {
 				// First publish succeeds, second fails
 				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf(schedulePublishError)).Times(1)
+				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf("failed to schedule round start: %s", schedulePublishError)).Times(1)
 			},
 		},
 		{
@@ -120,7 +120,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			mockExpects: func() {
 				// Both delayed messages succeed, but final publish fails
 				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(nil).Times(2)
-				mockEventBus.EXPECT().Publish(roundevents.RoundScheduled, gomock.Any()).Return(fmt.Errorf(schedulePublishError)).Times(1)
+				mockEventBus.EXPECT().Publish(roundevents.RoundScheduled, gomock.Any()).Return(fmt.Errorf("failed to publish %s event: %s", roundevents.RoundScheduled, schedulePublishError)).Times(1)
 			},
 		},
 	}

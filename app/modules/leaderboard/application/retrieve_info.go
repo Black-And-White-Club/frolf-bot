@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -33,7 +32,7 @@ func (s *LeaderboardService) GetLeaderboardRequest(ctx context.Context, msg *mes
 	leaderboardEntries := make([]leaderboardevents.LeaderboardEntry, 0, len(leaderboard.LeaderboardData))
 	for tagNumber, discordID := range leaderboard.LeaderboardData {
 		leaderboardEntries = append(leaderboardEntries, leaderboardevents.LeaderboardEntry{
-			TagNumber: strconv.Itoa(tagNumber),
+			TagNumber: tagNumber,
 			DiscordID: leaderboardtypes.DiscordID(discordID),
 		})
 	}

@@ -56,7 +56,7 @@ func (r *LeaderboardRouter) RegisterHandlers(
 		leaderboardevents.GetTagByDiscordIDRequest:          handlers.HandleGetTagByDiscordIDRequest,
 		leaderboardevents.TagAssigned:                       handlers.HandleTagAssigned,
 		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
-		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignmentRequested, // Add this line
+		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignmentRequested,
 	}
 	fmt.Println("eventsToHandlers:", eventsToHandlers) // Print the map contents
 	// Register each handler in the router.

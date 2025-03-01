@@ -23,36 +23,26 @@ import (
 )
 
 const (
-	validTitle       = "Test Round"
-	validRoundID     = "some-round-id"
-	duplicateRoundID = "duplicate-round-id"
-	correlationID    = "some-correlation-id" // Use a constant correlation ID
-	dbErrorMessage   = "some db error"       // Constant for the error message
+	validTitle       string = "Test Round"
+	validRoundID            = "some-round-id"
+	duplicateRoundID        = "duplicate-round-id"
+	correlationID           = "some-correlation-id" // Use a constant correlation ID
+	dbErrorMessage   string = "some db error"       // Constant for the error message
 )
 
 var (
-	validLocation         = "Test Park"
-	validEventType        = "casual"
-	validDescription      = "Test Description"
-	validDiscordChannelID = "12345"
-	validDiscordGuildID   = "67890"
+	validLocation    = "Test Park"
+	validDescription = "Test Description"
 
 	now            = time.Now().UTC().Truncate(time.Second) // Truncate for consistent comparisons
-	oneHourLater   = now.Add(1 * time.Hour)
-	validStartTime = now.Add(2 * time.Hour) // Ensure start time is in the future
-	validEndTime   = validStartTime.Add(1 * time.Hour)
+	validStartTime = now.Add(2 * time.Hour)                 // Ensure start time is in the future
 
 	// Define a valid RoundCreateRequestPayload for reuse.
 	validCreatePayload = roundevents.RoundCreateRequestPayload{
-		Title:            validTitle,
-		StartTime:        &validStartTime,
-		EndTime:          &validEndTime,
-		EventType:        &validEventType,
-		Location:         &validLocation,
-		Description:      &validDescription,
-		DiscordChannelID: &validDiscordChannelID,
-		DiscordGuildID:   &validDiscordGuildID,
-		Participants:     []roundtypes.ParticipantInput{},
+		Title:       validTitle,
+		StartTime:   &validStartTime,
+		Location:    &validLocation,
+		Description: &validDescription,
 	}
 	// Define Round
 	validRound = roundtypes.Round{
@@ -107,7 +97,6 @@ func TestRoundService_ValidateRoundRequest(t *testing.T) {
 			name: "Missing title",
 			payload: roundevents.RoundCreateRequestPayload{ // No title
 				StartTime: &validStartTime,
-				EndTime:   &validEndTime,
 			},
 			expectedEvent: "",
 			shouldPublish: false,
@@ -117,8 +106,7 @@ func TestRoundService_ValidateRoundRequest(t *testing.T) {
 		{
 			name: "Missing start time",
 			payload: roundevents.RoundCreateRequestPayload{ // No StartTime
-				Title:   validTitle,
-				EndTime: &validEndTime,
+				Title: validTitle,
 			},
 			expectedEvent: "",
 			shouldPublish: false,
@@ -131,7 +119,7 @@ func TestRoundService_ValidateRoundRequest(t *testing.T) {
 				Title:     "Valid Title",
 				StartTime: &validStartTime,
 			},
-			expectedEvent: roundevents.RoundValidated, // EndTime is optional
+			expectedEvent: roundevents.RoundValidated,
 			shouldPublish: true,
 			wantErr:       false,
 		},
@@ -183,7 +171,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		payload       interface{}
+		payload       any
 		mockDBSetup   func()
 		expectedEvent string
 		shouldPublish bool
@@ -231,13 +219,13 @@ func TestRoundService_StoreRound(t *testing.T) {
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
 					GetRound(gomock.Any(), gomock.Eq(validRoundID)).
-					Return(nil, fmt.Errorf(dbErrorMessage)). // Use the constant here
+					Return(nil, fmt.Errorf("failed to check for existing round: %s", dbErrorMessage)).
 					Times(1)
 			},
 			expectedEvent: "",
 			shouldPublish: false,
 			wantErr:       true,
-			errMsg:        "failed to check for existing round: " + dbErrorMessage, // And here
+			errMsg:        "failed to check for existing round: " + dbErrorMessage,
 		},
 		{
 			name:    "Database error (CreateRound)",
@@ -249,13 +237,13 @@ func TestRoundService_StoreRound(t *testing.T) {
 					Times(1)
 				mockRoundDB.EXPECT().
 					CreateRound(gomock.Any(), gomock.Any()).
-					Return(fmt.Errorf(dbErrorMessage)). // Use the constant here
+					Return(fmt.Errorf("failed to store round in database: %s", dbErrorMessage)).
 					Times(1)
 			},
 			expectedEvent: "",
 			shouldPublish: false,
 			wantErr:       true,
-			errMsg:        "failed to store round in database: " + dbErrorMessage, // And here
+			errMsg:        "failed to store round in database: " + dbErrorMessage,
 		},
 		{
 			name:          "Invalid Payload",

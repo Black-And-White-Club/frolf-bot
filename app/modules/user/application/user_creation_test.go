@@ -330,7 +330,7 @@ func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, string(tt.args.discordID), tt.args.tag); (err != nil) != tt.wantErr {
+			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.discordID), tt.args.tag); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.PublishUserCreated() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -25,7 +25,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, msg *mess
 	if eventPayload.RoundID == "" {
 		errs = append(errs, "round ID cannot be empty")
 	}
-	if eventPayload.Title == nil && eventPayload.Location == nil && eventPayload.EventType == nil && eventPayload.StartTime == nil && eventPayload.EndTime == nil {
+	if eventPayload.Title == nil && eventPayload.Location == nil && eventPayload.Description == nil && eventPayload.StartTime == nil {
 		errs = append(errs, "at least one field to update must be provided")
 	}
 
@@ -77,14 +77,9 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 	if eventPayload.RoundUpdateRequestPayload.Location != nil {
 		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Location
 	}
-	if eventPayload.RoundUpdateRequestPayload.EventType != nil {
-		existingRound.EventType = eventPayload.RoundUpdateRequestPayload.EventType
-	}
+
 	if eventPayload.RoundUpdateRequestPayload.StartTime != nil {
 		existingRound.StartTime = eventPayload.RoundUpdateRequestPayload.StartTime
-	}
-	if eventPayload.RoundUpdateRequestPayload.EndTime != nil {
-		existingRound.EndTime = eventPayload.RoundUpdateRequestPayload.EndTime
 	}
 
 	// 4. Update the round in the database
@@ -133,7 +128,6 @@ func (s *RoundService) StoreRoundUpdate(ctx context.Context, msg *message.Messag
 // publishRoundUpdateError publishes a round.update.error event with details.
 func (s *RoundService) publishRoundUpdateError(msg *message.Message, input roundevents.RoundUpdateRequestPayload, err error) error {
 	payload := roundevents.RoundUpdateErrorPayload{
-		CorrelationID:      middleware.MessageCorrelationID(msg),
 		RoundUpdateRequest: &input,
 		Error:              err.Error(),
 	}

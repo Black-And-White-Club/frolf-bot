@@ -46,11 +46,9 @@ func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
 	// Create a new payload for the Discord bot
 	discordPayload := roundevents.DiscordReminderPayload{
 		RoundID:      payload.RoundID,
-		ReminderType: payload.ReminderType,
 		RoundTitle:   payload.RoundTitle,
-		StartTime:    payload.StartTime,
-		Location:     payload.Location,
 		UserIDs:      userIDs,
+		ReminderType: payload.ReminderType,
 	}
 
 	discordPayloadBytes, err := json.Marshal(discordPayload)

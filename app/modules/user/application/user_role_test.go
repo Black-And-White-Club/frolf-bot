@@ -29,7 +29,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 
 	testDiscordID := "123456789012345678"
 	testRole := "admin"
-	testRequesterID := "requester456"
+	testRequesterID := "89172391827319827"
 	testCorrelationID := watermill.NewUUID()
 	testCtx := context.Background()
 
@@ -44,7 +44,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 		msg         *message.Message
 		discordID   usertypes.DiscordID
 		role        string
-		requesterID string
+		requesterID usertypes.DiscordID
 	}
 	tests := []struct {
 		name    string
@@ -66,7 +66,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil),
 				discordID:   usertypes.DiscordID(testDiscordID),
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: false,
 			setup: func(f fields, args args) {
@@ -91,7 +91,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.RequesterID != testRequesterID {
+						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.RequesterID != usertypes.DiscordID(testRequesterID) {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -117,7 +117,7 @@ func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil),
 				discordID:   usertypes.DiscordID(testDiscordID),
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: true,
 			setup: func(f fields, args args) {

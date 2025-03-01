@@ -14,7 +14,6 @@ import (
 	reflect "reflect"
 
 	message "github.com/ThreeDotsLabs/watermill/message"
-	jetstream "github.com/nats-io/nats.go/jetstream"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -70,31 +69,16 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockEventBus)(nil).Close))
 }
 
-// CreateOrUpdateStream mocks base method.
-func (m *MockEventBus) CreateOrUpdateStream(ctx context.Context, streamCfg jetstream.StreamConfig) (jetstream.Stream, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdateStream", ctx, streamCfg)
-	ret0, _ := ret[0].(jetstream.Stream)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateOrUpdateStream indicates an expected call of CreateOrUpdateStream.
-func (mr *MockEventBusMockRecorder) CreateOrUpdateStream(ctx, streamCfg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateStream", reflect.TypeOf((*MockEventBus)(nil).CreateOrUpdateStream), ctx, streamCfg)
-}
-
 // ProcessDelayedMessages mocks base method.
-func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context) {
+func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ProcessDelayedMessages", ctx)
+	m.ctrl.Call(m, "ProcessDelayedMessages", ctx, roundID)
 }
 
 // ProcessDelayedMessages indicates an expected call of ProcessDelayedMessages.
-func (mr *MockEventBusMockRecorder) ProcessDelayedMessages(ctx any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) ProcessDelayedMessages(ctx, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessDelayedMessages", reflect.TypeOf((*MockEventBus)(nil).ProcessDelayedMessages), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessDelayedMessages", reflect.TypeOf((*MockEventBus)(nil).ProcessDelayedMessages), ctx, roundID)
 }
 
 // Publish mocks base method.
@@ -114,6 +98,18 @@ func (mr *MockEventBusMockRecorder) Publish(topic any, messages ...any) *gomock.
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{topic}, messages...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), varargs...)
+}
+
+// ScheduleRoundProcessing mocks base method.
+func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ScheduleRoundProcessing", ctx, roundID)
+}
+
+// ScheduleRoundProcessing indicates an expected call of ScheduleRoundProcessing.
+func (mr *MockEventBusMockRecorder) ScheduleRoundProcessing(ctx, roundID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundProcessing", reflect.TypeOf((*MockEventBus)(nil).ScheduleRoundProcessing), ctx, roundID)
 }
 
 // Subscribe mocks base method.

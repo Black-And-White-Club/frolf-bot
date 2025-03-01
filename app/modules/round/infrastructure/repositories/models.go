@@ -12,9 +12,8 @@ type Round struct {
 	Location       string        `bun:"location"`
 	EventType      *string       `bun:"event_type"`
 	StartTime      time.Time     `bun:"start_time,notnull"`
-	EndTime        *time.Time    `bun:"end_time"`
 	Finalized      bool          `bun:"finalized,notnull"`
-	CreatorID      string        `bun:"discord_id,notnull"`
+	CreatorID      string        `bun:"user_id,notnull"`
 	State          RoundState    `bun:"state,notnull"`
 	Participants   []Participant `bun:"participants,type:jsonb"`
 	DiscordEventID string        `bun:"discord_event_id"`

@@ -105,7 +105,7 @@ func (s *ScoreService) publishLeaderboardUpdate(_ context.Context, roundID strin
 	for _, score := range scores {
 		eventScores = append(eventScores, scoreevents.ParticipantScore{
 			DiscordID: score.DiscordID,
-			Score:     float64(score.Score),
+			Score:     int(score.Score),
 			TagNumber: score.TagNumber,
 		})
 	}

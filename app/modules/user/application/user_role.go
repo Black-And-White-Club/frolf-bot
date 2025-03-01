@@ -14,12 +14,12 @@ import (
 )
 
 // UpdateUserRole starts the user role update process by publishing a UserPermissionsCheckRequest event.
-func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID string) error {
+func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum, requesterID usertypes.DiscordID) error {
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 	s.logger.Info("Starting user role update process",
 		slog.String("user_id", string(discordID)),
 		slog.String("role", string(role)),
-		slog.String("requester_id", requesterID),
+		slog.String("requester_id", string(requesterID)),
 		slog.String("correlation_id", correlationID),
 	)
 
@@ -41,6 +41,18 @@ func (s *UserServiceImpl) UpdateUserRole(ctx context.Context, msg *message.Messa
 
 	// Create a new message for the outgoing event
 	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	guildID := msg.Metadata.Get("guild_id")
+	newMsg.Metadata.Set("guild_id", guildID)
+	interactionID := msg.Metadata.Get("interaction_id")
+	newMsg.Metadata.Set("interaction_id", interactionID)
+	interactionToken := msg.Metadata.Get("interaction_token")
+	newMsg.Metadata.Set("interaction_token", interactionToken)
+
+	// Copy the discord ID from the original message metadata
+	if discordID := msg.Metadata.Get("user_id"); discordID != "" {
+		newMsg.Metadata.Set("user_id", discordID)
+	}
 
 	// Copy the correlation ID to the new message's metadata
 	s.eventUtil.PropagateMetadata(msg, newMsg)
@@ -83,9 +95,10 @@ func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *messa
 		slog.String("correlation_id", correlationID),
 	)
 
-	payloadBytes, err := json.Marshal(userevents.UserRoleUpdatedPayload{
+	payloadBytes, err := json.Marshal(userevents.UserRoleUpdateResultPayload{
 		DiscordID: discordID,
 		Role:      role,
+		Success:   true,
 	})
 	if err != nil {
 		s.logger.Error("Failed to marshal event payload",
@@ -96,12 +109,23 @@ func (s *UserServiceImpl) PublishUserRoleUpdated(ctx context.Context, msg *messa
 	}
 
 	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	guildID := msg.Metadata.Get("guild_id")
+	newMsg.Metadata.Set("guild_id", guildID)
+	interactionID := msg.Metadata.Get("interaction_id")
+	newMsg.Metadata.Set("interaction_id", interactionID)
+	interactionToken := msg.Metadata.Get("interaction_token")
+	newMsg.Metadata.Set("interaction_token", interactionToken)
+
+	// Copy the discord ID from the original message metadata
+	if discordID := msg.Metadata.Get("user_id"); discordID != "" {
+		newMsg.Metadata.Set("user_id", discordID)
+	}
 
 	// Copy the correlation ID to the new message's metadata
 	s.eventUtil.PropagateMetadata(msg, newMsg)
 	newMsg.SetContext(ctx)
 
-	if err := s.eventBus.Publish(userevents.UserRoleUpdated, newMsg); err != nil {
+	if err := s.eventBus.Publish("discord.user.roleresponse", newMsg); err != nil {
 		s.logger.Error("Failed to publish UserRoleUpdated event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
@@ -123,10 +147,11 @@ func (s *UserServiceImpl) PublishUserRoleUpdateFailed(ctx context.Context, msg *
 		slog.String("reason", reason),
 	)
 
-	payloadBytes, err := json.Marshal(userevents.UserRoleUpdateFailedPayload{
+	payloadBytes, err := json.Marshal(userevents.UserRoleUpdateResultPayload{
 		DiscordID: discordID,
 		Role:      role,
-		Reason:    reason,
+		Success:   false,
+		Error:     reason,
 	})
 	if err != nil {
 		s.logger.Error("Failed to marshal event payload",
@@ -137,12 +162,23 @@ func (s *UserServiceImpl) PublishUserRoleUpdateFailed(ctx context.Context, msg *
 	}
 
 	newMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	guildID := msg.Metadata.Get("guild_id")
+	newMsg.Metadata.Set("guild_id", guildID)
+	interactionID := msg.Metadata.Get("interaction_id")
+	newMsg.Metadata.Set("interaction_id", interactionID)
+	interactionToken := msg.Metadata.Get("interaction_token")
+	newMsg.Metadata.Set("interaction_token", interactionToken)
+
+	// Copy the discord ID from the original message metadata
+	if discordID := msg.Metadata.Get("user_id"); discordID != "" {
+		newMsg.Metadata.Set("user_id", discordID)
+	}
 
 	// Copy the correlation ID to the new message's metadata
 	s.eventUtil.PropagateMetadata(msg, newMsg)
 	newMsg.SetContext(ctx)
 
-	if err := s.eventBus.Publish(userevents.UserRoleUpdateFailed, newMsg); err != nil {
+	if err := s.eventBus.Publish("discord.user.roleresponsefailed", newMsg); err != nil {
 		s.logger.Error("Failed to publish UserRoleUpdateFailed event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),

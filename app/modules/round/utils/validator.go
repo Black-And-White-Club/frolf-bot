@@ -47,9 +47,5 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 		errs = append(errs, fmt.Errorf("start date must be in the future"))
 	}
 
-	// Example: Validate that the end time is after the start time
-	if input.EndTime != nil && input.StartTime != nil && (input.EndTime.Before(*input.StartTime) || input.EndTime.Equal(*input.StartTime)) {
-		errs = append(errs, fmt.Errorf("end time must be after start time"))
-	}
 	return errs
 }

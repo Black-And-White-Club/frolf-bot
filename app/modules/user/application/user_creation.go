@@ -57,11 +57,11 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	)
 
 	// Publish a UserCreated event
-	return s.PublishUserCreated(ctx, msg, string(discordID), tag)
+	return s.PublishUserCreated(ctx, msg, discordID, tag)
 }
 
 // PublishUserCreated publishes a UserCreated event.
-func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.Message, discordID string, tag *int) error {
+func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, tag *int) error {
 	// Get correlationID from message metadata
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
 
@@ -93,12 +93,20 @@ func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.M
 	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID)
 
 	// Copy the discord ID from the original message metadata
+	guildID := msg.Metadata.Get("guild_id")
+	newMessage.Metadata.Set("guild_id", guildID)
+	interactionID := msg.Metadata.Get("interaction_id")
+	newMessage.Metadata.Set("interaction_id", interactionID)
+	interactionToken := msg.Metadata.Get("interaction_token")
+	newMessage.Metadata.Set("interaction_token", interactionToken)
+
+	// Copy the discord ID from the original message metadata
 	if discordID := msg.Metadata.Get("user_id"); discordID != "" {
 		newMessage.Metadata.Set("user_id", discordID)
 	}
 
 	// Publish the event
-	if err := s.eventBus.Publish(userevents.UserCreated, newMessage); err != nil {
+	if err := s.eventBus.Publish("discord.user.signup.success", newMessage); err != nil {
 		s.logger.Error("Failed to publish UserCreated event",
 			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),
@@ -145,7 +153,7 @@ func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *me
 	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
 
 	// Publish the event
-	if err := s.eventBus.Publish(userevents.UserCreationFailed, newMessage); err != nil {
+	if err := s.eventBus.Publish("discord.user.signup.failed", newMessage); err != nil {
 		s.logger.Error("Failed to publish UserCreationFailed event",
 			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),

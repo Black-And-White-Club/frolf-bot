@@ -28,14 +28,17 @@ func (s *RoundService) ValidateRoundRequest(ctx context.Context, msg *message.Me
 		Title:       eventPayload.Title,
 		Description: eventPayload.Description,
 		Location:    eventPayload.Location,
-		EventType:   eventPayload.EventType,
 		StartTime:   eventPayload.StartTime,
-		EndTime:     eventPayload.EndTime,
 	}
 
 	if errs := s.roundValidator.ValidateRoundInput(input); len(errs) > 0 {
 		s.logger.Error("Validation failed", "errors", errs)
-		return fmt.Errorf("validation errors: %v", errs)
+
+		// Publish a failure event
+		return s.publishEvent(msg, roundevents.RoundValidationFailed, roundevents.RoundValidationFailedPayload{
+			UserID:       eventPayload.UserID,
+			ErrorMessage: &errs,
+		})
 	}
 
 	s.logger.Info("Publishing RoundValidated event", "payload", eventPayload)
@@ -104,8 +107,5 @@ func (s *RoundService) UpdateDiscordEventID(ctx context.Context, msg *message.Me
 	}
 
 	s.logger.Info("Publishing RoundDiscordEventIDUpdated event")
-	return s.publishEvent(msg, roundevents.RoundDiscordEventIDUpdated, roundevents.RoundDiscordEventIDUpdatedPayload{
-		RoundID:        eventPayload.RoundID,
-		DiscordEventID: eventPayload.DiscordEventID,
-	})
+	return s.publishEvent(msg, roundevents.RoundDiscordEventIDUpdated, roundevents.RoundDiscordEventIDUpdatedPayload(eventPayload))
 }

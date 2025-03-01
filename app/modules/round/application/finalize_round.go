@@ -10,7 +10,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // FinalizeRound handles the round finalization process.
@@ -84,9 +83,8 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Messa
 // publishRoundFinalizationError publishes a round.finalization.error event.
 func (s *RoundService) publishRoundFinalizationError(msg *message.Message, input roundevents.AllScoresSubmittedPayload, err error) error {
 	payload := roundevents.RoundFinalizationErrorPayload{
-		CorrelationID: middleware.MessageCorrelationID(msg),
-		RoundID:       input.RoundID,
-		Error:         err.Error(),
+		RoundID: input.RoundID,
+		Error:   err.Error(),
 	}
 
 	if pubErr := s.publishEvent(msg, roundevents.RoundFinalizationError, payload); pubErr != nil {
@@ -102,9 +100,8 @@ func (s *RoundService) publishRoundFinalizationError(msg *message.Message, input
 // publishScoreModuleNotificationError publishes a score.module.notification.error event.
 func (s *RoundService) publishScoreModuleNotificationError(msg *message.Message, input roundevents.RoundFinalizedPayload, err error) error {
 	payload := roundevents.ScoreModuleNotificationErrorPayload{
-		CorrelationID: middleware.MessageCorrelationID(msg),
-		RoundID:       input.RoundID,
-		Error:         err.Error(),
+		RoundID: input.RoundID,
+		Error:   err.Error(),
 	}
 	if pubErr := s.publishEvent(msg, roundevents.ScoreModuleNotificationError, payload); pubErr != nil {
 		logging.LogErrorWithMetadata(context.Background(), s.logger, msg, "Failed to publish score.module.notification.error event", map[string]interface{}{

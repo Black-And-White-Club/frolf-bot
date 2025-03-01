@@ -31,7 +31,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 
 	testDiscordID := "123456789012345678"
 	testRole := "admin"
-	testRequesterID := "requester456"
+	testRequesterID := usertypes.DiscordID("197263197263")
 	testCorrelationID := watermill.NewUUID()
 	testCtx := context.Background()
 
@@ -46,7 +46,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 		msg         *message.Message
 		discordID   string
 		role        string
-		requesterID string
+		requesterID usertypes.DiscordID
 	}
 	tests := []struct {
 		name    string
@@ -68,7 +68,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil),
 				discordID:   testDiscordID,
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: false,
 			setup: func(f fields, args args) {
@@ -101,7 +101,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 							t.Errorf("Expected role %s, got %s", testRole, payload.Role)
 						}
 
-						if payload.RequesterID != testRequesterID {
+						if payload.RequesterID != usertypes.DiscordID(testRequesterID) {
 							t.Errorf("Expected requester ID %s, got %s", testRequesterID, payload.RequesterID)
 						}
 
@@ -129,7 +129,7 @@ func TestUserServiceImpl_CheckUserPermissions(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil),
 				discordID:   testDiscordID,
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: true,
 			setup: func(f fields, args args) {
@@ -172,7 +172,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 
 	testDiscordID := "123456789012345678"
 	testRole := usertypes.UserRoleEnum("admin")
-	testRequesterID := "requester456"
+	testRequesterID := usertypes.DiscordID("71623871623")
 	testCorrelationID := watermill.NewUUID()
 	testCtx := context.Background()
 
@@ -187,7 +187,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 		msg         *message.Message // Add msg argument
 		discordID   usertypes.DiscordID
 		role        usertypes.UserRoleEnum
-		requesterID string
+		requesterID usertypes.DiscordID
 	}
 	tests := []struct {
 		name    string
@@ -209,7 +209,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil), // Create a message with correlation ID
 				discordID:   usertypes.DiscordID(testDiscordID),
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: false,
 			setup: func(f fields, a args) {
@@ -245,7 +245,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != a.discordID || payload.Role != a.role || payload.RequesterID != a.requesterID || !payload.HasPermission {
+						if payload.DiscordID != a.discordID || payload.Role != a.role || usertypes.DiscordID(payload.RequesterID) != a.requesterID || !payload.HasPermission {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -271,7 +271,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil), // Create a message with correlation ID
 				discordID:   usertypes.DiscordID(testDiscordID),
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: true,
 			setup: func(f fields, a args) {
@@ -329,7 +329,7 @@ func TestUserServiceImpl_CheckUserPermissionsInDB(t *testing.T) {
 				msg:         message.NewMessage(testCorrelationID, nil),
 				discordID:   usertypes.DiscordID(testDiscordID),
 				role:        testRole,
-				requesterID: testRequesterID,
+				requesterID: usertypes.DiscordID(testRequesterID),
 			},
 			wantErr: true,
 			setup: func(f fields, a args) {
@@ -411,7 +411,7 @@ func TestUserServiceImpl_PublishUserPermissionsCheckResponse(t *testing.T) {
 
 	testDiscordID := usertypes.DiscordID("123456789012345678")
 	testRole := usertypes.UserRoleEnum("admin")
-	testRequesterID := "requester456"
+	testRequesterID := usertypes.DiscordID("981273918273")
 	testCorrelationID := watermill.NewUUID()
 	testCtx := context.Background()
 
@@ -426,7 +426,7 @@ func TestUserServiceImpl_PublishUserPermissionsCheckResponse(t *testing.T) {
 		msg           *message.Message
 		discordID     usertypes.DiscordID
 		role          usertypes.UserRoleEnum
-		requesterID   string
+		requesterID   usertypes.DiscordID
 		hasPermission bool
 		reason        string
 	}
@@ -477,7 +477,7 @@ func TestUserServiceImpl_PublishUserPermissionsCheckResponse(t *testing.T) {
 							t.Fatalf("failed to unmarshal message payload: %v", err)
 						}
 
-						if payload.DiscordID != a.discordID || payload.Role != a.role || payload.RequesterID != a.requesterID || !payload.HasPermission {
+						if payload.DiscordID != a.discordID || payload.Role != a.role || usertypes.DiscordID(payload.RequesterID) != a.requesterID || !payload.HasPermission {
 							t.Errorf("Payload does not match expected values")
 						}
 
@@ -532,7 +532,7 @@ func TestUserServiceImpl_PublishUserPermissionsCheckResponse(t *testing.T) {
 				tt.setup(tt.fields, tt.args)
 			}
 
-			if err := s.PublishUserPermissionsCheckResponse(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.role, tt.args.requesterID, tt.args.hasPermission, tt.args.reason); (err != nil) != tt.wantErr {
+			if err := s.PublishUserPermissionsCheckResponse(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.role, usertypes.DiscordID(tt.args.requesterID), tt.args.hasPermission, tt.args.reason); (err != nil) != tt.wantErr {
 				t.Errorf("UserServiceImpl.PublishUserPermissionsCheckResponse() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

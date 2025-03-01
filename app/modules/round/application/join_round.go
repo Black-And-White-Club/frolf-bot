@@ -10,7 +10,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // -- Service Functions for JoinRound Flow --
@@ -98,7 +97,6 @@ func (s *RoundService) ParticipantTagFound(ctx context.Context, msg *message.Mes
 	if err := s.publishEvent(msg, roundevents.ParticipantJoined, roundevents.ParticipantJoinedPayload{
 		RoundID:     roundID,
 		Participant: eventPayload.DiscordID,
-		Response:    "accept",
 		TagNumber:   eventPayload.TagNumber,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.participant.joined event", map[string]interface{}{"error": err.Error()})
@@ -147,7 +145,7 @@ func (s *RoundService) ParticipantTagNotFound(ctx context.Context, msg *message.
 	if err := s.publishEvent(msg, roundevents.ParticipantJoined, roundevents.ParticipantJoinedPayload{
 		RoundID:     roundID,
 		Participant: eventPayload.DiscordID,
-		Response:    "accept",
+		TagNumber:   0,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.participant.joined event", map[string]interface{}{"error": err.Error()})
 		return fmt.Errorf("failed to publish round.participant.joined event: %w", err)
@@ -165,7 +163,6 @@ func (s *RoundService) ParticipantTagNotFound(ctx context.Context, msg *message.
 // publishParticipantJoinError publishes a round.participant.join.error event.
 func (s *RoundService) publishParticipantJoinError(msg *message.Message, input roundevents.ParticipantJoinRequestPayload, err error) error {
 	payload := roundevents.RoundParticipantJoinErrorPayload{
-		CorrelationID:          middleware.MessageCorrelationID(msg),
 		ParticipantJoinRequest: &input,
 		Error:                  err.Error(),
 	}

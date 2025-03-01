@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
@@ -20,7 +20,7 @@ func GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, n
 	newTagMap := createNewTagMap(newTagOrder)
 
 	// 2. Iterate through the current leaderboard entries.
-	usedTags := make(map[string]bool)
+	usedTags := make(map[int]bool)
 	nextAvailableTag := 1
 
 	// Sort the current leaderboard entries by tag number (rank).
@@ -58,7 +58,7 @@ func GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, n
 
 	// 4. Add back any tags that were in the current leaderboard but not in the new tag order, preserving their relative order.
 	for _, entry := range sortedCurrentEntries {
-		tag, _ := strconv.Atoi(entry.TagNumber)
+		tag := entry.TagNumber
 		if _, exists := updatedLeaderboard[tag]; !exists {
 			updatedLeaderboard[tag] = string(entry.DiscordID)
 		}
@@ -79,16 +79,20 @@ func FindTagByDiscordID(leaderboard *leaderboarddb.Leaderboard, discordID leader
 
 // --- Helper functions for generateUpdatedLeaderboard ---
 
-func parseTagDiscordIDPair(tagDiscordIDPair string) (string, string, error) {
+func parseTagDiscordIDPair(tagDiscordIDPair string) (int, string, error) {
 	parts := strings.Split(tagDiscordIDPair, ":")
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid tag-discordID pair format: %s", tagDiscordIDPair)
+		return 0, "", fmt.Errorf("invalid tag-discordID pair format: %s", tagDiscordIDPair)
 	}
-	return parts[0], parts[1], nil
+	tag, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid tag number: %s", parts[0])
+	}
+	return tag, parts[1], nil
 }
 
-func createNewTagMap(newTagOrder []string) map[string]string {
-	newTagMap := make(map[string]string)
+func createNewTagMap(newTagOrder []string) map[int]string {
+	newTagMap := make(map[int]string)
 	for _, tagDiscordIDPair := range newTagOrder {
 		tag, discordID, err := parseTagDiscordIDPair(tagDiscordIDPair)
 		if err == nil { // Only add to map if parsing was successful
@@ -102,14 +106,14 @@ func sortCurrentEntries(currentEntries map[int]string) []leaderboardevents.Leade
 	var sortedCurrentEntries []leaderboardevents.LeaderboardEntry
 	for tag, discordID := range currentEntries {
 		sortedCurrentEntries = append(sortedCurrentEntries, leaderboardevents.LeaderboardEntry{
-			TagNumber: strconv.Itoa(tag),
+			TagNumber: tag,
 			DiscordID: leaderboardtypes.DiscordID(discordID),
 		})
 	}
 	sort.Slice(sortedCurrentEntries, func(i, j int) bool {
 		// Sort by tag number (ascending).
-		tagI, _ := strconv.Atoi(sortedCurrentEntries[i].TagNumber)
-		tagJ, _ := strconv.Atoi(sortedCurrentEntries[j].TagNumber)
+		tagI := sortedCurrentEntries[i].TagNumber
+		tagJ := sortedCurrentEntries[j].TagNumber
 		return tagI < tagJ
 	})
 	return sortedCurrentEntries
@@ -126,7 +130,7 @@ func InsertTag(currentLeaderboard *leaderboarddb.Leaderboard, tagNumber leaderbo
 	// Find the correct position to insert the new tag
 	nextAvailableTag := 1
 	for _, entry := range sortedCurrentEntries {
-		currentTag, _ := strconv.Atoi(entry.TagNumber)
+		currentTag := entry.TagNumber
 
 		if !inserted && int(tagNumber) < currentTag {
 			updatedLeaderboard[int(tagNumber)] = string(discordID)

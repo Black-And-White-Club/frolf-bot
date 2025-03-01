@@ -9,7 +9,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // -- Service Functions for Score Update Flow --
@@ -131,7 +130,6 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, msg *message
 // publishScoreUpdateError publishes a round.score.update.error event.
 func (s *RoundService) publishScoreUpdateError(msg *message.Message, input roundevents.ScoreUpdateRequestPayload, err error) error {
 	payload := roundevents.RoundScoreUpdateErrorPayload{
-		CorrelationID:      middleware.MessageCorrelationID(msg),
 		ScoreUpdateRequest: &input,
 		Error:              err.Error(),
 	}

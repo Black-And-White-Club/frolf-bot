@@ -38,8 +38,6 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		RoundID:      roundID,
 		ReminderType: "1h",
 		RoundTitle:   eventPayload.Round.Title,
-		StartTime:    startTime,
-		Location:     eventPayload.Round.Location,
 	}
 
 	if err := encoder.Encode(reminderPayload); err != nil {
@@ -84,6 +82,8 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		s.logger.Error("Failed to schedule round start", "error", err, "round_id", roundID)
 		return fmt.Errorf("failed to schedule round start: %w", err)
 	}
+
+	s.EventBus.ScheduleRoundProcessing(ctx, roundID)
 
 	// Determine if this is an initial creation or an update
 	eventType := msg.Metadata.Get("event_type")

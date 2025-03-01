@@ -52,7 +52,7 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 	// Define the mapping of event topics to handler functions.
 	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
 		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
-		scoreevents.ScoreCorrectionRequest:    handlers.HandleScoreUpdateRequest, // Assuming this handles score corrections
+		scoreevents.ScoreUpdateRequest:        handlers.HandleScoreUpdateRequest, // Assuming this handles score corrections
 	}
 
 	// Register each handler in the router.

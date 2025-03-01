@@ -29,7 +29,7 @@ func TestUserHandlers_HandleUserPermissionsCheckRequest(t *testing.T) {
 	}
 
 	testDiscordID := usertypes.DiscordID("123456789012345678") // Valid Discord ID
-	testRequesterID := "requester456"
+	testRequesterID := usertypes.DiscordID("123456333")
 	testCorrelationID := watermill.NewUUID()
 
 	type args struct {
@@ -111,7 +111,7 @@ func TestUserHandlers_HandleUserPermissionsCheckFailed(t *testing.T) {
 	testCorrelationID := watermill.NewUUID()
 
 	t.Run("Successful Handling of Permissions Check Failed", func(t *testing.T) {
-		msg := message.NewMessage(testCorrelationID, []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456", "reason":"Some reason"}`))
+		msg := message.NewMessage(testCorrelationID, []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"81231273612", "reason":"Some reason"}`))
 		msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 		err := h.HandleUserPermissionsCheckFailed(msg)

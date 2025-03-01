@@ -38,13 +38,13 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "Successful Role Update Request",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"981273981273"}`)),
 			},
 			wantErr: false,
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				mockUserService.EXPECT().
-					UpdateUserRole(gomock.Any(), args.msg, usertypes.DiscordID("123456789012345678"), usertypes.UserRoleEnum("admin"), "requester456"). // Match usertypes.UserRoleEnum
+					UpdateUserRole(gomock.Any(), args.msg, usertypes.DiscordID("123456789012345678"), usertypes.UserRoleEnum("admin"), usertypes.DiscordID("981273981273")). // Match usertypes.UserRoleEnum
 					Return(nil).
 					Times(1)
 			},
@@ -60,13 +60,13 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		{
 			name: "UpdateUserRole Error",
 			args: args{
-				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"requester456"}`)),
+				msg: message.NewMessage(watermill.NewUUID(), []byte(`{"user_id":"123456789012345678", "role":"admin", "requester_id":"1231793618"}`)),
 			},
 			wantErr: true,
 			setup: func(args args) {
 				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				mockUserService.EXPECT().
-					UpdateUserRole(gomock.Any(), args.msg, usertypes.DiscordID("123456789012345678"), usertypes.UserRoleEnum("admin"), "requester456"). // Match usertypes.UserRoleEnum
+					UpdateUserRole(gomock.Any(), args.msg, usertypes.DiscordID("123456789012345678"), usertypes.UserRoleEnum("admin"), usertypes.DiscordID("1231793618")). // Match usertypes.UserRoleEnum
 					Return(errors.New("service error")).
 					Times(1)
 			},

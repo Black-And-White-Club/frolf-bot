@@ -8,7 +8,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // -- Service Functions for DeleteRound Flow --
@@ -72,7 +71,6 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 // publishRoundDeleteError publishes a round.delete.error event with details.
 func (s *RoundService) publishRoundDeleteError(msg *message.Message, input roundevents.RoundDeleteRequestPayload, err error) error {
 	payload := roundevents.RoundDeleteErrorPayload{
-		CorrelationID:      middleware.MessageCorrelationID(msg),
 		RoundDeleteRequest: &input,
 		Error:              err.Error(),
 	}

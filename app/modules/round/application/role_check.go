@@ -13,7 +13,7 @@ import (
 
 // CheckUserAuthorization checks if the requesting user is authorized to delete the round.
 func (s *RoundService) CheckUserAuthorization(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundToDeleteFetchedPayload](msg, s.logger)
+	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundToDeleteFetchedPayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundToDeleteFetchedPayload: %w", err)
 	}
@@ -39,9 +39,8 @@ func (s *RoundService) CheckUserAuthorization(ctx context.Context, msg *message.
 
 	// If the user is not the creator, publish a "round.user.role.check.request" event
 	if err := s.publishEvent(msg, roundevents.RoundUserRoleCheckRequest, roundevents.UserRoleCheckRequestPayload{
-		DiscordID:     eventPayload.RoundDeleteRequestPayload.RequestingUserDiscordID,
-		RoundID:       eventPayload.Round.ID, // Pass the round ID for context
-		CorrelationID: correlationID,
+		DiscordID: eventPayload.RoundDeleteRequestPayload.RequestingUserDiscordID,
+		RoundID:   eventPayload.Round.ID, // Pass the round ID for context
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.user.role.check.request event", map[string]interface{}{
 			"error": err,

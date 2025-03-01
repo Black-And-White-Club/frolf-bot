@@ -2,7 +2,7 @@ package roundhandlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -27,17 +27,13 @@ const (
 
 var (
 	validatedLocation          = "Test Location"
-	validatedEventType         = "casual"
 	validatedNow               = time.Now().UTC().Truncate(time.Second)
 	validatedStartTime         = &validatedNow
-	validatedEndTime           = &validatedNow
 	validRoundValidatedPayload = roundevents.RoundValidatedPayload{
 		RoundCreateRequestPayload: roundevents.RoundCreateRequestPayload{
 			Title:     validatedTitle,
 			StartTime: validatedStartTime,
 			Location:  &validatedLocation,
-			EventType: &validatedEventType,
-			EndTime:   validatedEndTime, // Now optional, but good to include in tests
 		},
 	}
 )
@@ -76,7 +72,7 @@ func TestRoundHandlers_HandleRoundCreateRequest(t *testing.T) {
 			wantErr: true,
 			errMsg:  "failed to handle RoundCreateRequest event: " + validatedServiceError,
 			mockExpects: func() {
-				mockRoundService.EXPECT().ValidateRoundRequest(gomock.Any(), gomock.Any()).Return(fmt.Errorf(validatedServiceError)).Times(1)
+				mockRoundService.EXPECT().ValidateRoundRequest(gomock.Any(), gomock.Any()).Return(errors.New(validatedServiceError)).Times(1)
 			},
 		},
 	}
@@ -149,7 +145,7 @@ func TestRoundHandlers_HandleRoundValidated(t *testing.T) {
 			errMsg:  "failed to handle RoundValidated event: " + validatedServiceError,
 			mockExpects: func() {
 				// Now expecting StoreRound to return an error.
-				mockRoundService.EXPECT().StoreRound(gomock.Any(), gomock.Any()).Return(fmt.Errorf(validatedServiceError)).Times(1)
+				mockRoundService.EXPECT().StoreRound(gomock.Any(), gomock.Any()).Return(errors.New(validatedServiceError)).Times(1)
 			},
 		},
 	}

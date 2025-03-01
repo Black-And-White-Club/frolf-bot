@@ -10,7 +10,7 @@ type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 	ID            int64 `bun:"id,pk,autoincrement" json:"id"`
 	// Name          string                 `bun:"name" json:"name"`
-	DiscordID usertypes.DiscordID    `bun:"discord_id,unique"`
+	DiscordID usertypes.DiscordID    `bun:"user_id,unique"`
 	Role      usertypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
 }
 
@@ -33,8 +33,8 @@ func (u *User) GetRole() usertypes.UserRoleEnum {
 
 // UserData struct implementing the User interface
 type UserData struct {
-	ID        int64                  `json:"id"`
-	Name      string                 `json:"name"`
+	ID int64 `json:"id"`
+	// Name      string                 `json:"name"`
 	DiscordID usertypes.DiscordID    `json:"user_id"`
 	Role      usertypes.UserRoleEnum `json:"role"` // Use UserRoleEnum here
 }

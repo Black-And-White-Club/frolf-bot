@@ -118,7 +118,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
 					GetRound(gomock.Any(), gomock.Eq(startRoundID)).
-					Return(nil, fmt.Errorf(startDBError)). // Simulate DB error
+					Return(nil, fmt.Errorf("failed to get round from database: %s", startDBError)). // Simulate DB error
 					Times(1)
 			},
 		},
@@ -135,7 +135,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					Times(1)
 				mockRoundDB.EXPECT().
 					UpdateRound(gomock.Any(), gomock.Eq(startRoundID), gomock.Any()).
-					Return(fmt.Errorf(startUpdateError)). // Simulate update error
+					Return(fmt.Errorf("failed to update round: %s", startUpdateError)). // Simulate update error
 					Times(1)
 			},
 		},
@@ -156,7 +156,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.RoundStarted), gomock.Any()).
-					Return(fmt.Errorf(startPublishError)). // Simulate publish error
+					Return(fmt.Errorf("failed to publish round.started event: %s", startPublishError)). // Simulate publish error
 					Times(1)
 			},
 		},
@@ -181,7 +181,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
-					Return(fmt.Errorf(startPublishError)). // Simulate Discord publish error
+					Return(fmt.Errorf("failed to publish to discord.round.event: %s", startPublishError)). // Simulate Discord publish error
 					Times(1)
 			},
 		},
@@ -210,7 +210,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					Times(1)
 				mockEventBus.EXPECT().
 					Publish(gomock.Eq(roundevents.RoundStateUpdated), gomock.Any()).
-					Return(fmt.Errorf(startPublishError)). // Simulate publish error
+					Return(fmt.Errorf("failed to publish round.state.updated event: %s", startPublishError)). // Simulate publish error
 					Times(1)
 			},
 		},

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/score"
@@ -36,6 +37,7 @@ type App struct {
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
 	ErrorReporter     errors.ErrorReporterInterface
+	Helpers           utils.Helpers
 }
 
 // Initialize initializes the application.
@@ -84,14 +86,16 @@ func (app *App) Initialize(ctx context.Context) error {
 	)
 
 	// Initialize EventBus
-	eventBus, err := eventbus.NewEventBus(ctx, app.Config.NATS.URL, app.Logger)
+	eventBus, err := eventbus.NewEventBus(ctx, app.Config.NATS.URL, app.Logger, "backend")
 	if err != nil {
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
 	app.EventBus = eventBus
 
+	// Initialize Tracer
+
 	// Initialize modules and register handlers
-	if err := app.initializeModules(ctx, cfg, app.Logger, app.DB, app.EventBus, app.Router); err != nil {
+	if err := app.initializeModules(ctx, cfg, app.Logger, app.DB, app.EventBus, app.Router, app.Helpers); err != nil {
 		return fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
@@ -100,11 +104,11 @@ func (app *App) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus eventbus.EventBus, router *message.Router) error {
+func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus eventbus.EventBus, router *message.Router, helpers utils.Helpers) error {
 	logger.Info("Entering initializeModules")
 
 	// Initialize User Module
-	userModule, err := user.NewUserModule(ctx, cfg, logger, db.UserDB, eventBus, router)
+	userModule, err := user.NewUserModule(ctx, cfg, logger, db.UserDB, eventBus, router, helpers)
 	if err != nil {
 		logger.Error("Failed to initialize user module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize user module: %w", err)

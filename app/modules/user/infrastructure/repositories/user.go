@@ -54,7 +54,7 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.Di
 	_, err = tx.NewUpdate().
 		Model((*User)(nil)).
 		Set("role = ?", role).
-		Where("discord_id = ?", discordID).
+		Where("user_id = ?", discordID).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update user role: %w", err)
@@ -70,7 +70,7 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.Di
 // GetUserByDiscordID retrieves a user by their Discord ID.
 func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error) {
 	user := &User{}
-	err := db.DB.NewSelect().Model(user).Where("discord_id = ?", discordID).Scan(ctx)
+	err := db.DB.NewSelect().Model(user).Where("user_id = ?", discordID).Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrUserNotFound // Now returning a specific error
@@ -86,7 +86,7 @@ func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID usertypes.Disco
 	err := db.DB.NewSelect().
 		Model(user).
 		Column("role").
-		Where("discord_id = ?", discordID).
+		Where("user_id = ?", discordID).
 		Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
