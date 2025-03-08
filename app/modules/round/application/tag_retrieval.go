@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -84,11 +85,17 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 		return fmt.Errorf("error from leaderboard: %s", eventPayload.Error)
 	}
 
-	RoundID := msg.Metadata.Get("RoundID")
+	roundIDStr := msg.Metadata.Get("RoundID")
 	if eventPayload.TagNumber != 0 {
+		// Convert string RoundID to int64
+		roundIDInt, err := strconv.ParseInt(roundIDStr, 10, 64)
+		if err != nil {
+			return fmt.Errorf("failed to convert RoundID to int64: %w", err)
+		}
+
 		// Publish round.tag.number.found event
 		if err := s.publishEvent(msg, roundevents.RoundTagNumberFound, roundevents.RoundTagNumberFoundPayload{
-			RoundID:   RoundID,
+			RoundID:   roundIDInt, // Use the converted int64
 			DiscordID: eventPayload.DiscordID,
 			TagNumber: eventPayload.TagNumber,
 		}); err != nil {

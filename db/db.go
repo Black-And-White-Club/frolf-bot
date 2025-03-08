@@ -15,7 +15,7 @@ const (
 // DB provides methods for interacting with an underlying database or other storage mechanism.
 type Database interface {
 	leaderboarddb.LeaderboardDB
-	rounddb.RoundDB
+	rounddb.RoundDBInterface
 	scoredb.ScoreDB
 	userdb.UserDB
 }

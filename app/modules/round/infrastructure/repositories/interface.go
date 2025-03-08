@@ -3,23 +3,21 @@ package rounddb
 import (
 	"context"
 	"time"
-
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 )
 
 // RoundDB is the interface for interacting with the rounds database.
-type RoundDB interface {
-	GetParticipantsWithResponses(ctx context.Context, roundID string, responses ...roundtypes.Response) ([]roundtypes.RoundParticipant, error)
-	CreateRound(ctx context.Context, round *roundtypes.Round) error
-	GetRound(ctx context.Context, roundID string) (*roundtypes.Round, error)
-	GetRoundState(ctx context.Context, roundID string) (roundtypes.RoundState, error)
-	UpdateRound(ctx context.Context, roundID string, round *roundtypes.Round) error
-	DeleteRound(ctx context.Context, roundID string) error
-	LogRound(ctx context.Context, round *roundtypes.Round) error
-	UpdateParticipant(ctx context.Context, roundID string, participant roundtypes.RoundParticipant) error
-	UpdateRoundState(ctx context.Context, roundID string, state roundtypes.RoundState) error
-	GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*roundtypes.Round, error)
-	UpdateParticipantScore(ctx context.Context, roundID string, participantID string, score int) error
-	GetParticipants(ctx context.Context, roundID string) ([]roundtypes.RoundParticipant, error)
-	UpdateDiscordEventID(ctx context.Context, roundID string, discordEventID string) error
+type RoundDBInterface interface {
+	CreateRound(ctx context.Context, round *Round) error
+	GetRound(ctx context.Context, roundID int64) (*Round, error)
+	UpdateRound(ctx context.Context, roundID int64, round *Round) error
+	DeleteRound(ctx context.Context, roundID int64) error
+	UpdateParticipant(ctx context.Context, roundID int64, participant Participant) error
+	UpdateRoundState(ctx context.Context, roundID int64, state RoundState) error
+	GetUpcomingRounds(ctx context.Context, startTime time.Time, endTime time.Time) ([]*Round, error)
+	UpdateParticipantScore(ctx context.Context, roundID int64, participantID string, score int) error
+	GetParticipantsWithResponses(ctx context.Context, roundID int64, responses ...string) ([]Participant, error)
+	GetRoundState(ctx context.Context, roundID int64) (RoundState, error)
+	LogRound(ctx context.Context, round *Round) error
+	GetParticipants(ctx context.Context, roundID int64) ([]Participant, error)
+	UpdateDiscordEventID(ctx context.Context, roundID int64, discordEventID string) error
 }

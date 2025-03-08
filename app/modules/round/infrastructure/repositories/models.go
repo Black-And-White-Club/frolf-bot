@@ -7,13 +7,14 @@ import (
 
 // Round represents a single round in the tournament.// Round represents a single round in the tournament.
 type Round struct {
-	ID             string        `bun:"id,pk,autoincrement"`
+	ID             int64         `bun:"id,pk,autoincrement"`
 	Title          string        `bun:"title,notnull"`
+	Description    string        `bun:"description"`
 	Location       string        `bun:"location"`
 	EventType      *string       `bun:"event_type"`
 	StartTime      time.Time     `bun:"start_time,notnull"`
 	Finalized      bool          `bun:"finalized,notnull"`
-	CreatorID      string        `bun:"user_id,notnull"`
+	CreatorID      string        `bun:"created_by,notnull"`
 	State          RoundState    `bun:"state,notnull"`
 	Participants   []Participant `bun:"participants,type:jsonb"`
 	DiscordEventID string        `bun:"discord_event_id"`

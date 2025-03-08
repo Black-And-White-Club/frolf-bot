@@ -7,6 +7,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -20,7 +21,8 @@ func (s *RoundService) FinalizeRound(ctx context.Context, msg *message.Message) 
 	}
 
 	// 1. Update the round state to finalized
-	if err := s.RoundDB.UpdateRoundState(ctx, eventPayload.RoundID, roundtypes.RoundStateFinalized); err != nil {
+	rounddbState := rounddb.RoundState(roundtypes.RoundStateFinalized)
+	if err := s.RoundDB.UpdateRoundState(ctx, eventPayload.RoundID, rounddbState); err != nil {
 		return s.publishRoundFinalizationError(msg, eventPayload, err)
 	}
 
@@ -34,6 +36,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, msg *message.Message) 
 	return nil
 }
 
+// NotifyScoreModule fetches the finalized round data and publishes an event for the Score Module.
 // NotifyScoreModule fetches the finalized round data and publishes an event for the Score Module.
 func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundFinalizedPayload](msg, s.logger)
@@ -50,15 +53,15 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Messa
 	// 2. Prepare the data for the Score Module
 	scores := make([]roundevents.ParticipantScore, 0)
 	for _, p := range round.Participants {
-		tagNumber := "0" // Default if no tag
-		if p.TagNumber != 0 {
-			tagNumber = strconv.Itoa(p.TagNumber)
+		tagNumber := "0"                             // Default if no tag
+		if p.TagNumber != nil && *p.TagNumber != 0 { // Corrected comparison
+			tagNumber = strconv.Itoa(*p.TagNumber) // Corrected conversion
 		}
 
 		// Use 0 for nil scores, otherwise convert to float64
-		score := float64(0)
+		score := int(0)
 		if p.Score != nil {
-			score = float64(*p.Score)
+			score = int(*p.Score)
 		}
 
 		scores = append(scores, roundevents.ParticipantScore{

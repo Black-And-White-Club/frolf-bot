@@ -82,7 +82,7 @@ func (s *RoundService) UserRoleCheckResult(ctx context.Context, msg *message.Mes
 
 	// If the user does not have the required role, publish a "round.delete.unauthorized" event
 	s.logger.Error("User is not authorized to delete the round",
-		slog.String("round_id", eventPayload.RoundID),
+		slog.Int64("round_id", eventPayload.RoundID),
 		slog.String("user_id", eventPayload.DiscordID),
 		slog.String("correlation_id", correlationID),
 		slog.Any("error", err),

@@ -126,7 +126,7 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 	logger.Info("Leaderboard module initialized successfully")
 
 	// Initialize Round Module
-	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router, app.ErrorReporter)
+	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router, app.ErrorReporter, helpers)
 	if err != nil {
 		logger.Error("Failed to initialize round module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize round module: %w", err)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -17,7 +19,7 @@ func (s *RoundService) GetRound(ctx context.Context, msg *message.Message) error
 		return fmt.Errorf("failed to unmarshal RoundUpdateValidatedPayload: %w", err)
 	}
 
-	round, err := s.RoundDB.GetRound(ctx, eventPayload.RoundUpdateRequestPayload.RoundID)
+	dbRound, err := s.RoundDB.GetRound(ctx, eventPayload.RoundUpdateRequestPayload.RoundID)
 	if err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to get round", map[string]interface{}{
 			"round_id": eventPayload.RoundUpdateRequestPayload.RoundID,
@@ -26,9 +28,23 @@ func (s *RoundService) GetRound(ctx context.Context, msg *message.Message) error
 		return s.publishRoundUpdateError(msg, eventPayload.RoundUpdateRequestPayload, err)
 	}
 
+	// Convert rounddb.Round to roundtypes.Round
+	rtRound := roundtypes.Round{
+		ID:           dbRound.ID,
+		Title:        dbRound.Title,
+		Description:  &dbRound.Description,
+		Location:     &dbRound.Location,
+		EventType:    dbRound.EventType,
+		StartTime:    &dbRound.StartTime,
+		Finalized:    dbRound.Finalized,
+		CreatedBy:    dbRound.CreatorID,
+		State:        roundtypes.RoundState(dbRound.State),
+		Participants: convertParticipants(dbRound.Participants),
+	}
+
 	// If the round is found, publish a "round.fetched" event
 	if err := s.publishEvent(msg, roundevents.RoundFetched, roundevents.RoundFetchedPayload{
-		Round:                     *round,
+		Round:                     rtRound,
 		RoundUpdateRequestPayload: eventPayload.RoundUpdateRequestPayload,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.fetched event", map[string]interface{}{
@@ -43,6 +59,20 @@ func (s *RoundService) GetRound(ctx context.Context, msg *message.Message) error
 	return nil
 }
 
+// convertParticipants converts []rounddb.Participant to []roundtypes.RoundParticipant.
+func convertParticipants(dbParticipants []rounddb.Participant) []roundtypes.RoundParticipant {
+	rtParticipants := make([]roundtypes.RoundParticipant, len(dbParticipants))
+	for i, dbP := range dbParticipants {
+		rtParticipants[i] = roundtypes.RoundParticipant{
+			DiscordID: dbP.DiscordID,
+			Response:  roundtypes.Response(dbP.Response), // Convert Response
+			TagNumber: *dbP.TagNumber,
+			Score:     dbP.Score,
+		}
+	}
+	return rtParticipants
+}
+
 // CheckRoundExists checks if the round exists in the database and publishes a round.to.delete.fetched event.
 func (s *RoundService) CheckRoundExists(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteValidatedPayload](msg, s.logger)
@@ -50,7 +80,7 @@ func (s *RoundService) CheckRoundExists(ctx context.Context, msg *message.Messag
 		return fmt.Errorf("failed to unmarshal RoundDeleteValidatedPayload: %w", err)
 	}
 
-	round, err := s.RoundDB.GetRound(ctx, eventPayload.RoundDeleteRequestPayload.RoundID)
+	dbRound, err := s.RoundDB.GetRound(ctx, eventPayload.RoundDeleteRequestPayload.RoundID)
 	if err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to get round", map[string]interface{}{
 			"round_id": eventPayload.RoundDeleteRequestPayload.RoundID,
@@ -60,9 +90,23 @@ func (s *RoundService) CheckRoundExists(ctx context.Context, msg *message.Messag
 		return s.publishRoundDeleteError(msg, eventPayload.RoundDeleteRequestPayload, err)
 	}
 
+	// Convert rounddb.Round to roundtypes.Round
+	rtRound := roundtypes.Round{
+		ID:           dbRound.ID,
+		Title:        dbRound.Title,
+		Description:  &dbRound.Description,
+		Location:     &dbRound.Location,
+		EventType:    dbRound.EventType,
+		StartTime:    &dbRound.StartTime,
+		Finalized:    dbRound.Finalized,
+		CreatedBy:    dbRound.CreatorID,
+		State:        roundtypes.RoundState(dbRound.State),
+		Participants: convertParticipants(dbRound.Participants),
+	}
+
 	// If the round is found, publish a "round.to.delete.fetched" event
 	if err := s.publishEvent(msg, roundevents.RoundToDeleteFetched, roundevents.RoundToDeleteFetchedPayload{
-		Round:                     *round,
+		Round:                     rtRound,
 		RoundDeleteRequestPayload: eventPayload.RoundDeleteRequestPayload,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.to.delete.fetched event", map[string]interface{}{

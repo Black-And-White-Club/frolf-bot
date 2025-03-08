@@ -8,6 +8,7 @@ type Handlers interface {
 	// Create Round
 	HandleRoundCreateRequest(msg *message.Message) error
 	HandleRoundValidated(msg *message.Message) error
+	HandleRoundEntityCreated(msg *message.Message) error
 	HandleRoundStored(msg *message.Message) error
 	HandleRoundScheduled(msg *message.Message) error
 	HandleUpdateDiscordEventID(msg *message.Message) error
@@ -35,6 +36,7 @@ type Handlers interface {
 	HandleRoundParticipantJoinRequest(msg *message.Message) error
 	HandleRoundParticipantJoinValidated(msg *message.Message) error
 	HandleRoundTagNumberFound(msg *message.Message) error
+
 	HandleRoundTagNumberNotFound(msg *message.Message) error
 
 	// Score Round

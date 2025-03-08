@@ -12,6 +12,7 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
@@ -70,15 +71,15 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 }
 
 // ProcessDelayedMessages mocks base method.
-func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID string) {
+func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID int64, scheduledTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ProcessDelayedMessages", ctx, roundID)
+	m.ctrl.Call(m, "ProcessDelayedMessages", ctx, roundID, scheduledTime)
 }
 
 // ProcessDelayedMessages indicates an expected call of ProcessDelayedMessages.
-func (mr *MockEventBusMockRecorder) ProcessDelayedMessages(ctx, roundID any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) ProcessDelayedMessages(ctx, roundID, scheduledTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessDelayedMessages", reflect.TypeOf((*MockEventBus)(nil).ProcessDelayedMessages), ctx, roundID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessDelayedMessages", reflect.TypeOf((*MockEventBus)(nil).ProcessDelayedMessages), ctx, roundID, scheduledTime)
 }
 
 // Publish mocks base method.
@@ -100,16 +101,28 @@ func (mr *MockEventBusMockRecorder) Publish(topic any, messages ...any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockEventBus)(nil).Publish), varargs...)
 }
 
-// ScheduleRoundProcessing mocks base method.
-func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID string) {
+// RecoverScheduledRounds mocks base method.
+func (m *MockEventBus) RecoverScheduledRounds(ctx context.Context) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ScheduleRoundProcessing", ctx, roundID)
+	m.ctrl.Call(m, "RecoverScheduledRounds", ctx)
+}
+
+// RecoverScheduledRounds indicates an expected call of RecoverScheduledRounds.
+func (mr *MockEventBusMockRecorder) RecoverScheduledRounds(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverScheduledRounds", reflect.TypeOf((*MockEventBus)(nil).RecoverScheduledRounds), ctx)
+}
+
+// ScheduleRoundProcessing mocks base method.
+func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID string, scheduledTime time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ScheduleRoundProcessing", ctx, roundID, scheduledTime)
 }
 
 // ScheduleRoundProcessing indicates an expected call of ScheduleRoundProcessing.
-func (mr *MockEventBusMockRecorder) ScheduleRoundProcessing(ctx, roundID any) *gomock.Call {
+func (mr *MockEventBusMockRecorder) ScheduleRoundProcessing(ctx, roundID, scheduledTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundProcessing", reflect.TypeOf((*MockEventBus)(nil).ScheduleRoundProcessing), ctx, roundID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundProcessing", reflect.TypeOf((*MockEventBus)(nil).ScheduleRoundProcessing), ctx, roundID, scheduledTime)
 }
 
 // Subscribe mocks base method.

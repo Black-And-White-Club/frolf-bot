@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -207,6 +208,20 @@ func (m *MockService) ProcessRoundStart(msg *message.Message) error {
 func (mr *MockServiceMockRecorder) ProcessRoundStart(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), msg)
+}
+
+// ProcessValidatedRound mocks base method.
+func (m *MockService) ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundutil.TimeParserInterface) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessValidatedRound", ctx, msg, timeParser)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ProcessValidatedRound indicates an expected call of ProcessValidatedRound.
+func (mr *MockServiceMockRecorder) ProcessValidatedRound(ctx, msg, timeParser any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessValidatedRound", reflect.TypeOf((*MockService)(nil).ProcessValidatedRound), ctx, msg, timeParser)
 }
 
 // PublishRoundCreated mocks base method.

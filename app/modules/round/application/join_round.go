@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -21,11 +23,11 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, msg *
 		return s.publishParticipantJoinError(msg, eventPayload, fmt.Errorf("invalid payload: %w", err))
 	}
 
-	if eventPayload.RoundID == "" {
-		err := fmt.Errorf("round ID cannot be empty")
+	if eventPayload.RoundID == 0 { // Check if RoundID is zero
+		err := fmt.Errorf("round ID cannot be zero")
 		return s.publishParticipantJoinError(msg, eventPayload, err)
 	}
-	if eventPayload.Participant == "" {
+	if eventPayload.DiscordID == "" { // Changed to DiscordID
 		err := fmt.Errorf("participant Discord ID cannot be empty")
 		return s.publishParticipantJoinError(msg, eventPayload, err)
 	}
@@ -49,43 +51,52 @@ func (s *RoundService) CheckParticipantTag(ctx context.Context, msg *message.Mes
 		return s.publishParticipantJoinError(msg, eventPayload.ParticipantJoinRequestPayload, fmt.Errorf("invalid payload: %w", err))
 	}
 
+	// Convert int64 RoundID to string
+	roundIDStr := strconv.FormatInt(eventPayload.ParticipantJoinRequestPayload.RoundID, 10)
+
 	// Set the RoundID in the metadata for later use.
-	msg.Metadata.Set("RoundID", eventPayload.ParticipantJoinRequestPayload.RoundID)
+	msg.Metadata.Set("RoundID", roundIDStr) // Use the converted string
 
 	// Publish a "round.tag.number.request" event to get tag number in tag_retrieval.go
 	// Correctly construct the payload for the event
 	if err := s.publishEvent(msg, roundevents.RoundTagNumberRequest, roundevents.TagNumberRequestPayload{
-		DiscordID: eventPayload.ParticipantJoinRequestPayload.Participant,
+		DiscordID: eventPayload.ParticipantJoinRequestPayload.DiscordID,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.request event", map[string]interface{}{"error": err.Error()})
 		return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.ParticipantJoinRequestPayload.Participant})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.ParticipantJoinRequestPayload.DiscordID})
 
 	return nil
 }
 
 // ParticipantTagFound handles the round.tag.number.found event.
 func (s *RoundService) ParticipantTagFound(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundTagNumberFoundPayload](msg, s.logger)
+	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, s.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundTagNumberFoundPayload: %w", err)
+		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
 	}
 
-	roundID := msg.Metadata.Get("RoundID")
-	if roundID == "" {
-		return fmt.Errorf("round ID not found in metadata")
-	}
+	s.logger.Info("Received ParticipantJoinRequest event", slog.String("correlation_id", correlationID))
 
-	// Update the participant's response and tag number in the database
-	participant := roundtypes.RoundParticipant{
+	roundID := eventPayload.RoundID
+
+	// Convert roundtypes.Response to rounddb.Response
+	dbResponse := rounddb.Response(eventPayload.Response)
+
+	// Convert roundtypes.RoundParticipant.TagNumber to *int
+	dbTagNumber := &eventPayload.TagNumber
+
+	// Convert roundtypes.RoundParticipant to rounddb.Participant
+	dbParticipant := rounddb.Participant{
 		DiscordID: eventPayload.DiscordID,
-		Response:  roundtypes.ResponseAccept, // Assuming they are joining the round
-		TagNumber: eventPayload.TagNumber,    // Now we have the tag number
+		Response:  dbResponse,
+		TagNumber: dbTagNumber,
+		Score:     nil, // Score is initialized to nil
 	}
 
-	if err = s.RoundDB.UpdateParticipant(ctx, roundID, participant); err != nil {
+	if err = s.RoundDB.UpdateParticipant(ctx, roundID, dbParticipant); err != nil {
 		s.logger.Error("Failed to update participant in database",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
@@ -93,23 +104,7 @@ func (s *RoundService) ParticipantTagFound(ctx context.Context, msg *message.Mes
 		return s.publishParticipantJoinError(msg, roundevents.ParticipantJoinRequestPayload{}, err)
 	}
 
-	// Publish a "round.participant.joined" event
-	if err := s.publishEvent(msg, roundevents.ParticipantJoined, roundevents.ParticipantJoinedPayload{
-		RoundID:     roundID,
-		Participant: eventPayload.DiscordID,
-		TagNumber:   eventPayload.TagNumber,
-	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.participant.joined event", map[string]interface{}{"error": err.Error()})
-		return fmt.Errorf("failed to publish round.participant.joined event: %w", err)
-	}
-
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Participant joined round and updated in database", map[string]interface{}{
-		"correlation_id": correlationID,
-		"round_id":       roundID,
-		"participant_id": eventPayload.DiscordID,
-		"tag_number":     eventPayload.TagNumber,
-	})
-
+	s.logger.Info("ParticipantJoinRequest event processed", slog.String("correlation_id", correlationID))
 	return nil
 }
 
@@ -121,19 +116,26 @@ func (s *RoundService) ParticipantTagNotFound(ctx context.Context, msg *message.
 	}
 
 	// Get RoundID from message metadata
-	roundID := msg.Metadata.Get("RoundID")
-	if roundID == "" {
+	roundIDStr := msg.Metadata.Get("RoundID")
+	if roundIDStr == "" {
 		return fmt.Errorf("RoundID not found in message metadata")
 	}
 
-	// Update the participant's response in the database (without a tag number)
-	participant := roundtypes.RoundParticipant{
-		DiscordID: eventPayload.DiscordID,
-		Response:  roundtypes.ResponseAccept, // Assuming they are joining the round
-		TagNumber: 0,                         // Set special value to indicate no tag
+	// Convert roundIDStr to int64
+	roundID, err := strconv.ParseInt(roundIDStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid RoundID in message metadata: %w", err)
 	}
 
-	if err = s.RoundDB.UpdateParticipant(ctx, roundID, participant); err != nil {
+	// Convert roundtypes.RoundParticipant to rounddb.Participant
+	dbParticipant := rounddb.Participant{
+		DiscordID: eventPayload.DiscordID,
+		Response:  rounddb.Response(roundtypes.ResponseAccept), // Assuming they are joining the round
+		TagNumber: &[]int{0}[0],                                // Set special value to indicate no tag
+		Score:     nil,
+	}
+
+	if err = s.RoundDB.UpdateParticipant(ctx, roundID, dbParticipant); err != nil {
 		s.logger.Error("Failed to update participant in database",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),

@@ -1,11 +1,14 @@
 package roundhandlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -41,7 +44,11 @@ func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
 		slog.String("correlation_id", correlationID),
 	)
 
-	if err := h.RoundService.StoreRound(msg.Context(), msg); err != nil {
+	// Create instances of TimeParser and Clock
+	timeParser := roundutil.NewTimeParser()
+
+	// Call the service function with the necessary parameters
+	if err := h.RoundService.ProcessValidatedRound(msg.Context(), msg, timeParser); err != nil {
 		h.logger.Error("Failed to handle RoundValidated event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
@@ -50,6 +57,39 @@ func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
 	}
 
 	h.logger.Info("RoundValidated event processed", slog.String("correlation_id", correlationID))
+	return nil
+}
+
+func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) error {
+	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.RoundEntityCreatedPayload](msg, h.logger)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal RoundEntityCreatedPayload: %w", err)
+	}
+
+	h.logger.Info("Received round.entity.created event", slog.String("correlation_id", correlationID))
+
+	// Reconstruct the message
+	newMessage := message.NewMessage(watermill.NewUUID(), nil)
+
+	// Copy metadata
+	for key, value := range msg.Metadata {
+		newMessage.Metadata.Set(key, value)
+	}
+
+	// Marshal payload
+	payloadBytes, err := json.Marshal(roundevents.RoundEntityCreatedPayload{Round: payload.Round})
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+	newMessage.Payload = payloadBytes
+
+	// Call StoreRound with the reconstructed message
+	if err := h.RoundService.StoreRound(msg.Context(), newMessage); err != nil {
+		h.logger.Error("Failed to create round in database", slog.String("correlation_id", correlationID), slog.Any("error", err))
+		return fmt.Errorf("failed to create round: %w", err)
+	}
+
+	h.logger.Info("Round created in database successfully", slog.String("correlation_id", correlationID))
 	return nil
 }
 

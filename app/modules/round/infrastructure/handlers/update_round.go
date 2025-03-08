@@ -3,6 +3,7 @@ package roundhandlers
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
@@ -100,9 +101,12 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
 		return fmt.Errorf("failed to unmarshal RoundScheduleUpdatePayload: %w", err)
 	}
 
+	// Convert int64 RoundID to string
+	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+
 	h.logger.Info("Received RoundScheduleUpdate event",
 		slog.String("correlation_id", correlationID),
-		slog.String("round_id", eventPayload.RoundID),
+		slog.String("round_id", roundIDStr), // Use the converted string
 	)
 
 	// Update the scheduled events for the round

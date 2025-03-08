@@ -8,6 +8,7 @@ require (
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.38.0
+	github.com/olebedev/when v1.1.0
 	github.com/uptrace/bun v1.2.6
 	github.com/uptrace/bun/dialect/pgdialect v1.2.6
 	github.com/uptrace/bun/driver/pgdriver v1.2.6
@@ -19,6 +20,7 @@ require (
 replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
+	github.com/AlekSi/pointer v1.0.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

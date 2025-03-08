@@ -1,22 +1,14 @@
 package roundutil
 
 import (
-	"fmt"
 	"log/slog"
-	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 )
 
 // RoundValidator defines the interface for round validation.
 type RoundValidator interface {
-	ValidateRoundInput(input roundtypes.CreateRoundInput) []error
-}
-
-// RoundValidationError defines a struct for collecting validation errors.
-type RoundValidationError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
+	ValidateRoundInput(input roundtypes.CreateRoundInput) []string
 }
 
 // RoundValidatorImpl is the concrete implementation of the RoundValidator interface.
@@ -27,24 +19,28 @@ type RoundValidatorImpl struct {
 // NewRoundValidator creates a new instance of RoundValidatorImpl.
 func NewRoundValidator() RoundValidator {
 	return &RoundValidatorImpl{
-		logger: slog.Default(), // Use your preferred logger
+		logger: slog.Default(),
 	}
 }
 
 // ValidateRoundInput validates the input for creating a new round.
-func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInput) []error {
-	var errs []error
+func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInput) []string {
+	var errs []string
 
 	if input.Title == "" {
-		errs = append(errs, fmt.Errorf("title cannot be empty"))
-	}
-	if input.StartTime == nil {
-		errs = append(errs, fmt.Errorf("start time cannot be empty"))
+		errs = append(errs, "title cannot be empty")
 	}
 
-	// Example: Validate that the date is in the future
-	if input.StartTime != nil && input.StartTime.Before(time.Now()) {
-		errs = append(errs, fmt.Errorf("start date must be in the future"))
+	if input.StartTime == "" {
+		errs = append(errs, "start time cannot be empty")
+	}
+
+	if input.Location == nil {
+		errs = append(errs, "location cannot be empty")
+	}
+
+	if input.Description == nil {
+		errs = append(errs, "description cannot be empty")
 	}
 
 	return errs

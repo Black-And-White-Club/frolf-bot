@@ -3,6 +3,7 @@ package roundservice
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -22,9 +23,10 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, msg *mess
 	}
 
 	var errs []string
-	if eventPayload.RoundID == "" {
-		errs = append(errs, "round ID cannot be empty")
+	if eventPayload.RoundID == 0 {
+		errs = append(errs, "round ID cannot be zero")
 	}
+
 	if eventPayload.Title == nil && eventPayload.Location == nil && eventPayload.Description == nil && eventPayload.StartTime == nil {
 		errs = append(errs, "at least one field to update must be provided")
 	}
@@ -72,14 +74,14 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 		existingRound.Title = *eventPayload.RoundUpdateRequestPayload.Title
 	}
 	if eventPayload.RoundUpdateRequestPayload.Description != nil {
-		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Description
+		existingRound.Location = *eventPayload.RoundUpdateRequestPayload.Description
 	}
 	if eventPayload.RoundUpdateRequestPayload.Location != nil {
-		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Location
+		existingRound.Location = *eventPayload.RoundUpdateRequestPayload.Location
 	}
 
 	if eventPayload.RoundUpdateRequestPayload.StartTime != nil {
-		existingRound.StartTime = eventPayload.RoundUpdateRequestPayload.StartTime
+		existingRound.StartTime = *eventPayload.RoundUpdateRequestPayload.StartTime
 	}
 
 	// 4. Update the round in the database
@@ -103,13 +105,17 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 }
 
 // StoreRoundUpdate updates the round in the database.
+// StoreRoundUpdate updates the round in the database.
 func (s *RoundService) StoreRoundUpdate(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundEntityUpdatedPayload](msg, s.logger)
 	if err != nil {
 		return s.publishRoundUpdateError(msg, roundevents.RoundUpdateRequestPayload{}, fmt.Errorf("invalid payload: %w", err))
 	}
 
-	if err := s.RoundDB.UpdateRound(ctx, eventPayload.Round.ID, &eventPayload.Round); err != nil {
+	// Convert roundtypes.Round to rounddb.Round
+	dbRound := convertRtRoundToDbRound(&eventPayload.Round)
+
+	if err := s.RoundDB.UpdateRound(ctx, dbRound.ID, dbRound); err != nil {
 		return s.publishRoundUpdateError(msg, roundevents.RoundUpdateRequestPayload{}, err)
 	}
 
@@ -147,8 +153,11 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, msg *mess
 		return fmt.Errorf("invalid payload: %w", err)
 	}
 
+	// Convert int64 RoundID to string
+	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+
 	// Cancel existing scheduled events
-	if err := s.EventBus.CancelScheduledMessage(ctx, eventPayload.RoundID); err != nil {
+	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {
 		return fmt.Errorf("failed to cancel existing scheduled events: %w", err)
 	}
 

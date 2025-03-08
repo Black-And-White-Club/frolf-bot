@@ -21,8 +21,8 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, msg *mess
 	}
 
 	var errs []string
-	if eventPayload.RoundID == "" {
-		errs = append(errs, "round ID cannot be empty")
+	if eventPayload.RoundID == 0 { // Check if RoundID is zero
+		errs = append(errs, "round ID cannot be zero")
 	}
 	if eventPayload.Participant == "" {
 		errs = append(errs, "participant Discord ID cannot be empty")

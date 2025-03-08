@@ -3,6 +3,7 @@ package roundservice
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
@@ -19,8 +20,8 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, msg *mess
 		return s.publishRoundDeleteError(msg, eventPayload, fmt.Errorf("invalid payload: %w", err))
 	}
 
-	if eventPayload.RoundID == "" {
-		err := fmt.Errorf("round ID cannot be empty")
+	if eventPayload.RoundID == 0 { // Check if RoundID is zero
+		err := fmt.Errorf("round ID cannot be zero")
 		return s.publishRoundDeleteError(msg, eventPayload, err)
 	}
 
@@ -52,7 +53,10 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
 	}
 
-	if err := s.EventBus.CancelScheduledMessage(ctx, eventPayload.RoundID); err != nil {
+	// Convert int64 RoundID to string
+	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+
+	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {
 		s.logger.Error("Failed to cancel scheduled messages", "error", err)
 		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
 	}

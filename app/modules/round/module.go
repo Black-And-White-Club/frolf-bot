@@ -8,6 +8,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
@@ -24,17 +25,18 @@ type Module struct {
 	RoundRouter   *roundrouter.RoundRouter
 	cancelFunc    context.CancelFunc
 	ErrorReporter errors.ErrorReporterInterface
+	helper        utils.Helpers
 }
 
 // NewRoundModule creates a new instance of the Round module.
-func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDB, eventBus eventbus.EventBus, router *message.Router, ErrorReporter errors.ErrorReporterInterface) (*Module, error) {
+func NewRoundModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, roundDB rounddb.RoundDBInterface, eventBus eventbus.EventBus, router *message.Router, ErrorReporter errors.ErrorReporterInterface, helper utils.Helpers) (*Module, error) {
 	logger.Info("round.NewRoundModule called")
 
 	// Initialize round service.
 	roundService := roundservice.NewRoundService(roundDB, eventBus, logger, ErrorReporter)
 
 	// Initialize round router.
-	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus)
+	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, helper)
 
 	// Configure the router with the round service.
 	if err := roundRouter.Configure(roundService); err != nil {

@@ -58,8 +58,7 @@ func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
 
 	// Publish to discord.round.event with deduplication
 	discordMsg := message.NewMessage(watermill.NewUUID(), discordPayloadBytes)
-	discordMsg.Metadata.Set("correlationID", payload.RoundID)
-	discordMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-%s-reminder", payload.RoundID, payload.ReminderType)) // Prevent duplicate reminders
+	discordMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%d-%s-reminder", payload.RoundID, payload.ReminderType))
 
 	if err := s.EventBus.Publish(roundevents.DiscordEventsSubject, discordMsg); err != nil {
 		return fmt.Errorf("failed to publish to discord.round.event: %w", err)

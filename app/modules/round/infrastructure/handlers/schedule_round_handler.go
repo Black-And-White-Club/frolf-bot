@@ -10,6 +10,7 @@ import (
 )
 
 func (h *RoundHandlers) HandleScheduleRoundEvents(msg *message.Message) error {
+	h.logger.Info("HandleRoundScheduled: Received message", slog.String("message_id", msg.UUID))
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundStoredPayload: %w", err)
