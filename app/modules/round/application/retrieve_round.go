@@ -6,7 +6,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -30,16 +29,16 @@ func (s *RoundService) GetRound(ctx context.Context, msg *message.Message) error
 
 	// Convert rounddb.Round to roundtypes.Round
 	rtRound := roundtypes.Round{
-		ID:           dbRound.ID,
+		ID:           dbRound.ID, // Ensure this matches the field name in roundtypes.Round
 		Title:        dbRound.Title,
-		Description:  &dbRound.Description,
-		Location:     &dbRound.Location,
+		Description:  dbRound.Description,
+		Location:     dbRound.Location,
 		EventType:    dbRound.EventType,
-		StartTime:    &dbRound.StartTime,
+		StartTime:    dbRound.StartTime,
 		Finalized:    dbRound.Finalized,
-		CreatedBy:    dbRound.CreatorID,
+		CreatedBy:    dbRound.CreatedBy,
 		State:        roundtypes.RoundState(dbRound.State),
-		Participants: convertParticipants(dbRound.Participants),
+		Participants: dbRound.Participants,
 	}
 
 	// If the round is found, publish a "round.fetched" event
@@ -57,20 +56,6 @@ func (s *RoundService) GetRound(ctx context.Context, msg *message.Message) error
 		"round_id": eventPayload.RoundUpdateRequestPayload.RoundID,
 	})
 	return nil
-}
-
-// convertParticipants converts []rounddb.Participant to []roundtypes.RoundParticipant.
-func convertParticipants(dbParticipants []rounddb.Participant) []roundtypes.RoundParticipant {
-	rtParticipants := make([]roundtypes.RoundParticipant, len(dbParticipants))
-	for i, dbP := range dbParticipants {
-		rtParticipants[i] = roundtypes.RoundParticipant{
-			DiscordID: dbP.DiscordID,
-			Response:  roundtypes.Response(dbP.Response), // Convert Response
-			TagNumber: *dbP.TagNumber,
-			Score:     dbP.Score,
-		}
-	}
-	return rtParticipants
 }
 
 // CheckRoundExists checks if the round exists in the database and publishes a round.to.delete.fetched event.
@@ -92,16 +77,16 @@ func (s *RoundService) CheckRoundExists(ctx context.Context, msg *message.Messag
 
 	// Convert rounddb.Round to roundtypes.Round
 	rtRound := roundtypes.Round{
-		ID:           dbRound.ID,
+		ID:           dbRound.ID, // Ensure this matches the field name in roundtypes.Round
 		Title:        dbRound.Title,
-		Description:  &dbRound.Description,
-		Location:     &dbRound.Location,
+		Description:  dbRound.Description,
+		Location:     dbRound.Location,
 		EventType:    dbRound.EventType,
-		StartTime:    &dbRound.StartTime,
+		StartTime:    dbRound.StartTime,
 		Finalized:    dbRound.Finalized,
-		CreatedBy:    dbRound.CreatorID,
+		CreatedBy:    dbRound.CreatedBy,
 		State:        roundtypes.RoundState(dbRound.State),
-		Participants: convertParticipants(dbRound.Participants),
+		Participants: dbRound.Participants,
 	}
 
 	// If the round is found, publish a "round.to.delete.fetched" event

@@ -9,7 +9,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -32,16 +31,8 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 		return fmt.Errorf("failed to get round from database: %w", err)
 	}
 
-	// Convert rounddb.Round to roundtypes.Round
-	rtRound := convertDbRoundToRtRound(dbRound)
-
-	rtRound = s.transformParticipants(rtRound)
-	rtRound.State = roundtypes.RoundStateInProgress
-
-	// Convert roundtypes.Round back to rounddb.Round
-	dbRound = convertRtRoundToDbRound(rtRound)
-
-	dbRound.State = rounddb.RoundState(roundtypes.RoundStateInProgress) // Convert RoundState
+	// Update the round state directly
+	dbRound.State = roundtypes.RoundStateInProgress
 
 	if err := s.RoundDB.UpdateRound(ctx, dbRound.ID, dbRound); err != nil {
 		return fmt.Errorf("failed to update round: %w", err)
@@ -51,7 +42,8 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 		return fmt.Errorf("failed to publish round.started event: %w", err)
 	}
 
-	discordPayload, err := s.createDiscordPayload(eventPayload, rtRound)
+	// Use dbRound directly in createDiscordPayload
+	discordPayload, err := s.createDiscordPayload(eventPayload, dbRound) // Pass dbRound directly
 	if err != nil {
 		return fmt.Errorf("failed to create Discord payload: %w", err)
 	}
@@ -59,7 +51,7 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 	discordMsg := message.NewMessage(watermill.NewUUID(), discordPayload)
 
 	// Convert int64 RoundID to string
-	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
 	discordMsg.Metadata.Set("correlationID", roundIDStr) // Use the converted string
 
 	if err := s.EventBus.Publish(roundevents.DiscordEventsSubject, discordMsg); err != nil {
@@ -68,7 +60,7 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 
 	stateUpdatedPayload := roundevents.RoundStateUpdatedPayload{
 		RoundID: eventPayload.RoundID,
-		State:   roundtypes.RoundState(dbRound.State), // Convert RoundState
+		State:   roundtypes.RoundState(dbRound.State), // Use the state directly
 	}
 
 	stateUpdatedPayloadBytes, err := json.Marshal(stateUpdatedPayload)
@@ -79,7 +71,7 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 	stateUpdatedMsg := message.NewMessage(watermill.NewUUID(), stateUpdatedPayloadBytes)
 
 	// Convert int64 RoundID to string
-	stateUpdatedRoundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+	stateUpdatedRoundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
 	stateUpdatedMsg.Metadata.Set("correlationID", stateUpdatedRoundIDStr) // Use the converted string
 
 	if err := s.EventBus.Publish(roundevents.RoundStateUpdated, stateUpdatedMsg); err != nil {
@@ -90,32 +82,14 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 	return nil
 }
 
-// transformParticipants initializes each participant's score to 0 and retains existing details.
-func (s *RoundService) transformParticipants(round *roundtypes.Round) *roundtypes.Round {
-	updatedParticipants := make([]roundtypes.RoundParticipant, 0, len(round.Participants))
-	for _, participant := range round.Participants {
-		transformedParticipant := roundtypes.RoundParticipant{
-			DiscordID: participant.DiscordID,
-			Response:  participant.Response,
-			TagNumber: participant.TagNumber, // Include the tag number (even if 0)
-		}
-
-		zero := 0                            // Initialize zero
-		transformedParticipant.Score = &zero // Assign to Score
-		updatedParticipants = append(updatedParticipants, transformedParticipant)
-	}
-	round.Participants = updatedParticipants
-	return round
-}
-
 // createDiscordPayload constructs the payload to send to the Discord bot.
 func (s *RoundService) createDiscordPayload(eventPayload roundevents.RoundStartedPayload, round *roundtypes.Round) ([]byte, error) {
-	discordParticipants := make([]roundevents.DiscordRoundParticipant, 0, len(round.Participants))
+	discordParticipants := make([]roundevents.RoundParticipant, 0, len(round.Participants))
 	for _, p := range round.Participants {
-		discordParticipants = append(discordParticipants, roundevents.DiscordRoundParticipant{
-			DiscordID: p.DiscordID,
+		discordParticipants = append(discordParticipants, roundevents.RoundParticipant{
+			UserID:    p.UserID,
 			TagNumber: p.TagNumber,
-			Score:     p.Score,
+			Response:  p.Response,
 		})
 	}
 
@@ -132,60 +106,4 @@ func (s *RoundService) createDiscordPayload(eventPayload roundevents.RoundStarte
 		return nil, fmt.Errorf("failed to marshal DiscordRoundStartPayload: %w", err)
 	}
 	return discordPayloadBytes, nil
-}
-
-func convertDbRoundToRtRound(dbRound *rounddb.Round) *roundtypes.Round {
-	return &roundtypes.Round{
-		ID:           dbRound.ID,
-		Title:        dbRound.Title,
-		Description:  &dbRound.Description,
-		Location:     &dbRound.Location,
-		EventType:    dbRound.EventType,
-		StartTime:    &dbRound.StartTime,
-		Finalized:    dbRound.Finalized,
-		CreatedBy:    dbRound.CreatorID,
-		State:        roundtypes.RoundState(dbRound.State),
-		Participants: convertDbParticipantsToRtParticipants(dbRound.Participants),
-	}
-}
-
-func convertDbParticipantsToRtParticipants(dbParticipants []rounddb.Participant) []roundtypes.RoundParticipant {
-	rtParticipants := make([]roundtypes.RoundParticipant, len(dbParticipants))
-	for i, dbP := range dbParticipants {
-		rtParticipants[i] = roundtypes.RoundParticipant{
-			DiscordID: dbP.DiscordID,
-			Response:  roundtypes.Response(dbP.Response),
-			TagNumber: *dbP.TagNumber,
-			Score:     dbP.Score,
-		}
-	}
-	return rtParticipants
-}
-
-func convertRtRoundToDbRound(rtRound *roundtypes.Round) *rounddb.Round {
-	return &rounddb.Round{
-		ID:           rtRound.ID,
-		Title:        rtRound.Title,
-		Description:  *rtRound.Description,
-		Location:     *rtRound.Location,
-		EventType:    rtRound.EventType,
-		StartTime:    *rtRound.StartTime,
-		Finalized:    rtRound.Finalized,
-		CreatorID:    rtRound.CreatedBy,
-		State:        rounddb.RoundState(rtRound.State),
-		Participants: convertRtParticipantsToDbParticipants(rtRound.Participants),
-	}
-}
-
-func convertRtParticipantsToDbParticipants(rtParticipants []roundtypes.RoundParticipant) []rounddb.Participant {
-	dbParticipants := make([]rounddb.Participant, len(rtParticipants))
-	for i, rtP := range rtParticipants {
-		dbParticipants[i] = rounddb.Participant{
-			DiscordID: rtP.DiscordID,
-			Response:  rounddb.Response(rtP.Response),
-			TagNumber: &rtP.TagNumber,
-			Score:     rtP.Score,
-		}
-	}
-	return dbParticipants
 }

@@ -25,7 +25,7 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, msg *mess
 		return s.publishRoundDeleteError(msg, eventPayload, err)
 	}
 
-	if eventPayload.RequestingUserDiscordID == "" {
+	if eventPayload.RequestingUserUserID == "" {
 		err := fmt.Errorf("requesting user's Discord ID cannot be empty")
 		return s.publishRoundDeleteError(msg, eventPayload, err)
 	}
@@ -46,25 +46,36 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, msg *mess
 func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteAuthorizedPayload](msg, s.logger)
 	if err != nil {
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{}, fmt.Errorf("invalid payload: %w", err))
+		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{
+			RoundID:              0,
+			RequestingUserUserID: "",
+		}, fmt.Errorf("invalid payload: %w", err))
 	}
 
 	if err := s.RoundDB.DeleteRound(ctx, eventPayload.RoundID); err != nil {
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
+		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{
+			RoundID:              eventPayload.RoundID,
+			RequestingUserUserID: "",
+		}, err)
 	}
 
-	// Convert int64 RoundID to string
-	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+	// Convert roundtypes.ID to string
+	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
 
 	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {
 		s.logger.Error("Failed to cancel scheduled messages", "error", err)
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
+		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{
+			RoundID:              eventPayload.RoundID,
+			RequestingUserUserID: "",
+		}, err)
 	}
 
 	// If publishing `round.deleted` fails, return the error immediately
-	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload(eventPayload)); err != nil {
+	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload{
+		RoundID: eventPayload.RoundID,
+	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.deleted event", map[string]interface{}{"error": err.Error()})
-		return fmt.Errorf("failed to publish round.deleted event: %w", err) // ✅ Ensure error is returned
+		return fmt.Errorf("failed to publish round.deleted event: %w", err) // Ensure error is returned
 	}
 
 	// Success message should only be logged if everything succeeds

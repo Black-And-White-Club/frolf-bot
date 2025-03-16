@@ -13,7 +13,7 @@ import (
 )
 
 func (h *RoundHandlers) HandleRoundCreateRequest(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundCreateRequestPayload](msg, h.logger)
+	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.CreateRoundRequestedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundCreateRequestPayload: %w", err)
 	}

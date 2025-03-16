@@ -32,7 +32,7 @@ var (
 	scheduleHandlerStartTime    = &scheduleHandlerNow
 	validScheduleHandlerPayload = roundevents.RoundStoredPayload{
 		Round: roundtypes.Round{
-			ID:        scheduleHandlerRoundID,
+			RoundID:   scheduleHandlerRoundID,
 			Title:     scheduleHandlerTitle,
 			Location:  &scheduleHandlerLocation,
 			EventType: &scheduleHandlerEventType,

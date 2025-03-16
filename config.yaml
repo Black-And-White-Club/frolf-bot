@@ -1,5 +1,5 @@
 postgres:
-  dsn: "postgres://postgres:postgres@localhost:5432/tcr-bot?sslmode=disable"
+  dsn: "postgres://postgres:postgres@localhost:5432/tcr_bot?sslmode=disable"
   log_statement: "all"
   log_min_duration_statement: 0
 

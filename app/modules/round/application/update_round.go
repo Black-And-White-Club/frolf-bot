@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -27,7 +28,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, msg *mess
 		errs = append(errs, "round ID cannot be zero")
 	}
 
-	if eventPayload.Title == nil && eventPayload.Location == nil && eventPayload.Description == nil && eventPayload.StartTime == nil {
+	if eventPayload.Title == "" && eventPayload.Location == nil && eventPayload.Description == nil && eventPayload.StartTime == nil {
 		errs = append(errs, "at least one field to update must be provided")
 	}
 
@@ -70,32 +71,41 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 	}
 
 	// 3. Apply updates
-	if eventPayload.RoundUpdateRequestPayload.Title != nil {
-		existingRound.Title = *eventPayload.RoundUpdateRequestPayload.Title
+	if eventPayload.RoundUpdateRequestPayload.Title != "" {
+		existingRound.Title = eventPayload.RoundUpdateRequestPayload.Title
 	}
 	if eventPayload.RoundUpdateRequestPayload.Description != nil {
-		existingRound.Location = *eventPayload.RoundUpdateRequestPayload.Description
+		existingRound.Description = eventPayload.RoundUpdateRequestPayload.Description
 	}
 	if eventPayload.RoundUpdateRequestPayload.Location != nil {
-		existingRound.Location = *eventPayload.RoundUpdateRequestPayload.Location
+		existingRound.Location = eventPayload.RoundUpdateRequestPayload.Location
 	}
-
 	if eventPayload.RoundUpdateRequestPayload.StartTime != nil {
-		existingRound.StartTime = *eventPayload.RoundUpdateRequestPayload.StartTime
+		startTime := roundtypes.StartTime(*eventPayload.RoundUpdateRequestPayload.StartTime)
+		existingRound.StartTime = &startTime
 	}
 
 	// 4. Update the round in the database
-	err = s.RoundDB.UpdateRound(ctx, existingRound.ID, existingRound)
-	if err != nil {
+	if err = s.RoundDB.UpdateRound(ctx, existingRound.ID, existingRound); err != nil {
 		s.logger.Error("Failed to update round entity", "round_id", existingRound.ID, "error", err)
 		return s.publishRoundUpdateError(msg, eventPayload.RoundUpdateRequestPayload, fmt.Errorf("failed to update round entity: %w", err))
 	}
 
 	// 5. Successfully updated round → Publish "round.updated" event
-	err = s.publishEvent(msg, roundevents.RoundUpdated, roundevents.RoundUpdatedPayload{
-		RoundID: existingRound.ID,
-	})
-	if err != nil {
+	if err = s.publishEvent(msg, roundevents.RoundUpdated, roundevents.RoundEntityUpdatedPayload{
+		Round: roundtypes.Round{
+			ID:           existingRound.ID, // Assuming existingRound.ID is of type roundtypes.ID
+			Title:        existingRound.Title,
+			Description:  existingRound.Description,
+			Location:     existingRound.Location,
+			EventType:    existingRound.EventType,
+			StartTime:    existingRound.StartTime,
+			Finalized:    existingRound.Finalized,
+			CreatedBy:    existingRound.CreatedBy,
+			State:        existingRound.State,
+			Participants: existingRound.Participants,
+		},
+	}); err != nil {
 		s.logger.Error("Failed to publish round.updated event", "round_id", existingRound.ID, "error", err)
 		return fmt.Errorf("failed to publish round.updated event: %w", err)
 	}
@@ -105,22 +115,22 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, msg *message.Messa
 }
 
 // StoreRoundUpdate updates the round in the database.
-// StoreRoundUpdate updates the round in the database.
 func (s *RoundService) StoreRoundUpdate(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundEntityUpdatedPayload](msg, s.logger)
 	if err != nil {
 		return s.publishRoundUpdateError(msg, roundevents.RoundUpdateRequestPayload{}, fmt.Errorf("invalid payload: %w", err))
 	}
 
-	// Convert roundtypes.Round to rounddb.Round
-	dbRound := convertRtRoundToDbRound(&eventPayload.Round)
+	// Use eventPayload.Round directly if it is already of the correct type
+	dbRound := eventPayload.Round // Assuming eventPayload.Round is of type roundtypes.Round
 
-	if err := s.RoundDB.UpdateRound(ctx, dbRound.ID, dbRound); err != nil {
+	// Pass the address of dbRound to UpdateRound
+	if err := s.RoundDB.UpdateRound(ctx, dbRound.ID, &dbRound); err != nil { // Take the address of dbRound
 		return s.publishRoundUpdateError(msg, roundevents.RoundUpdateRequestPayload{}, err)
 	}
 
 	// Publish "round.updated" event
-	if err := s.publishEvent(msg, roundevents.RoundUpdated, roundevents.RoundUpdatedPayload{
+	if err := s.publishEvent(msg, roundevents.RoundUpdated, roundevents.RoundStateUpdatedPayload{
 		RoundID: eventPayload.Round.ID,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.updated event", map[string]interface{}{"error": err.Error()})
@@ -148,13 +158,13 @@ func (s *RoundService) publishRoundUpdateError(msg *message.Message, input round
 
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
 func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundUpdatedPayload](msg, s.logger)
+	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundScheduleUpdatePayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
 	}
 
 	// Convert int64 RoundID to string
-	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
 
 	// Cancel existing scheduled events
 	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {

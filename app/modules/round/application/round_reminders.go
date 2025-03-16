@@ -13,7 +13,7 @@ import (
 
 // ProcessRoundReminder is a service function triggered when a reminder is due.
 func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
-	var payload roundevents.RoundReminderPayload
+	var payload roundevents.DiscordReminderPayload
 	err := json.Unmarshal(msg.Payload, &payload)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundReminderPayload: %w", err)
@@ -34,7 +34,7 @@ func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
 	// Extract Discord IDs
 	userIDs := make([]string, 0, len(round.Participants))
 	for _, p := range round.Participants {
-		userIDs = append(userIDs, p.DiscordID)
+		userIDs = append(userIDs, string(p.UserID))
 	}
 
 	// Skip publishing if there are no participants
@@ -47,7 +47,7 @@ func (s *RoundService) ProcessRoundReminder(msg *message.Message) error {
 	discordPayload := roundevents.DiscordReminderPayload{
 		RoundID:      payload.RoundID,
 		RoundTitle:   payload.RoundTitle,
-		UserIDs:      userIDs,
+		UserIDs:      payload.UserIDs,
 		ReminderType: payload.ReminderType,
 	}
 

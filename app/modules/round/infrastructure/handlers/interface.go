@@ -34,8 +34,10 @@ type Handlers interface {
 
 	// Join Round
 	HandleRoundParticipantJoinRequest(msg *message.Message) error
-	HandleRoundParticipantJoinValidated(msg *message.Message) error
 	HandleRoundTagNumberFound(msg *message.Message) error
+	HandleRoundParticipantDeclined(msg *message.Message) error
+	HandleRoundParticipantJoinValidationRequest(msg *message.Message) error
+	HandleRoundParticipantRemovalRequest(msg *message.Message) error
 
 	HandleRoundTagNumberNotFound(msg *message.Message) error
 

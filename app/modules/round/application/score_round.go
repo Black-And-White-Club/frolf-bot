@@ -62,7 +62,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, msg *message.
 	}
 
 	// Access fields through eventPayload.ScoreUpdateRequestPayload
-	err = s.RoundDB.UpdateParticipantScore(ctx, eventPayload.ScoreUpdateRequestPayload.RoundID, eventPayload.ScoreUpdateRequestPayload.Participant, *eventPayload.ScoreUpdateRequestPayload.Score)
+	err = s.RoundDB.UpdateParticipantScore(ctx, eventPayload.ScoreUpdateRequestPayload.RoundID, string(eventPayload.ScoreUpdateRequestPayload.Participant), *eventPayload.ScoreUpdateRequestPayload.Score)
 	if err != nil {
 		return s.publishScoreUpdateError(msg, eventPayload.ScoreUpdateRequestPayload, err) // Error event
 	}

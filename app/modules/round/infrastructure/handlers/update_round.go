@@ -102,7 +102,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
 	}
 
 	// Convert int64 RoundID to string
-	roundIDStr := strconv.FormatInt(eventPayload.RoundID, 10)
+	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
 
 	h.logger.Info("Received RoundScheduleUpdate event",
 		slog.String("correlation_id", correlationID),

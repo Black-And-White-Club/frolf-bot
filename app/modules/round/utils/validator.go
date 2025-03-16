@@ -8,7 +8,8 @@ import (
 
 // RoundValidator defines the interface for round validation.
 type RoundValidator interface {
-	ValidateRoundInput(input roundtypes.CreateRoundInput) []string
+	ValidateBaseRoundPayload(input roundtypes.BaseRoundPayload) []string
+	ValidateRoundInput(input roundtypes.CreateRoundInput) []string // Update to accept CreateRoundInput
 }
 
 // RoundValidatorImpl is the concrete implementation of the RoundValidator interface.
@@ -23,6 +24,29 @@ func NewRoundValidator() RoundValidator {
 	}
 }
 
+// ValidateBaseRoundPayload validates the base round payload.
+func (v *RoundValidatorImpl) ValidateBaseRoundPayload(input roundtypes.BaseRoundPayload) []string {
+	var errs []string
+
+	if input.Title == "" {
+		errs = append(errs, "title cannot be empty")
+	}
+
+	if input.StartTime == nil { // This check may need to be removed or adjusted
+		errs = append(errs, "start time cannot be empty")
+	}
+
+	if input.Location == nil {
+		errs = append(errs, "location cannot be empty")
+	}
+
+	if input.Description == nil {
+		errs = append(errs, "description cannot be empty")
+	}
+
+	return errs
+}
+
 // ValidateRoundInput validates the input for creating a new round.
 func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInput) []string {
 	var errs []string
@@ -31,7 +55,7 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 		errs = append(errs, "title cannot be empty")
 	}
 
-	if input.StartTime == "" {
+	if input.StartTime == "" { // Check for empty string instead of nil
 		errs = append(errs, "start time cannot be empty")
 	}
 

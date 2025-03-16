@@ -56,18 +56,18 @@ func (mr *MockServiceMockRecorder) CheckAllScoresSubmitted(ctx, msg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAllScoresSubmitted", reflect.TypeOf((*MockService)(nil).CheckAllScoresSubmitted), ctx, msg)
 }
 
-// CheckParticipantTag mocks base method.
-func (m *MockService) CheckParticipantTag(ctx context.Context, msg *message.Message) error {
+// CheckParticipantStatus mocks base method.
+func (m *MockService) CheckParticipantStatus(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckParticipantTag", ctx, msg)
+	ret := m.ctrl.Call(m, "CheckParticipantStatus", ctx, msg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CheckParticipantTag indicates an expected call of CheckParticipantTag.
-func (mr *MockServiceMockRecorder) CheckParticipantTag(ctx, msg any) *gomock.Call {
+// CheckParticipantStatus indicates an expected call of CheckParticipantStatus.
+func (mr *MockServiceMockRecorder) CheckParticipantStatus(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckParticipantTag", reflect.TypeOf((*MockService)(nil).CheckParticipantTag), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckParticipantStatus", reflect.TypeOf((*MockService)(nil).CheckParticipantStatus), ctx, msg)
 }
 
 // CheckRoundExists mocks base method.
@@ -140,6 +140,20 @@ func (mr *MockServiceMockRecorder) GetRound(ctx, msg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRound", reflect.TypeOf((*MockService)(nil).GetRound), ctx, msg)
 }
 
+// HandleDecline mocks base method.
+func (m *MockService) HandleDecline(ctx context.Context, msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleDecline", ctx, msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleDecline indicates an expected call of HandleDecline.
+func (mr *MockServiceMockRecorder) HandleDecline(ctx, msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDecline", reflect.TypeOf((*MockService)(nil).HandleDecline), ctx, msg)
+}
+
 // NotifyScoreModule mocks base method.
 func (m *MockService) NotifyScoreModule(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
@@ -152,6 +166,20 @@ func (m *MockService) NotifyScoreModule(ctx context.Context, msg *message.Messag
 func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyScoreModule", reflect.TypeOf((*MockService)(nil).NotifyScoreModule), ctx, msg)
+}
+
+// ParticipantRemoval mocks base method.
+func (m *MockService) ParticipantRemoval(ctx context.Context, msg *message.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ParticipantRemoval", ctx, msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ParticipantRemoval indicates an expected call of ParticipantRemoval.
+func (mr *MockServiceMockRecorder) ParticipantRemoval(ctx, msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantRemoval", reflect.TypeOf((*MockService)(nil).ParticipantRemoval), ctx, msg)
 }
 
 // ParticipantTagFound mocks base method.

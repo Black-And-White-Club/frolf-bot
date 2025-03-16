@@ -35,9 +35,11 @@ type Service interface {
 
 	// Join Round
 	ValidateParticipantJoinRequest(ctx context.Context, msg *message.Message) error
-	CheckParticipantTag(ctx context.Context, msg *message.Message) error
 	ParticipantTagFound(ctx context.Context, msg *message.Message) error
 	ParticipantTagNotFound(ctx context.Context, msg *message.Message) error
+	HandleDecline(ctx context.Context, msg *message.Message) error
+	ParticipantRemoval(ctx context.Context, msg *message.Message) error
+	CheckParticipantStatus(ctx context.Context, msg *message.Message) error
 
 	// Score Round
 	ValidateScoreUpdateRequest(ctx context.Context, msg *message.Message) error

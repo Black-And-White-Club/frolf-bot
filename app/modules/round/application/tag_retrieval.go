@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // -- Service Functions for Tag Retrieval Flow --
-
-const defaultGetTagNumberTimeout = 5 * time.Second // Or whatever timeout you deem appropriate
 
 // RequestTagNumber initiates the tag number retrieval process.
 func (s *RoundService) RequestTagNumber(ctx context.Context, msg *message.Message) error {
@@ -24,21 +22,15 @@ func (s *RoundService) RequestTagNumber(ctx context.Context, msg *message.Messag
 		return fmt.Errorf("failed to unmarshal TagNumberRequestPayload: %w", err)
 	}
 
-	// Validate input, set defaults, etc.
-	if eventPayload.Timeout == 0 {
-		eventPayload.Timeout = defaultGetTagNumberTimeout
-	}
-
 	// Publish "round.tag.number.request" event
 	if err := s.publishEvent(msg, roundevents.RoundTagNumberRequest, roundevents.TagNumberRequestPayload{
-		DiscordID: eventPayload.DiscordID,
-		Timeout:   eventPayload.Timeout,
+		UserID: eventPayload.UserID,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.request event", map[string]interface{}{})
 		return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.DiscordID})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{"user_id": eventPayload.UserID})
 	return nil
 }
 
@@ -56,7 +48,7 @@ func (s *RoundService) TagNumberRequest(ctx context.Context, msg *message.Messag
 
 	// Prepare the request payload for the leaderboard
 	leaderboardRequestPayload := roundevents.TagNumberRequestPayload{
-		DiscordID: eventPayload.DiscordID,
+		UserID: eventPayload.UserID,
 	}
 
 	// Publish the request to the leaderboard service using publishEvent
@@ -65,7 +57,7 @@ func (s *RoundService) TagNumberRequest(ctx context.Context, msg *message.Messag
 		return fmt.Errorf("failed to publish GetTagNumberRequest to leaderboard: %w", err)
 	}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published GetTagNumberRequest to leaderboard", map[string]interface{}{"user_id": eventPayload.DiscordID})
+	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published GetTagNumberRequest to leaderboard", map[string]interface{}{"user_id": eventPayload.UserID})
 	return nil
 }
 
@@ -76,49 +68,43 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 		return fmt.Errorf("failed to unmarshal GetTagNumberResponsePayload: %w", err)
 	}
 
-	if eventPayload.Error != "" {
-		// Handle error (publish round.tag.retrieval.error or similar)
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Received error from leaderboard", map[string]interface{}{
-			"error": eventPayload.Error,
-		})
-		// ... publish a round.tag.retrieval.error event if needed ...
-		return fmt.Errorf("error from leaderboard: %s", eventPayload.Error)
+	roundIDStr := msg.Metadata.Get("RoundID")
+	roundID, err := strconv.ParseInt(roundIDStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to convert RoundID to int64: %w", err)
 	}
 
-	roundIDStr := msg.Metadata.Get("RoundID")
-	if eventPayload.TagNumber != 0 {
-		// Convert string RoundID to int64
-		roundIDInt, err := strconv.ParseInt(roundIDStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("failed to convert RoundID to int64: %w", err)
+	if eventPayload.Error != "" {
+		// Handle error (publish round.tag.retrieval.error or similar)
+		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Received error from leaderboard", map[string]interface{}{"error": eventPayload.Error})
+		// Publish round.tag.number.notfound event
+		if err := s.publishEvent(msg, roundevents.RoundTagNumberNotFound, roundevents.RoundTagNumberNotFoundPayload{
+			UserID: eventPayload.UserID,
+		}); err != nil {
+			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.notfound event", map[string]interface{}{"error": err.Error()})
+			return fmt.Errorf("failed to publish round.tag.number.notfound event: %w", err)
 		}
+		return nil
+	}
 
-		// Publish round.tag.number.found event
+	// If tag number is found, add participant to the round
+	if eventPayload.TagNumber != nil {
 		if err := s.publishEvent(msg, roundevents.RoundTagNumberFound, roundevents.RoundTagNumberFoundPayload{
-			RoundID:   roundIDInt, // Use the converted int64
-			DiscordID: eventPayload.DiscordID,
+			RoundID:   roundtypes.ID(roundID),
+			UserID:    eventPayload.UserID,
 			TagNumber: eventPayload.TagNumber,
 		}); err != nil {
 			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.found event", map[string]interface{}{"error": err.Error()})
 			return fmt.Errorf("failed to publish round.tag.number.found event: %w", err)
 		}
-
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.found event", map[string]interface{}{
-			"tag_number": eventPayload.TagNumber,
-			"user_id":    eventPayload.DiscordID,
-		})
 	} else {
-		// Publish round.tag.number.notfound event (or handle as needed)
+		// Handle case where tag number is not found
 		if err := s.publishEvent(msg, roundevents.RoundTagNumberNotFound, roundevents.RoundTagNumberNotFoundPayload{
-			DiscordID: eventPayload.DiscordID,
+			UserID: eventPayload.UserID,
 		}); err != nil {
 			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.notfound event", map[string]interface{}{"error": err.Error()})
 			return fmt.Errorf("failed to publish round.tag.number.notfound event: %w", err)
 		}
-
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.notfound event", map[string]interface{}{
-			"user_id": eventPayload.DiscordID,
-		})
 	}
 
 	return nil

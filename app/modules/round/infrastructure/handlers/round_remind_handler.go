@@ -10,7 +10,7 @@ import (
 )
 
 func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundReminderPayload](msg, h.logger)
+	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.DiscordReminderPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundReminderPayload: %w", err)
 	}

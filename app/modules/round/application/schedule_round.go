@@ -11,6 +11,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
@@ -21,13 +22,14 @@ import (
 func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Message) error {
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, s.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundScheduledPayload: %w", err)
+		return fmt.Errorf("failed to unmarshal RoundStoredPayload: %w", err)
 	}
 
-	s.logger.Info("ScheduleRoundEvents: Received RoundStored event", slog.Int64("round_id", eventPayload.Round.ID))
+	s.logger.Info("ScheduleRoundEvents: Received RoundStored event", slog.Int64("round_id", int64(eventPayload.Round.ID)))
 
 	// Ensure StartTime is treated as UTC
-	startTime := eventPayload.Round.StartTime.UTC()
+	startTime := time.Time(*eventPayload.Round.StartTime) // Convert to time.Time
+	startTime = startTime.UTC()
 
 	if time.Until(startTime) < 0 {
 		s.logger.Warn("Round start time is in the past, scheduling for immediate execution", "round_id", eventPayload.Round.ID)
@@ -39,7 +41,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 
 	// --- Schedule 1-Hour Reminder ---
 	payloadBuf.Reset()
-	reminderPayload := roundevents.RoundReminderPayload{
+	reminderPayload := roundevents.DiscordReminderPayload{
 		RoundID:      eventPayload.Round.ID,
 		ReminderType: "1h",
 		RoundTitle:   eventPayload.Round.Title,
@@ -58,7 +60,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 
 	// Publish reminder message with correct subject
 	reminderSubject := fmt.Sprintf("%s.%d", eventbus.DelayedMessagesSubject, eventPayload.Round.ID)
-	s.logger.InfoContext(ctx, " Publishing delayed reminder message", slog.String("subject", reminderSubject), slog.Int64("round_id", eventPayload.Round.ID), slog.Time("execute_at", startTime.Add(-1*time.Hour).UTC()))
+	s.logger.InfoContext(ctx, "Publishing delayed reminder message", slog.String("subject", reminderSubject), slog.Int64("round_id", int64(eventPayload.Round.ID)), slog.Time("execute_at", startTime.Add(-1*time.Hour).UTC()))
 	if err := s.EventBus.Publish(reminderSubject, reminderMsg); err != nil {
 		s.logger.Error("Failed to schedule reminder", "error", err, "round_id", eventPayload.Round.ID, "reminder_type", "1h")
 		return fmt.Errorf("failed to schedule 1h reminder: %w", err)
@@ -70,7 +72,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		RoundID:   eventPayload.Round.ID,
 		Title:     eventPayload.Round.Title,
 		Location:  eventPayload.Round.Location,
-		StartTime: &startTime,
+		StartTime: (*roundtypes.StartTime)(&startTime),
 	}
 
 	if err := encoder.Encode(startPayload); err != nil {
@@ -86,7 +88,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 
 	// Schedule the round processing
 	s.EventBus.ScheduleRoundProcessing(ctx, fmt.Sprintf("%d", eventPayload.Round.ID), startTime.UTC())
-	s.logger.Info("ScheduleRoundEvents: Round processing scheduled", slog.Int64("round_id", eventPayload.Round.ID), slog.Time("execute_at", startTime.UTC()))
+	s.logger.Info("ScheduleRoundEvents: Round processing scheduled", slog.Int64("round_id", int64(eventPayload.Round.ID)), slog.Time("execute_at", startTime.UTC()))
 
 	// Determine if this is an initial creation or an update
 	eventType := msg.Metadata.Get("event_type")
@@ -108,12 +110,15 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 
 	// Publish final event
 	scheduledMsg := roundevents.RoundScheduledPayload{
-		RoundID:     eventPayload.Round.ID,
-		StartTime:   eventPayload.Round.StartTime,
-		Title:       eventPayload.Round.Title,
-		Description: eventPayload.Round.Description,
-		Location:    eventPayload.Round.Location,
-		CreatedBy:   eventPayload.Round.CreatedBy,
+		BaseRoundPayload: roundtypes.BaseRoundPayload{
+			RoundID:     eventPayload.Round.ID,
+			Title:       eventPayload.Round.Title,
+			Description: eventPayload.Round.Description,
+			Location:    eventPayload.Round.Location,
+			StartTime:   &startTime,
+			UserID:      eventPayload.Round.CreatedBy,
+		},
+		DiscordEventID: nil,
 	}
 
 	if err := s.publishEvent(msg, publishTopic, scheduledMsg); err != nil {
@@ -121,6 +126,6 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 		return fmt.Errorf("failed to publish %s event: %w", publishTopic, err)
 	}
 
-	s.logger.Info("ScheduleRoundEvents: Round events scheduled successfully", slog.Int64("round_id", eventPayload.Round.ID))
+	s.logger.Info("ScheduleRoundEvents: Round events scheduled successfully", slog.Int64("round_id", int64(eventPayload.Round.ID)))
 	return nil
 }
