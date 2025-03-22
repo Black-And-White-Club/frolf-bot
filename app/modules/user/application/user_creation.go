@@ -106,7 +106,7 @@ func (s *UserServiceImpl) PublishUserCreated(ctx context.Context, msg *message.M
 	}
 
 	// Publish the event
-	if err := s.eventBus.Publish("discord.user.signup.success", newMessage); err != nil {
+	if err := s.eventBus.Publish(userevents.UserSignupSuccess, newMessage); err != nil {
 		s.logger.Error("Failed to publish UserCreated event",
 			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),
@@ -129,7 +129,7 @@ func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *me
 
 	// Prepare the event payload
 	eventPayload := &userevents.UserCreationFailedPayload{
-		DiscordID: discordID, // This is where you set the DiscordID
+		DiscordID: discordID,
 		Reason:    reason,
 	}
 	if tag != nil {
@@ -153,7 +153,7 @@ func (s *UserServiceImpl) PublishUserCreationFailed(ctx context.Context, msg *me
 	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
 
 	// Publish the event
-	if err := s.eventBus.Publish("discord.user.signup.failed", newMessage); err != nil {
+	if err := s.eventBus.Publish(userevents.UserSignupFailed, newMessage); err != nil {
 		s.logger.Error("Failed to publish UserCreationFailed event",
 			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),

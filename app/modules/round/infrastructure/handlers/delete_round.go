@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundDeleteRequestPayload: %w", err)
@@ -31,7 +31,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteValidatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundDeleteValidatedPayload: %w", err)
@@ -53,7 +53,7 @@ func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundToDeleteFetched(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundToDeleteFetched(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundToDeleteFetchedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundToDeleteFetchedPayload: %w", err)
@@ -75,7 +75,7 @@ func (h *RoundHandlers) HandleRoundToDeleteFetched(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteAuthorizedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundDeleteAuthorizedPayload: %w", err)
@@ -97,7 +97,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) error 
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundUserRoleCheckResult(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundUserRoleCheckResult(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.UserRoleCheckResultPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal UserRoleCheckResultPayload: %w", err)

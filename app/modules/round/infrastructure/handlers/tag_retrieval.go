@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundTagNumberRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundTagNumberRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.TagNumberRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal TagNumberRequestPayload: %w", err)
@@ -31,7 +31,7 @@ func (h *RoundHandlers) HandleRoundTagNumberRequest(msg *message.Message) error 
 	return nil
 }
 
-func (h *RoundHandlers) HandleLeaderboardGetTagNumberResponse(msg *message.Message) error {
+func (h *RoundHandlers) HandleLeaderboardGetTagNumberResponse(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.GetTagNumberResponsePayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal GetTagNumberResponsePayload: %w", err)

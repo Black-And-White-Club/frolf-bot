@@ -8,12 +8,12 @@ import (
 )
 
 // RoundDBInterface is the interface for interacting with the rounds database.
-type RoundDBInterface interface {
+type RoundDB interface {
 	CreateRound(ctx context.Context, round *roundtypes.Round) error
 	GetRound(ctx context.Context, roundID roundtypes.ID) (*roundtypes.Round, error)
 	UpdateRound(ctx context.Context, roundID roundtypes.ID, round *roundtypes.Round) error
 	DeleteRound(ctx context.Context, roundID roundtypes.ID) error
-	UpdateParticipant(ctx context.Context, roundID roundtypes.ID, participant roundtypes.Participant) error
+	UpdateParticipant(ctx context.Context, roundID roundtypes.ID, participant roundtypes.Participant) ([]roundtypes.Participant, error)
 	UpdateRoundState(ctx context.Context, roundID roundtypes.ID, state roundtypes.RoundState) error
 	GetUpcomingRounds(ctx context.Context, startTime time.Time, endTime time.Time) ([]*roundtypes.Round, error)
 	UpdateParticipantScore(ctx context.Context, roundID roundtypes.ID, participantID string, score int) error
@@ -21,7 +21,8 @@ type RoundDBInterface interface {
 	GetRoundState(ctx context.Context, roundID roundtypes.ID) (roundtypes.RoundState, error)
 	LogRound(ctx context.Context, round *roundtypes.Round) error
 	GetParticipants(ctx context.Context, roundID roundtypes.ID) ([]roundtypes.Participant, error)
-	UpdateDiscordEventID(ctx context.Context, roundID roundtypes.ID, discordEventID string) error
+	UpdateEventMessageID(ctx context.Context, roundID roundtypes.ID, eventMessageID string) error
 	GetParticipant(ctx context.Context, roundID roundtypes.ID, userID string) (*roundtypes.Participant, error)
 	RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID string) error
+	GetEventMessageID(ctx context.Context, roundID roundtypes.ID) (*roundtypes.EventMessageID, error)
 }

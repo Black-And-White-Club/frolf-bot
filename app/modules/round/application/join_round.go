@@ -2,82 +2,124 @@ package roundservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// -- Service Functions for JoinRound Flow --
+// CheckParticipantStatus checks if this is a toggle action or a new join
+func (s *RoundService) CheckParticipantStatus(ctx context.Context, msg *message.Message) error {
+	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, s.logger)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
+	}
+
+	slog.Debug("Unmarshalled payload in CheckParticipantStatus",
+		slog.Any("correlation_id", correlationID),
+		slog.Any("payload", payload))
+
+	// Check if the user is already a participant
+	participant, err := s.RoundDB.GetParticipant(ctx, payload.RoundID, string(payload.UserID))
+	if err != nil {
+		slog.Error("Failed to get participant's current status",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err))
+		return s.publishParticipantJoinError(msg, payload, err)
+	}
+
+	currentStatus := ""
+	if participant != nil {
+		currentStatus = string(participant.Response)
+	}
+
+	// Handle toggle removal (if the same status is clicked again)
+	if currentStatus == string(payload.Response) {
+		slog.Info("Toggle action detected - publishing removal request",
+			slog.String("correlation_id", correlationID),
+			slog.String("status", currentStatus))
+
+		// Publish a removal request event
+		if err := s.publishEvent(msg, roundevents.RoundParticipantRemovalRequest, roundevents.ParticipantRemovalRequestPayload{
+			RoundID: payload.RoundID,
+			UserID:  payload.UserID,
+		}); err != nil {
+			slog.Error("Failed to publish removal request",
+				slog.String("correlation_id", correlationID),
+				slog.Any("error", err))
+			return err
+		}
+	} else {
+		// Late Join Detection
+		isLateJoin := payload.JoinedLate != nil && *payload.JoinedLate
+
+		slog.Debug("Publishing validation request",
+			slog.String("correlation_id", correlationID),
+			slog.Bool("joined_late", isLateJoin),
+			slog.Any("payload", payload))
+
+		// Publish validation request, ensuring `JoinedLate` is passed correctly
+		if err := s.publishEvent(msg, roundevents.RoundParticipantJoinValidationRequest, roundevents.ParticipantJoinRequestPayload{
+			RoundID:    payload.RoundID,
+			UserID:     payload.UserID,
+			Response:   payload.Response,
+			JoinedLate: payload.JoinedLate,
+		}); err != nil {
+			slog.Error("Failed to publish validation request",
+				slog.String("correlation_id", correlationID),
+				slog.Any("error", err))
+			return err
+		}
+	}
+
+	return nil
+}
 
 // ValidateParticipantJoinRequest validates the participant join request and publishes the next step.
 func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, msg *message.Message) error {
-	// Unmarshal the payload from the message
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
 	}
 
-	// Log the entire unmarshalled payload for debugging
-	s.logger.Debug("Unmarshalled payload",
+	isLateJoin := eventPayload.JoinedLate != nil && *eventPayload.JoinedLate
+	slog.Debug("Validating participant join request",
+		slog.Bool("joined_late", isLateJoin),
 		slog.Any("payload", eventPayload))
 
-	// Validate RoundID
+	// Validation checks
 	if eventPayload.RoundID == 0 {
 		return s.publishParticipantJoinError(msg, eventPayload, fmt.Errorf("round ID cannot be zero"))
 	}
 
-	// Validate UserID
 	if eventPayload.UserID == "" {
 		return s.publishParticipantJoinError(msg, eventPayload, fmt.Errorf("participant Discord ID cannot be empty"))
 	}
 
-	// Log the validated RoundID and UserID
-	s.logger.Debug("Validated payload",
-		slog.Int64("round_id", int64(eventPayload.RoundID)),
-		slog.String("user_id", string(eventPayload.UserID)))
+	payloadBytes, err := json.Marshal(eventPayload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
 
-	// Determine the next step based on the RSVP response
-	switch eventPayload.Response {
-	case roundtypes.ResponseDecline:
-		// Publish a decline event
-		if err := s.publishEvent(msg, roundevents.RoundParticipantDeclined, roundevents.ParticipantDeclinedPayload{
-			RoundID: eventPayload.RoundID,
-			UserID:  eventPayload.UserID,
-		}); err != nil {
-			return fmt.Errorf("failed to publish round.participant.declined event: %w", err)
-		}
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Participant declined", map[string]interface{}{
-			"round_id": eventPayload.RoundID,
-			"user_id":  eventPayload.UserID,
-		})
+	// Create a Watermill message
+	joinValidatedMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 
-	case roundtypes.ResponseAccept, roundtypes.ResponseTentative:
-		// Publish a validated event for Accept or Tentative
-		if err := s.publishEvent(msg, roundevents.RoundParticipantJoinValidated, eventPayload); err != nil {
-			return fmt.Errorf("failed to publish round.participant.join.validated event: %w", err)
-		}
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Participant join request validated", map[string]interface{}{
-			"round_id": eventPayload.RoundID,
-		})
+	// Publish using EventBus
+	if err := s.EventBus.Publish(roundevents.RoundParticipantJoinValidated, joinValidatedMsg); err != nil {
+		slog.Error("🔥 Failed to publish round.participant.join.validated event", slog.Any("error", err))
+		return fmt.Errorf("failed to publish round.participant.join.validated event: %w", err)
+	}
 
-		// Publish a tag number request event
-		if err := s.publishEvent(msg, roundevents.RoundTagNumberRequest, roundevents.TagNumberRequestPayload{
-			UserID: eventPayload.UserID,
-		}); err != nil {
-			return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
-		}
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Published round.tag.number.request event", map[string]interface{}{
-			"user_id": eventPayload.UserID,
-		})
-
-	default:
-		return fmt.Errorf("unknown response type: %s", eventPayload.Response)
+	// Log if it's a late join
+	if isLateJoin {
+		slog.Info("Late join request validated",
+			slog.Int64("round_id", int64(eventPayload.RoundID)),
+			slog.String("user_id", string(eventPayload.UserID)))
 	}
 
 	return nil
@@ -90,32 +132,37 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, msg *message.Mess
 		return fmt.Errorf("failed to unmarshal ParticipantRemovalRequestPayload: %w", err)
 	}
 
-	s.logger.Info("Removing participant from round",
+	slog.Info("Removing participant from round",
 		slog.String("correlation_id", correlationID),
 		slog.Int64("round_id", int64(eventPayload.RoundID)),
 		slog.String("user_id", string(eventPayload.UserID)))
 
-	// Get current response before removing (for the event)
+	// Retrieve EventMessageID
+	eventMessageID, err := s.getEventMessageID(ctx, eventPayload.RoundID)
+	if err != nil {
+		return err
+	}
+
+	// Get current response before removing (for event publishing)
 	participant, err := s.RoundDB.GetParticipant(ctx, eventPayload.RoundID, string(eventPayload.UserID))
 	if err != nil {
-		s.logger.Error("Failed to get participant response before removal",
+		slog.Error("Failed to get participant response before removal",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err))
 		return fmt.Errorf("failed to get participant response before removal: %w", err)
 	}
 
-	// Get response value for the event
+	// Determine the response to include in the event
 	var response roundtypes.Response
 	if participant == nil {
-		// They weren't in the round to begin with
-		response = roundtypes.Response("")
+		response = roundtypes.Response("") // User was not in the round
 	} else {
 		response = roundtypes.Response(participant.Response)
 	}
 
 	// Remove participant from database
 	if err := s.RoundDB.RemoveParticipant(ctx, eventPayload.RoundID, string(eventPayload.UserID)); err != nil {
-		s.logger.Error("Failed to remove participant from database",
+		slog.Error("Failed to remove participant from database",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err))
 		return fmt.Errorf("failed to remove participant from database: %w", err)
@@ -123,128 +170,123 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, msg *message.Mess
 
 	// Publish participant removed event
 	if err := s.publishEvent(msg, roundevents.RoundParticipantRemoved, roundevents.ParticipantRemovedPayload{
-		RoundID:  eventPayload.RoundID,
-		UserID:   eventPayload.UserID,
-		Response: response, // Include the response they were removed from
+		RoundID:        eventPayload.RoundID,
+		UserID:         eventPayload.UserID,
+		Response:       response,
+		EventMessageID: eventMessageID, // ✅ Now included!
 	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg,
+		slog.Error(
 			"Failed to publish participant.removed event",
 			map[string]interface{}{"error": err.Error()})
 		return fmt.Errorf("failed to publish participant.removed event: %w", err)
 	}
 
-	s.logger.Info("Participant removed successfully",
+	slog.Info("Participant removed successfully",
 		slog.String("correlation_id", correlationID))
+
 	return nil
 }
 
 // ParticipantTagFound handles the round.tag.number.found event.
+// ParticipantTagFound handles the round.tag.number.found event.
 func (s *RoundService) ParticipantTagFound(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, s.logger)
+	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundTagNumberFoundPayload](msg, s.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
+		return fmt.Errorf("failed to unmarshal RoundTagNumberFoundPayload: %w", err)
 	}
 
-	s.logger.Info("Received ParticipantJoinRequest event", slog.String("correlation_id", correlationID))
+	slog.Info("Received ParticipantTagFound event",
+		slog.String("correlation_id", correlationID),
+		slog.String("user_id", string(eventPayload.UserID)),
+		slog.Any("tag_number", eventPayload.TagNumber))
 
 	roundID := eventPayload.RoundID
 
-	// Convert response and tag number
-	participant := roundtypes.Participant{
-		UserID:    eventPayload.UserID,
-		Response:  eventPayload.Response,
-		TagNumber: eventPayload.TagNumber,
-		Score:     nil, // Score is initialized to nil
+	// Retrieve EventMessageID
+	eventMessageID, err := s.getEventMessageID(ctx, roundID)
+	if err != nil {
+		return err
 	}
 
-	// Update the participant in the database
-	if err = s.RoundDB.UpdateParticipant(ctx, roundID, participant); err != nil {
-		s.logger.Error("Failed to update participant in database",
+	// Ensure tag number is properly assigned
+	var tagNumber *int
+	if eventPayload.TagNumber != nil {
+		tagNumber = eventPayload.TagNumber
+	} else {
+		slog.Warn("Tag number is missing in event payload", slog.String("user_id", string(eventPayload.UserID)))
+	}
+
+	// Create a new participant with the found tag number
+	participant := roundtypes.Participant{
+		UserID:    string(eventPayload.UserID),
+		Response:  string(roundtypes.ResponseAccept),
+		TagNumber: tagNumber, // Ensure this is not nil if it should have a value
+		Score:     nil,
+	}
+
+	// Update participant in the database
+	updatedParticipants, err := s.RoundDB.UpdateParticipant(ctx, roundID, participant)
+	if err != nil {
+		slog.Error("Failed to update participant in database",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
 		)
-		return s.publishParticipantJoinError(msg, eventPayload, err)
+		return err
 	}
 
-	// Publish the joined event
-	if err := s.publishEvent(msg, roundevents.RoundParticipantJoined, roundevents.ParticipantJoinedPayload{
-		RoundID: roundID,
-		Participant: roundtypes.Participant{
-			UserID:    eventPayload.UserID,
-			Response:  eventPayload.Response,
-			TagNumber: eventPayload.TagNumber,
-			Score:     nil,
-		},
-	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.participant.joined event", map[string]interface{}{"error": err.Error()})
+	slog.Info("Updated participants list from database",
+		slog.Any("updated_participants", updatedParticipants),
+	)
+
+	// Categorize participants
+	var accepted, declined, tentative []roundtypes.Participant
+	for _, p := range updatedParticipants {
+		switch roundtypes.Response(p.Response) {
+		case roundtypes.ResponseAccept:
+			accepted = append(accepted, p)
+		case roundtypes.ResponseDecline:
+			declined = append(declined, p)
+		case roundtypes.ResponseTentative:
+			tentative = append(tentative, p)
+		}
+	}
+
+	slog.Info("Categorized participants",
+		slog.Any("accepted", accepted),
+		slog.Any("declined", declined),
+		slog.Any("tentative", tentative),
+	)
+
+	// Publish updated participant list
+	joinedPayload := roundevents.ParticipantJoinedPayload{
+		RoundID:               roundID,
+		AcceptedParticipants:  accepted,
+		DeclinedParticipants:  declined,
+		TentativeParticipants: tentative,
+		EventMessageID:        eventMessageID,
+	}
+
+	payloadBytes, err := json.Marshal(joinedPayload)
+	if err != nil {
+		slog.Error("Failed to marshal participant joined payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("failed to marshal participant joined payload: %w", err)
+	}
+
+	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	if err := s.EventBus.Publish(roundevents.RoundParticipantJoined, newMessage); err != nil {
+		slog.Error("Failed to publish round.participant.joined event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish round.participant.joined event: %w", err)
 	}
 
-	return nil
-}
-
-// CheckParticipantStatus checks if this is a toggle action or a new join
-func (s *RoundService) CheckParticipantStatus(ctx context.Context, msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
-	}
-
-	s.logger.Debug("Unmarshalled payload in CheckParticipantStatus",
-		slog.String("correlation_id", correlationID),
-		slog.Any("payload", payload))
-
-	// Get current status from database
-	participant, err := s.RoundDB.GetParticipant(ctx, payload.RoundID, string(payload.UserID))
-	if err != nil {
-		s.logger.Error("Failed to get participant's current status",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err))
-		return s.publishParticipantJoinError(msg, payload, err)
-	}
-
-	currentStatus := ""
-	if participant != nil {
-		currentStatus = string(participant.Response)
-	}
-
-	// Check if this is a toggle action
-	if currentStatus == string(payload.Response) {
-		s.logger.Info("Toggle action detected - publishing removal request",
-			slog.String("correlation_id", correlationID),
-			slog.String("status", currentStatus))
-
-		// Publish a removal request event
-		if err := s.publishEvent(msg, roundevents.RoundParticipantRemovalRequest, roundevents.ParticipantRemovalRequestPayload{
-			RoundID: payload.RoundID,
-			UserID:  payload.UserID,
-		}); err != nil {
-			s.logger.Error("Failed to publish removal request",
-				slog.String("correlation_id", correlationID),
-				slog.Any("error", err))
-			return err
-		}
-	} else {
-		// Not a toggle action, proceed with validation
-		s.logger.Debug("Publishing validation request",
-			slog.String("correlation_id", correlationID),
-			slog.Any("payload", roundevents.ParticipantJoinRequestPayload{
-				RoundID:  payload.RoundID,
-				UserID:   payload.UserID,
-				Response: payload.Response,
-			}))
-
-		if err := s.publishEvent(msg, roundevents.RoundParticipantJoinValidationRequest, roundevents.ParticipantJoinRequestPayload{
-			RoundID:  payload.RoundID,
-			UserID:   payload.UserID,
-			Response: payload.Response,
-		}); err != nil {
-			s.logger.Error("Failed to publish validation request",
-				slog.String("correlation_id", correlationID),
-				slog.Any("error", err))
-			return err
-		}
-	}
+	slog.Info("Successfully published discord.round.participant.joined event",
+		slog.Any("published_payload", joinedPayload),
+	)
 
 	return nil
 }
@@ -256,85 +298,132 @@ func (s *RoundService) ParticipantTagNotFound(ctx context.Context, msg *message.
 		return fmt.Errorf("failed to unmarshal RoundTagNumberNotFoundPayload: %w", err)
 	}
 
-	// Get RoundID from message metadata
-	roundIDStr := msg.Metadata.Get("RoundID")
-	if roundIDStr == "" {
-		return fmt.Errorf("RoundID not found in message metadata")
-	}
+	slog.Info("Received ParticipantTagNotFound event",
+		slog.String("correlation_id", correlationID))
 
-	// Convert roundIDStr to int64
-	roundID, err := strconv.ParseInt(roundIDStr, 10, 64)
+	roundID := eventPayload.RoundID
+
+	// Retrieve EventMessageID
+	eventMessageID, err := s.getEventMessageID(ctx, roundID)
 	if err != nil {
-		return fmt.Errorf("invalid RoundID in message metadata: %w", err)
+		return err
 	}
 
-	// Create a new participant with no tag
+	slog.Info("About to categorize participants 🚀") // Add this line
+
+	// Create a new participant with no tag but with ACCEPT status
 	participant := roundtypes.Participant{
-		UserID:    eventPayload.UserID,
-		Response:  roundtypes.ResponseAccept,
+		UserID:    string(eventPayload.UserID),
+		Response:  string(roundtypes.ResponseAccept),
 		TagNumber: nil, // No tag number
 		Score:     nil,
 	}
 
-	if err = s.RoundDB.UpdateParticipant(ctx, roundtypes.ID(roundID), participant); err != nil {
-		s.logger.Error("Failed to update participant in database",
+	// Get the updated participants list from the database
+	updatedParticipants, err := s.RoundDB.UpdateParticipant(ctx, roundID, participant)
+	if err != nil {
+		slog.Error("Failed to update participant in database",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),
 		)
-		return s.publishParticipantJoinError(msg, roundevents.ParticipantJoinRequestPayload{
-			RoundID: roundtypes.ID(roundID),
-			UserID:  eventPayload.UserID,
-		}, err)
+
+		joinRequestPayload := roundevents.ParticipantJoinRequestPayload{
+			RoundID:    roundID,
+			UserID:     eventPayload.UserID,
+			Response:   roundtypes.ResponseAccept,
+			JoinedLate: nil,
+		}
+		return s.publishParticipantJoinError(msg, joinRequestPayload, err)
 	}
 
-	// Publish joined event with nil tag number
-	if err := s.publishEvent(msg, roundevents.RoundParticipantJoined, roundevents.ParticipantJoinedPayload{
-		RoundID: roundtypes.ID(roundID),
-		Participant: roundtypes.Participant{
-			UserID:    eventPayload.UserID,
-			TagNumber: nil,
-			Response:  roundtypes.ResponseAccept,
-			Score:     nil,
-		},
-	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.participant.joined event", map[string]interface{}{"error": err.Error()})
+	// Log what's in the updated participants list
+	slog.Info("Updated participants list from database",
+		slog.Any("updated_participants", updatedParticipants),
+	)
+
+	// Assign participants to respective lists
+	var accepted, declined, tentative []roundtypes.Participant
+	for _, p := range updatedParticipants {
+		switch roundtypes.Response(p.Response) {
+		case roundtypes.ResponseAccept:
+			accepted = append(accepted, p)
+		case roundtypes.ResponseDecline:
+			declined = append(declined, p)
+		case roundtypes.ResponseTentative:
+			tentative = append(tentative, p)
+		}
+	}
+
+	slog.Info("Categorized participants",
+		slog.Any("accepted", accepted),
+		slog.Any("declined", declined),
+		slog.Any("tentative", tentative),
+	)
+
+	// Construct the payload for the participant joined event
+	joinedPayload := roundevents.ParticipantJoinedPayload{
+		RoundID:               roundID,
+		AcceptedParticipants:  accepted,
+		DeclinedParticipants:  declined,
+		TentativeParticipants: tentative,
+		EventMessageID:        eventMessageID,
+	}
+
+	// *** ADDED LOGGING HERE ***
+	slog.Info("Before marshalling joinedPayload",
+		slog.Any("accepted", accepted),
+		slog.Any("declined", declined),
+		slog.Any("tentative", tentative),
+	)
+
+	// Marshal the payload
+	payloadBytes, err := json.Marshal(joinedPayload)
+	if err != nil {
+		slog.Error("Failed to marshal participant joined payload",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("failed to marshal participant joined payload: %w", err)
+	}
+	slog.Info("ParticipantJoinedPayload being sent",
+		slog.Any("payload", joinedPayload),
+	)
+
+	// Create a new Watermill message
+	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	// Publish the event
+	if err := s.EventBus.Publish(roundevents.RoundParticipantJoined, newMessage); err != nil {
+		slog.Error("Failed to publish discord.round.participant.joined event",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("failed to publish round.participant.joined event: %w", err)
 	}
+
+	slog.Info("Successfully published discord.round.participant.joined event",
+		slog.Any("published_payload", joinedPayload),
+	)
 
 	return nil
 }
 
 // HandleDecline logs the participant's decline response and updates the database.
 func (s *RoundService) HandleDecline(ctx context.Context, msg *message.Message) error {
-	// Unmarshal the payload to get the event data
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.ParticipantDeclinedPayload](msg, s.logger)
+	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.ParticipantDeclinedPayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantDeclinedPayload: %w", err)
 	}
 
-	// Create a rounddb.Participant object for the decline
-	participant := roundtypes.Participant{
-		UserID:    eventPayload.UserID,
-		Response:  roundtypes.ResponseAccept,
-		TagNumber: nil, // No tag number
-		Score:     nil,
+	eventMessageID, err := s.getEventMessageID(ctx, eventPayload.RoundID)
+	if err != nil {
+		return err
 	}
 
-	if err = s.RoundDB.UpdateParticipant(ctx, roundtypes.ID(eventPayload.RoundID), participant); err != nil {
-		s.logger.Error("Failed to update participant in database",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return s.publishParticipantJoinError(msg, roundevents.ParticipantJoinRequestPayload{
-			RoundID: roundtypes.ID(eventPayload.RoundID),
-			UserID:  eventPayload.UserID,
-		}, err)
-	}
-
-	// Publish an event to notify Discord to update the embed
-	if err := s.publishEvent(nil, roundevents.RoundParticipantDeclinedResponse, roundevents.ParticipantDeclinedPayload{
-		RoundID: eventPayload.RoundID,
-		UserID:  eventPayload.UserID,
+	if err := s.publishEvent(msg, roundevents.RoundParticipantDeclinedResponse, roundevents.ParticipantDeclinedPayload{
+		RoundID:        eventPayload.RoundID,
+		UserID:         eventPayload.UserID,
+		EventMessageID: eventMessageID,
 	}); err != nil {
 		return fmt.Errorf("failed to publish participant declined notification for round %d: %w", eventPayload.RoundID, err)
 	}
@@ -344,15 +433,19 @@ func (s *RoundService) HandleDecline(ctx context.Context, msg *message.Message) 
 
 // publishParticipantJoinError publishes a round.participant.join.error event.
 func (s *RoundService) publishParticipantJoinError(msg *message.Message, input roundevents.ParticipantJoinRequestPayload, err error) error {
+	eventMessageID, getErr := s.getEventMessageID(context.Background(), input.RoundID)
+	if getErr != nil {
+		slog.Error("Failed to retrieve EventMessageID for error event", slog.Any("error", getErr))
+		eventMessageID = "" // Fallback to empty
+	}
+
 	payload := roundevents.RoundParticipantJoinErrorPayload{
 		ParticipantJoinRequest: &input,
 		Error:                  err.Error(),
+		EventMessageID:         eventMessageID,
 	}
 
 	if pubErr := s.publishEvent(msg, roundevents.RoundParticipantJoinError, payload); pubErr != nil {
-		logging.LogErrorWithMetadata(context.Background(), s.logger, msg, "Failed to publish round.participant.join.error event", map[string]interface{}{
-			"original_error": err.Error(),
-		})
 		return fmt.Errorf("failed to publish round.participant.join.error event: %w, original error: %w", pubErr, err)
 	}
 

@@ -32,9 +32,10 @@ func (s *RoundService) FinalizeRound(ctx context.Context, msg *message.Message) 
 		return fmt.Errorf("failed to publish round.finalized event: %w", err)
 	}
 
-	if err := s.publishEvent(msg, roundevents.RoundFinalized, finalizedPayload); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.finalized event", map[string]interface{}{})
-		return fmt.Errorf("failed to publish round.finalized event: %w", err)
+	// 3. NEW: Publish a "discord.round.finalized" event or similar
+	if err := s.publishEvent(msg, roundevents.DiscordRoundFinalized, finalizedPayload); err != nil {
+		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish discord.round.finalized event", map[string]interface{}{})
+		return fmt.Errorf("failed to publish discord.round.finalized event: %w", err)
 	}
 
 	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round finalized", map[string]interface{}{"round_id": eventPayload.RoundID})
@@ -69,7 +70,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Messa
 		}
 
 		scores = append(scores, roundevents.ParticipantScore{
-			UserID:    p.UserID,
+			UserID:    roundtypes.UserID(p.UserID),
 			TagNumber: &tagNumber,
 			Score:     score,
 		})

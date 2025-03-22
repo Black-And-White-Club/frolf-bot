@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
@@ -40,8 +41,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID:                 "some-uuid",
-					RequestingUserDiscordID: "user-123",
+					RoundID:              1,
+					RequestingUserUserID: "user-123",
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteValidated,
@@ -67,7 +68,7 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteRequestPayload{
-					RequestingUserDiscordID: "user-123",
+					RequestingUserUserID: "user-123",
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteError,
@@ -81,7 +82,7 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID: "some-uuid",
+					RoundID: 1,
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteError,
@@ -95,8 +96,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID:                 "some-uuid",
-					RequestingUserDiscordID: "user-123",
+					RoundID:              1,
+					RequestingUserUserID: "user-123",
 				},
 			},
 			expectedEvent: "",
@@ -142,7 +143,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	logger := slog.Default()
 
 	type args struct {
@@ -161,15 +162,24 @@ func TestRoundService_DeleteRound(t *testing.T) {
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: "some-uuid",
+						RoundID: 1,
 					})
 					return payload
 				}()),
 			},
 			wantErr: false,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(nil).Times(1)
+				// Mock GetEventMessageID - this was missing in your original test
+				eventMessageID := roundtypes.EventMessageID("message-123")
+				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(&eventMessageID, nil).Times(1)
+
+				// Mock DeleteRound
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
+
+				// Mock CancelScheduledMessage - note the string parameter
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
+
+				// Mock Publish
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -185,19 +195,36 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			},
 		},
 		{
-			name: "Failed to delete round from database",
+			name: "Failed to retrieve EventMessageID",
 			args: args{
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: "some-uuid",
+						RoundID: 1,
 					})
 					return payload
 				}()),
 			},
 			wantErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(fmt.Errorf("db error")).Times(1)
+				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, fmt.Errorf("failed to get event message ID")).Times(1)
+			},
+		},
+		{
+			name: "Failed to delete round from database",
+			args: args{
+				ctx: context.Background(),
+				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
+					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: 1,
+					})
+					return payload
+				}()),
+			},
+			wantErr: true,
+			mockExpects: func() {
+				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, nil).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(fmt.Errorf("db error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -207,15 +234,16 @@ func TestRoundService_DeleteRound(t *testing.T) {
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: "some-uuid",
+						RoundID: 1,
 					})
 					return payload
 				}()),
 			},
 			wantErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(fmt.Errorf("cancel error")).Times(1)
+				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, nil).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(fmt.Errorf("cancel error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -225,15 +253,17 @@ func TestRoundService_DeleteRound(t *testing.T) {
 				ctx: context.Background(),
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: "some-uuid",
+						RoundID: 1,
 					})
 					return payload
 				}()),
 			},
 			wantErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), "some-uuid").Return(nil).Times(1)
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), "some-uuid").Return(nil).Times(1)
+				eventMessageID := roundtypes.EventMessageID("message-123")
+				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(&eventMessageID, nil).Times(1)
+				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
+				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
 			},
 		},

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -46,14 +47,14 @@ func TestRoundHandlers_HandleRoundParticipantJoinRequest(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
+					RoundID:  roundtypes.ID(1),
+					UserID:   "some-discord-id",
+					Response: "some-response",
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateParticipantJoinRequest(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().CheckParticipantStatus(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -63,7 +64,7 @@ func TestRoundHandlers_HandleRoundParticipantJoinRequest(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid-payload")), // Use a simple invalid payload
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
@@ -78,14 +79,70 @@ func TestRoundHandlers_HandleRoundParticipantJoinRequest(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
+					RoundID:  roundtypes.ID(1),
+					UserID:   "some-discord-id",
+					Response: "some-response",
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateParticipantJoinRequest(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().CheckParticipantStatus(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			},
+		},
+		{
+			name: "Late Join Detected",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinRequestPayload{
+					RoundID:    roundtypes.ID(1),
+					UserID:     "some-discord-id",
+					Response:   "some-response",
+					JoinedLate: func(b bool) *bool { return &b }(true), // Create a pointer to true
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().CheckParticipantStatus(gomock.Any(), a.msg).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "Tag Number Provided",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinRequestPayload{
+					RoundID:   roundtypes.ID(1),
+					UserID:    "some-discord-id",
+					Response:  "some-response",
+					TagNumber: func(i int) *int { return &i }(123),
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().CheckParticipantStatus(gomock.Any(), a.msg).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "No Optional Fields",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinRequestPayload{
+					RoundID:  roundtypes.ID(1),
+					UserID:   "some-discord-id",
+					Response: "some-response",
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().CheckParticipantStatus(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 	}
@@ -101,7 +158,8 @@ func TestRoundHandlers_HandleRoundParticipantJoinRequest(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundParticipantJoinRequest(tt.args.msg); (err != nil) != tt.expectErr {
+			err := h.HandleRoundParticipantJoinRequest(tt.args.msg)
+			if (err != nil) != tt.expectErr {
 				t.Errorf("RoundHandlers.HandleRoundParticipantJoinRequest() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
@@ -141,15 +199,16 @@ func TestRoundHandlers_HandleRoundParticipantJoinValidated(t *testing.T) {
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinValidatedPayload{
 					ParticipantJoinRequestPayload: roundevents.ParticipantJoinRequestPayload{
-						RoundID:     "some-round-id",
-						Participant: "some-discord-id",
+						RoundID:  1,
+						UserID:   "some-discord-id",
+						Response: "some-response",
 					},
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckParticipantTag(gomock.Any(), a.msg).Return(nil).Times(1)
+				// Set up expectation for the *new* message that will be sent.
+				f.RoundService.EXPECT().RequestTagNumber(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
@@ -159,7 +218,7 @@ func TestRoundHandlers_HandleRoundParticipantJoinValidated(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid-payload")),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
@@ -175,15 +234,57 @@ func TestRoundHandlers_HandleRoundParticipantJoinValidated(t *testing.T) {
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinValidatedPayload{
 					ParticipantJoinRequestPayload: roundevents.ParticipantJoinRequestPayload{
-						RoundID:     "some-round-id",
-						Participant: "some-discord-id",
+						RoundID:  1,
+						UserID:   "some-discord-id",
+						Response: "some-response",
 					},
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckParticipantTag(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().RequestTagNumber(gomock.Any(), gomock.Any()).Return(fmt.Errorf("service error")).Times(1)
+			},
+		},
+		{
+			name: "Tag Number and JoinedLate",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinValidatedPayload{
+					ParticipantJoinRequestPayload: roundevents.ParticipantJoinRequestPayload{
+						RoundID:    1,
+						UserID:     "some-discord-id",
+						Response:   "some-response",
+						TagNumber:  func(i int) *int { return &i }(123),
+						JoinedLate: func(b bool) *bool { return &b }(true),
+					},
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().RequestTagNumber(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			},
+		},
+		{
+			name: "RequestTagNumber fails",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantJoinValidatedPayload{
+					ParticipantJoinRequestPayload: roundevents.ParticipantJoinRequestPayload{
+						RoundID:  1,
+						UserID:   "some-discord-id",
+						Response: "some-response",
+					},
+				}),
+			},
+			expectErr: true,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().RequestTagNumber(gomock.Any(), gomock.Any()).Return(fmt.Errorf("tag number error")).Times(1)
 			},
 		},
 	}
@@ -199,7 +300,8 @@ func TestRoundHandlers_HandleRoundParticipantJoinValidated(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundParticipantJoinValidated(tt.args.msg); (err != nil) != tt.expectErr {
+			err := h.HandleRoundParticipantJoinValidated(tt.args.msg)
+			if (err != nil) != tt.expectErr {
 				t.Errorf("RoundHandlers.HandleRoundParticipantJoinValidated() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
@@ -238,14 +340,13 @@ func TestRoundHandlers_HandleRoundTagNumberFound(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberFoundPayload{
-					RoundID:   "some-round-id",
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					RoundID:   1,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				f.RoundService.EXPECT().ParticipantTagFound(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
@@ -256,7 +357,7 @@ func TestRoundHandlers_HandleRoundTagNumberFound(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
+				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid-payload")),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
@@ -271,15 +372,50 @@ func TestRoundHandlers_HandleRoundTagNumberFound(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberFoundPayload{
-					RoundID:   "some-round-id",
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					RoundID:   1,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				f.RoundService.EXPECT().ParticipantTagFound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			},
+		},
+		{
+			name: "Invalid RoundID",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberFoundPayload{
+					RoundID:   1, // Use invalid round ID type
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
+				}),
+			},
+			expectErr: true,
+			mockExpects: func(f fields, a args) {
+				//  unmarshalling error
+			},
+		},
+		{
+			name: "Zero TagNumber",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberFoundPayload{
+					RoundID:   1,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(0), //  0 tag number.
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().ParticipantTagFound(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 	}
@@ -295,7 +431,8 @@ func TestRoundHandlers_HandleRoundTagNumberFound(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundTagNumberFound(tt.args.msg); (err != nil) != tt.expectErr {
+			err := h.HandleRoundTagNumberFound(tt.args.msg)
+			if (err != nil) != tt.expectErr {
 				t.Errorf("RoundHandlers.HandleRoundTagNumberFound() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
@@ -334,7 +471,7 @@ func TestRoundHandlers_HandleRoundTagNumberNotFound(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberNotFoundPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				}),
 			},
 			expectErr: false,
@@ -365,13 +502,44 @@ func TestRoundHandlers_HandleRoundTagNumberNotFound(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberNotFoundPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
 				f.RoundService.EXPECT().ParticipantTagNotFound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			},
+		},
+		{
+			name: "Missing UserID",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberNotFoundPayload{ // Missing UserID
+				}),
+			},
+			expectErr: true,
+			mockExpects: func(f fields, a args) {
+				//  unmarshalling error is expected.
+			},
+		},
+		{
+			name: "Empty UserID",
+			fields: fields{
+				RoundService: mockRoundService,
+				logger:       logger,
+			},
+			args: args{
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundTagNumberNotFoundPayload{
+					UserID: "", // Empty UserID
+				}),
+			},
+			expectErr: false,
+			mockExpects: func(f fields, a args) {
+				f.RoundService.EXPECT().ParticipantTagNotFound(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 	}
@@ -387,7 +555,8 @@ func TestRoundHandlers_HandleRoundTagNumberNotFound(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundTagNumberNotFound(tt.args.msg); (err != nil) != tt.expectErr {
+			err := h.HandleRoundTagNumberNotFound(tt.args.msg)
+			if (err != nil) != tt.expectErr {
 				t.Errorf("RoundHandlers.HandleRoundTagNumberNotFound() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})

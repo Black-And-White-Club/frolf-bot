@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -24,7 +23,6 @@ type Module struct {
 	UserRouter  *userrouter.UserRouter
 	cancelFunc  context.CancelFunc
 	helper      utils.Helpers
-	tracer      observability.Tracer
 }
 
 func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, userDB userdb.UserDB, eventBus eventbus.EventBus, router *message.Router, helpers utils.Helpers) (*Module, error) {
@@ -49,7 +47,8 @@ func NewUserModule(ctx context.Context, cfg *config.Config, logger *slog.Logger,
 		UserService: userService,
 		logger:      logger,
 		config:      cfg,
-		UserRouter:  userRouter, // Set the UserRouter
+		UserRouter:  userRouter,
+		helper:      helpers,
 	}
 
 	return module, nil

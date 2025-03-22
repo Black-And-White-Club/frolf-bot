@@ -46,7 +46,7 @@ func TestRoundHandlers_HandleRoundParticipantScoreUpdated(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantScoreUpdatedPayload{
-					RoundID:     "some-round-id",
+					RoundID:     RoundID,
 					Participant: "some-discord-id",
 					Score:       10,
 				}),
@@ -79,7 +79,7 @@ func TestRoundHandlers_HandleRoundParticipantScoreUpdated(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ParticipantScoreUpdatedPayload{
-					RoundID:     "some-round-id",
+					RoundID:     RoundID,
 					Participant: "some-discord-id",
 					Score:       10,
 				}),
@@ -142,7 +142,7 @@ func TestRoundHandlers_HandleRoundAllScoresSubmitted(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.AllScoresSubmittedPayload{
-					RoundID: "some-round-id",
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: false,
@@ -173,7 +173,7 @@ func TestRoundHandlers_HandleRoundAllScoresSubmitted(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.AllScoresSubmittedPayload{
-					RoundID: "some-round-id",
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: true,
@@ -234,7 +234,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundFinalizedPayload{
-					RoundID: "some-round-id",
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: false,
@@ -265,7 +265,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundFinalizedPayload{
-					RoundID: "some-round-id",
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: true,

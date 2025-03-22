@@ -1,15 +1,16 @@
 package roundservice
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"runtime"
 
 	"log/slog"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
@@ -20,86 +21,79 @@ import (
 
 // RoundService handles round-related logic.
 type RoundService struct {
-	RoundDB        rounddb.RoundDBInterface
+	RoundDB        rounddb.RoundDB
 	EventBus       eventbus.EventBus
-	logger         *slog.Logger
+	logger         observability.Logger
 	eventUtil      eventutil.EventUtil
 	roundValidator roundutil.RoundValidator
-	ErrorReporter  errors.ErrorReporterInterface
+	metrics        observability.Metrics
+	tracer         observability.Tracer
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(db rounddb.RoundDBInterface, eventBus eventbus.EventBus, logger *slog.Logger, errorReporter errors.ErrorReporterInterface) Service {
+func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger observability.Logger, metrics observability.Metrics, tracer observability.Tracer) Service {
 	return &RoundService{
 		RoundDB:        db,
 		EventBus:       eventBus,
 		logger:         logger,
 		eventUtil:      eventutil.NewEventUtil(),
 		roundValidator: roundutil.NewRoundValidator(),
+		metrics:        metrics,
+		tracer:         tracer,
 	}
 }
 
 // publishEvent is a generic helper function to publish events.
 func (s *RoundService) publishEvent(msg *message.Message, eventName string, payload interface{}) error {
-	ctx := msg.Context()
+	// Extract correlation ID from incoming message
 	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
+	if correlationID == "" {
+		correlationID = watermill.NewUUID()
+	}
 
+	// Create a new message with the payload
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		s.logger.Error("Failed to marshal event payload",
-			slog.String("event", eventName),
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal event payload for %s: %w", eventName, err)
+		return fmt.Errorf("failed to marshal payload for event %s: %w", eventName, err)
 	}
 
+	// Create new message with proper metadata
 	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
 
-	// Preserve correlation ID
-	if correlationID == "" {
-		correlationID = watermill.NewUUID() // Generate a new correlation ID if it's missing
-	}
-	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID) // Use middleware.CorrelationIDMetadataKey
+	// Transfer essential metadata
+	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
 
-	// Use `Nats-Msg-Id` for deduplication (optional, but recommended)
-	newMessage.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-%s", correlationID, eventName))
-
-	// (Optional) Set caused_by metadata to the name of the calling function
-	newMessage.Metadata.Set("caused_by", getCallerFunctionName())
-
-	// Add logging to inspect the payload before publishing
-	switch eventName {
-	case roundevents.RoundEntityCreated:
-		createdPayload, ok := payload.(roundevents.RoundEntityCreatedPayload)
-		if !ok {
-			s.logger.Error("Invalid payload type for RoundEntityCreated", slog.String("correlation_id", correlationID))
-			return fmt.Errorf("invalid payload type for RoundEntityCreated")
-		}
-		roundStoredPayload := roundevents.RoundStoredPayload{
-			Round: createdPayload.Round,
-		}
-		s.logger.InfoContext(ctx, "RoundStoredPayload inside publishEvent", slog.Any("roundStoredPayload", roundStoredPayload), slog.String("correlation_id", correlationID))
-
+	// Add context about the origin
+	callerFunc := getCallerFunctionName()
+	if callerFunc != "" {
+		newMessage.Metadata.Set("caused_by", callerFunc)
 	}
 
-	s.logger.Info("Publishing event",
+	// Add any additional relevant metadata from the original message
+	if parentID := msg.Metadata.Get("parent_id"); parentID != "" {
+		newMessage.Metadata.Set("parent_id", parentID)
+	}
+
+	// Log the intention to publish at debug level
+	s.logger.Debug("Publishing event",
 		slog.String("event", eventName),
 		slog.String("correlation_id", correlationID),
 		slog.String("message_id", newMessage.UUID),
-		slog.Any("payload", payload), // Add payload logging
 	)
 
+	// Publish the event
 	if err := s.EventBus.Publish(eventName, newMessage); err != nil {
 		s.logger.Error("Failed to publish event",
 			slog.String("event", eventName),
-			slog.Any("error", err),
 			slog.String("correlation_id", correlationID),
+			slog.String("message_id", newMessage.UUID),
+			slog.Any("error", err),
 		)
 		return fmt.Errorf("failed to publish event %s: %w", eventName, err)
 	}
 
-	s.logger.Info("Published event",
+	// Log success at debug level only
+	s.logger.Debug("Event published",
 		slog.String("event", eventName),
 		slog.String("correlation_id", correlationID),
 		slog.String("message_id", newMessage.UUID),
@@ -115,4 +109,13 @@ func getCallerFunctionName() string {
 		return "unknown"
 	}
 	return runtime.FuncForPC(pc).Name() // Get the function name
+}
+
+func (s *RoundService) getEventMessageID(ctx context.Context, roundID roundtypes.ID) (roundtypes.EventMessageID, error) {
+	eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, roundID)
+	slog.Info("We are here 🌟")
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve EventMessageID for round %d: %w", roundID, err)
+	}
+	return *eventMessageID, nil
 }

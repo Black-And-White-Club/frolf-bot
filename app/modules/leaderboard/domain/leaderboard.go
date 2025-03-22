@@ -29,11 +29,11 @@ func GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, n
 	// Iterate through the sorted current entries, adding them to the updated leaderboard if they exist in the new tag map.
 	for _, entry := range sortedCurrentEntries {
 		tag := entry.TagNumber
-		if _, exists := newTagMap[tag]; exists {
+		if _, exists := newTagMap[*tag]; exists {
 			for {
 				if _, exists := updatedLeaderboard[nextAvailableTag]; !exists {
-					updatedLeaderboard[nextAvailableTag] = string(entry.DiscordID)
-					usedTags[tag] = true
+					updatedLeaderboard[nextAvailableTag] = string(entry.UserID)
+					usedTags[*tag] = true
 					nextAvailableTag++
 					break
 				}
@@ -43,11 +43,11 @@ func GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, n
 	}
 
 	// 3. Add any new tags from the round results that were not in the current leaderboard.
-	for tag, discordID := range newTagMap {
+	for tag, userID := range newTagMap {
 		if !usedTags[tag] {
 			for {
 				if _, exists := updatedLeaderboard[nextAvailableTag]; !exists {
-					updatedLeaderboard[nextAvailableTag] = discordID
+					updatedLeaderboard[nextAvailableTag] = userID
 					nextAvailableTag++
 					break
 				}
@@ -59,18 +59,18 @@ func GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, n
 	// 4. Add back any tags that were in the current leaderboard but not in the new tag order, preserving their relative order.
 	for _, entry := range sortedCurrentEntries {
 		tag := entry.TagNumber
-		if _, exists := updatedLeaderboard[tag]; !exists {
-			updatedLeaderboard[tag] = string(entry.DiscordID)
+		if _, exists := updatedLeaderboard[*tag]; !exists {
+			updatedLeaderboard[*tag] = string(entry.UserID)
 		}
 	}
 
 	return updatedLeaderboard
 }
 
-// FindTagByDiscordID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
-func FindTagByDiscordID(leaderboard *leaderboarddb.Leaderboard, discordID leaderboardtypes.DiscordID) (int, bool) {
+// FindTagByUserID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
+func FindTagByUserID(leaderboard *leaderboarddb.Leaderboard, userID leaderboardtypes.UserID) (int, bool) {
 	for tag, id := range leaderboard.LeaderboardData {
-		if leaderboardtypes.DiscordID(id) == discordID {
+		if leaderboardtypes.UserID(id) == userID {
 			return tag, true
 		}
 	}
@@ -79,10 +79,10 @@ func FindTagByDiscordID(leaderboard *leaderboarddb.Leaderboard, discordID leader
 
 // --- Helper functions for generateUpdatedLeaderboard ---
 
-func parseTagDiscordIDPair(tagDiscordIDPair string) (int, string, error) {
-	parts := strings.Split(tagDiscordIDPair, ":")
+func parseTagUserIDPair(tagUserIDPair string) (int, string, error) {
+	parts := strings.Split(tagUserIDPair, ":")
 	if len(parts) != 2 {
-		return 0, "", fmt.Errorf("invalid tag-discordID pair format: %s", tagDiscordIDPair)
+		return 0, "", fmt.Errorf("invalid tag-UserID pair format: %s", tagUserIDPair)
 	}
 	tag, err := strconv.Atoi(parts[0])
 	if err != nil {
@@ -93,10 +93,10 @@ func parseTagDiscordIDPair(tagDiscordIDPair string) (int, string, error) {
 
 func createNewTagMap(newTagOrder []string) map[int]string {
 	newTagMap := make(map[int]string)
-	for _, tagDiscordIDPair := range newTagOrder {
-		tag, discordID, err := parseTagDiscordIDPair(tagDiscordIDPair)
+	for _, tagUserIDPair := range newTagOrder {
+		tag, userID, err := parseTagUserIDPair(tagUserIDPair)
 		if err == nil { // Only add to map if parsing was successful
-			newTagMap[tag] = discordID
+			newTagMap[tag] = userID
 		}
 	}
 	return newTagMap
@@ -104,23 +104,23 @@ func createNewTagMap(newTagOrder []string) map[int]string {
 
 func sortCurrentEntries(currentEntries map[int]string) []leaderboardevents.LeaderboardEntry {
 	var sortedCurrentEntries []leaderboardevents.LeaderboardEntry
-	for tag, discordID := range currentEntries {
+	for tag, userID := range currentEntries {
 		sortedCurrentEntries = append(sortedCurrentEntries, leaderboardevents.LeaderboardEntry{
-			TagNumber: tag,
-			DiscordID: leaderboardtypes.DiscordID(discordID),
+			TagNumber: &tag,
+			UserID:    leaderboardtypes.UserID(userID),
 		})
 	}
 	sort.Slice(sortedCurrentEntries, func(i, j int) bool {
 		// Sort by tag number (ascending).
 		tagI := sortedCurrentEntries[i].TagNumber
 		tagJ := sortedCurrentEntries[j].TagNumber
-		return tagI < tagJ
+		return *tagI < *tagJ
 	})
 	return sortedCurrentEntries
 }
 
 // InsertTag inserts a new tag/Discord ID into the correct position in the leaderboard, maintaining order.
-func InsertTag(currentLeaderboard *leaderboarddb.Leaderboard, tagNumber leaderboardtypes.Tag, discordID leaderboardtypes.DiscordID) leaderboardtypes.LeaderboardData {
+func InsertTag(currentLeaderboard *leaderboarddb.Leaderboard, tagNumber leaderboardtypes.Tag, userID leaderboardtypes.UserID) leaderboardtypes.LeaderboardData {
 	updatedLeaderboard := make(leaderboardtypes.LeaderboardData)
 	inserted := false
 
@@ -132,14 +132,14 @@ func InsertTag(currentLeaderboard *leaderboarddb.Leaderboard, tagNumber leaderbo
 	for _, entry := range sortedCurrentEntries {
 		currentTag := entry.TagNumber
 
-		if !inserted && int(tagNumber) < currentTag {
-			updatedLeaderboard[int(tagNumber)] = string(discordID)
+		if !inserted && int(tagNumber) < *currentTag {
+			updatedLeaderboard[int(tagNumber)] = string(userID)
 			inserted = true
 		}
 
 		for {
 			if _, exists := updatedLeaderboard[nextAvailableTag]; !exists {
-				updatedLeaderboard[nextAvailableTag] = string(entry.DiscordID)
+				updatedLeaderboard[nextAvailableTag] = string(entry.UserID)
 				nextAvailableTag++
 				break
 			}
@@ -151,7 +151,7 @@ func InsertTag(currentLeaderboard *leaderboarddb.Leaderboard, tagNumber leaderbo
 	if !inserted {
 		for {
 			if _, exists := updatedLeaderboard[nextAvailableTag]; !exists {
-				updatedLeaderboard[nextAvailableTag] = string(discordID)
+				updatedLeaderboard[nextAvailableTag] = string(userID)
 				break
 			}
 			nextAvailableTag++

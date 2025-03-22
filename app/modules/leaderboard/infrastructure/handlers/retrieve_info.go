@@ -33,27 +33,28 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 	return nil
 }
 
-// HandleGetTagByDiscordIDRequest handles the GetTagByDiscordIDRequest event.
-func (h *LeaderboardHandlers) HandleGetTagByDiscordIDRequest(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.GetTagByDiscordIDRequestPayload](msg, h.logger)
+// HandleGetTagByUserIDRequest handles the GetTagByUserIDRequest event.
+func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) error {
+	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagNumberRequestPayload](msg, h.logger)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal GetTagByDiscordIDRequestPayload: %w", err)
+		return fmt.Errorf("failed to unmarshal GetTagByUserIDRequestPayload: %w", err)
 	}
 
-	h.logger.Info("Received GetTagByDiscordIDRequest event",
+	h.logger.Info("✅ Inside HandleGetTagByUserIDRequest",
 		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.DiscordID)),
-	)
+		slog.String("discord_id", string(payload.UserID)))
 
-	// Call the service function to handle the event
-	if err := h.leaderboardService.GetTagByDiscordIDRequest(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle GetTagByDiscordIDRequest event",
+	if err := h.leaderboardService.GetTagByUserIDRequest(msg.Context(), msg); err != nil {
+		h.logger.Error("❌ Failed to handle GetTagByUserIDRequest event",
 			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle GetTagByDiscordIDRequest event: %w", err)
+			slog.Any("error", err))
+
+		// ❌ **DON'T ACKNOWLEDGE on failure!** Let NATS retry.
+		return err
 	}
 
-	h.logger.Info("GetTagByDiscordIDRequest event processed", slog.String("correlation_id", correlationID))
+	// ✅ **Manually acknowledge the message**
+	msg.Ack()
+
 	return nil
 }

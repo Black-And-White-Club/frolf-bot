@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -211,17 +211,17 @@ func (mr *MockServiceMockRecorder) ParticipantTagNotFound(ctx, msg any) *gomock.
 }
 
 // ProcessRoundReminder mocks base method.
-func (m *MockService) ProcessRoundReminder(msg *message.Message) error {
+func (m *MockService) ProcessRoundReminder(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundReminder", msg)
+	ret := m.ctrl.Call(m, "ProcessRoundReminder", ctx, msg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ProcessRoundReminder indicates an expected call of ProcessRoundReminder.
-func (mr *MockServiceMockRecorder) ProcessRoundReminder(msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundReminder(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundReminder", reflect.TypeOf((*MockService)(nil).ProcessRoundReminder), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundReminder", reflect.TypeOf((*MockService)(nil).ProcessRoundReminder), ctx, msg)
 }
 
 // ProcessRoundStart mocks base method.
@@ -239,7 +239,7 @@ func (mr *MockServiceMockRecorder) ProcessRoundStart(msg any) *gomock.Call {
 }
 
 // ProcessValidatedRound mocks base method.
-func (m *MockService) ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundutil.TimeParserInterface) error {
+func (m *MockService) ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundtime.TimeParserInterface) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessValidatedRound", ctx, msg, timeParser)
 	ret0, _ := ret[0].(error)
@@ -350,18 +350,18 @@ func (mr *MockServiceMockRecorder) TagNumberResponse(ctx, msg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagNumberResponse", reflect.TypeOf((*MockService)(nil).TagNumberResponse), ctx, msg)
 }
 
-// UpdateDiscordEventID mocks base method.
-func (m *MockService) UpdateDiscordEventID(ctx context.Context, msg *message.Message) error {
+// UpdateEventMessageID mocks base method.
+func (m *MockService) UpdateEventMessageID(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDiscordEventID", ctx, msg)
+	ret := m.ctrl.Call(m, "UpdateEventMessageID", ctx, msg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateDiscordEventID indicates an expected call of UpdateDiscordEventID.
-func (mr *MockServiceMockRecorder) UpdateDiscordEventID(ctx, msg any) *gomock.Call {
+// UpdateEventMessageID indicates an expected call of UpdateEventMessageID.
+func (mr *MockServiceMockRecorder) UpdateEventMessageID(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDiscordEventID", reflect.TypeOf((*MockService)(nil).UpdateDiscordEventID), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventMessageID", reflect.TypeOf((*MockService)(nil).UpdateEventMessageID), ctx, msg)
 }
 
 // UpdateParticipantScore mocks base method.

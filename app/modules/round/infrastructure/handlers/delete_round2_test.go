@@ -1,7 +1,6 @@
 package roundhandlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,7 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleRoundScoreUpdateRequest(t *testing.T) {
+func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -40,22 +39,20 @@ func TestRoundHandlers_HandleRoundScoreUpdateRequest(t *testing.T) {
 		mockExpects   func(f fields, a args)
 	}{
 		{
-			name: "Successful round score update request handling",
+			name: "Successful round delete authorized handling",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
-					Score:       func() *int { i := 10; return &i }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteAuthorizedPayload{
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateScoreUpdateRequest(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().DeleteRound(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -79,16 +76,14 @@ func TestRoundHandlers_HandleRoundScoreUpdateRequest(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
-					Score:       func() *int { i := 10; return &i }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteAuthorizedPayload{
+					RoundID: RoundID,
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateScoreUpdateRequest(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().DeleteRound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}
@@ -104,14 +99,14 @@ func TestRoundHandlers_HandleRoundScoreUpdateRequest(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundScoreUpdateRequest(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundScoreUpdateRequest() error = %v, wantErr %v", err, tt.expectErr)
+			if err := h.HandleRoundDeleteAuthorized(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleRoundDeleteAuthorized() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
 	}
 }
 
-func TestRoundHandlers_HandleRoundScoreUpdateValidated(t *testing.T) {
+func TestRoundHandlers_HandleRoundUserRoleCheckResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -136,24 +131,22 @@ func TestRoundHandlers_HandleRoundScoreUpdateValidated(t *testing.T) {
 		mockExpects   func(f fields, a args)
 	}{
 		{
-			name: "Successful round score update validated handling",
+			name: "Successful round user role check result handling",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ScoreUpdateValidatedPayload{
-					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
-						RoundID:     "some-round-id",
-						Participant: "some-discord-id",
-						Score:       func() *int { i := 10; return &i }(),
-					},
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.UserRoleCheckResultPayload{
+					UserID:  "some-discord-id",
+					RoundID: RoundID,
+					HasRole: true,
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().UpdateParticipantScore(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().UserRoleCheckResult(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -177,18 +170,16 @@ func TestRoundHandlers_HandleRoundScoreUpdateValidated(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.ScoreUpdateValidatedPayload{
-					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
-						RoundID:     "some-round-id",
-						Participant: "some-discord-id",
-						Score:       func() *int { i := 10; return &i }(),
-					},
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.UserRoleCheckResultPayload{
+					UserID:  "some-discord-id",
+					RoundID: RoundID,
+					HasRole: true,
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().UpdateParticipantScore(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().UserRoleCheckResult(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}
@@ -204,21 +195,9 @@ func TestRoundHandlers_HandleRoundScoreUpdateValidated(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundScoreUpdateValidated(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundScoreUpdateValidated() error = %v, wantErr %v", err, tt.expectErr)
+			if err := h.HandleRoundUserRoleCheckResult(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleRoundUserRoleCheckResult() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
 	}
-}
-
-// Helper function to create a test message with a payload
-func createTestMessageWithPayload(t *testing.T, correlationID string, payload interface{}) *message.Message {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal payload: %v", err)
-	}
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata = make(message.Metadata)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	return msg
 }

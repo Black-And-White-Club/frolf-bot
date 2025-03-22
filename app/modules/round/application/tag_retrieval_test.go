@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
@@ -40,8 +39,7 @@ func TestRoundService_RequestTagNumber(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
-					Timeout:   5 * time.Second,
+					UserID: "some-discord-id",
 				},
 			},
 			expectedEvent: roundevents.RoundTagNumberRequest,
@@ -58,12 +56,8 @@ func TestRoundService_RequestTagNumber(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.DiscordID != "some-discord-id" {
-						return fmt.Errorf("unexpected Discord ID: %s", payload.DiscordID)
-					}
-
-					if payload.Timeout != 5*time.Second {
-						return fmt.Errorf("unexpected timeout: %v", payload.Timeout)
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
 					}
 
 					return nil
@@ -85,8 +79,7 @@ func TestRoundService_RequestTagNumber(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
-					Timeout:   5 * time.Second,
+					UserID: "some-discord-id",
 				},
 			},
 			expectedEvent: "",
@@ -150,7 +143,7 @@ func TestRoundService_TagNumberRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				},
 			},
 			expectedEvent: roundevents.LeaderboardGetTagNumberRequest,
@@ -167,8 +160,8 @@ func TestRoundService_TagNumberRequest(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.DiscordID != "some-discord-id" {
-						return fmt.Errorf("unexpected Discord ID: %s", payload.DiscordID)
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
 					}
 
 					return nil
@@ -190,7 +183,7 @@ func TestRoundService_TagNumberRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				},
 			},
 			expectedEvent: "",
@@ -230,7 +223,6 @@ func TestRoundService_TagNumberRequest(t *testing.T) {
 		})
 	}
 }
-
 func TestRoundService_TagNumberResponse(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -254,8 +246,8 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 					Error:     "",
 				},
 			},
@@ -273,12 +265,15 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.DiscordID != "some-discord-id" {
-						return fmt.Errorf("unexpected Discord ID: %s", payload.DiscordID)
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
 					}
 
-					if payload.TagNumber != 1234 {
-						return fmt.Errorf("unexpected tag number: %d", payload.TagNumber)
+					if payload.TagNumber == nil || *payload.TagNumber != 1234 { // Corrected assertion
+						return fmt.Errorf("unexpected tag number: %v", payload.TagNumber)
+					}
+					if payload.RoundID != 1 { //Added this assertion
+						return fmt.Errorf("unexpected round ID: %d", payload.RoundID)
 					}
 
 					return nil
@@ -290,8 +285,8 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 0,
+					UserID:    "some-discord-id",
+					TagNumber: nil, // Changed to nil
 					Error:     "",
 				},
 			},
@@ -309,8 +304,8 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.DiscordID != "some-discord-id" {
-						return fmt.Errorf("unexpected Discord ID: %s", payload.DiscordID)
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
 					}
 
 					return nil
@@ -322,13 +317,30 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 0,
+					UserID:    "some-discord-id",
+					TagNumber: nil,
 					Error:     "some error",
 				},
 			},
-			expectErr: true, // Expecting an error as there was an error in the response
+			expectErr: false, // Expecting no error, the function handles the error.
 			mockExpects: func() {
+				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundTagNumberNotFound), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
+					if topic != roundevents.RoundTagNumberNotFound {
+						return fmt.Errorf("unexpected topic: %s", topic)
+					}
+
+					var payload roundevents.RoundTagNumberNotFoundPayload
+					err := json.Unmarshal(msg.Payload, &payload)
+					if err != nil {
+						return fmt.Errorf("failed to unmarshal payload: %w", err)
+					}
+
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
+					}
+
+					return nil
+				}).Times(1)
 			},
 		},
 		{
@@ -346,8 +358,8 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 					Error:     "",
 				},
 			},
@@ -362,8 +374,8 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 0,
+					UserID:    "some-discord-id",
+					TagNumber: nil,
 					Error:     "",
 				},
 			},
@@ -381,7 +393,7 @@ func TestRoundService_TagNumberResponse(t *testing.T) {
 			payloadBytes, _ := json.Marshal(tt.args.payload)
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-			msg.Metadata.Set("RoundID", "some-round-id")
+			msg.Metadata.Set("RoundID", "1") // Corrected RoundID to a valid integer string
 
 			tt.mockExpects()
 

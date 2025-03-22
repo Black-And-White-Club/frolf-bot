@@ -23,35 +23,38 @@ import (
 // --- Constants and Variables for Test Data (Update Round) ---
 
 const (
-	updateRoundID              = "some-round-id"
-	updateCorrelationID        = "some-correlation-id"
-	updateDBError       string = "db error"
+	updateRoundID       roundtypes.ID = 1
+	updateCorrelationID               = "some-correlation-id"
+	updateDBError       string        = "db error"
 )
 
 var (
-	updateNewTitle     string = "New Title"
-	updateNewLocation  string = "New Location"
-	updateOldLocation  string = "Old Location"
-	updateOldEventType        = "Old Type"
-	updateNow                 = time.Now().UTC().Truncate(time.Second)
-	updateLater               = updateNow.Add(1 * time.Hour)
-	updateOldStartTime        = &updateNow
-	updateNewStartTime        = &updateLater
+	updateNewTitle     roundtypes.Title     = "New Title"
+	updateNewLocation  roundtypes.Location  = "New Location"
+	updateOldLocation  roundtypes.Location  = "Old Location"
+	updateOldEventType roundtypes.EventType = "Old Type"
+
+	// Convert `time.Time` values properly before assignment
+	updateNewStartTime = roundtypes.StartTime(scheduleNow.Add(2 * time.Hour))
+	updateOldStartTime = roundtypes.StartTime(scheduleNow.Add(-2 * time.Hour))
 
 	// Pre-built payloads for common scenarios (Update Round)
 	validUpdatePayload = roundevents.RoundUpdateRequestPayload{
-		RoundID:   updateRoundID,
-		Title:     &updateNewTitle,
-		Location:  &updateNewLocation,
-		StartTime: updateNewStartTime,
+		BaseRoundPayload: roundtypes.BaseRoundPayload{
+			RoundID:   updateRoundID,
+			Title:     updateNewTitle,
+			Location:  &updateNewLocation,
+			StartTime: &updateNewStartTime,
+		},
 	}
+
 	validFetchedPayload = roundevents.RoundFetchedPayload{
 		Round: roundtypes.Round{
 			ID:        updateRoundID,
 			Title:     "Old Title",
 			Location:  &updateOldLocation,
 			EventType: &updateOldEventType,
-			StartTime: updateOldStartTime,
+			StartTime: &updateOldStartTime,
 			State:     roundtypes.RoundStateUpcoming,
 		},
 		RoundUpdateRequestPayload: validUpdatePayload,
@@ -63,7 +66,7 @@ func TestRoundService_ValidateRoundUpdateRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl) // Not used in this test, but good practice
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl) // Not used in this test, but good practice
 	mockErrorReporter := errorext.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	s := &RoundService{
 		EventBus:      mockEventBus,
@@ -105,24 +108,11 @@ func TestRoundService_ValidateRoundUpdateRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Empty round ID",
-			payload: roundevents.RoundUpdateRequestPayload{
-				Title: &updateNewTitle,
-			},
-			expectedEvent: roundevents.RoundUpdateError,
-			wantErr:       true,
-			errMsg:        "round ID cannot be empty",
-			mockExpects: func() {
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).
-					Times(1).
-					Return(nil) // Mock error publishing
-			},
-		},
-		{
 			name: "No fields to update",
 			payload: roundevents.RoundUpdateRequestPayload{
-				RoundID: updateRoundID,
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID: updateRoundID,
+				},
 			},
 			expectedEvent: roundevents.RoundUpdateError,
 			wantErr:       true,
@@ -182,7 +172,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	mockErrorReporter := errorext.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	logger := slog.Default()
 

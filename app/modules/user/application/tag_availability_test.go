@@ -202,10 +202,10 @@ func TestUserServiceImpl_HandleTagUnavailable(t *testing.T) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				// Expect the service to publish a UserCreationFailed event
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreationFailed, gomock.Any()).
+					Publish(userevents.TagUnavailable, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserCreationFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						if topic != userevents.TagUnavailable {
+							t.Errorf("Expected topic %s, got %s", userevents.TagUnavailable, topic)
 						}
 
 						if len(msgs) != 1 {
@@ -267,7 +267,7 @@ func TestUserServiceImpl_HandleTagUnavailable(t *testing.T) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 				// Expect the service to publish a UserCreationFailed event, but simulate an error
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreationFailed, gomock.Any()).
+					Publish(userevents.TagUnavailable, gomock.Any()).
 					Return(errors.New("publish error")).
 					Times(1)
 			},

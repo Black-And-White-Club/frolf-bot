@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
+func TestRoundHandlers_HandleRoundStored(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -40,21 +40,22 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 		mockExpects   func(f fields, a args)
 	}{
 		{
-			name: "Successful round update request handling",
+			name: "Successful round stored handling",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdateRequestPayload{
-					RoundID: "some-round-id",
-					Title:   func() *string { s := "hi"; return &s }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundStoredPayload{
+					Round: roundtypes.Round{
+						ID: RoundID,
+					},
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateRoundUpdateRequest(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().ScheduleRoundEvents(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -78,15 +79,16 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdateRequestPayload{
-					RoundID: "some-round-id",
-					Title:   func() *string { s := "hi"; return &s }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundStoredPayload{
+					Round: roundtypes.Round{
+						ID: RoundID,
+					},
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateRoundUpdateRequest(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().ScheduleRoundEvents(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}
@@ -102,14 +104,14 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundUpdateRequest(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundUpdateRequest() error = %v, wantErr %v", err, tt.expectErr)
+			if err := h.HandleRoundStored(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleRoundStored() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
 	}
 }
 
-func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
+func TestRoundHandlers_HandleRoundScheduled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -134,23 +136,22 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		mockExpects   func(f fields, a args)
 	}{
 		{
-			name: "Successful round update validated handling",
+			name: "Successful round scheduled handling",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-						Title:   func() *string { s := "hi"; return &s }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundScheduledPayload{
+					BaseRoundPayload: roundtypes.BaseRoundPayload{
+						RoundID: RoundID,
 					},
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().GetRound(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().PublishRoundCreated(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -174,17 +175,16 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-						Title:   func() *string { s := "hi"; return &s }(),
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundScheduledPayload{
+					BaseRoundPayload: roundtypes.BaseRoundPayload{
+						RoundID: RoundID,
 					},
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().GetRound(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().PublishRoundCreated(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}
@@ -200,14 +200,14 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundUpdateValidated(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundUpdateValidated() error = %v, wantErr %v", err, tt.expectErr)
+			if err := h.HandleRoundScheduled(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleRoundScheduled() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
 	}
 }
 
-func TestRoundHandlers_HandleRoundFetched(t *testing.T) {
+func TestRoundHandlers_HandleUpdateEventMessageID(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -232,28 +232,21 @@ func TestRoundHandlers_HandleRoundFetched(t *testing.T) {
 		mockExpects   func(f fields, a args)
 	}{
 		{
-			name: "Successful round fetched handling",
+			name: "Successful Discord event ID update",
 			fields: fields{
 				RoundService: mockRoundService,
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundFetchedPayload{
-					Round: roundtypes.Round{
-						ID:    "some-round-id",
-						Title: "Test Round",
-						State: roundtypes.RoundStateUpcoming,
-					},
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-						Title:   func() *string { s := "hi"; return &s }(),
-					},
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEventCreatedPayload{
+					RoundID:        RoundID,
+					EventMessageID: "new-discord-event-id",
 				}),
 			},
 			expectErr: false,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().UpdateRoundEntity(gomock.Any(), a.msg).Return(nil).Times(1)
+				f.RoundService.EXPECT().UpdateEventMessageID(gomock.Any(), a.msg).Return(nil).Times(1)
 			},
 		},
 		{
@@ -277,22 +270,15 @@ func TestRoundHandlers_HandleRoundFetched(t *testing.T) {
 				logger:       logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundFetchedPayload{
-					Round: roundtypes.Round{
-						ID:    "some-round-id",
-						Title: "Test Round",
-						State: roundtypes.RoundStateUpcoming,
-					},
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-						Title:   func() *string { s := "hi"; return &s }(),
-					},
+				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEventCreatedPayload{
+					RoundID:        RoundID,
+					EventMessageID: "new-discord-event-id",
 				}),
 			},
 			expectErr: true,
 			mockExpects: func(f fields, a args) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().UpdateRoundEntity(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+				f.RoundService.EXPECT().UpdateEventMessageID(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
 			},
 		},
 	}
@@ -308,8 +294,8 @@ func TestRoundHandlers_HandleRoundFetched(t *testing.T) {
 				tt.mockExpects(tt.fields, tt.args)
 			}
 
-			if err := h.HandleRoundFetched(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundFetched() error = %v, wantErr %v", err, tt.expectErr)
+			if err := h.HandleUpdateEventMessageID(tt.args.msg); (err != nil) != tt.expectErr {
+				t.Errorf("RoundHandlers.HandleUpdateEventMessageID() error = %v, wantErr %v", err, tt.expectErr)
 			}
 		})
 	}

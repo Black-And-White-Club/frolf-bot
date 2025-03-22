@@ -11,19 +11,19 @@ import (
 // Round represents a single round in the tournament.// Round represents a single round in the tournament.
 type Round struct {
 	bun.BaseModel  `bun:"table:rounds,alias:r"`
-	ID             roundtypes.ID            `bun:"id,pk,autoincrement"`
-	Title          roundtypes.Title         `bun:"title,notnull"`
-	Description    roundtypes.Description   `bun:"description"`
-	Location       roundtypes.Location      `bun:"location"`
-	EventType      *roundtypes.EventType    `bun:"event_type"`
-	StartTime      roundtypes.StartTime     `bun:"start_time,notnull"`
-	Finalized      roundtypes.Finalized     `bun:"finalized,notnull"`
-	CreatorID      roundtypes.CreatedBy     `bun:"created_by,notnull"`
-	State          roundtypes.RoundState    `bun:"state,notnull"`
-	Participants   []roundtypes.Participant `bun:"participants,type:jsonb"`
-	DiscordEventID string                   `bun:"discord_event_id"`
-	CreatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
-	UpdatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
+	ID             roundtypes.ID             `bun:"id,pk,autoincrement"`
+	Title          roundtypes.Title          `bun:"title,notnull"`
+	Description    roundtypes.Description    `bun:"description"`
+	Location       roundtypes.Location       `bun:"location"`
+	EventType      *roundtypes.EventType     `bun:"event_type"`
+	StartTime      roundtypes.StartTime      `bun:"start_time,notnull"`
+	Finalized      roundtypes.Finalized      `bun:"finalized,notnull"`
+	CreatorID      roundtypes.CreatedBy      `bun:"created_by,notnull"`
+	State          roundtypes.RoundState     `bun:"state,notnull"`
+	Participants   []roundtypes.Participant  `bun:"participants,type:jsonb"`
+	EventMessageID roundtypes.EventMessageID `bun:"event_message_id"`
+	CreatedAt      time.Time                 `bun:",notnull,default:current_timestamp"`
+	UpdatedAt      time.Time                 `bun:",notnull,default:current_timestamp"`
 }
 
 // Response represents the possible responses for a participant.

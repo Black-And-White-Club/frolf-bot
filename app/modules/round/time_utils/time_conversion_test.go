@@ -1,11 +1,12 @@
-package roundutil
+package roundtime
 
 import (
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils/mocks"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -94,7 +95,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 	tests := []struct {
 		name         string
 		startTimeStr string
-		timezoneStr  string
+		timezone     roundtypes.Timezone
 		mockNow      time.Time
 		want         int64
 		wantErr      bool
@@ -102,7 +103,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Valid time in PDT",
 			startTimeStr: "Tomorrow 5 PM",
-			timezoneStr:  "PDT",
+			timezone:     "PDT",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         time.Date(2025, 6, 7, 0, 0, 0, 0, time.UTC).Unix(),
 			wantErr:      false,
@@ -110,7 +111,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Invalid timezone",
 			startTimeStr: "5 PM",
-			timezoneStr:  "XYZ",
+			timezone:     "XYZ",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -118,7 +119,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Invalid date format",
 			startTimeStr: "invalid date",
-			timezoneStr:  "CST",
+			timezone:     "CST",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -126,7 +127,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "6am (time already passed)",
 			startTimeStr: "6am",
-			timezoneStr:  "CDT",
+			timezone:     "CDT",
 			mockNow:      time.Date(2025, 6, 5, 7, 0, 0, 0, time.UTC), // 2 AM CDT
 			want:         0,                                           // Should fail since 6 AM CDT has passed
 			wantErr:      true,
@@ -134,7 +135,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "7pm (time not yet passed)",
 			startTimeStr: "7pm",
-			timezoneStr:  "CDT",
+			timezone:     "CDT",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),        // 7 AM CDT
 			want:         time.Date(2025, 6, 6, 00, 0, 0, 0, time.UTC).Unix(), // 7 PM CDT -> 00:00 UTC
 			wantErr:      false,
@@ -142,7 +143,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Empty timezone string",
 			startTimeStr: "Tomorrow 5 PM",
-			timezoneStr:  "",
+			timezone:     "",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -150,7 +151,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Malformed time string",
 			startTimeStr: "25 PM",
-			timezoneStr:  "PDT",
+			timezone:     "PDT",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -158,7 +159,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "DST Transition",
 			startTimeStr: "Nov 5 1:30 AM",
-			timezoneStr:  "PDT",
+			timezone:     "PDT",
 			mockNow:      time.Date(2025, 11, 4, 12, 0, 0, 0, time.UTC),
 			want:         time.Date(2025, 11, 5, 9, 30, 0, 0, time.UTC).Unix(), // Adjusted for DST
 			wantErr:      false,
@@ -166,7 +167,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Empty startTimeStr",
 			startTimeStr: "",
-			timezoneStr:  "PDT",
+			timezone:     "PDT",
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -174,7 +175,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 		{
 			name:         "Nil timezone (default handling)",
 			startTimeStr: "Tomorrow 5 PM",
-			timezoneStr:  "", // Simulates nil behavior for a string
+			timezone:     "", // Simulates nil behavior for a string
 			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
@@ -193,7 +194,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 
 			tp := NewTimeParser()
 
-			got, err := tp.ParseUserTimeInput(tt.startTimeStr, tt.timezoneStr, mockClock)
+			got, err := tp.ParseUserTimeInput(tt.startTimeStr, tt.timezone, mockClock)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TimeParser.ParseUserTimeInput() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -23,7 +23,7 @@ func TestRoundService_GetRound(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	logger := slog.Default()
 
 	type args struct {
@@ -43,15 +43,17 @@ func TestRoundService_GetRound(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundUpdateValidatedPayload{
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
+						BaseRoundPayload: roundtypes.BaseRoundPayload{
+							RoundID: 1,
+						},
 					},
 				},
 			},
 			expectedEvent: roundevents.RoundFetched,
 			expectErr:     false,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(&roundtypes.Round{
+					ID:    1,
 					Title: "Test Round",
 					State: roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
@@ -66,16 +68,16 @@ func TestRoundService_GetRound(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.Round.ID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
+					if payload.Round.ID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.Round.ID)
 					}
 
 					if payload.Round.Title != "Test Round" {
 						return fmt.Errorf("unexpected round title: %s", payload.Round.Title)
 					}
 
-					if payload.RoundUpdateRequestPayload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundUpdateRequestPayload.RoundID)
+					if payload.RoundUpdateRequestPayload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundUpdateRequestPayload.RoundID)
 					}
 
 					return nil
@@ -98,14 +100,16 @@ func TestRoundService_GetRound(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundUpdateValidatedPayload{
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
+						BaseRoundPayload: roundtypes.BaseRoundPayload{
+							RoundID: 1,
+						},
 					},
 				},
 			},
 			expectedEvent: roundevents.RoundUpdateError,
 			expectErr:     true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(nil, fmt.Errorf("db error")).Times(1)
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(nil, fmt.Errorf("db error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -115,14 +119,16 @@ func TestRoundService_GetRound(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundUpdateValidatedPayload{
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
+						BaseRoundPayload: roundtypes.BaseRoundPayload{
+							RoundID: 1,
+						},
 					},
 				},
 			},
 			expectErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(&roundtypes.Round{
+					ID:    1,
 					Title: "Test Round",
 					State: roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
@@ -167,7 +173,7 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	logger := slog.Default()
 
 	type args struct {
@@ -187,15 +193,16 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteValidatedPayload{
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
+						RoundID:              1,
+						RequestingUserUserID: "user-123",
 					},
 				},
 			},
 			expectedEvent: roundevents.RoundToDeleteFetched,
 			expectErr:     false,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(&roundtypes.Round{
+					ID:    1,
 					Title: "Test Round",
 					State: roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
@@ -210,16 +217,16 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.Round.ID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
+					if payload.Round.ID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.Round.ID)
 					}
 
 					if payload.Round.Title != "Test Round" {
 						return fmt.Errorf("unexpected round title: %s", payload.Round.Title)
 					}
 
-					if payload.RoundDeleteRequestPayload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundDeleteRequestPayload.RoundID)
+					if payload.RoundDeleteRequestPayload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundDeleteRequestPayload.RoundID)
 					}
 
 					return nil
@@ -242,14 +249,15 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteValidatedPayload{
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
+						RoundID:              1,
+						RequestingUserUserID: roundtypes.UserID("some-user-id"),
 					},
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteError,
 			expectErr:     true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(nil, fmt.Errorf("db error")).Times(1)
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(nil, fmt.Errorf("db error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -259,14 +267,15 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundDeleteValidatedPayload{
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
+						RoundID:              1,
+						RequestingUserUserID: roundtypes.UserID("some-user-id"),
 					},
 				},
 			},
 			expectErr: true,
 			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
+				mockRoundDB.EXPECT().GetRound(gomock.Any(), roundtypes.ID(1)).Return(&roundtypes.Round{
+					ID:    1,
 					Title: "Test Round",
 					State: roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)

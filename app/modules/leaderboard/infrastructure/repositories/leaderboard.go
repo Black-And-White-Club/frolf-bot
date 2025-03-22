@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
@@ -71,7 +72,7 @@ func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber
 }
 
 // AssignTag assigns a tag to a Discord ID, updates the leaderboard, and sets the source of the update.
-func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, discordID leaderboardtypes.DiscordID, tagNumber int, source ServiceUpdateTagSource, updateID string) error {
+func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID leaderboardtypes.UserID, tagNumber int, source ServiceUpdateTagSource, updateID string) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -94,7 +95,7 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, discordID leaderboar
 	if leaderboard.LeaderboardData == nil {
 		leaderboard.LeaderboardData = make(map[int]string)
 	}
-	leaderboard.LeaderboardData[tagNumber] = string(discordID)
+	leaderboard.LeaderboardData[tagNumber] = string(userID)
 
 	// Deactivate the current leaderboard
 	_, err = tx.NewUpdate().
@@ -190,12 +191,12 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	var requestorTag, targetTag int
 	var foundRequestor, foundTarget bool
 
-	for tag, discordID := range leaderboard.LeaderboardData {
-		if discordID == requestorID {
+	for tag, userID := range leaderboard.LeaderboardData {
+		if userID == requestorID {
 			requestorTag = tag
 			foundRequestor = true
 		}
-		if discordID == targetID {
+		if userID == targetID {
 			targetTag = tag
 			foundTarget = true
 		}
@@ -238,24 +239,42 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	return nil
 }
 
-// GetTagByDiscordID retrieves the tag number associated with a Discord ID from the active leaderboard.
-func (db *LeaderboardDBImpl) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) {
-	// Get the active leaderboard
-	leaderboard := new(Leaderboard)
+// Returns nil if no tag is found.
+// GetTagByUserID retrieves the tag number for a given user ID from leaderboard_data.
+func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID string) (*int, error) {
+	leaderboardEntry := struct {
+		LeaderboardData map[string]string `bun:"leaderboard_data,type:jsonb"`
+	}{}
+
+	// ✅ Fetch leaderboard entry that contains user ID
 	err := db.DB.NewSelect().
-		Model(leaderboard).
-		Where("is_active = ?", true).
+		Model(&leaderboardEntry).
+		Table("leaderboards").
+		Where("leaderboard_data::text LIKE ?", fmt.Sprintf("%%%s%%", userID)). // Ensure user ID is present
 		Scan(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get active leaderboard: %w", err)
+		slog.Error("❌ Failed to fetch leaderboard entry", slog.Any("error", err))
+		return nil, err
 	}
 
-	// Find the tag number for the given Discord ID
-	for tag, id := range leaderboard.LeaderboardData {
-		if id == discordID {
-			return tag, nil
+	// ✅ Debug log: Ensure we retrieved the correct JSONB data
+	slog.Info("📊 Retrieved leaderboard entry",
+		slog.Any("leaderboard_data", leaderboardEntry.LeaderboardData))
+
+	// ✅ Extract tag number
+	for tag, uid := range leaderboardEntry.LeaderboardData {
+		if uid == userID {
+			tagNum, convErr := strconv.Atoi(tag) // Convert tag string to int
+			if convErr != nil {
+				slog.Error("❌ Failed to convert tag number", slog.String("tag", tag), slog.Any("error", convErr))
+				return nil, convErr
+			}
+			slog.Info("✅ Tag found!", slog.Int("tag_number", tagNum))
+			return &tagNum, nil
 		}
 	}
 
-	return 0, fmt.Errorf("no tag found for discord ID: %s", discordID)
+	// ❌ If no tag is found, log it and return nil
+	slog.Warn("⚠️ No tag found for user", slog.String("user_id", userID))
+	return nil, nil
 }

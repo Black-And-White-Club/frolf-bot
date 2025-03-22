@@ -61,7 +61,7 @@ func (db *RoundDBImpl) GetParticipant(ctx context.Context, roundID roundtypes.ID
 
 	// Look for the participant in the round's participants
 	for _, p := range round.Participants {
-		if p.UserID == roundtypes.UserID(userID) {
+		if p.UserID == string(userID) {
 			return &p, nil
 		}
 	}
@@ -88,7 +88,7 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID roundtypes
 	found := false
 	updatedParticipants := make([]roundtypes.Participant, 0, len(round.Participants))
 	for _, p := range round.Participants {
-		if p.UserID != roundtypes.UserID(userID) {
+		if p.UserID != string(userID) {
 			updatedParticipants = append(updatedParticipants, p)
 		} else {
 			found = true
@@ -131,30 +131,45 @@ func (db *RoundDBImpl) DeleteRound(ctx context.Context, roundID roundtypes.ID) e
 	return db.UpdateRoundState(ctx, roundID, roundtypes.RoundState(roundtypes.RoundStateDeleted))
 }
 
-// UpdateParticipant updates a participant's response or tag number in a round.
-func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID roundtypes.ID, participant roundtypes.Participant) error {
+// UpdateParticipant updates a participant's response or tag number in a round and returns the updated participant lists.
+func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID roundtypes.ID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
 	round := new(roundtypes.Round)
 	err := db.DB.NewSelect().
 		Model(round).
 		Where("id = ?", roundID).
 		Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch round: %w", err)
+		return nil, fmt.Errorf("failed to fetch round: %w", err)
 	}
+
+	// Debug log before update
+	slog.Info("Before update",
+		slog.Any("participants", round.Participants),
+		slog.Int64("round_id", int64(roundID)),
+	)
 
 	// Find the participant and update their response or tag number
 	found := false
 	for i, p := range round.Participants {
 		if p.UserID == participant.UserID {
-			// Update response if provided
 			if participant.Response != "" {
 				round.Participants[i].Response = participant.Response
 			}
-			// Update tag number if provided
+
+			// 🚀 **Ensure TagNumber is updated**
 			if participant.TagNumber != nil {
+				slog.Info("✅ Updating tag number",
+					slog.String("user_id", participant.UserID),
+					slog.Any("old_tag", round.Participants[i].TagNumber),
+					slog.Any("new_tag", participant.TagNumber),
+				)
 				round.Participants[i].TagNumber = participant.TagNumber
+			} else {
+				slog.Warn("⚠️ Tag number is nil, skipping update",
+					slog.String("user_id", participant.UserID),
+				)
 			}
-			// Update score if provided
+
 			if participant.Score != nil {
 				round.Participants[i].Score = participant.Score
 			}
@@ -162,21 +177,37 @@ func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID roundtypes
 			break
 		}
 	}
+
 	if !found {
-		// If participant not found, add them to the round
+		slog.Info("🚀 Adding new participant",
+			slog.String("user_id", participant.UserID),
+			slog.Any("tag_number", participant.TagNumber),
+		)
 		round.Participants = append(round.Participants, participant)
 	}
 
+	// Debug log after update
+	slog.Info("After update",
+		slog.Any("participants", round.Participants),
+		slog.Int64("round_id", int64(roundID)),
+	)
+
+	// 🚀 **Ensure TagNumber is included in the database update**
 	_, err = db.DB.NewUpdate().
 		Model(round).
 		Set("participants = ?", round.Participants).
 		Where("id = ?", roundID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update participant response: %w", err)
+		slog.Error("❌ Failed to update participant response",
+			slog.String("correlation_id", fmt.Sprintf("%v", ctx.Value("correlation_id"))),
+			slog.Any("error", err),
+		)
+		return nil, fmt.Errorf("failed to update participant response: %w", err)
 	}
 
-	return nil
+	// ✅ Return the updated participants list
+	return round.Participants, nil
 }
 
 // UpdateRoundState updates the state of a round.
@@ -219,7 +250,7 @@ func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, roundID round
 	// Find the participant and update their score
 	found := false
 	for i, p := range round.Participants {
-		if p.UserID == roundtypes.UserID(participantID) {
+		if p.UserID == string(participantID) {
 			round.Participants[i].Score = &score // Update the Score field
 			found = true
 			break
@@ -296,15 +327,32 @@ func (db *RoundDBImpl) GetParticipants(ctx context.Context, roundID roundtypes.I
 	return participants, nil
 }
 
-// UpdateDiscordEventID updates the DiscordEventID for an existing round.
-func (db *RoundDBImpl) UpdateDiscordEventID(ctx context.Context, roundID roundtypes.ID, discordEventID string) error {
+// UpdateEventMessageID updates the EventMessageID(messageID) for an existing round.
+func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, roundID roundtypes.ID, eventMessageID string) error {
 	_, err := db.DB.NewUpdate().
 		Model(&roundtypes.Round{}).
-		Set("discord_event_id =?", discordEventID).
+		Set("event_message_id =?", eventMessageID).
 		Where("id =?", roundID).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update discord event ID: %w", err)
 	}
 	return nil
+}
+
+// GetEventMessageID retrieves the EventMessageID for a given round.
+func (db *RoundDBImpl) GetEventMessageID(ctx context.Context, roundID roundtypes.ID) (*roundtypes.EventMessageID, error) {
+	var eventMessageID roundtypes.EventMessageID
+
+	err := db.DB.NewSelect().
+		Model((*roundtypes.Round)(nil)). // Using nil because we only need one field
+		Column("event_message_id").
+		Where("id = ?", roundID).
+		Scan(ctx, &eventMessageID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch EventMessageID for round %d: %w", roundID, err)
+	}
+
+	return &eventMessageID, nil
 }

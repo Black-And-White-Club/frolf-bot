@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.DiscordReminderPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundReminderPayload: %w", err)
@@ -19,7 +19,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) error {
 		slog.String("correlation_id", correlationID),
 	)
 
-	if err := h.RoundService.ProcessRoundReminder(msg); err != nil {
+	if err := h.RoundService.ProcessRoundReminder(msg.Context(), msg); err != nil {
 		h.logger.Error("Failed to handle RoundReminder event",
 			slog.String("correlation_id", correlationID),
 			slog.Any("error", err),

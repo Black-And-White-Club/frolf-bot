@@ -54,18 +54,18 @@ func (mr *MockHandlersMockRecorder) HandleGetLeaderboardRequest(msg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetLeaderboardRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetLeaderboardRequest), msg)
 }
 
-// HandleGetTagByDiscordIDRequest mocks base method.
-func (m *MockHandlers) HandleGetTagByDiscordIDRequest(msg *message.Message) error {
+// HandleGetTagByUserIDRequest mocks base method.
+func (m *MockHandlers) HandleGetTagByUserIDRequest(msg *message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleGetTagByDiscordIDRequest", msg)
+	ret := m.ctrl.Call(m, "HandleGetTagByUserIDRequest", msg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// HandleGetTagByDiscordIDRequest indicates an expected call of HandleGetTagByDiscordIDRequest.
-func (mr *MockHandlersMockRecorder) HandleGetTagByDiscordIDRequest(msg any) *gomock.Call {
+// HandleGetTagByUserIDRequest indicates an expected call of HandleGetTagByUserIDRequest.
+func (mr *MockHandlersMockRecorder) HandleGetTagByUserIDRequest(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetTagByDiscordIDRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetTagByDiscordIDRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetTagByUserIDRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetTagByUserIDRequest), msg)
 }
 
 // HandleLeaderboardUpdateRequested mocks base method.

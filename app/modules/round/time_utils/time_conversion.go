@@ -1,4 +1,4 @@
-package roundutil
+package roundtime
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/olebedev/when"
 	"github.com/olebedev/when/rules/en"
 )
@@ -14,7 +16,7 @@ import (
 // TimeParserInterface defines the methods for time parsing and timezone handling.
 type TimeParserInterface interface {
 	GetTimezoneFromInput(input string) (string, bool)
-	ParseUserTimeInput(startTimeStr, timezoneStr string, clock Clock) (int64, error)
+	ParseUserTimeInput(startTimeStr string, timezone roundtypes.Timezone, clock roundutil.Clock) (int64, error)
 }
 
 // TimeParser struct holds the timezone mappings and implements TimeParserInterface.
@@ -58,18 +60,18 @@ func (tp *TimeParser) GetTimezoneFromInput(input string) (string, bool) {
 }
 
 // ParseUserTimeInput parses user-provided time and converts it to a UTC timestamp.
-func (tp *TimeParser) ParseUserTimeInput(startTimeStr, timezoneStr string, clock Clock) (int64, error) {
+func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
 	// Determine the timezone
-	userTimeZone, found := tp.GetTimezoneFromInput(timezoneStr)
+	userTimeZone, found := tp.GetTimezoneFromInput(string(timezone))
 	if !found {
-		return 0, fmt.Errorf("invalid timezone: %s", timezoneStr)
+		return 0, fmt.Errorf("invalid timezone: %s", timezone)
 	}
 	slog.Info("Timezone override", slog.String("user_timezone", userTimeZone))
 
 	// Load the timezone
 	loc, err := time.LoadLocation(userTimeZone)
 	if err != nil {
-		return 0, fmt.Errorf("failed to load timezone: %s", timezoneStr)
+		return 0, fmt.Errorf("failed to load timezone: %s", timezone)
 	}
 
 	// Normalize the input

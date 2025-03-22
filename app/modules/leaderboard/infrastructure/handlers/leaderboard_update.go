@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -18,7 +19,7 @@ func (h *LeaderboardHandlers) HandleRoundFinalized(msg *message.Message) error {
 
 	h.logger.Info("Received RoundFinalized event",
 		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
+		slog.Any("round_id", roundtypes.ID(payload.RoundID)),
 	)
 
 	// Call the service function directly
@@ -43,7 +44,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 
 	h.logger.Info("Received LeaderboardUpdateRequested event",
 		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
+		slog.Any("round_id", payload.RoundID),
 	)
 
 	// Extract the context from the message

@@ -56,18 +56,18 @@ func (mr *MockServiceMockRecorder) GetLeaderboardRequest(ctx, msg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboardRequest", reflect.TypeOf((*MockService)(nil).GetLeaderboardRequest), ctx, msg)
 }
 
-// GetTagByDiscordIDRequest mocks base method.
-func (m *MockService) GetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error {
+// GetTagByUserIDRequest mocks base method.
+func (m *MockService) GetTagByUserIDRequest(ctx context.Context, msg *message.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTagByDiscordIDRequest", ctx, msg)
+	ret := m.ctrl.Call(m, "GetTagByUserIDRequest", ctx, msg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// GetTagByDiscordIDRequest indicates an expected call of GetTagByDiscordIDRequest.
-func (mr *MockServiceMockRecorder) GetTagByDiscordIDRequest(ctx, msg any) *gomock.Call {
+// GetTagByUserIDRequest indicates an expected call of GetTagByUserIDRequest.
+func (mr *MockServiceMockRecorder) GetTagByUserIDRequest(ctx, msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByDiscordIDRequest", reflect.TypeOf((*MockService)(nil).GetTagByDiscordIDRequest), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserIDRequest", reflect.TypeOf((*MockService)(nil).GetTagByUserIDRequest), ctx, msg)
 }
 
 // LeaderboardUpdateRequested mocks base method.

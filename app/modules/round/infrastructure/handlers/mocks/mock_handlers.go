@@ -41,11 +41,12 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleLeaderboardGetTagNumberResponse mocks base method.
-func (m *MockHandlers) HandleLeaderboardGetTagNumberResponse(msg *message.Message) error {
+func (m *MockHandlers) HandleLeaderboardGetTagNumberResponse(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleLeaderboardGetTagNumberResponse", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleLeaderboardGetTagNumberResponse indicates an expected call of HandleLeaderboardGetTagNumberResponse.
@@ -55,11 +56,12 @@ func (mr *MockHandlersMockRecorder) HandleLeaderboardGetTagNumberResponse(msg an
 }
 
 // HandleRoundAllScoresSubmitted mocks base method.
-func (m *MockHandlers) HandleRoundAllScoresSubmitted(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundAllScoresSubmitted(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundAllScoresSubmitted", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundAllScoresSubmitted indicates an expected call of HandleRoundAllScoresSubmitted.
@@ -69,11 +71,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundAllScoresSubmitted(msg any) *gomo
 }
 
 // HandleRoundCreateRequest mocks base method.
-func (m *MockHandlers) HandleRoundCreateRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundCreateRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundCreateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundCreateRequest indicates an expected call of HandleRoundCreateRequest.
@@ -83,11 +86,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundCreateRequest(msg any) *gomock.Ca
 }
 
 // HandleRoundDeleteAuthorized mocks base method.
-func (m *MockHandlers) HandleRoundDeleteAuthorized(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundDeleteAuthorized", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundDeleteAuthorized indicates an expected call of HandleRoundDeleteAuthorized.
@@ -97,11 +101,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundDeleteAuthorized(msg any) *gomock
 }
 
 // HandleRoundDeleteRequest mocks base method.
-func (m *MockHandlers) HandleRoundDeleteRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundDeleteRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundDeleteRequest indicates an expected call of HandleRoundDeleteRequest.
@@ -111,11 +116,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundDeleteRequest(msg any) *gomock.Ca
 }
 
 // HandleRoundDeleteValidated mocks base method.
-func (m *MockHandlers) HandleRoundDeleteValidated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundDeleteValidated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundDeleteValidated indicates an expected call of HandleRoundDeleteValidated.
@@ -125,11 +131,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundDeleteValidated(msg any) *gomock.
 }
 
 // HandleRoundEntityCreated mocks base method.
-func (m *MockHandlers) HandleRoundEntityCreated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundEntityCreated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundEntityCreated indicates an expected call of HandleRoundEntityCreated.
@@ -139,11 +146,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundEntityCreated(msg any) *gomock.Ca
 }
 
 // HandleRoundEntityUpdated mocks base method.
-func (m *MockHandlers) HandleRoundEntityUpdated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundEntityUpdated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundEntityUpdated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundEntityUpdated indicates an expected call of HandleRoundEntityUpdated.
@@ -153,11 +161,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundEntityUpdated(msg any) *gomock.Ca
 }
 
 // HandleRoundFetched mocks base method.
-func (m *MockHandlers) HandleRoundFetched(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundFetched(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundFetched", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundFetched indicates an expected call of HandleRoundFetched.
@@ -167,11 +176,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundFetched(msg any) *gomock.Call {
 }
 
 // HandleRoundFinalized mocks base method.
-func (m *MockHandlers) HandleRoundFinalized(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundFinalized", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundFinalized indicates an expected call of HandleRoundFinalized.
@@ -181,11 +191,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundFinalized(msg any) *gomock.Call {
 }
 
 // HandleRoundParticipantDeclined mocks base method.
-func (m *MockHandlers) HandleRoundParticipantDeclined(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundParticipantDeclined(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundParticipantDeclined", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundParticipantDeclined indicates an expected call of HandleRoundParticipantDeclined.
@@ -195,11 +206,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundParticipantDeclined(msg any) *gom
 }
 
 // HandleRoundParticipantJoinRequest mocks base method.
-func (m *MockHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundParticipantJoinRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundParticipantJoinRequest indicates an expected call of HandleRoundParticipantJoinRequest.
@@ -208,12 +220,28 @@ func (mr *MockHandlersMockRecorder) HandleRoundParticipantJoinRequest(msg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundParticipantJoinRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundParticipantJoinRequest), msg)
 }
 
+// HandleRoundParticipantJoinValidated mocks base method.
+func (m *MockHandlers) HandleRoundParticipantJoinValidated(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleRoundParticipantJoinValidated", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleRoundParticipantJoinValidated indicates an expected call of HandleRoundParticipantJoinValidated.
+func (mr *MockHandlersMockRecorder) HandleRoundParticipantJoinValidated(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundParticipantJoinValidated", reflect.TypeOf((*MockHandlers)(nil).HandleRoundParticipantJoinValidated), msg)
+}
+
 // HandleRoundParticipantJoinValidationRequest mocks base method.
-func (m *MockHandlers) HandleRoundParticipantJoinValidationRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundParticipantJoinValidationRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundParticipantJoinValidationRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundParticipantJoinValidationRequest indicates an expected call of HandleRoundParticipantJoinValidationRequest.
@@ -223,11 +251,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundParticipantJoinValidationRequest(
 }
 
 // HandleRoundParticipantRemovalRequest mocks base method.
-func (m *MockHandlers) HandleRoundParticipantRemovalRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundParticipantRemovalRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundParticipantRemovalRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundParticipantRemovalRequest indicates an expected call of HandleRoundParticipantRemovalRequest.
@@ -237,11 +266,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundParticipantRemovalRequest(msg any
 }
 
 // HandleRoundParticipantScoreUpdated mocks base method.
-func (m *MockHandlers) HandleRoundParticipantScoreUpdated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundParticipantScoreUpdated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundParticipantScoreUpdated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundParticipantScoreUpdated indicates an expected call of HandleRoundParticipantScoreUpdated.
@@ -251,11 +281,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundParticipantScoreUpdated(msg any) 
 }
 
 // HandleRoundReminder mocks base method.
-func (m *MockHandlers) HandleRoundReminder(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundReminder", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundReminder indicates an expected call of HandleRoundReminder.
@@ -265,11 +296,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundReminder(msg any) *gomock.Call {
 }
 
 // HandleRoundScheduleUpdate mocks base method.
-func (m *MockHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundScheduleUpdate", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundScheduleUpdate indicates an expected call of HandleRoundScheduleUpdate.
@@ -279,11 +311,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundScheduleUpdate(msg any) *gomock.C
 }
 
 // HandleRoundScheduled mocks base method.
-func (m *MockHandlers) HandleRoundScheduled(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundScheduled(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundScheduled", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundScheduled indicates an expected call of HandleRoundScheduled.
@@ -293,11 +326,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundScheduled(msg any) *gomock.Call {
 }
 
 // HandleRoundScoreUpdateRequest mocks base method.
-func (m *MockHandlers) HandleRoundScoreUpdateRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundScoreUpdateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundScoreUpdateRequest indicates an expected call of HandleRoundScoreUpdateRequest.
@@ -307,11 +341,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundScoreUpdateRequest(msg any) *gomo
 }
 
 // HandleRoundScoreUpdateValidated mocks base method.
-func (m *MockHandlers) HandleRoundScoreUpdateValidated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundScoreUpdateValidated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundScoreUpdateValidated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundScoreUpdateValidated indicates an expected call of HandleRoundScoreUpdateValidated.
@@ -321,11 +356,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundScoreUpdateValidated(msg any) *go
 }
 
 // HandleRoundStarted mocks base method.
-func (m *MockHandlers) HandleRoundStarted(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundStarted", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundStarted indicates an expected call of HandleRoundStarted.
@@ -335,11 +371,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundStarted(msg any) *gomock.Call {
 }
 
 // HandleRoundStored mocks base method.
-func (m *MockHandlers) HandleRoundStored(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundStored(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundStored", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundStored indicates an expected call of HandleRoundStored.
@@ -349,11 +386,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundStored(msg any) *gomock.Call {
 }
 
 // HandleRoundTagNumberFound mocks base method.
-func (m *MockHandlers) HandleRoundTagNumberFound(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundTagNumberFound(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundTagNumberFound", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundTagNumberFound indicates an expected call of HandleRoundTagNumberFound.
@@ -363,11 +401,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundTagNumberFound(msg any) *gomock.C
 }
 
 // HandleRoundTagNumberNotFound mocks base method.
-func (m *MockHandlers) HandleRoundTagNumberNotFound(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundTagNumberNotFound(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundTagNumberNotFound", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundTagNumberNotFound indicates an expected call of HandleRoundTagNumberNotFound.
@@ -377,11 +416,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundTagNumberNotFound(msg any) *gomoc
 }
 
 // HandleRoundTagNumberRequest mocks base method.
-func (m *MockHandlers) HandleRoundTagNumberRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundTagNumberRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundTagNumberRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundTagNumberRequest indicates an expected call of HandleRoundTagNumberRequest.
@@ -391,11 +431,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundTagNumberRequest(msg any) *gomock
 }
 
 // HandleRoundToDeleteFetched mocks base method.
-func (m *MockHandlers) HandleRoundToDeleteFetched(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundToDeleteFetched(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundToDeleteFetched", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundToDeleteFetched indicates an expected call of HandleRoundToDeleteFetched.
@@ -405,11 +446,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundToDeleteFetched(msg any) *gomock.
 }
 
 // HandleRoundUpdateRequest mocks base method.
-func (m *MockHandlers) HandleRoundUpdateRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundUpdateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundUpdateRequest indicates an expected call of HandleRoundUpdateRequest.
@@ -419,11 +461,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundUpdateRequest(msg any) *gomock.Ca
 }
 
 // HandleRoundUpdateValidated mocks base method.
-func (m *MockHandlers) HandleRoundUpdateValidated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundUpdateValidated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundUpdateValidated indicates an expected call of HandleRoundUpdateValidated.
@@ -433,11 +476,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundUpdateValidated(msg any) *gomock.
 }
 
 // HandleRoundUserRoleCheckResult mocks base method.
-func (m *MockHandlers) HandleRoundUserRoleCheckResult(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundUserRoleCheckResult(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundUserRoleCheckResult", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundUserRoleCheckResult indicates an expected call of HandleRoundUserRoleCheckResult.
@@ -447,11 +491,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundUserRoleCheckResult(msg any) *gom
 }
 
 // HandleRoundValidated mocks base method.
-func (m *MockHandlers) HandleRoundValidated(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundValidated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundValidated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundValidated indicates an expected call of HandleRoundValidated.
@@ -461,11 +506,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundValidated(msg any) *gomock.Call {
 }
 
 // HandleScheduleRoundEvents mocks base method.
-func (m *MockHandlers) HandleScheduleRoundEvents(msg *message.Message) error {
+func (m *MockHandlers) HandleScheduleRoundEvents(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleScheduleRoundEvents", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleScheduleRoundEvents indicates an expected call of HandleScheduleRoundEvents.
@@ -474,16 +520,17 @@ func (mr *MockHandlersMockRecorder) HandleScheduleRoundEvents(msg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScheduleRoundEvents", reflect.TypeOf((*MockHandlers)(nil).HandleScheduleRoundEvents), msg)
 }
 
-// HandleUpdateDiscordEventID mocks base method.
-func (m *MockHandlers) HandleUpdateDiscordEventID(msg *message.Message) error {
+// HandleUpdateEventMessageID mocks base method.
+func (m *MockHandlers) HandleUpdateEventMessageID(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUpdateDiscordEventID", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "HandleUpdateEventMessageID", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// HandleUpdateDiscordEventID indicates an expected call of HandleUpdateDiscordEventID.
-func (mr *MockHandlersMockRecorder) HandleUpdateDiscordEventID(msg any) *gomock.Call {
+// HandleUpdateEventMessageID indicates an expected call of HandleUpdateEventMessageID.
+func (mr *MockHandlersMockRecorder) HandleUpdateEventMessageID(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateDiscordEventID", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateDiscordEventID), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateEventMessageID", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateEventMessageID), msg)
 }

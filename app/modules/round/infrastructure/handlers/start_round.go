@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundStartedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundStartedPayload: %w", err)

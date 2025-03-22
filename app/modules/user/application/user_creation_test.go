@@ -76,10 +76,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Times(1)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreated, gomock.Any()).
+					Publish(userevents.UserSignupSuccess, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserCreated {
-							t.Errorf("Expected topic %s, got %s", userevents.UserCreated, topic)
+						if topic != userevents.UserSignupSuccess {
+							t.Errorf("Expected topic %s, got %s", userevents.UserSignupSuccess, topic)
 						}
 
 						if len(msgs) != 1 {
@@ -137,10 +137,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Times(1)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreationFailed, gomock.Any()).
+					Publish(userevents.UserSignupFailed, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserCreationFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						if topic != userevents.UserSignupFailed {
+							t.Errorf("Expected topic %s, got %s", userevents.UserSignupFailed, topic)
 						}
 
 						if len(msgs) != 1 {
@@ -176,7 +176,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Times(1)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreated, gomock.Any()).
+					Publish(userevents.UserSignupSuccess, gomock.Any()).
 					Return(errors.New("publish error")).
 					Times(1)
 			},
@@ -254,10 +254,10 @@ func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreated, gomock.Any()).
+					Publish(userevents.UserSignupSuccess, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserCreated {
-							t.Errorf("Expected topic %s, got %s", userevents.UserCreated, topic)
+						if topic != userevents.UserSignupSuccess {
+							t.Errorf("Expected topic %s, got %s", userevents.UserSignupSuccess, topic)
 						}
 
 						if len(msgs) != 1 {
@@ -310,7 +310,7 @@ func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreated, gomock.Any()).
+					Publish(userevents.UserSignupSuccess, gomock.Any()).
 					Return(errors.New("publish error")).
 					Times(1)
 			},
@@ -391,10 +391,10 @@ func TestUserServiceImpl_PublishUserCreationFailed(t *testing.T) {
 				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
 
 				f.eventBus.EXPECT().
-					Publish(userevents.UserCreationFailed, gomock.Any()).
+					Publish(userevents.UserSignupFailed, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserCreationFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserCreationFailed, topic)
+						if topic != userevents.UserSignupFailed {
+							t.Errorf("Expected topic %s, got %s", userevents.UserSignupFailed, topic)
 						}
 
 						if len(msgs) != 1 {

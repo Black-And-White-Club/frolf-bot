@@ -1,4 +1,3 @@
-// db/bundb/bundb.go
 package bundb
 
 import (
@@ -7,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
@@ -24,6 +24,8 @@ type DBService struct {
 	ScoreDB       *scoredb.ScoreDBImpl
 	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
 	db            *bun.DB
+	metrics       observability.Metrics
+	tracer        observability.Tracer
 }
 
 // GetDB returns the underlying database connection pool.
@@ -32,7 +34,7 @@ func (dbService *DBService) GetDB() *bun.DB {
 }
 
 // NewBunDBService initializes a new DBService with the provided Postgres configuration.
-func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService, error) {
+func NewBunDBService(ctx context.Context, cfg config.PostgresConfig, metrics observability.Metrics, tracer observability.Tracer) (*DBService, error) {
 	log.Printf("NewBunDBService - Initializing with DSN: %s", cfg.DSN)
 
 	sqldb, err := pgConn(cfg.DSN)
@@ -48,11 +50,13 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	}
 
 	dbService := &DBService{
-		UserDB:  &userdb.UserDBImpl{DB: db},
-		RoundDB: &rounddb.RoundDBImpl{DB: db},
-		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
+		UserDB:        &userdb.UserDBImpl{DB: db},
+		RoundDB:       &rounddb.RoundDBImpl{DB: db},
+		ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
 		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
 		db:            db,
+		metrics:       metrics,
+		tracer:        tracer,
 	}
 
 	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)

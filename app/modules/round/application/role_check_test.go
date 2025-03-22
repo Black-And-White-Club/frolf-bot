@@ -43,11 +43,11 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundToDeleteFetchedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-round-id",
+						ID:        1,
 						CreatedBy: "some-discord-id",
 					},
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserDiscordID: "some-discord-id",
+						RequestingUserUserID: "some-discord-id",
 					},
 				},
 			},
@@ -66,8 +66,8 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
+					if payload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
 					}
 
 					return nil
@@ -80,11 +80,11 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundToDeleteFetchedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-round-id",
+						ID:        1,
 						CreatedBy: "creator-discord-id",
 					},
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserDiscordID: "some-discord-id",
+						RequestingUserUserID: "some-discord-id",
 					},
 				},
 			},
@@ -103,12 +103,12 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.DiscordID != "some-discord-id" {
-						return fmt.Errorf("unexpected Discord ID: %s", payload.DiscordID)
+					if payload.UserID != "some-discord-id" {
+						return fmt.Errorf("unexpected Discord ID: %s", payload.UserID)
 					}
 
-					if payload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
+					if payload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
 					}
 
 					return nil
@@ -131,11 +131,11 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundToDeleteFetchedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-round-id",
+						ID:        1,
 						CreatedBy: "some-discord-id",
 					},
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserDiscordID: "some-discord-id",
+						RequestingUserUserID: "some-discord-id",
 					},
 				},
 			},
@@ -152,11 +152,11 @@ func TestRoundService_CheckUserAuthorization(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.RoundToDeleteFetchedPayload{
 					Round: roundtypes.Round{
-						ID:        "some-round-id",
+						ID:        1,
 						CreatedBy: "creator-discord-id",
 					},
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserDiscordID: "some-discord-id",
+						RequestingUserUserID: "some-discord-id",
 					},
 				},
 			},
@@ -223,9 +223,9 @@ func TestRoundService_UserRoleCheckResult(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.UserRoleCheckResultPayload{
-					DiscordID: "some-discord-id",
-					RoundID:   "some-round-id",
-					HasRole:   true,
+					UserID:  "some-discord-id",
+					RoundID: 1,
+					HasRole: true,
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteAuthorized,
@@ -243,8 +243,8 @@ func TestRoundService_UserRoleCheckResult(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
+					if payload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
 					}
 
 					return nil
@@ -256,9 +256,9 @@ func TestRoundService_UserRoleCheckResult(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.UserRoleCheckResultPayload{
-					DiscordID: "some-discord-id",
-					RoundID:   "some-round-id",
-					HasRole:   false,
+					UserID:  "some-discord-id",
+					RoundID: 1,
+					HasRole: false,
 				},
 			},
 			expectedEvent: roundevents.RoundDeleteUnauthorized,
@@ -288,9 +288,9 @@ func TestRoundService_UserRoleCheckResult(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.UserRoleCheckResultPayload{
-					DiscordID: "some-discord-id",
-					RoundID:   "some-round-id",
-					HasRole:   true,
+					UserID:  "some-discord-id",
+					RoundID: 1,
+					HasRole: true,
 				},
 			},
 			expectedEvent: "",
@@ -305,9 +305,9 @@ func TestRoundService_UserRoleCheckResult(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.UserRoleCheckResultPayload{
-					DiscordID: "some-discord-id",
-					RoundID:   "some-round-id",
-					HasRole:   false,
+					UserID:  "some-discord-id",
+					RoundID: 1,
+					HasRole: false,
 				},
 			},
 			expectedEvent: "",

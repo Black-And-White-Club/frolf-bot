@@ -3,7 +3,6 @@ package roundservice
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
@@ -52,6 +51,12 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 		}, fmt.Errorf("invalid payload: %w", err))
 	}
 
+	// Fetch EventMessageID from DB
+	eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, eventPayload.RoundID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve EventMessageID for round %d: %w", eventPayload.RoundID, err)
+	}
+
 	if err := s.RoundDB.DeleteRound(ctx, eventPayload.RoundID); err != nil {
 		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{
 			RoundID:              eventPayload.RoundID,
@@ -59,10 +64,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 		}, err)
 	}
 
-	// Convert roundtypes.ID to string
-	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
-
-	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {
+	if err := s.EventBus.CancelScheduledMessage(ctx, eventPayload.RoundID); err != nil {
 		s.logger.Error("Failed to cancel scheduled messages", "error", err)
 		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{
 			RoundID:              eventPayload.RoundID,
@@ -72,7 +74,8 @@ func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) er
 
 	// If publishing `round.deleted` fails, return the error immediately
 	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload{
-		RoundID: eventPayload.RoundID,
+		RoundID:        eventPayload.RoundID,
+		EventMessageID: *eventMessageID,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.deleted event", map[string]interface{}{"error": err.Error()})
 		return fmt.Errorf("failed to publish round.deleted event: %w", err) // Ensure error is returned

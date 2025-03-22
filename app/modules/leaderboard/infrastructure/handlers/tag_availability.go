@@ -18,8 +18,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 	h.logger.Info("Received TagAvailabilityCheckRequested event",
 		slog.String("correlation_id", correlationID),
-		slog.Int("tag_number", payload.TagNumber),
-		slog.String("user_id", string(payload.DiscordID)),
+		slog.Int("tag_number", *payload.TagNumber),
+		slog.String("user_id", string(payload.UserID)),
 	)
 
 	// Call the service function to handle the event

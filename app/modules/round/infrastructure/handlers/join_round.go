@@ -1,15 +1,17 @@
 package roundhandlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
@@ -21,12 +23,14 @@ func (h *RoundHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) 
 		slog.String("response", string(payload.Response)),
 		slog.Int64("round_id", int64(payload.RoundID)))
 
-	// Log the entire payload for debugging
-	h.logger.Debug("Unmarshalled payload",
-		slog.String("correlation_id", correlationID),
-		slog.Any("payload", payload))
+	// Log if this is a late join
+	if payload.JoinedLate != nil && *payload.JoinedLate {
+		h.logger.Info("Late join detected",
+			slog.String("user_id", string(payload.UserID)),
+			slog.Int64("round_id", int64(payload.RoundID)))
+	}
 
-	// Call the CheckParticipantStatus service method
+	// Call the CheckParticipantStatus service method, ensuring late join flag is passed
 	if err := h.RoundService.CheckParticipantStatus(msg.Context(), msg); err != nil {
 		h.logger.Error("Failed to check participant status",
 			slog.String("correlation_id", correlationID),
@@ -37,7 +41,7 @@ func (h *RoundHandlers) HandleRoundParticipantJoinRequest(msg *message.Message) 
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundParticipantJoinValidationRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundParticipantJoinValidationRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinValidationRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantJoinValidationRequestPayload: %w", err)
@@ -58,7 +62,43 @@ func (h *RoundHandlers) HandleRoundParticipantJoinValidationRequest(msg *message
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundParticipantRemovalRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundParticipantJoinValidated(msg *message.Message) ([]*message.Message, error) {
+	correlationID, payload, err := eventutil.UnmarshalPayload[roundevents.ParticipantJoinRequestPayload](msg, h.logger)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal ParticipantJoinRequestPayload: %w", err)
+	}
+
+	h.logger.Info("Received ParticipantJoinValidated event",
+		slog.String("correlation_id", correlationID),
+		slog.Any("payload", payload),
+	)
+
+	tagRequestPayload := roundevents.TagNumberRequestPayload{
+		UserID:  payload.UserID,
+		RoundID: payload.RoundID,
+	}
+
+	tagRequestBytes, err := json.Marshal(tagRequestPayload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal TagNumberRequestPayload: %w", err)
+	}
+
+	newMsg := message.NewMessage(watermill.NewUUID(), tagRequestBytes)
+
+	// 🔥 Now call RequestTagNumber with the NEW message!
+	if err := h.RoundService.RequestTagNumber(msg.Context(), newMsg); err != nil {
+		h.logger.Error("Failed to request tag number",
+			slog.String("correlation_id", correlationID),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("failed to request tag number: %w", err)
+	}
+
+	h.logger.Info("ParticipantJoinValidated event processed", slog.String("correlation_id", correlationID))
+	return nil
+}
+
+func (h *RoundHandlers) HandleRoundParticipantRemovalRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.ParticipantRemovalRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantRemovalRequestPayload: %w", err)
@@ -79,7 +119,7 @@ func (h *RoundHandlers) HandleRoundParticipantRemovalRequest(msg *message.Messag
 }
 
 // Handle the decline event
-func (h *RoundHandlers) HandleRoundParticipantDeclined(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundParticipantDeclined(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.ParticipantDeclinedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ParticipantDeclinedPayload: %w", err)
@@ -97,7 +137,7 @@ func (h *RoundHandlers) HandleRoundParticipantDeclined(msg *message.Message) err
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundTagNumberFound(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundTagNumberFound(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundTagNumberFoundPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundTagNumberFoundPayload: %w", err)
@@ -119,7 +159,7 @@ func (h *RoundHandlers) HandleRoundTagNumberFound(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundTagNumberNotFound(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundTagNumberNotFound(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundTagNumberNotFoundPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundTagNumberNotFoundPayload: %w", err)

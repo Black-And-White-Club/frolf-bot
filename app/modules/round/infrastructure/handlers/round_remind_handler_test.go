@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundservicemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -17,15 +18,15 @@ import (
 
 // --- Constants and Variables for Test Data ---
 const (
-	reminderHandlerRoundID       = "some-round-id"
-	reminderHandlerCorrelationID = "some-correlation-id"
-	reminderHandlerType          = "1h"
-	reminderHandlerRoundTitle    = "Test Round"
-	reminderProcessError         = "processing error"
+	reminderHandlerRoundID       roundtypes.ID = 1
+	reminderHandlerCorrelationID               = "some-correlation-id"
+	reminderHandlerType                        = "1h"
+	reminderHandlerRoundTitle                  = "Test Round"
+	reminderProcessError                       = "processing error"
 )
 
 var (
-	validReminderHandlerPayload = roundevents.RoundReminderPayload{
+	validReminderHandlerPayload = roundevents.DiscordReminderPayload{
 		RoundID:      reminderHandlerRoundID,
 		RoundTitle:   reminderHandlerRoundTitle,
 		ReminderType: reminderHandlerType,
@@ -51,7 +52,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			payload: validReminderHandlerPayload, // Use constant
 			mockExpects: func() {
 				mockRoundService.EXPECT().
-					ProcessRoundReminder(gomock.Any()).
+					ProcessRoundReminder(gomock.Any(), 1).
 					Return(nil).
 					Times(1)
 			},
@@ -69,7 +70,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			payload: validReminderHandlerPayload, // Use constant
 			mockExpects: func() {
 				mockRoundService.EXPECT().
-					ProcessRoundReminder(gomock.Any()).
+					ProcessRoundReminder(gomock.Any(), 1).
 					Return(errors.New(reminderProcessError)). // Simulate processing error
 					Times(1)
 			},

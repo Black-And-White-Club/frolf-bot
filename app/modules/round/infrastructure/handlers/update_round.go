@@ -10,7 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundUpdateRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundUpdateRequestPayload: %w", err)
@@ -31,7 +31,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundUpdateValidatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundUpdateValidatedPayload: %w", err)
@@ -52,7 +52,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundFetched(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundFetched(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundFetchedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundFetchedPayload: %w", err)
@@ -73,7 +73,7 @@ func (h *RoundHandlers) HandleRoundFetched(msg *message.Message) error {
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundEntityUpdated(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundEntityUpdated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundEntityUpdatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundEntityUpdatedPayload: %w", err)
@@ -95,7 +95,7 @@ func (h *RoundHandlers) HandleRoundEntityUpdated(msg *message.Message) error {
 }
 
 // HandleRoundScheduleUpdate handles the round.schedule.update event.
-func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*message.Message, error) {
 	correlationID, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundScheduleUpdatePayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundScheduleUpdatePayload: %w", err)

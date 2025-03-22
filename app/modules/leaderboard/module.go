@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
@@ -21,19 +22,16 @@ type Module struct {
 	config             *config.Config
 	LeaderboardRouter  *leaderboardrouter.LeaderboardRouter
 	cancelFunc         context.CancelFunc
+	helper             utils.Helpers
 }
 
-func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
-	logger.Info("leaderboard.NewLeaderboardModule called")
+func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, leaderboardDB leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, router *message.Router, helper utils.Helpers) (*Module, error) {
 
-	// Initialize leaderboard service.
 	leaderboardService := leaderboardservice.NewLeaderboardService(leaderboardDB, eventBus, logger)
+	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, helper)
 
-	// Initialize leaderboard router.
-	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus)
-
-	// Configure the router with the leaderboard service.
 	if err := leaderboardRouter.Configure(leaderboardService); err != nil {
+		logger.Error("❌ Failed to configure leaderboard router", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)
 	}
 
@@ -42,7 +40,8 @@ func NewLeaderboardModule(ctx context.Context, cfg *config.Config, logger *slog.
 		LeaderboardService: leaderboardService,
 		logger:             logger,
 		config:             cfg,
-		LeaderboardRouter:  leaderboardRouter, // Set the LeaderboardRouter
+		LeaderboardRouter:  leaderboardRouter,
+		helper:             helper,
 	}
 
 	return module, nil

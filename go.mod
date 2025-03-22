@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.38.0
 	github.com/olebedev/when v1.1.0
+	github.com/prometheus/client_golang v1.20.4
 	github.com/uptrace/bun v1.2.11
 	github.com/uptrace/bun/dialect/pgdialect v1.2.11
 	github.com/uptrace/bun/driver/pgdriver v1.2.11
@@ -57,7 +58,6 @@ require (
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.20.4 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.61.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect

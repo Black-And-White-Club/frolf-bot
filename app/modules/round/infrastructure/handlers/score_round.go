@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundScoreUpdateRequest(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.ScoreUpdateRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundScoreUpdateRequestPayload: %w", err)
@@ -31,7 +31,7 @@ func (h *RoundHandlers) HandleRoundScoreUpdateRequest(msg *message.Message) erro
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundScoreUpdateValidated(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundScoreUpdateValidated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.ScoreUpdateValidatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundScoreUpdateValidatedPayload: %w", err)
@@ -53,7 +53,7 @@ func (h *RoundHandlers) HandleRoundScoreUpdateValidated(msg *message.Message) er
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundParticipantScoreUpdated(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundParticipantScoreUpdated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.ParticipantScoreUpdatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundParticipantScoreUpdatedPayload: %w", err)
@@ -75,7 +75,7 @@ func (h *RoundHandlers) HandleRoundParticipantScoreUpdated(msg *message.Message)
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundAllScoresSubmitted(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundAllScoresSubmitted(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.AllScoresSubmittedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundAllScoresSubmittedPayload: %w", err)
@@ -97,7 +97,7 @@ func (h *RoundHandlers) HandleRoundAllScoresSubmitted(msg *message.Message) erro
 	return nil
 }
 
-func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) error {
+func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundFinalizedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundFinalizedPayload: %w", err)

@@ -16,6 +16,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+var (
+	RoundID roundtypes.ID = 1
+)
+
 func TestRoundHandlers_HandleRoundEntityUpdated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -49,7 +53,7 @@ func TestRoundHandlers_HandleRoundEntityUpdated(t *testing.T) {
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEntityUpdatedPayload{
 					Round: roundtypes.Round{
-						ID:    "some-round-id",
+						ID:    RoundID,
 						Title: "Test Round",
 						State: roundtypes.RoundStateUpcoming,
 					},
@@ -84,7 +88,7 @@ func TestRoundHandlers_HandleRoundEntityUpdated(t *testing.T) {
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundEntityUpdatedPayload{
 					Round: roundtypes.Round{
-						ID:    "some-round-id",
+						ID:    RoundID,
 						Title: "Test Round",
 						State: roundtypes.RoundStateUpcoming,
 					},
@@ -146,7 +150,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			args: args{
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundScheduleUpdatePayload{
-						RoundID: "some-uuid",
+						RoundID: RoundID,
 					})
 					return payload
 				}()),
@@ -177,7 +181,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			args: args{
 				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
 					payload, _ := json.Marshal(roundevents.RoundScheduleUpdatePayload{
-						RoundID: "some-uuid",
+						RoundID: RoundID,
 					})
 					return payload
 				}()),

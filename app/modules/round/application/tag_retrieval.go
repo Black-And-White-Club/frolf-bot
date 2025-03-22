@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -24,7 +22,8 @@ func (s *RoundService) RequestTagNumber(ctx context.Context, msg *message.Messag
 
 	// Publish "round.tag.number.request" event
 	if err := s.publishEvent(msg, roundevents.RoundTagNumberRequest, roundevents.TagNumberRequestPayload{
-		UserID: eventPayload.UserID,
+		UserID:  eventPayload.UserID,
+		RoundID: eventPayload.RoundID,
 	}); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.request event", map[string]interface{}{})
 		return fmt.Errorf("failed to publish round.tag.number.request event: %w", err)
@@ -48,9 +47,14 @@ func (s *RoundService) TagNumberRequest(ctx context.Context, msg *message.Messag
 
 	// Prepare the request payload for the leaderboard
 	leaderboardRequestPayload := roundevents.TagNumberRequestPayload{
-		UserID: eventPayload.UserID,
+		UserID:  eventPayload.UserID,
+		RoundID: eventPayload.RoundID,
 	}
 
+	s.logger.Info("Executing HandleRoundTagNumberRequest",
+		slog.String("correlation_id", correlationID),
+		slog.String("user_id", string(eventPayload.UserID)),
+	)
 	// Publish the request to the leaderboard service using publishEvent
 	if err := s.publishEvent(msg, roundevents.LeaderboardGetTagNumberRequest, leaderboardRequestPayload); err != nil {
 		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish GetTagNumberRequest to leaderboard", map[string]interface{}{"error": err.Error()})
@@ -66,12 +70,6 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.GetTagNumberResponsePayload](msg, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal GetTagNumberResponsePayload: %w", err)
-	}
-
-	roundIDStr := msg.Metadata.Get("RoundID")
-	roundID, err := strconv.ParseInt(roundIDStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to convert RoundID to int64: %w", err)
 	}
 
 	if eventPayload.Error != "" {
@@ -90,7 +88,7 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 	// If tag number is found, add participant to the round
 	if eventPayload.TagNumber != nil {
 		if err := s.publishEvent(msg, roundevents.RoundTagNumberFound, roundevents.RoundTagNumberFoundPayload{
-			RoundID:   roundtypes.ID(roundID),
+			RoundID:   eventPayload.RoundID,
 			UserID:    eventPayload.UserID,
 			TagNumber: eventPayload.TagNumber,
 		}); err != nil {
@@ -100,7 +98,8 @@ func (s *RoundService) TagNumberResponse(ctx context.Context, msg *message.Messa
 	} else {
 		// Handle case where tag number is not found
 		if err := s.publishEvent(msg, roundevents.RoundTagNumberNotFound, roundevents.RoundTagNumberNotFoundPayload{
-			UserID: eventPayload.UserID,
+			UserID:  eventPayload.UserID,
+			RoundID: eventPayload.RoundID,
 		}); err != nil {
 			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.tag.number.notfound event", map[string]interface{}{"error": err.Error()})
 			return fmt.Errorf("failed to publish round.tag.number.notfound event: %w", err)

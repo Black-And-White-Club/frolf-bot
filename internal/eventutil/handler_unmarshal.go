@@ -29,7 +29,7 @@ func UnmarshalPayload[T any](msg *message.Message, logger *slog.Logger) (string,
 			slog.String("message_uuid", msg.UUID),
 			slog.Any("error", err),
 		)
-		return correlationID, payload, fmt.Errorf("failed to unmarshal payload: %w", err)
+		return correlationID, payload, err
 	}
 
 	logger.Debug("Payload unmarshalled successfully",

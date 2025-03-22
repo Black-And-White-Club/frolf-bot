@@ -7,13 +7,12 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
+	rounddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -23,225 +22,197 @@ import (
 // --- Constants and Variables for Test Data ---
 
 const (
-	storeUpdateRoundID       = "some-round-id"
-	storeUpdateCorrelationID = "some-correlation-id"
-	storeUpdateDBError       = "db error"
-	storeUpdatePublishError  = "publish error"
-	storeUpdateCancelError   = "cancel error"
+	storeUpdateRoundID       roundtypes.ID = 1
+	storeUpdateCorrelationID               = "some-correlation-id"
+	storeUpdateCancelError                 = "cancel error"
+	storeUpdatePublishError                = "publish error"
+	storeUpdateDBError                     = "db error"
 )
-
-var (
-	storeUpdateTitle     = "Updated Title"
-	storeUpdateLocation  = "Updated Location"
-	storeUpdateEventType = "Updated Type" // Use var for pointer
-	storeUpdateTimeNow   = time.Now().UTC().Truncate(time.Second)
-	storeUpdateStartTime = &storeUpdateTimeNow
-
-	// Pre-built payload
-	validStoredUpdatePayload = roundevents.RoundEntityUpdatedPayload{
-		Round: roundtypes.Round{
-			ID:        storeUpdateRoundID,
-			Title:     storeUpdateTitle,
-			Location:  &storeUpdateLocation,  // Now takes the address
-			EventType: &storeUpdateEventType, // Now takes the address
-			StartTime: storeUpdateStartTime,
-			State:     roundtypes.RoundStateUpcoming,
-		},
-	}
-
-	validRoundUpdatedPayload = roundevents.RoundUpdatedPayload{
-		RoundID: storeUpdateRoundID,
-	}
-)
-
-func TestRoundService_StoreRoundUpdate(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
-	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
-	logger := slog.Default()
-
-	s := &RoundService{
-		RoundDB:       mockRoundDB,
-		EventBus:      mockEventBus,
-		logger:        logger,
-		ErrorReporter: mockErrorReporter,
-	}
-
-	tests := []struct {
-		name          string
-		payload       interface{}
-		mockDBSetup   func()
-		expectedEvent string
-		wantErr       bool
-		errMsg        string
-	}{
-		{
-			name:          "Successful round update storage",
-			payload:       validStoredUpdatePayload, // Use pre-built payload
-			expectedEvent: roundevents.RoundUpdated,
-			wantErr:       false,
-			mockDBSetup: func() {
-				mockRoundDB.EXPECT().
-					UpdateRound(gomock.Any(), gomock.Eq(storeUpdateRoundID), gomock.Any()).
-					Return(nil).
-					Times(1)
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundUpdated), gomock.Any()).
-					Return(nil). // Mock successful publishing
-					Times(1)
-			},
-		},
-		{
-			name:          "Invalid payload",
-			payload:       "invalid json",
-			expectedEvent: "round.update.error",
-			wantErr:       true,
-			errMsg:        "invalid payload",
-			mockDBSetup: func() {
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq("round.update.error"), gomock.Any()).
-					Times(1).
-					Return(nil) // Mock error publishing
-			},
-		},
-		{
-			name:    "Database error",
-			payload: validStoredUpdatePayload,
-			mockDBSetup: func() {
-				mockRoundDB.EXPECT().
-					UpdateRound(gomock.Any(), gomock.Eq(storeUpdateRoundID), gomock.Any()).
-					Return(fmt.Errorf("%s", storeUpdateDBError)). // Simulate DB error
-					Times(1)
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq("round.update.error"), gomock.Any()).
-					Times(1).
-					Return(nil) // Mock error publishing
-			},
-			expectedEvent: "round.update.error",
-			wantErr:       true,
-			errMsg:        storeUpdateDBError, // Check for the specific error
-		},
-		{
-			name:    "Publish RoundUpdated event fails",
-			payload: validStoredUpdatePayload,
-			mockDBSetup: func() {
-				mockRoundDB.EXPECT().
-					UpdateRound(gomock.Any(), gomock.Eq(storeUpdateRoundID), gomock.Any()).
-					Return(nil).
-					Times(1)
-				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundUpdated), gomock.Any()).
-					Return(fmt.Errorf("%s", storeUpdatePublishError)). // Simulate publish error
-					Times(1)
-			},
-			expectedEvent: roundevents.RoundUpdated, // Event *should* be published
-			wantErr:       true,
-			errMsg:        storeUpdatePublishError, // Check specific publish error
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			payloadBytes, _ := json.Marshal(tt.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, storeUpdateCorrelationID)
-
-			if tt.mockDBSetup != nil {
-				tt.mockDBSetup()
-			}
-
-			err := s.StoreRoundUpdate(context.Background(), msg)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("StoreRoundUpdate() expected error, got none")
-				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("StoreRoundUpdate() error = %v, wantErrMsg containing %v", err, tt.errMsg)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("StoreRoundUpdate() unexpected error: %v", err)
-				}
-			}
-		})
-	}
-}
 
 func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
+	mockRoundDB := rounddbmocks.NewMockRoundDBInterface(ctrl)
 	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	logger := slog.Default()
 
 	s := &RoundService{
 		EventBus:      mockEventBus,
+		RoundDB:       mockRoundDB,
 		logger:        logger,
 		ErrorReporter: mockErrorReporter,
 	}
 
+	// Create a sample round for test responses
+	sampleRound := &roundtypes.Round{
+		ID:        storeUpdateRoundID,
+		Title:     "Test Round",
+		StartTime: nil,
+		Location:  nil,
+	}
+
 	tests := []struct {
-		name          string
-		payload       interface{}
-		mockExpects   func()
-		expectedEvent string
-		wantErr       bool
-		errMsg        string
+		name        string
+		payload     interface{}
+		mockExpects func()
+		wantErr     bool
+		errMsg      string
 	}{
 		{
-			name:          "Successful update of scheduled round events",
-			payload:       validRoundUpdatedPayload,
-			expectedEvent: roundevents.RoundScheduleUpdate,
-			wantErr:       false,
+			name: "Successful update of scheduled round events",
+			payload: roundevents.RoundScheduleUpdatePayload{
+				RoundID: storeUpdateRoundID,
+			},
+			wantErr: false,
 			mockExpects: func() {
 				mockEventBus.EXPECT().
-					CancelScheduledMessage(gomock.Any(), gomock.Eq(storeUpdateRoundID)).
+					CancelScheduledMessage(gomock.Any(), storeUpdateRoundID).
 					Return(nil).
 					Times(1)
+
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), storeUpdateRoundID).
+					Return(sampleRound, nil).
+					Times(1)
+
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundScheduleUpdate), gomock.Any()).
+					Publish(gomock.Eq(roundevents.RoundUpdateReschedule), gomock.Any()).
+					Do(func(topic string, payload interface{}) {
+						msg, ok := payload.(*message.Message)
+						if !ok {
+							t.Errorf("Expected *message.Message, got %T", payload)
+							return
+						}
+
+						// Unmarshal and verify the payload inside the message
+						var storedPayload roundevents.RoundStoredPayload
+						if err := json.Unmarshal(msg.Payload, &storedPayload); err != nil {
+							t.Errorf("Failed to unmarshal published payload: %v", err)
+							return
+						}
+
+						if storedPayload.Round.ID != storeUpdateRoundID {
+							t.Errorf("Expected round ID %v, got %v", storeUpdateRoundID, storedPayload.Round.ID)
+						}
+					}).
 					Return(nil).
 					Times(1)
 			},
 		},
 		{
-			name:          "Invalid payload",
-			payload:       "invalid json",
-			expectedEvent: "",
-			wantErr:       true,
-			errMsg:        "invalid payload",
-		},
-		{
-			name:          "Failed to cancel existing scheduled events",
-			payload:       validRoundUpdatedPayload,
-			expectedEvent: "",
-			wantErr:       true,
-			errMsg:        "failed to cancel existing scheduled events: " + storeUpdateCancelError,
+			name:    "Invalid payload",
+			payload: "invalid json",
+			wantErr: true,
+			errMsg:  "invalid payload",
 			mockExpects: func() {
 				mockEventBus.EXPECT().
-					CancelScheduledMessage(gomock.Any(), gomock.Eq(storeUpdateRoundID)).
-					Return(fmt.Errorf("failed to cancel existing scheduled events: %s", storeUpdateCancelError)). // Simulate cancel error
+					Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).
 					Times(1)
 			},
 		},
 		{
-			name:          "Failed to publish round.schedule.update event",
-			payload:       validRoundUpdatedPayload,
-			expectedEvent: roundevents.RoundScheduleUpdate,
-			wantErr:       true,
-			errMsg:        "failed to publish event",
+			name:    "Failed to cancel existing scheduled events - continues anyway",
+			payload: roundevents.RoundScheduleUpdatePayload{RoundID: storeUpdateRoundID},
+			wantErr: false, // Continues despite cancellation error
 			mockExpects: func() {
 				mockEventBus.EXPECT().
-					CancelScheduledMessage(gomock.Any(), gomock.Eq(storeUpdateRoundID)).
+					CancelScheduledMessage(gomock.Any(), storeUpdateRoundID).
+					Return(fmt.Errorf("%s", storeUpdateCancelError)).
+					Times(1)
+
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), storeUpdateRoundID).
+					Return(sampleRound, nil).
+					Times(1)
+
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.RoundUpdateReschedule), gomock.Any()).
 					Return(nil).
 					Times(1)
+			},
+		},
+		{
+			name:    "Failed to fetch round from database",
+			payload: roundevents.RoundScheduleUpdatePayload{RoundID: storeUpdateRoundID},
+			wantErr: true,
+			errMsg:  "failed to fetch round for rescheduling",
+			mockExpects: func() {
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.RoundScheduleUpdate), gomock.Any()).
+					CancelScheduledMessage(gomock.Any(), storeUpdateRoundID).
+					Return(nil).
+					Times(1)
+
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), storeUpdateRoundID).
+					Return(nil, fmt.Errorf("%s", storeUpdateDBError)).
+					Times(1)
+
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).
+					Do(func(topic string, payload interface{}) {
+						msg, ok := payload.(*message.Message)
+						if !ok {
+							t.Errorf("Expected *message.Message, got %T", payload)
+							return
+						}
+
+						var errorPayload roundevents.RoundUpdateErrorPayload
+						if err := json.Unmarshal(msg.Payload, &errorPayload); err != nil {
+							t.Errorf("Failed to unmarshal error payload: %v", err)
+							return
+						}
+
+						if !strings.Contains(errorPayload.Error, "failed to fetch round for rescheduling") {
+							t.Errorf("Unexpected error message: %s", errorPayload.Error)
+						}
+					}).
+					Return(nil).
+					Times(1)
+			},
+		},
+		{
+			name:    "Failed to publish round.update.reschedule event",
+			payload: roundevents.RoundScheduleUpdatePayload{RoundID: storeUpdateRoundID},
+			wantErr: true,
+			errMsg:  "failed to publish reschedule event",
+			mockExpects: func() {
+				mockEventBus.EXPECT().
+					CancelScheduledMessage(gomock.Any(), storeUpdateRoundID).
+					Return(nil).
+					Times(1)
+
+				mockRoundDB.EXPECT().
+					GetRound(gomock.Any(), storeUpdateRoundID).
+					Return(sampleRound, nil).
+					Times(1)
+
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.RoundUpdateReschedule), gomock.Any()).
 					Return(fmt.Errorf("%s", storeUpdatePublishError)).
+					Times(1)
+
+				mockEventBus.EXPECT().
+					Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).
+					Do(func(topic string, payload interface{}) {
+						msg, ok := payload.(*message.Message)
+						if !ok {
+							t.Errorf("Expected *message.Message, got %T", payload)
+							return
+						}
+
+						var errorPayload roundevents.RoundUpdateErrorPayload
+						if err := json.Unmarshal(msg.Payload, &errorPayload); err != nil {
+							t.Errorf("Failed to unmarshal error payload: %v", err)
+							return
+						}
+
+						if !strings.Contains(errorPayload.Error, "failed to publish event round.update.reschedule") {
+							t.Errorf("Unexpected error message: %s", errorPayload.Error)
+						}
+					}).
+					Return(nil).
 					Times(1)
 			},
 		},
@@ -261,14 +232,12 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 
 			if tt.wantErr {
 				if err == nil {
-					t.Error("UpdateScheduledRoundEvents() expected error, got none")
+					t.Error("Expected error but got none")
 				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("UpdateScheduledRoundEvents() error = %v, wantErrMsg containing %v", err, tt.errMsg)
+					t.Errorf("Unexpected error: got %v, want message containing %v", err, tt.errMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("UpdateScheduledRoundEvents() unexpected error: %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
 			}
 		})
 	}

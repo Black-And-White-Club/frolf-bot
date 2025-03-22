@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
@@ -40,7 +41,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
+					RoundID:     1,
 					Participant: "some-discord-id",
 					Score:       func() *int { i := 10; return &i }(),
 				},
@@ -59,8 +60,8 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.ScoreUpdateRequestPayload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.ScoreUpdateRequestPayload.RoundID)
+					if payload.ScoreUpdateRequestPayload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.ScoreUpdateRequestPayload.RoundID)
 					}
 
 					if payload.ScoreUpdateRequestPayload.Participant != "some-discord-id" {
@@ -107,7 +108,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateRequestPayload{
-					RoundID: "some-round-id",
+					RoundID: 1,
 					Score:   func() *int { i := 10; return &i }(),
 				},
 			},
@@ -122,7 +123,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
+					RoundID:     1,
 					Participant: "some-discord-id",
 					Score:       nil,
 				},
@@ -138,7 +139,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
+					RoundID:     1,
 					Participant: "some-discord-id",
 					Score:       func() *int { i := 10; return &i }(),
 				},
@@ -185,7 +186,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	logger := slog.Default()
 
 	type args struct {
@@ -205,7 +206,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateValidatedPayload{
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
-						RoundID:     "some-round-id",
+						RoundID:     1,
 						Participant: "some-discord-id",
 						Score:       func() *int { i := 10; return &i }(),
 					},
@@ -215,7 +216,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			expectErr:     false,
 			mockExpects: func() {
 				score := 10
-				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), "some-round-id", "some-discord-id", score).Return(nil).Times(1)
+				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), roundtypes.ID(1), "some-discord-id", score).Return(nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundParticipantScoreUpdated), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
 					if topic != roundevents.RoundParticipantScoreUpdated {
 						return fmt.Errorf("unexpected topic: %s", topic)
@@ -227,8 +228,8 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 						return fmt.Errorf("failed to unmarshal payload: %w", err)
 					}
 
-					if payload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundID)
+					if payload.RoundID != 1 {
+						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
 					}
 
 					if payload.Participant != "some-discord-id" {
@@ -261,7 +262,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateValidatedPayload{
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
-						RoundID:     "some-round-id",
+						RoundID:     1,
 						Participant: "some-discord-id",
 						Score:       func() *int { i := 10; return &i }(),
 					},
@@ -271,7 +272,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			expectErr:     true,
 			mockExpects: func() {
 				score := 10
-				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), "some-round-id", "some-discord-id", score).Return(fmt.Errorf("db error")).Times(1)
+				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), roundtypes.ID(1), "some-discord-id", score).Return(fmt.Errorf("db error")).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundScoreUpdateError), gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -281,7 +282,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				ctx: context.Background(),
 				payload: roundevents.ScoreUpdateValidatedPayload{
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
-						RoundID:     "some-round-id",
+						RoundID:     1,
 						Participant: "some-discord-id",
 						Score:       func() *int { i := 10; return &i }(),
 					},
@@ -290,7 +291,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			expectErr: true,
 			mockExpects: func() {
 				score := 10
-				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), "some-round-id", "some-discord-id", score).Return(nil).Times(1)
+				mockRoundDB.EXPECT().UpdateParticipantScore(gomock.Any(), roundtypes.ID(1), "some-discord-id", score).Return(nil).Times(1)
 				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundParticipantScoreUpdated), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
 			},
 		},

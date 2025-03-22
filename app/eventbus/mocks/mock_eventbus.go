@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,7 +44,7 @@ func (m *MockEventBus) EXPECT() *MockEventBusMockRecorder {
 }
 
 // CancelScheduledMessage mocks base method.
-func (m *MockEventBus) CancelScheduledMessage(ctx context.Context, roundID string) error {
+func (m *MockEventBus) CancelScheduledMessage(ctx context.Context, roundID roundtypes.ID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CancelScheduledMessage", ctx, roundID)
 	ret0, _ := ret[0].(error)
@@ -71,7 +72,7 @@ func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 }
 
 // ProcessDelayedMessages mocks base method.
-func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID int64, scheduledTime time.Time) {
+func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID roundtypes.ID, scheduledTime time.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ProcessDelayedMessages", ctx, roundID, scheduledTime)
 }
@@ -114,7 +115,7 @@ func (mr *MockEventBusMockRecorder) RecoverScheduledRounds(ctx any) *gomock.Call
 }
 
 // ScheduleRoundProcessing mocks base method.
-func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID string, scheduledTime time.Time) {
+func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID roundtypes.ID, scheduledTime time.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ScheduleRoundProcessing", ctx, roundID, scheduledTime)
 }

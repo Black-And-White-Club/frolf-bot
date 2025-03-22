@@ -87,7 +87,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 	startMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%d-round-start-%d", eventPayload.Round.ID, time.Now().Unix()))
 
 	// Schedule the round processing
-	s.EventBus.ScheduleRoundProcessing(ctx, fmt.Sprintf("%d", eventPayload.Round.ID), startTime.UTC())
+	s.EventBus.ScheduleRoundProcessing(ctx, eventPayload.Round.ID, startTime.UTC())
 	s.logger.Info("ScheduleRoundEvents: Round processing scheduled", slog.Int64("round_id", int64(eventPayload.Round.ID)), slog.Time("execute_at", startTime.UTC()))
 
 	// Determine if this is an initial creation or an update
@@ -115,10 +115,10 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Mes
 			Title:       eventPayload.Round.Title,
 			Description: eventPayload.Round.Description,
 			Location:    eventPayload.Round.Location,
-			StartTime:   &startTime,
+			StartTime:   eventPayload.Round.StartTime,
 			UserID:      eventPayload.Round.CreatedBy,
 		},
-		DiscordEventID: nil,
+		EventMessageID: nil,
 	}
 
 	if err := s.publishEvent(msg, publishTopic, scheduledMsg); err != nil {

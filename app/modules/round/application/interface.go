@@ -3,7 +3,7 @@ package roundservice
 import (
 	"context"
 
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -12,10 +12,10 @@ type Service interface {
 	// Create Round
 	ValidateRoundRequest(ctx context.Context, msg *message.Message) error
 	StoreRound(ctx context.Context, msg *message.Message) error
-	ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundutil.TimeParserInterface) error
+	ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundtime.TimeParserInterface) error
 	ScheduleRoundEvents(ctx context.Context, msg *message.Message) error
 	PublishRoundCreated(ctx context.Context, msg *message.Message) error
-	UpdateDiscordEventID(ctx context.Context, msg *message.Message) error
+	UpdateEventMessageID(ctx context.Context, msg *message.Message) error
 
 	// Update Round
 	ValidateRoundUpdateRequest(ctx context.Context, msg *message.Message) error
@@ -56,5 +56,5 @@ type Service interface {
 	TagNumberResponse(ctx context.Context, msg *message.Message) error
 
 	// Round Reminder
-	ProcessRoundReminder(msg *message.Message) error
+	ProcessRoundReminder(ctx context.Context, msg *message.Message) error
 }

@@ -24,6 +24,6 @@ type Service interface {
 
 	// Other Operations
 	GetLeaderboardRequest(ctx context.Context, msg *message.Message) error
-	GetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error
+	GetTagByUserIDRequest(ctx context.Context, msg *message.Message) error
 	TagAvailabilityCheckRequested(ctx context.Context, msg *message.Message) error
 }

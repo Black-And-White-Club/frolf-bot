@@ -30,8 +30,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, msg *message.
 	}
 
 	// 2. Check if both requestorID and targetID have tags on the leaderboard.
-	_, requestorExists := leaderboarddomain.FindTagByDiscordID(currentLeaderboard, leaderboardtypes.DiscordID(eventPayload.RequestorID))
-	_, targetExists := leaderboarddomain.FindTagByDiscordID(currentLeaderboard, leaderboardtypes.DiscordID(eventPayload.TargetID))
+	_, requestorExists := leaderboarddomain.FindTagByUserID(currentLeaderboard, leaderboardtypes.UserID(eventPayload.RequestorID))
+	_, targetExists := leaderboarddomain.FindTagByUserID(currentLeaderboard, leaderboardtypes.UserID(eventPayload.TargetID))
 
 	if !requestorExists || !targetExists {
 		s.logger.Error("One or both users do not have tags on the leaderboard", "requestor", eventPayload.RequestorID, "target", eventPayload.TargetID, "correlation_id", correlationID)
@@ -66,7 +66,7 @@ func (s *LeaderboardService) TagSwapInitiated(ctx context.Context, msg *message.
 		s.logger.Error("Failed to swap tags in DB", "error", err, "correlation_id", correlationID)
 
 		// Publish TagSwapFailed event
-		if pubErr := s.publishTagSwapFailed(ctx, msg, leaderboardtypes.DiscordID(eventPayload.RequestorID), eventPayload.TargetID, err.Error()); pubErr != nil {
+		if pubErr := s.publishTagSwapFailed(ctx, msg, leaderboardtypes.UserID(eventPayload.RequestorID), eventPayload.TargetID, err.Error()); pubErr != nil {
 			s.logger.Error("Failed to publish TagSwapFailed event", "error", pubErr, "correlation_id", correlationID)
 		}
 
@@ -74,7 +74,7 @@ func (s *LeaderboardService) TagSwapInitiated(ctx context.Context, msg *message.
 	}
 
 	// Publish TagSwapProcessed event
-	if err := s.publishTagSwapProcessed(ctx, msg, leaderboardtypes.DiscordID(eventPayload.RequestorID), eventPayload.TargetID); err != nil {
+	if err := s.publishTagSwapProcessed(ctx, msg, leaderboardtypes.UserID(eventPayload.RequestorID), eventPayload.TargetID); err != nil {
 		s.logger.Error("Failed to publish TagSwapProcessed event", "error", err, "correlation_id", correlationID)
 	}
 
@@ -83,7 +83,7 @@ func (s *LeaderboardService) TagSwapInitiated(ctx context.Context, msg *message.
 }
 
 // publishTagSwapProcessed publishes a TagSwapProcessed event.
-func (s *LeaderboardService) publishTagSwapProcessed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.DiscordID, targetID string) error {
+func (s *LeaderboardService) publishTagSwapProcessed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.UserID, targetID string) error {
 	eventPayload := leaderboardevents.TagSwapProcessedPayload{
 		RequestorID: string(requestorID),
 		TargetID:    targetID,
@@ -93,7 +93,7 @@ func (s *LeaderboardService) publishTagSwapProcessed(_ context.Context, msg *mes
 }
 
 // publishTagSwapFailed publishes a TagSwapFailed event.
-func (s *LeaderboardService) publishTagSwapFailed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.DiscordID, targetID string, reason string) error {
+func (s *LeaderboardService) publishTagSwapFailed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.UserID, targetID string, reason string) error {
 	eventPayload := leaderboardevents.TagSwapFailedPayload{
 		RequestorID: string(requestorID),
 		TargetID:    targetID,

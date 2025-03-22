@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
@@ -19,7 +19,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/user"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
@@ -27,13 +26,14 @@ import (
 // App holds the application components.
 type App struct {
 	Config            *config.Config
-	Logger            *slog.Logger
+	Observability     observability.Observability
+	Logger            observability.Logger
 	Router            *message.Router
 	UserModule        *user.Module
 	LeaderboardModule *leaderboard.Module
 	RoundModule       *round.Module
-	ScoreModule       *score.Module // Add Score module
-	RouterReady       chan struct{} // Channel to signal when the main router is ready
+	ScoreModule       *score.Module
+	RouterReady       chan struct{}
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
 	ErrorReporter     errors.ErrorReporterInterface
@@ -41,35 +41,24 @@ type App struct {
 }
 
 // Initialize initializes the application.
-func (app *App) Initialize(ctx context.Context) error {
-	// Parse config file
-	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
-	flag.Parse()
-
-	cfg, err := config.LoadConfig(*configFile)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+// Initialize initializes the application.
+func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observability.Observability) error {
 	app.Config = cfg
+	app.Observability = obs
+	app.Logger = obs.GetLogger() // Use logger from observability
 
-	// Initialize logger
-	app.Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+	logger := app.Logger
+	logger.Info("App Initialize started")
 
-	app.Logger.Info("App Initialize started")
-
-	/// Initialize database
-	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres)
+	// Initialize database with metrics and tracer
+	var err error
+	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres, obs.GetMetrics(), obs.GetTracer())
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// Create Watermill logger
-	watermillLogger := watermill.NewSlogLogger(app.Logger)
-
-	// Create a message deduplicator
-	deduplicator := middleware.Deduplicator(middleware.Deduplicator{})
+	// Create Watermill logger adapter
+	watermillLogger := observability.ToWatermillAdapter(logger)
 
 	// Create Router
 	router, err := message.NewRouter(message.RouterConfig{}, watermillLogger)
@@ -80,31 +69,38 @@ func (app *App) Initialize(ctx context.Context) error {
 
 	// Add Middleware
 	app.Router.AddMiddleware(
-		middleware.CorrelationID, // Generate or propagate correlation ID
-		deduplicator.Middleware,  // Deduplicate messages
-		middleware.Recoverer,     // Recover from panics
+		middleware.CorrelationID,
+		middleware.Recoverer,
+		observability.LokiLoggingMiddleware(watermillLogger), // Add our logging middleware
 	)
 
-	// Initialize EventBus
-	eventBus, err := eventbus.NewEventBus(ctx, app.Config.NATS.URL, app.Logger, "backend")
+	// Initialize EventBus with observability
+	eventBus, err := eventbus.NewEventBus(ctx, app.Config.NATS.URL, logger, "backend")
 	if err != nil {
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
 	app.EventBus = eventBus
 
-	// Initialize Tracer
-
 	// Initialize modules and register handlers
-	if err := app.initializeModules(ctx, cfg, app.Logger, app.DB, app.EventBus, app.Router, app.Helpers); err != nil {
+	if err := app.initializeModules(ctx, cfg, app.Observability, app.DB, app.EventBus, app.Router, app.Helpers); err != nil {
 		return fmt.Errorf("failed to initialize modules: %w", err)
 	}
 
-	app.Logger.Info("All modules initialized successfully")
+	logger.Info("All modules initialized successfully")
 
 	return nil
 }
 
-func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logger *slog.Logger, db *bundb.DBService, eventBus eventbus.EventBus, router *message.Router, helpers utils.Helpers) error {
+func (app *App) initializeModules(
+	ctx context.Context,
+	cfg *config.Config,
+	obs observability.Observability,
+	db *bundb.DBService,
+	eventBus eventbus.EventBus,
+	router *message.Router,
+	helpers utils.Helpers,
+) error {
+	logger := obs.GetLogger()
 	logger.Info("Entering initializeModules")
 
 	// Initialize User Module
@@ -114,10 +110,10 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	app.UserModule = userModule
-	logger.Info("User module initialized successfully")
+	logger.Info("User  module initialized successfully")
 
 	// Initialize Leaderboard Module
-	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, logger, db.LeaderboardDB, eventBus, router)
+	leaderboardModule, err := leaderboard.NewLeaderboardModule(ctx, cfg, logger, db.LeaderboardDB, eventBus, router, helpers)
 	if err != nil {
 		logger.Error("Failed to initialize leaderboard module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
@@ -126,13 +122,13 @@ func (app *App) initializeModules(ctx context.Context, cfg *config.Config, logge
 	logger.Info("Leaderboard module initialized successfully")
 
 	// Initialize Round Module
-	roundModule, err := round.NewRoundModule(ctx, cfg, logger, db.RoundDB, eventBus, router, app.ErrorReporter, helpers)
+	roundModule, err := round.NewRoundModule(ctx, cfg, obs, db.RoundDB, eventBus, router, helpers)
 	if err != nil {
-		logger.Error("Failed to initialize round module", slog.Any("error", err))
+		logger.Error("❌ Failed to initialize round module", slog.Any("error", err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
 	app.RoundModule = roundModule
-	logger.Info("Round module initialized successfully")
+	logger.Info("✅ Round module initialized successfully")
 
 	// Initialize Score Module
 	scoreModule, err := score.NewScoreModule(ctx, cfg, logger, db.ScoreDB, eventBus, router)
@@ -189,7 +185,6 @@ func (app *App) Run(ctx context.Context) error {
 	app.ScoreModule.Run(ctx, nil)
 
 	// Keep the main goroutine alive until the context is canceled.
-	// This could be due to an interrupt signal or an error in the router.
 	<-ctx.Done()
 
 	// Perform a graceful shutdown
@@ -233,7 +228,6 @@ func (app *App) Close() error {
 			app.Logger.Error("Error closing event bus", slog.Any("error", err))
 		}
 	}
-
 	app.Logger.Info("Finished app.Close()")
 	return nil
 }

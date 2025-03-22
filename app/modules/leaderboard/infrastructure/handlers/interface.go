@@ -13,6 +13,6 @@ type Handlers interface {
 	HandleTagSwapRequested(msg *message.Message) error
 	HandleTagSwapInitiated(msg *message.Message) error
 	HandleGetLeaderboardRequest(msg *message.Message) error
-	HandleGetTagByDiscordIDRequest(msg *message.Message) error
+	HandleGetTagByUserIDRequest(msg *message.Message) error
 	HandleTagAvailabilityCheckRequested(msg *message.Message) error
 }

@@ -8,4 +8,12 @@ nats:
 
 discord:
   token: "YOUR_DISCORD_BOT_TOKEN"
+
+observability:
+  loki_url: "http://localhost:3100/loki/api/v1/push"
+  loki_tenant_id: "frolf-bot"
+  metrics_address: ":9090"
+  tempo_endpoint: "localhost:4317"
+  tempo_insecure: true
+  tempo_sample_rate: 0.1
 # ... other configuration settings ...

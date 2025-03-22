@@ -14,6 +14,11 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// Helper function to create a pointer to an int
+func intPtr(i int) *int {
+	return &i
+}
+
 func TestRoundHandlers_HandleRoundTagNumberRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -46,7 +51,7 @@ func TestRoundHandlers_HandleRoundTagNumberRequest(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				}),
 			},
 			expectErr: false,
@@ -77,7 +82,7 @@ func TestRoundHandlers_HandleRoundTagNumberRequest(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.TagNumberRequestPayload{
-					DiscordID: "some-discord-id",
+					UserID: "some-discord-id",
 				}),
 			},
 			expectErr: true,
@@ -138,8 +143,8 @@ func TestRoundHandlers_HandleLeaderboardGetTagNumberResponse(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 				}),
 			},
 			expectErr: false,
@@ -170,8 +175,8 @@ func TestRoundHandlers_HandleLeaderboardGetTagNumberResponse(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.GetTagNumberResponsePayload{
-					DiscordID: "some-discord-id",
-					TagNumber: 1234,
+					UserID:    "some-discord-id",
+					TagNumber: intPtr(1234),
 				}),
 			},
 			expectErr: true,

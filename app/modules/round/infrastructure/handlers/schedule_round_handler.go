@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleScheduleRoundEvents(msg *message.Message) error {
+func (h *RoundHandlers) HandleScheduleRoundEvents(msg *message.Message) ([]*message.Message, error) {
 	h.logger.Info("HandleRoundScheduled: Received message", slog.String("message_id", msg.UUID))
 	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, h.logger)
 	if err != nil {

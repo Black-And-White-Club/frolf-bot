@@ -22,7 +22,7 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 
 	s.logger.Info("Handling TagAvailabilityCheckRequested event",
 		"correlation_id", correlationID,
-		"user_id", eventPayload.DiscordID,
+		"user_id", eventPayload.UserID,
 		"tag_number", eventPayload.TagNumber,
 	)
 
@@ -36,7 +36,7 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 	s.logger.Info("Active Leaderboard Data", slog.Any("leaderboard_data", activeLeaderboard.LeaderboardData)) // Log the leaderboard data
 
 	// Check tag availability.
-	isAvailable, err := s.LeaderboardDB.CheckTagAvailability(ctx, eventPayload.TagNumber)
+	isAvailable, err := s.LeaderboardDB.CheckTagAvailability(ctx, *eventPayload.TagNumber)
 
 	if err != nil {
 		s.logger.Error("Failed to check tag availability", "error", err, "correlation_id", correlationID)
@@ -54,7 +54,7 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 			"assignment_id", assignmentID,
 		)
 
-		if err := s.publishTagAssignmentRequested(ctx, msg, eventPayload.DiscordID, eventPayload.TagNumber, assignmentID); err != nil {
+		if err := s.publishTagAssignmentRequested(ctx, msg, eventPayload.UserID, *eventPayload.TagNumber, assignmentID); err != nil {
 			return fmt.Errorf("failed to publish TagAssignmentRequested event: %w", err)
 		}
 	} else { // This branch should be taken when the tag is NOT available
@@ -64,7 +64,7 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 			"tag_number", eventPayload.TagNumber,
 		)
 
-		if err := s.publishTagUnavailable(ctx, msg, eventPayload.TagNumber, eventPayload.DiscordID, "Tag is already assigned"); err != nil {
+		if err := s.publishTagUnavailable(ctx, msg, *eventPayload.TagNumber, eventPayload.UserID, "Tag is already assigned"); err != nil {
 			return fmt.Errorf("failed to publish TagUnavailable event: %w", err)
 		}
 	}
@@ -73,10 +73,10 @@ func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, 
 }
 
 // publishTagAssigned publishes a TagAssigned event.
-func (s *LeaderboardService) publishTagAssigned(_ context.Context, msg *message.Message, tagNumber int, discordID leaderboardtypes.DiscordID, assignmentID string) error {
+func (s *LeaderboardService) publishTagAssigned(_ context.Context, msg *message.Message, tagNumber int, UserID leaderboardtypes.UserID, assignmentID string) error {
 	eventPayload := &leaderboardevents.TagAssignedPayload{
-		DiscordID:    discordID,
-		TagNumber:    tagNumber,
+		UserID:       UserID,
+		TagNumber:    &tagNumber,
 		AssignmentID: assignmentID,
 	}
 
@@ -88,7 +88,7 @@ func (s *LeaderboardService) publishTagAssigned(_ context.Context, msg *message.
 func (s *LeaderboardService) PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error {
 	// Construct the payload for the user.tag.available event
 	eventPayload := &leaderboardevents.TagAvailablePayload{
-		DiscordID: leaderboardtypes.DiscordID(payload.DiscordID),
+		UserID:    leaderboardtypes.UserID(payload.UserID),
 		TagNumber: payload.TagNumber,
 	}
 

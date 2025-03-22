@@ -22,18 +22,18 @@ import (
 
 // --- Constants and Variables for Test Data ---
 const (
-	scheduleRoundID              = "some-uuid"
+	scheduleRoundID              = 1
 	scheduleCorrelationID        = "some-correlation-id"
-	scheduleTitle         string = "Test Round"
+	scheduleTitle                = "Test Round"
 	schedulePublishError  string = "publish error"
 )
 
 var (
-	scheduleLocation     = "Test Location" // Now a var
-	scheduleEventType    = "casual"        // Now a var
-	scheduleNow          = time.Now().UTC().Truncate(time.Second)
-	scheduleStartTime    = scheduleNow.Add(2 * time.Hour)
-	validSchedulePayload = roundevents.RoundStoredPayload{
+	scheduleLocation     roundtypes.Location  = "Test Location"
+	scheduleEventType    roundtypes.EventType = "casual"
+	scheduleNow                               = time.Now().UTC().Truncate(time.Second)
+	scheduleStartTime                         = roundtypes.StartTime(scheduleNow.Add(2 * time.Hour))
+	validSchedulePayload                      = roundevents.RoundStoredPayload{
 		Round: roundtypes.Round{
 			ID:        scheduleRoundID,
 			Title:     scheduleTitle,
@@ -50,7 +50,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl) //Not used here, but good practice to keep
+	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
 	mockErrorReporter := errors.NewErrorReporter(mockEventBus, *slog.Default(), "serviceName", "environment")
 	logger := slog.Default()
 
@@ -70,12 +70,21 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	}{
 		{
 			name:          "Successful scheduling of round events",
-			payload:       validSchedulePayload,       // Use constant
-			expectedEvent: roundevents.RoundScheduled, // Expect final event
+			payload:       validSchedulePayload,
+			expectedEvent: roundevents.RoundScheduled,
 			wantErr:       false,
 			mockExpects: func() {
-				// Expect two calls for delayed messages and one for final confirmation
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(nil).Times(2)
+				// For reminder message
+				mockEventBus.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+				// For ScheduleRoundProcessing - no return value
+				mockEventBus.EXPECT().ScheduleRoundProcessing(
+					gomock.Any(),
+					roundtypes.ID(scheduleRoundID),
+					gomock.Any(),
+				).Times(1)
+
+				// For final event
 				mockEventBus.EXPECT().Publish(roundevents.RoundScheduled, gomock.Any()).Return(nil).Times(1)
 			},
 		},
@@ -89,37 +98,31 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:          "Failed to schedule 1-hour reminder",
 			payload:       validSchedulePayload,
-			expectedEvent: "", // No final event if scheduling fails
+			expectedEvent: "",
 			wantErr:       true,
 			errMsg:        "failed to schedule 1h reminder: " + schedulePublishError,
-
 			mockExpects: func() {
-				// Expect only the first publish to fail
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf("failed to schedule 1h reminder: %s", schedulePublishError)).Times(1)
-			},
-		},
-		{
-			name:          "Failed to schedule round start",
-			payload:       validSchedulePayload,
-			expectedEvent: "", // No final event
-			wantErr:       true,
-			errMsg:        "failed to schedule round start: " + schedulePublishError,
-			mockExpects: func() {
-				// First publish succeeds, second fails
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(fmt.Errorf("failed to schedule round start: %s", schedulePublishError)).Times(1)
+				mockEventBus.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(fmt.Errorf("failed to schedule 1h reminder: %s", schedulePublishError)).Times(1)
 			},
 		},
 		{
 			name:          "Failed to publish final event",
 			payload:       validSchedulePayload,
-			expectedEvent: roundevents.RoundScheduled, //Still expect this topic
+			expectedEvent: roundevents.RoundScheduled,
 			wantErr:       true,
 			errMsg:        "failed to publish " + roundevents.RoundScheduled + " event: " + schedulePublishError,
-
 			mockExpects: func() {
-				// Both delayed messages succeed, but final publish fails
-				mockEventBus.EXPECT().Publish(roundevents.DelayedMessagesSubject, gomock.Any()).Return(nil).Times(2)
+				// For reminder message
+				mockEventBus.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+				// For ScheduleRoundProcessing - no return value
+				mockEventBus.EXPECT().ScheduleRoundProcessing(
+					gomock.Any(),
+					roundtypes.ID(scheduleRoundID),
+					gomock.Any(),
+				).Times(1)
+
+				// For final event
 				mockEventBus.EXPECT().Publish(roundevents.RoundScheduled, gomock.Any()).Return(fmt.Errorf("failed to publish %s event: %s", roundevents.RoundScheduled, schedulePublishError)).Times(1)
 			},
 		},
@@ -130,7 +133,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			payloadBytes, _ := json.Marshal(tt.payload)
 			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
 			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, scheduleCorrelationID)
-			msg.Metadata.Set("event_type", roundevents.RoundCreateRequest) //Need this for the switch case
+			msg.Metadata.Set("event_type", roundevents.RoundCreateRequest)
 
 			if tt.mockExpects != nil {
 				tt.mockExpects()

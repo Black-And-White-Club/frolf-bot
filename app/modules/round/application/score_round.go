@@ -109,19 +109,46 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, msg *message
 		}
 	}
 
+	// Fetch EventMessageID from DB
+	eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, eventPayload.RoundID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve EventMessageID for round %d: %w", eventPayload.RoundID, err)
+	}
+
 	if allScoresSubmitted {
-		// Publish a "round.all.scores.submitted" event
+		// Publish round.all.scores.submitted when all scores are in
 		if err := s.publishEvent(msg, roundevents.RoundAllScoresSubmitted, roundevents.AllScoresSubmittedPayload{
-			RoundID: eventPayload.RoundID,
+			RoundID:        eventPayload.RoundID,
+			EventMessageID: eventMessageID,
 		}); err != nil {
 			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.all.scores.submitted event", map[string]interface{}{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("failed to publish round.all.scores.submitted event: %w", err)
 		}
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "All scores submitted for round", map[string]interface{}{"round_id": eventPayload.RoundID})
+		logging.LogInfoWithMetadata(ctx, s.logger, msg, "All scores submitted for round", map[string]interface{}{
+			"round_id":         eventPayload.RoundID,
+			"event_message_id": eventMessageID,
+		})
 	} else {
-		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Not all scores have been submitted for round", map[string]interface{}{"round_id": eventPayload.RoundID})
+		// Publish round.not.all.scores.submitted to update the Discord bot
+		if err := s.publishEvent(msg, roundevents.RoundNotAllScoresSubmitted, roundevents.ParticipantScoreUpdatedPayload{
+			RoundID:        eventPayload.RoundID,
+			Participant:    eventPayload.Participant,
+			Score:          eventPayload.Score,
+			EventMessageID: eventMessageID,
+		}); err != nil {
+			logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.not.all.scores.submitted event", map[string]interface{}{
+				"error": err.Error(),
+			})
+			return fmt.Errorf("failed to publish round.not.all.scores.submitted event: %w", err)
+		}
+		logging.LogInfoWithMetadata(ctx, s.logger, msg, "Not all scores submitted yet, updating Discord", map[string]interface{}{
+			"round_id":         eventPayload.RoundID,
+			"participant_id":   eventPayload.Participant,
+			"score":            eventPayload.Score,
+			"event_message_id": eventMessageID,
+		})
 	}
 
 	return nil

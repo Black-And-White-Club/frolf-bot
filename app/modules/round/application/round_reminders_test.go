@@ -1,7 +1,9 @@
 package roundservice
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -20,30 +22,30 @@ import (
 
 // --- Constants and Variables for Test Data ---
 const (
-	reminderRoundID       = "some-round-id"
-	reminderCorrelationID = "some-correlation-id"
-	reminderType          = "1h"
-	reminderRoundTitle    = "Test Round"
-	reminderUser1         = "user1"
-	reminderUser2         = "user2"
-	reminderDBError       = "database error"
-	reminderPubError      = "publish error"
+	reminderRoundID       roundtypes.ID = 1
+	reminderCorrelationID               = "some-correlation-id"
+	reminderType                        = "1h"
+	reminderRoundTitle                  = "Test Round"
+	reminderUser1                       = "user1"
+	reminderUser2                       = "user2"
+	reminderDBError                     = "database error"
+	reminderPubError                    = "publish error"
 )
 
 var (
-	reminderLocation = "Test Location"
+	reminderLocation roundtypes.Location = "Test Location"
 	//valid reminder
-	validReminderPayload = roundevents.RoundReminderPayload{
-		RoundID:      reminderRoundID,
+	validReminderPayload = roundevents.DiscordReminderPayload{
+		RoundID:      1,
 		RoundTitle:   reminderRoundTitle,
 		ReminderType: reminderType,
 	}
 	//Valid Round
 	validReminderRound = roundtypes.Round{
-		ID: reminderRoundID,
-		Participants: []roundtypes.RoundParticipant{
-			{DiscordID: reminderUser1},
-			{DiscordID: reminderUser2},
+		ID: 1,
+		Participants: []roundtypes.Participant{
+			{UserID: reminderUser1},
+			{UserID: reminderUser2},
 		},
 		Location: &reminderLocation,
 	}
@@ -54,7 +56,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddbmocks.NewMockRoundDB(ctrl)
+	mockRoundDB := rounddbmocks.NewMockRoundDBInterface(ctrl)
 	mockErrorReporter := errormocks.NewMockErrorReporterInterface(ctrl)
 	logger := slog.Default()
 
@@ -75,7 +77,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		{
 			name:          "Successful round reminder processing",
 			payload:       validReminderPayload,             // Use pre-built payload
-			expectedEvent: roundevents.DiscordEventsSubject, // Expect publish to Discord
+			expectedEvent: roundevents.DiscordRoundReminder, // Expect publish to Discord
 			wantErr:       false,
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
@@ -83,7 +85,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 					Return(&validReminderRound, nil). // Return valid round with participants
 					Times(1)
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
+					Publish(gomock.Eq(roundevents.DiscordRoundReminder), gomock.Any()).
 					Times(1).
 					Return(nil)
 			},
@@ -118,8 +120,8 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				mockRoundDB.EXPECT().
 					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
 					Return(&roundtypes.Round{ // Return a round with NO participants
-						ID:           reminderRoundID,
-						Participants: []roundtypes.RoundParticipant{},
+						ID:           1,
+						Participants: []roundtypes.Participant{},
 					}, nil).
 					Times(1)
 			},
@@ -127,17 +129,17 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		{
 			name:          "Failed to publish to Discord",
 			payload:       validReminderPayload,
-			expectedEvent: roundevents.DiscordEventsSubject,
+			expectedEvent: roundevents.DiscordRoundReminder, // Corrected expected event
 			wantErr:       true,
-			errMsg:        "failed to publish to discord.round.event: " + reminderPubError,
+			errMsg:        "failed to publish Discord notification: " + reminderPubError,
 			mockDBSetup: func() {
 				mockRoundDB.EXPECT().
 					GetRound(gomock.Any(), gomock.Eq(reminderRoundID)).
 					Return(&validReminderRound, nil). // Valid round with participants
 					Times(1)
 				mockEventBus.EXPECT().
-					Publish(gomock.Eq(roundevents.DiscordEventsSubject), gomock.Any()).
-					Return(fmt.Errorf("failed to publish to discord.round.event: %s", reminderPubError)). // Simulate publish failure
+					Publish(gomock.Eq(roundevents.DiscordRoundReminder), gomock.Any()).
+					Return(errors.New(reminderPubError)).
 					Times(1)
 			},
 		},
@@ -153,7 +155,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				tt.mockDBSetup()
 			}
 
-			err := s.ProcessRoundReminder(msg)
+			err := s.ProcessRoundReminder(context.Background(), msg)
 
 			if tt.wantErr {
 				if err == nil {

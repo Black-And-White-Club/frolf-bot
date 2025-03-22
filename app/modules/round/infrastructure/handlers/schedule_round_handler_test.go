@@ -19,24 +19,24 @@ import (
 
 // --- Constants and Variables for Test Data ---
 const (
-	scheduleHandlerRoundID       = "some-round-id"
-	scheduleHandlerCorrelationID = "some-correlation-id"
-	scheduleHandlerTitle         = "Test Round"
-	scheduleHandlerScheduleError = "scheduling error"
+	scheduleHandlerRoundID       roundtypes.ID = 1
+	scheduleHandlerCorrelationID               = "some-correlation-id"
+	scheduleHandlerTitle                       = "Test Round"
+	scheduleHandlerScheduleError               = "scheduling error"
 )
 
 var (
-	scheduleHandlerLocation     = "Test Location"
-	scheduleHandlerEventType    = "casual"
-	scheduleHandlerNow          = time.Now().UTC().Truncate(time.Second)
-	scheduleHandlerStartTime    = &scheduleHandlerNow
-	validScheduleHandlerPayload = roundevents.RoundStoredPayload{
+	scheduleHandlerLocation     roundtypes.Location  = "Test Location"
+	scheduleHandlerEventType    roundtypes.EventType = "casual"
+	scheduleHandlerNow          time.Time            = time.Now().UTC().Truncate(time.Second)
+	scheduleHandlerStartTime                         = roundtypes.StartTime(scheduleHandlerNow)
+	validScheduleHandlerPayload                      = roundevents.RoundStoredPayload{
 		Round: roundtypes.Round{
-			RoundID:   scheduleHandlerRoundID,
+			ID:        scheduleHandlerRoundID,
 			Title:     scheduleHandlerTitle,
 			Location:  &scheduleHandlerLocation,
 			EventType: &scheduleHandlerEventType,
-			StartTime: scheduleHandlerStartTime,
+			StartTime: &scheduleHandlerStartTime,
 			State:     roundtypes.RoundStateUpcoming,
 		},
 	}

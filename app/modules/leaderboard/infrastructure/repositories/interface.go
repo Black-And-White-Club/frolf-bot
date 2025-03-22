@@ -13,7 +13,7 @@ type LeaderboardDB interface {
 	DeactivateLeaderboard(ctx context.Context, leaderboardID int64) error
 	UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string, scoreUpdateID string) error
 	SwapTags(ctx context.Context, requestorID, targetID string) error
-	AssignTag(ctx context.Context, discordID leaderboardtypes.DiscordID, tagNumber int, source ServiceUpdateTagSource, updateID string) error
-	GetTagByDiscordID(ctx context.Context, discordID string) (int, error)
+	AssignTag(ctx context.Context, userID leaderboardtypes.UserID, tagNumber int, source ServiceUpdateTagSource, updateID string) error
+	GetTagByUserID(ctx context.Context, userID string) (*int, error)
 	CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error)
 }

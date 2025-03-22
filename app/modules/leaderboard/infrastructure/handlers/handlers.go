@@ -13,7 +13,7 @@ type LeaderboardHandlers struct {
 }
 
 // NewLeaderboardHandlers creates a new instance of LeaderboardHandlers.
-func NewLeaderboardHandlers(leaderboardService leaderboardservice.Service, logger *slog.Logger) *LeaderboardHandlers {
+func NewLeaderboardHandlers(leaderboardService leaderboardservice.Service, logger *slog.Logger) Handlers {
 	return &LeaderboardHandlers{
 		leaderboardService: leaderboardService,
 		logger:             logger,

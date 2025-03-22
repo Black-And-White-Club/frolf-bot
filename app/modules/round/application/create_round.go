@@ -9,113 +9,111 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// ValidateRoundRequest validates the round creation request.
-func (s *RoundService) ValidateRoundRequest(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.CreateRoundRequestedPayload](msg, slog.Default())
-	if err != nil {
-		return fmt.Errorf("invalid payload: %w", err)
-	}
-
+// ValidateRoundRequest validates the round creation request
+func (s *RoundService) ValidateRoundRequest(ctx context.Context, payload roundevents.CreateRoundRequestedPayload) error {
 	// Ensure StartTime is present
-	if eventPayload.StartTime == "" {
+	if payload.StartTime == "" {
 		return fmt.Errorf("missing required field: start_time")
 	}
 
-	input := roundtypes.CreateRoundInput{ // Use roundtypes.CreateRoundInput
-		Title:       eventPayload.Title,
-		Description: &eventPayload.Description,
-		Location:    &eventPayload.Location,
-		StartTime:   eventPayload.StartTime,
-		UserID:      eventPayload.UserID,
+	input := roundtypes.CreateRoundInput{
+		Title:       payload.Title,
+		Description: &payload.Description,
+		Location:    &payload.Location,
+		StartTime:   payload.StartTime,
+		UserID:      payload.UserID,
 	}
 
-	slog.Debug(input.StartTime)
-	errs := s.roundValidator.ValidateRoundInput(input) // This should now work
+	s.logger.Debug("Validating round input", "startTime", attr.Time(input.StartTime))
+	errs := s.roundValidator.ValidateRoundInput(input)
 	if len(errs) > 0 {
-		slog.Error("Validation failed", "errors", errs)
+		s.logger.Error("Validation failed", attr.Error(errs))
 
 		// Publish a failure event
-		if publishErr := s.publishEvent(msg, roundevents.RoundValidationFailed, roundevents.RoundValidationFailedPayload{
-			UserID:       roundtypes.UserID(eventPayload.UserID), // Convert string to roundtypes.UserID
+		failedPayload := roundevents.RoundValidationFailedPayload{
+			UserID:       roundtypes.UserID(payload.UserID),
 			ErrorMessage: errs,
-		}); publishErr != nil {
-			slog.Error("Failed to publish validation failed event", "error", publishErr)
 		}
-		return nil
+
+		if err := s.publishEvent(roundevents.RoundValidationFailed, failedPayload); err != nil {
+			s.logger.Error("Failed to publish validation failed event", "error", err)
+		}
+		return fmt.Errorf("validation failed: %v", errs)
 	}
 
-	slog.Info("Publishing from ValidateRoundRequest Service Function", "payload", eventPayload)
-	return s.publishEvent(msg, roundevents.RoundValidated, roundevents.RoundValidatedPayload{
-		CreateRoundRequestedPayload: eventPayload,
-	})
+	s.logger.Info("Round validation successful", "payload", payload)
+
+	// Publish the validated payload
+	validatedPayload := roundevents.RoundValidatedPayload{
+		CreateRoundRequestedPayload: payload,
+	}
+
+	return s.publishEvent(roundevents.RoundValidated, validatedPayload)
 }
 
-// ProcessValidatedRound transforms RoundValidatedPayload to RoundEntityCreatedPayload
-func (s *RoundService) ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundutil.TimeParserInterface) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundValidatedPayload](msg, slog.Default())
-	if err != nil {
-		return fmt.Errorf("invalid payload: %w", err)
-	}
-
-	// Extract timezone from the event payload
-	timezoneStr := eventPayload.CreateRoundRequestedPayload.Timezone
-
+// ProcessValidatedRound transforms validated round data to an entity
+func (s *RoundService) ProcessValidatedRound(ctx context.Context, payload roundevents.RoundValidatedPayload, timeParser roundtime.TimeParserInterface) error {
 	clock := roundutil.RealClock{}
 
-	// Parse StartTime string using 'when' and the submission timestamp, considering the user's time zone
-	parsedTimeUnix, err := timeParser.ParseUserTimeInput(eventPayload.CreateRoundRequestedPayload.StartTime, timezoneStr, clock)
+	// Parse StartTime
+	parsedTimeUnix, err := timeParser.ParseUserTimeInput(
+		payload.CreateRoundRequestedPayload.StartTime,
+		payload.CreateRoundRequestedPayload.Timezone,
+		clock,
+	)
 	if err != nil {
-		// Publish a validation failed event if parsing fails
-		if publishErr := s.publishEvent(msg, roundevents.RoundValidationFailed, roundevents.RoundValidationFailedPayload{
-			UserID:       roundtypes.UserID(eventPayload.CreateRoundRequestedPayload.UserID),
+		// Handle parsing failure
+		failurePayload := roundevents.RoundValidationFailedPayload{
+			UserID:       roundtypes.UserID(payload.CreateRoundRequestedPayload.UserID),
 			ErrorMessage: []string{err.Error()},
-		}); publishErr != nil {
-			slog.Error("Failed to publish validation failed event", "error", publishErr)
 		}
-		return nil
+
+		if publishErr := s.publishEvent(roundevents.RoundValidationFailed, failurePayload); publishErr != nil {
+			s.logger.Error("Failed to publish validation failed event", "error", publishErr)
+		}
+		return fmt.Errorf("time parsing failed: %w", err)
 	}
 
 	// Continue with the rest of the logic if parsing is successful
 	parsedTime := time.Unix(parsedTimeUnix, 0).UTC() // Convert to UTC
 
-	slog.Info("🟢 Time after parsing", "parsedTime", parsedTime.Format(time.RFC3339))
+	s.logger.Info("Time after parsing", "parsedTime", parsedTime.Format(time.RFC3339))
 
 	// Create round entity
 	roundTypes := roundtypes.Round{
-		Title:        roundtypes.Title(eventPayload.CreateRoundRequestedPayload.Title),
-		Description:  roundtypes.DescriptionPtr(eventPayload.CreateRoundRequestedPayload.Description),
-		Location:     roundtypes.LocationPtr(eventPayload.CreateRoundRequestedPayload.Location),
+		Title:        roundtypes.Title(payload.CreateRoundRequestedPayload.Title),
+		Description:  &payload.CreateRoundRequestedPayload.Description,
+		Location:     &payload.CreateRoundRequestedPayload.Location,
 		StartTime:    (*roundtypes.StartTime)(&parsedTime),
-		CreatedBy:    roundtypes.UserID(eventPayload.CreateRoundRequestedPayload.UserID),
+		CreatedBy:    roundtypes.UserID(payload.CreateRoundRequestedPayload.UserID),
 		State:        roundtypes.RoundStateUpcoming,
 		Participants: []roundtypes.Participant{},
 	}
+
 	// Create event payload
 	entityCreatedPayload := roundevents.RoundEntityCreatedPayload{
 		Round:            roundTypes,
-		DiscordChannelID: eventPayload.CreateRoundRequestedPayload.ChannelID,
+		DiscordChannelID: payload.CreateRoundRequestedPayload.ChannelID,
 		DiscordGuildID:   "",
 	}
 
-	slog.Info("Publishing from ProcessValidatedRound", "payload", entityCreatedPayload)
-	return s.publishEvent(msg, roundevents.RoundEntityCreated, entityCreatedPayload)
+	s.logger.Info("Entity created for round", "payload", entityCreatedPayload)
+	return s.publishEvent(roundevents.RoundEntityCreated, entityCreatedPayload)
 }
 
-func (s *RoundService) StoreRound(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundEntityCreatedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("invalid payload: %w", err)
-	}
+// StoreRound stores a round in the database
+func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) error {
+	roundTypes := payload.Round
 
-	roundTypes := eventPayload.Round // Extract the round object
-
-	// Ensure required fields are present
+	// Validate required fields
 	if roundTypes.Description == nil {
 		return fmt.Errorf("description is required but was nil")
 	}
@@ -126,7 +124,7 @@ func (s *RoundService) StoreRound(ctx context.Context, msg *message.Message) err
 		return fmt.Errorf("startTime is required but was nil")
 	}
 
-	// **Map round data to the database model**
+	// Map round data to the database model
 	roundDB := roundtypes.Round{
 		Title:       roundTypes.Title,
 		Description: roundTypes.Description,
@@ -138,29 +136,35 @@ func (s *RoundService) StoreRound(ctx context.Context, msg *message.Message) err
 		State:       roundTypes.State,
 	}
 
-	s.logger.Info("About to CreateRound in DB", "payload", eventPayload)
-	msg.Metadata.Set("user_id", string(roundDB.CreatedBy))
+	s.logger.Info("About to create round in DB", "payload", payload)
 
-	// **Insert into the database**
+	// Insert into the database
 	if err := s.RoundDB.CreateRound(ctx, &roundDB); err != nil {
 		// Publish RoundCreationFailed event
-		return s.publishEvent(msg, roundevents.RoundCreationFailed, roundevents.RoundCreationFailedPayload{
-			UserID:       eventPayload.Round.CreatedBy,
+		failurePayload := roundevents.RoundCreationFailedPayload{
+			UserID:       payload.Round.CreatedBy,
 			ErrorMessage: err.Error(),
-		})
+		}
+
+		if publishErr := s.publishEvent(roundevents.RoundCreationFailed, failurePayload); publishErr != nil {
+			s.logger.Error("Failed to publish creation failed event", "error", publishErr)
+		}
+		return fmt.Errorf("failed to create round: %w", err)
 	}
 
 	s.logger.Info("Round successfully stored in DB")
 
-	// **Update roundTypes with the database ID**
+	// Update roundTypes with the database ID
 	roundTypes.ID = roundDB.ID
 
 	s.logger.Info("Round created successfully", "round_id", roundDB.ID)
 
-	// Publish RoundCreated event
-	return s.publishEvent(msg, roundevents.RoundStored, roundevents.RoundStoredPayload{
+	// Publish RoundStored event
+	storedPayload := roundevents.RoundStoredPayload{
 		Round: roundTypes,
-	})
+	}
+
+	return s.publishEvent(roundevents.RoundStored, storedPayload)
 }
 
 // PublishRoundCreated publishes the final event after storage.
@@ -185,9 +189,9 @@ func (s *RoundService) PublishRoundCreated(ctx context.Context, msg *message.Mes
 	return s.publishEvent(msg, roundevents.RoundCreated, round)
 }
 
-// UpdateDiscordEventID updates the DiscordEventID for an existing round.
-func (s *RoundService) UpdateDiscordEventID(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundEventCreatedPayload](msg, slog.Default())
+// UpdateEventMessageID updates the EventMessageID for an existing round (MessageID so it can be used for interactions later)
+func (s *RoundService) UpdateEventMessageID(ctx context.Context, msg *message.Message) error {
+	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundEventMessageIDUpdatedPayload](msg, slog.Default())
 	if err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
 	}
@@ -196,13 +200,13 @@ func (s *RoundService) UpdateDiscordEventID(ctx context.Context, msg *message.Me
 		return fmt.Errorf("invalid RoundID in payload")
 	}
 
-	err = s.RoundDB.UpdateDiscordEventID(ctx, eventPayload.RoundID, eventPayload.DiscordEventID)
+	err = s.RoundDB.UpdateEventMessageID(ctx, eventPayload.RoundID, eventPayload.EventMessageID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("round not found: %w", err)
 	} else if err != nil {
 		return fmt.Errorf("failed to update Discord event ID: %w", err)
 	}
 
-	slog.Info("Publishing RoundDiscordEventIDUpdated event")
-	return s.publishEvent(msg, roundevents.RoundDiscordEventIDUpdated, roundevents.RoundDiscordEventIDUpdatedPayload(eventPayload))
+	slog.Info("Publishing RoundEventMessageIDUpdated event")
+	return s.publishEvent(msg, roundevents.RoundEventMessageIDUpdated, roundevents.RoundEventMessageIDUpdatedPayload(eventPayload))
 }

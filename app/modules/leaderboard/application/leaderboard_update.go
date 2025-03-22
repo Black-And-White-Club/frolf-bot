@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -27,12 +29,12 @@ func (s *LeaderboardService) RoundFinalized(ctx context.Context, msg *message.Me
 }
 
 // publishLeaderboardUpdateRequested publishes a LeaderboardUpdateRequested event.
-func (s *LeaderboardService) publishLeaderboardUpdateRequested(_ context.Context, msg *message.Message, roundID string, sortedParticipantTags []string) error {
+func (s *LeaderboardService) publishLeaderboardUpdateRequested(_ context.Context, msg *message.Message, roundID roundtypes.ID, sortedParticipantTags []string) error {
 	eventPayload := leaderboardevents.LeaderboardUpdateRequestedPayload{
 		RoundID:               roundID,
 		SortedParticipantTags: sortedParticipantTags,
 		Source:                "round", // Source is "round" for round-based updates
-		UpdateID:              roundID, // Update ID is the round ID
+		UpdateID:              watermill.NewUUID(),
 	}
 
 	return s.publishEvent(msg, leaderboardevents.LeaderboardUpdateRequested, eventPayload)
@@ -47,7 +49,7 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 
 	s.logger.Info("Handling LeaderboardUpdateRequested event", "correlation_id", correlationID)
 
-	// 1. Get the current leaderboard.
+	// 1. Get the current active leaderboard.
 	currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get active leaderboard", "error", err, "correlation_id", correlationID)
@@ -70,20 +72,25 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 	}
 
 	// 4. Create new leaderboard in the database.
-	newLeaderboardID, err := s.LeaderboardDB.CreateLeaderboard(ctx, &leaderboarddb.Leaderboard{
+	newLeaderboard := &leaderboarddb.Leaderboard{
 		LeaderboardData:   updatedLeaderboard,
 		IsActive:          true,
 		ScoreUpdateSource: source,
 		ScoreUpdateID:     eventPayload.UpdateID,
-	})
+	}
+
+	newLeaderboardID, err := s.LeaderboardDB.CreateLeaderboard(ctx, newLeaderboard)
 	if err != nil {
 		s.logger.Error("Failed to create new leaderboard", "error", err, "correlation_id", correlationID)
 		// Publish LeaderboardUpdateFailed event
-		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error()); pubErr != nil {
+		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, roundtypes.ID(eventPayload.RoundID), err.Error()); pubErr != nil {
 			s.logger.Error("Failed to publish LeaderboardUpdateFailed event", "error", pubErr, "correlation_id", correlationID)
 		}
 		return nil // Error handled gracefully
 	}
+
+	// Store the ID inside the leaderboard object
+	newLeaderboard.ID = newLeaderboardID
 
 	// 5. Deactivate the current leaderboard entry.
 	if err := s.LeaderboardDB.DeactivateLeaderboard(ctx, currentLeaderboard.ID); err != nil {
@@ -95,8 +102,8 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 		return nil // Error handled gracefully
 	}
 
-	// 6. Publish LeaderboardUpdated
-	if err := s.publishLeaderboardUpdated(ctx, msg, newLeaderboardID, eventPayload.RoundID); err != nil {
+	// 6. Publish LeaderboardUpdated with full leaderboard data
+	if err := s.publishLeaderboardUpdated(ctx, msg, newLeaderboard, eventPayload.RoundID); err != nil {
 		s.logger.Error("Failed to publish LeaderboardUpdated event", "error", err, "correlation_id", correlationID)
 		// Publish LeaderboardUpdateFailed event
 		if pubErr := s.publishLeaderboardUpdateFailed(ctx, msg, eventPayload.RoundID, err.Error()); pubErr != nil {
@@ -109,17 +116,18 @@ func (s *LeaderboardService) LeaderboardUpdateRequested(ctx context.Context, msg
 }
 
 // publishLeaderboardUpdated publishes a LeaderboardUpdated event.
-func (s *LeaderboardService) publishLeaderboardUpdated(_ context.Context, msg *message.Message, leaderboardID int64, roundID string) error {
+func (s *LeaderboardService) publishLeaderboardUpdated(_ context.Context, msg *message.Message, leaderboard *leaderboarddb.Leaderboard, roundID roundtypes.ID) error {
 	eventPayload := leaderboardevents.LeaderboardUpdatedPayload{
-		LeaderboardID: leaderboardID,
-		RoundID:       roundID,
+		LeaderboardID:   leaderboard.ID,
+		RoundID:         roundID,
+		LeaderboardData: leaderboard.LeaderboardData, // Pass full leaderboard data
 	}
 
 	return s.publishEvent(msg, leaderboardevents.LeaderboardUpdated, eventPayload)
 }
 
 // publishLeaderboardUpdateFailed publishes a LeaderboardUpdateFailed event.
-func (s *LeaderboardService) publishLeaderboardUpdateFailed(_ context.Context, msg *message.Message, roundID string, reason string) error {
+func (s *LeaderboardService) publishLeaderboardUpdateFailed(_ context.Context, msg *message.Message, roundID roundtypes.ID, reason string) error {
 	eventPayload := leaderboardevents.LeaderboardUpdateFailedPayload{
 		RoundID: roundID,
 		Reason:  reason,

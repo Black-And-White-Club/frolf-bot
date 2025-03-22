@@ -5,34 +5,48 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // LeaderboardRouter handles routing for leaderboard module events.
 type LeaderboardRouter struct {
-	logger     *slog.Logger
-	router     *message.Router
-	subscriber message.Subscriber
+	logger           *slog.Logger
+	Router           *message.Router
+	subscriber       eventbus.EventBus
+	helper           utils.Helpers
+	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewLeaderboardRouter creates a new LeaderboardRouter.
-func NewLeaderboardRouter(logger *slog.Logger, router *message.Router, subscriber message.Subscriber) *LeaderboardRouter {
+func NewLeaderboardRouter(logger *slog.Logger, router *message.Router, subscriber eventbus.EventBus, helper utils.Helpers) *LeaderboardRouter {
 	return &LeaderboardRouter{
-		logger:     logger,
-		router:     router,
-		subscriber: subscriber,
+		logger:           logger,
+		Router:           router,
+		subscriber:       subscriber,
+		helper:           helper,
+		middlewareHelper: utils.NewMiddlewareHelper(),
 	}
 }
 
 // Configure sets up the router with the necessary handlers and dependencies.
-func (r *LeaderboardRouter) Configure(
-	leaderboardService leaderboardservice.Service,
-) error {
+func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Service) error {
 	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, r.logger)
+
+	r.Router.AddMiddleware(
+		middleware.CorrelationID,
+		r.middlewareHelper.CommonMetadataMiddleware("leaderboard"),
+		r.middlewareHelper.DiscordMetadataMiddleware(),
+		r.middlewareHelper.RoutingMetadataMiddleware(),
+		middleware.Recoverer,
+		middleware.Retry{MaxRetries: 3}.Middleware,
+	)
+
 	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
@@ -40,48 +54,35 @@ func (r *LeaderboardRouter) Configure(
 }
 
 // RegisterHandlers registers the event handlers for the leaderboard module.
-func (r *LeaderboardRouter) RegisterHandlers(
-	ctx context.Context,
-	handlers leaderboardhandlers.Handlers, // Use a pointer to LeaderboardHandlers
-) error {
-	r.logger.Info("Entering RegisterHandlers for Leaderboard")
+func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
+	r.logger.Info("🚀 Entering RegisterHandlers for Leaderboard")
 
-	// Define the mapping of event topics to handler functions.
 	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
 		leaderboardevents.RoundFinalized:                    handlers.HandleRoundFinalized,
 		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
 		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
 		leaderboardevents.TagSwapInitiated:                  handlers.HandleTagSwapInitiated,
 		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,
-		leaderboardevents.GetTagByDiscordIDRequest:          handlers.HandleGetTagByDiscordIDRequest,
+		leaderboardevents.GetTagByUserIDRequest:             handlers.HandleGetTagByUserIDRequest,
 		leaderboardevents.TagAssigned:                       handlers.HandleTagAssigned,
 		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
 		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignmentRequested,
 	}
-	fmt.Println("eventsToHandlers:", eventsToHandlers) // Print the map contents
-	// Register each handler in the router.
-	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("leaderboard.module.handle.%s.%s", topic, watermill.NewUUID())
-		r.logger.Info("Registering handler with AddNoPublisherHandler", slog.String("topic", topic), slog.String("handler", handlerName))
 
-		// Add the handler.
-		r.router.AddNoPublisherHandler(
-			handlerName,  // Handler name
-			topic,        // Topic
-			r.subscriber, // Subscriber (EventBus)
-			handlerFunc,  // Handler function
+	for topic, handlerFunc := range eventsToHandlers {
+		handlerName := fmt.Sprintf("leaderboard.%s", topic)
+
+		r.logger.Info("✅ Registering leaderboard handler",
+			slog.String("topic", topic),
+			slog.String("handler", handlerName),
 		)
 
-		r.logger.Info("Handler registered successfully", slog.String("handler", handlerName), slog.String("topic", topic))
+		r.Router.AddNoPublisherHandler(
+			handlerName,
+			topic,
+			r.subscriber,
+			handlerFunc,
+		)
 	}
-
-	r.logger.Info("Exiting RegisterHandlers for Leaderboard")
-	return nil
-}
-
-// Close stops the router and cleans up resources.
-func (r *LeaderboardRouter) Close() error {
-	// Currently, no specific resources to close in this router.
-	// If there were any, they would be handled here.
 	return nil
 }

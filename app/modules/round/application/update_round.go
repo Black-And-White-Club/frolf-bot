@@ -3,7 +3,7 @@ package roundservice
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"log/slog"
 	"strings"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -11,7 +11,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // -- Service Functions for UpdateRound Flow --
@@ -149,7 +148,6 @@ func (s *RoundService) publishRoundUpdateError(msg *message.Message, input round
 	}
 
 	if pubErr := s.publishEvent(msg, roundevents.RoundUpdateError, payload); pubErr != nil {
-		s.ErrorReporter.ReportError(middleware.MessageCorrelationID(msg), "Failed to publish round.update.error event", pubErr, "original_error", err.Error())
 		return fmt.Errorf("failed to publish round.update.error event: %w, original error: %w", pubErr, err)
 	}
 
@@ -158,26 +156,84 @@ func (s *RoundService) publishRoundUpdateError(msg *message.Message, input round
 
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
 func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error {
+	// Step 1: Unmarshal the payload
 	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundScheduleUpdatePayload](msg, s.logger)
 	if err != nil {
+		s.logger.Error("Failed to unmarshal message payload",
+			slog.String("message_uuid", msg.UUID),
+			slog.Any("error", err),
+		)
+
+		errorPayload := roundevents.RoundUpdateErrorPayload{
+			RoundUpdateRequest: nil,
+			Error:              fmt.Sprintf("failed to unmarshal payload: %v", err),
+		}
+
+		if err := s.publishEvent(msg, roundevents.RoundUpdateError, errorPayload); err != nil {
+			return fmt.Errorf("error during error reporting: %w", err)
+		}
 		return fmt.Errorf("invalid payload: %w", err)
 	}
 
-	// Convert int64 RoundID to string
-	roundIDStr := strconv.FormatInt(int64(eventPayload.RoundID), 10)
+	roundID := eventPayload.RoundID
+	s.logger.Info("Processing scheduled round update",
+		slog.String("round_id", fmt.Sprintf("%d", roundID)),
+	)
 
-	// Cancel existing scheduled events
-	if err := s.EventBus.CancelScheduledMessage(ctx, roundIDStr); err != nil {
-		return fmt.Errorf("failed to cancel existing scheduled events: %w", err)
+	// Step 2: Attempt to cancel existing scheduled events
+	if err := s.EventBus.CancelScheduledMessage(ctx, roundID); err != nil {
+		s.logger.Warn("Failed to cancel existing scheduled events, proceeding anyway",
+			slog.String("error", err.Error()),
+			slog.String("round_id", fmt.Sprintf("%d", roundID)),
+		)
 	}
 
-	// Publish an event to schedule new events
-	if err := s.publishEvent(msg, roundevents.RoundScheduleUpdate, roundevents.RoundScheduleUpdatePayload{
-		RoundID: eventPayload.RoundID,
-	}); err != nil {
-		s.logger.Error("Failed to publish round.schedule.update", "error", err)
-		return fmt.Errorf("failed to publish event: %w", err)
+	// Step 3: Fetch the complete round information from the database
+	round, fetchErr := s.RoundDB.GetRound(ctx, roundID)
+	if fetchErr != nil {
+		s.logger.Error("Failed to fetch round for rescheduling",
+			slog.String("round_id", fmt.Sprintf("%d", roundID)),
+			slog.Any("error", fetchErr),
+		)
+
+		errorPayload := roundevents.RoundUpdateErrorPayload{
+			RoundUpdateRequest: nil,
+			Error:              fmt.Sprintf("failed to fetch round for rescheduling: %v", fetchErr),
+		}
+
+		if err := s.publishEvent(msg, roundevents.RoundUpdateError, errorPayload); err != nil {
+			return fmt.Errorf("error during error reporting: %w", err)
+		}
+		return fmt.Errorf("failed to fetch round for rescheduling: %w", fetchErr)
 	}
+
+	// Step 4: Use `RoundStoredPayload` instead of creating a custom struct
+	storedPayload := roundevents.RoundStoredPayload{
+		Round: *round,
+	}
+
+	// Step 5: Publish the round update reschedule event
+	if err := s.publishEvent(msg, roundevents.RoundUpdateReschedule, storedPayload); err != nil {
+		s.logger.Error("Failed to publish event",
+			slog.String("event", roundevents.RoundUpdateReschedule),
+			slog.String("error", err.Error()),
+			slog.String("round_id", fmt.Sprintf("%d", roundID)),
+		)
+
+		errorPayload := roundevents.RoundUpdateErrorPayload{
+			RoundUpdateRequest: nil,
+			Error:              fmt.Sprintf("failed to publish event %s: %v", roundevents.RoundUpdateReschedule, err),
+		}
+
+		if err := s.publishEvent(msg, roundevents.RoundUpdateError, errorPayload); err != nil {
+			return fmt.Errorf("error during error reporting: %w", err)
+		}
+		return fmt.Errorf("failed to publish reschedule event: %w", err)
+	}
+
+	s.logger.Info("Round reschedule event published successfully",
+		slog.String("round_id", fmt.Sprintf("%d", roundID)),
+	)
 
 	return nil
 }

@@ -45,7 +45,7 @@ func TestRoundHandlers_HandleRoundStarted(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundStartedPayload{
-					RoundID: "some-round-id",
+					RoundID: 1,
 				}),
 			},
 			wantErr: false,
@@ -76,7 +76,7 @@ func TestRoundHandlers_HandleRoundStarted(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundStartedPayload{
-					RoundID: "some-round-id",
+					RoundID: 1,
 				}),
 			},
 			wantErr: true,
