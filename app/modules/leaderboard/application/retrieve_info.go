@@ -72,7 +72,7 @@ func (s *LeaderboardService) GetTagByUserIDRequest(ctx context.Context, msg *mes
 
 	s.logger.Info("✅ Inside GetTagByUserIDRequest",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(eventPayload.UserID)))
+		slog.String("user_id", string(eventPayload.UserID)))
 
 	// Fetch tag number from DB
 	tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, string(eventPayload.UserID))

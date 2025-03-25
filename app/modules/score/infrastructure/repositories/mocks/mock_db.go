@@ -85,15 +85,15 @@ func (mr *MockScoreDBMockRecorder) UpdateOrAddScore(ctx, score any) *gomock.Call
 }
 
 // UpdateScore mocks base method.
-func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID, discordID string, newScore int) error {
+func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID, userID usertypes.DiscordID, newScore int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScore", ctx, roundID, discordID, newScore)
+	ret := m.ctrl.Call(m, "UpdateScore", ctx, roundID, userID, newScore)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateScore indicates an expected call of UpdateScore.
-func (mr *MockScoreDBMockRecorder) UpdateScore(ctx, roundID, discordID, newScore any) *gomock.Call {
+func (mr *MockScoreDBMockRecorder) UpdateScore(ctx, roundID, userID, newScore any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateScore), ctx, roundID, discordID, newScore)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateScore), ctx, roundID, userID, newScore)
 }

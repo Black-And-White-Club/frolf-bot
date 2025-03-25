@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -12,17 +14,21 @@ import (
 
 type ScoreHandlers struct {
 	scoreService scoreservice.Service
-	logger       *slog.Logger
+	logger       observability.Logger
+	tracer       observability.Tracer
+	helpers      utils.Helpers
 }
 
-func NewScoreHandlers(scoreService scoreservice.Service, logger *slog.Logger) Handlers {
+func NewScoreHandlers(scoreService scoreservice.Service, logger observability.Logger, tracer observability.Tracer, helpers utils.Helpers) Handlers {
 	return &ScoreHandlers{
 		scoreService: scoreService,
 		logger:       logger,
+		tracer:       tracer,
+		helpers:      helpers,
 	}
 }
 
-func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) error {
+func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[scoreevents.ProcessRoundScoresRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ProcessRoundScoresRequestPayload: %w", err)
@@ -45,7 +51,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) er
 	return nil
 }
 
-func (h *ScoreHandlers) HandleScoreUpdateRequest(msg *message.Message) error {
+func (h *ScoreHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[scoreevents.ScoreUpdateRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal ScoreUpdateRequestPayload: %w", err)

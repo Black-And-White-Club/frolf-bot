@@ -1,18 +1,20 @@
 package userhandlers
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
-	"io"
-	"log/slog"
+	"fmt"
+	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	"github.com/ThreeDotsLabs/watermill"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
 )
 
@@ -20,88 +22,190 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserService := mocks.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	testUserID := usertypes.DiscordID("12345678901234567")
+	testTagNumber := 1
 
-	testDiscordID := "123456789012345678" // Valid Discord ID format
-	testTagNumber := 123
-	testCorrelationID := watermill.NewUUID()
+	testPayload := &userevents.TagAvailablePayload{
+		UserID:    testUserID,
+		TagNumber: testTagNumber,
+	}
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	type fields struct {
-		userService *mocks.MockService
-		logger      *slog.Logger
-	}
-	type args struct {
-		msg *message.Message
-	}
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+
+	// Mock dependencies
+	mockUserService := userservice.NewMockService(ctrl)
+	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
+		name           string
+		mockSetup      func()
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
 	}{
 		{
-			name: "Successful Tag Available",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Successfully handle TagAvailable event",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.TagAvailablePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Eq(&testTagNumber),
+				).Return(
+					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+					nil,
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+					userevents.UserCreated,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagAvailablePayload{
-					DiscordID: usertypes.DiscordID(testDiscordID),
-					TagNumber: testTagNumber,
-				}),
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				// Expect the service's CreateUser to be called with the correct arguments
-				f.userService.EXPECT().CreateUser(a.msg.Context(), a.msg, usertypes.DiscordID(testDiscordID), &testTagNumber).Return(nil).Times(1)
-			},
 		},
 		{
-			name: "Unmarshal Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Fail to create user",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.TagAvailablePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Eq(&testTagNumber),
+				).Return(
+					nil,
+					&userevents.UserCreationFailedPayload{
+						UserID:    testUserID,
+						TagNumber: &testTagNumber,
+						Reason:    "failed",
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.UserCreationFailedPayload{UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
+					userevents.UserCreationFailed,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, "invalid-payload"),
-			},
-			wantErr: true,
-			setup:   func(f fields, a args) {},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
 		},
 		{
-			name: "Service Layer Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Fail to unmarshal payload",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagAvailablePayload{
-					DiscordID: usertypes.DiscordID(testDiscordID),
-					TagNumber: testTagNumber,
-				}),
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+		},
+		{
+			name: "Service failure in CreateUser",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.TagAvailablePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Eq(&testTagNumber),
+				).Return(nil, nil, fmt.Errorf("internal service error"))
 			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.userService.EXPECT().CreateUser(a.msg.Context(), a.msg, usertypes.DiscordID(testDiscordID), &testTagNumber).Return(errors.New("service error")).Times(1)
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to create user: internal service error",
+		},
+		{
+			name: "Failure to create success message",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.TagAvailablePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Eq(&testTagNumber),
+				).Return(
+					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+					nil,
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+					userevents.UserCreated,
+				).Return(nil, fmt.Errorf("failed to create success message"))
 			},
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create success message",
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
 			h := &UserHandlers{
-				userService: tt.fields.userService,
-				logger:      tt.fields.logger,
+				userService: mockUserService,
+				logger:      logger,
+				tracer:      tracer,
+				metrics:     metrics,
+				helpers:     mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
+
+			got, err := h.HandleTagAvailable(tt.msg)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleTagAvailable() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if err := h.HandleTagAvailable(tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("UserHandlers.HandleTagAvailable() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleTagAvailable() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HandleTagAvailable() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -111,114 +215,86 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserService := mocks.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	testUserID := usertypes.DiscordID("12345678901234567")
+	testTagNumber := 1
 
-	testDiscordID := "123456789012345678" // Valid Discord ID format
-	testTagNumber := 123
-	testCorrelationID := watermill.NewUUID()
+	testTagUnavailablePayload := &userevents.TagUnavailablePayload{
+		UserID:    testUserID,
+		TagNumber: testTagNumber,
+	}
 
-	type fields struct {
-		userService *mocks.MockService
-		logger      *slog.Logger
+	expectedFailedPayload := &userevents.UserCreationFailedPayload{
+		UserID:    testUserID,
+		TagNumber: &testTagNumber,
+		Reason:    "tag not available",
 	}
-	type args struct {
-		msg *message.Message
-	}
+
+	// Mock dependencies
+	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+
+	mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(msg *message.Message, out interface{}) error {
+			*out.(*userevents.TagUnavailablePayload) = *testTagUnavailablePayload
+			return nil
+		},
+	).AnyTimes()
+
+	payloadBytes, _ := json.Marshal(testTagUnavailablePayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	// Use No-Op implementations for observability
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
+
+	// Define test cases
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
+		name      string
+		mockSetup func()
+		msg       *message.Message
+		want      []*message.Message
+		wantErr   bool
 	}{
 		{
-			name: "Successful Tag Unavailable",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Successfully handle TagUnavailable event",
+			mockSetup: func() {
+				mockHelpers.EXPECT().CreateResultMessage(
+					testMsg,
+					expectedFailedPayload,
+					userevents.UserCreationFailed,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagUnavailablePayload{
-					DiscordID: usertypes.DiscordID(testDiscordID),
-					TagNumber: testTagNumber,
-					Reason:    "tag not available",
-				}),
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				// Expect the TagUnavailable method to be called with correct arguments
-				f.userService.EXPECT().
-					TagUnavailable(a.msg.Context(), a.msg, testTagNumber, usertypes.DiscordID(testDiscordID)).
-					Return(nil).
-					Times(1)
-			},
-		},
-		{
-			name: "Unmarshal Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, "invalid-payload"),
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				// No expectations for TagUnavailable, as unmarshaling should fail
-			},
-		},
-		{
-			name: "Service Layer Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.TagUnavailablePayload{
-					DiscordID: usertypes.DiscordID(testDiscordID),
-					TagNumber: testTagNumber,
-					Reason:    "tag not available",
-				}),
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				// Expect the TagUnavailable method to return an error
-				f.userService.EXPECT().
-					TagUnavailable(a.msg.Context(), a.msg, testTagNumber, usertypes.DiscordID(testDiscordID)).
-					Return(errors.New("service error")).
-					Times(1)
-			},
 		},
 	}
+
+	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
 			h := &UserHandlers{
-				userService: tt.fields.userService,
-				logger:      tt.fields.logger,
+				logger:  logger,
+				tracer:  tracer,
+				metrics: metrics,
+				helpers: mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
-			}
-			if err := h.HandleTagUnavailable(tt.args.msg); (err != nil) != tt.wantErr {
+
+			got, err := h.HandleTagUnavailable(tt.msg)
+
+			if (err != nil) != tt.wantErr {
 				t.Errorf("UserHandlers.HandleTagUnavailable() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UserHandlers.HandleTagUnavailable() = %v, want %v", got, tt.want)
 			}
 		})
 	}
-}
-
-// Helper function to create a test message with a payload and correlation ID in metadata
-func createTestMessageWithPayload(t *testing.T, correlationID string, payload interface{}) *message.Message {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal payload: %v", err)
-	}
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata = make(message.Metadata)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	return msg
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // HandleGetLeaderboardRequest handles the GetLeaderboardRequest event.
-func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, _, err := eventutil.UnmarshalPayload[leaderboardevents.GetLeaderboardRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal GetLeaderboardRequestPayload: %w", err)
@@ -34,7 +34,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 }
 
 // HandleGetTagByUserIDRequest handles the GetTagByUserIDRequest event.
-func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagNumberRequestPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal GetTagByUserIDRequestPayload: %w", err)
@@ -42,7 +42,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 
 	h.logger.Info("✅ Inside HandleGetTagByUserIDRequest",
 		slog.String("correlation_id", correlationID),
-		slog.String("discord_id", string(payload.UserID)))
+		slog.String("user_id", string(payload.UserID)))
 
 	if err := h.leaderboardService.GetTagByUserIDRequest(msg.Context(), msg); err != nil {
 		h.logger.Error("❌ Failed to handle GetTagByUserIDRequest event",

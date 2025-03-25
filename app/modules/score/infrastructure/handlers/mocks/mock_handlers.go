@@ -41,11 +41,12 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleProcessRoundScoresRequest mocks base method.
-func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleProcessRoundScoresRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleProcessRoundScoresRequest indicates an expected call of HandleProcessRoundScoresRequest.
@@ -55,11 +56,12 @@ func (mr *MockHandlersMockRecorder) HandleProcessRoundScoresRequest(msg any) *go
 }
 
 // HandleScoreUpdateRequest mocks base method.
-func (m *MockHandlers) HandleScoreUpdateRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleScoreUpdateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleScoreUpdateRequest indicates an expected call of HandleScoreUpdateRequest.

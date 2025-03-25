@@ -28,7 +28,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eventUtil := eventutil.NewEventUtil()
 
-	testDiscordID := leaderboardtypes.DiscordID("testDiscordID")
+	testUserID := leaderboardtypes.UserID("testUserID")
 	testTagNumber := 123
 	testCorrelationID := watermill.NewUUID()
 	type contextKey string
@@ -64,7 +64,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					DiscordID: testDiscordID,
+					UserID:    testUserID,
 					TagNumber: testTagNumber,
 				}),
 			},
@@ -98,8 +98,8 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 						if err != nil {
 							t.Errorf("Failed to unmarshal message payload: %v", err)
 						}
-						if payload.DiscordID != testDiscordID {
-							t.Errorf("Expected DiscordID %s, got %s", testDiscordID, payload.DiscordID)
+						if payload.UserID != testUserID {
+							t.Errorf("Expected UserID %s, got %s", testUserID, payload.UserID)
 						}
 						if payload.TagNumber != testTagNumber {
 							t.Errorf("Expected TagNumber %d, got %d", testTagNumber, payload.TagNumber)
@@ -120,7 +120,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					DiscordID: testDiscordID,
+					UserID:    testUserID,
 					TagNumber: testTagNumber,
 				}),
 			},
@@ -131,7 +131,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 					GetActiveLeaderboard(a.ctx).
 					Return(&leaderboarddbtypes.Leaderboard{
 						LeaderboardData: map[int]string{
-							testTagNumber: string(testDiscordID),
+							testTagNumber: string(testUserID),
 						},
 						IsActive: true,
 					}, nil).
@@ -156,8 +156,8 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 						if err != nil {
 							t.Errorf("Failed to unmarshal message payload: %v", err)
 						}
-						if payload.DiscordID != testDiscordID {
-							t.Errorf("Expected DiscordID %s, got %s", testDiscordID, payload.DiscordID)
+						if payload.UserID != testUserID {
+							t.Errorf("Expected UserID %s, got %s", testUserID, payload.UserID)
 						}
 						if payload.TagNumber != testTagNumber {
 							t.Errorf("Expected TagNumber %d, got %d", testTagNumber, payload.TagNumber)
@@ -178,7 +178,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					DiscordID: testDiscordID,
+					UserID:    testUserID,
 					TagNumber: testTagNumber,
 				}),
 			},
@@ -202,7 +202,7 @@ func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					DiscordID: testDiscordID,
+					UserID:    testUserID,
 					TagNumber: testTagNumber,
 				}),
 			},

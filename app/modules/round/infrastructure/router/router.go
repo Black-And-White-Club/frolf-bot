@@ -60,7 +60,7 @@ func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus even
 	metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 
 	// Create round handlers with logger and tracer only
-	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer)
+	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper)
 	// Add middleware specific to the round module
 	r.Router.AddMiddleware(
 		middleware.CorrelationID,

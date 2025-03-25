@@ -14,8 +14,11 @@ import (
 	reflect "reflect"
 	time "time"
 
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	message "github.com/ThreeDotsLabs/watermill/message"
+	nats "github.com/nats-io/nats.go"
+	jetstream "github.com/nats-io/nats.go/jetstream"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -69,6 +72,48 @@ func (m *MockEventBus) Close() error {
 func (mr *MockEventBusMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockEventBus)(nil).Close))
+}
+
+// GetHealthCheckers mocks base method.
+func (m *MockEventBus) GetHealthCheckers() []eventbus.HealthChecker {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHealthCheckers")
+	ret0, _ := ret[0].([]eventbus.HealthChecker)
+	return ret0
+}
+
+// GetHealthCheckers indicates an expected call of GetHealthCheckers.
+func (mr *MockEventBusMockRecorder) GetHealthCheckers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHealthCheckers", reflect.TypeOf((*MockEventBus)(nil).GetHealthCheckers))
+}
+
+// GetJetStream mocks base method.
+func (m *MockEventBus) GetJetStream() jetstream.JetStream {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetJetStream")
+	ret0, _ := ret[0].(jetstream.JetStream)
+	return ret0
+}
+
+// GetJetStream indicates an expected call of GetJetStream.
+func (mr *MockEventBusMockRecorder) GetJetStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetJetStream", reflect.TypeOf((*MockEventBus)(nil).GetJetStream))
+}
+
+// GetNATSConnection mocks base method.
+func (m *MockEventBus) GetNATSConnection() *nats.Conn {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNATSConnection")
+	ret0, _ := ret[0].(*nats.Conn)
+	return ret0
+}
+
+// GetNATSConnection indicates an expected call of GetNATSConnection.
+func (mr *MockEventBusMockRecorder) GetNATSConnection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNATSConnection", reflect.TypeOf((*MockEventBus)(nil).GetNATSConnection))
 }
 
 // ProcessDelayedMessages mocks base method.
@@ -139,4 +184,56 @@ func (m *MockEventBus) Subscribe(ctx context.Context, topic string) (<-chan *mes
 func (mr *MockEventBusMockRecorder) Subscribe(ctx, topic any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockEventBus)(nil).Subscribe), ctx, topic)
+}
+
+// MockHealthChecker is a mock of HealthChecker interface.
+type MockHealthChecker struct {
+	ctrl     *gomock.Controller
+	recorder *MockHealthCheckerMockRecorder
+	isgomock struct{}
+}
+
+// MockHealthCheckerMockRecorder is the mock recorder for MockHealthChecker.
+type MockHealthCheckerMockRecorder struct {
+	mock *MockHealthChecker
+}
+
+// NewMockHealthChecker creates a new mock instance.
+func NewMockHealthChecker(ctrl *gomock.Controller) *MockHealthChecker {
+	mock := &MockHealthChecker{ctrl: ctrl}
+	mock.recorder = &MockHealthCheckerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHealthChecker) EXPECT() *MockHealthCheckerMockRecorder {
+	return m.recorder
+}
+
+// Check mocks base method.
+func (m *MockHealthChecker) Check(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Check", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Check indicates an expected call of Check.
+func (mr *MockHealthCheckerMockRecorder) Check(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*MockHealthChecker)(nil).Check), ctx)
+}
+
+// Name mocks base method.
+func (m *MockHealthChecker) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockHealthCheckerMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockHealthChecker)(nil).Name))
 }

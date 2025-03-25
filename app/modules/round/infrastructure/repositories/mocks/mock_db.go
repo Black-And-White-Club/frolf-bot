@@ -86,7 +86,7 @@ func (mr *MockRoundDBMockRecorder) GetEventMessageID(ctx, roundID any) *gomock.C
 }
 
 // GetParticipant mocks base method.
-func (m *MockRoundDB) GetParticipant(ctx context.Context, roundID roundtypes.ID, userID string) (*roundtypes.Participant, error) {
+func (m *MockRoundDB) GetParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) (*roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParticipant", ctx, roundID, userID)
 	ret0, _ := ret[0].(*roundtypes.Participant)
@@ -195,7 +195,7 @@ func (mr *MockRoundDBMockRecorder) LogRound(ctx, round any) *gomock.Call {
 }
 
 // RemoveParticipant mocks base method.
-func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID string) error {
+func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveParticipant", ctx, roundID, userID)
 	ret0, _ := ret[0].(error)

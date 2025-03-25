@@ -41,11 +41,12 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleGetLeaderboardRequest mocks base method.
-func (m *MockHandlers) HandleGetLeaderboardRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleGetLeaderboardRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleGetLeaderboardRequest indicates an expected call of HandleGetLeaderboardRequest.
@@ -55,11 +56,12 @@ func (mr *MockHandlersMockRecorder) HandleGetLeaderboardRequest(msg any) *gomock
 }
 
 // HandleGetTagByUserIDRequest mocks base method.
-func (m *MockHandlers) HandleGetTagByUserIDRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleGetTagByUserIDRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleGetTagByUserIDRequest indicates an expected call of HandleGetTagByUserIDRequest.
@@ -69,11 +71,12 @@ func (mr *MockHandlersMockRecorder) HandleGetTagByUserIDRequest(msg any) *gomock
 }
 
 // HandleLeaderboardUpdateRequested mocks base method.
-func (m *MockHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) error {
+func (m *MockHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleLeaderboardUpdateRequested", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleLeaderboardUpdateRequested indicates an expected call of HandleLeaderboardUpdateRequested.
@@ -83,11 +86,12 @@ func (mr *MockHandlersMockRecorder) HandleLeaderboardUpdateRequested(msg any) *g
 }
 
 // HandleRoundFinalized mocks base method.
-func (m *MockHandlers) HandleRoundFinalized(msg *message.Message) error {
+func (m *MockHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleRoundFinalized", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleRoundFinalized indicates an expected call of HandleRoundFinalized.
@@ -97,11 +101,12 @@ func (mr *MockHandlersMockRecorder) HandleRoundFinalized(msg any) *gomock.Call {
 }
 
 // HandleTagAssigned mocks base method.
-func (m *MockHandlers) HandleTagAssigned(msg *message.Message) error {
+func (m *MockHandlers) HandleTagAssigned(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAssigned", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagAssigned indicates an expected call of HandleTagAssigned.
@@ -111,11 +116,12 @@ func (mr *MockHandlersMockRecorder) HandleTagAssigned(msg any) *gomock.Call {
 }
 
 // HandleTagAssignmentRequested mocks base method.
-func (m *MockHandlers) HandleTagAssignmentRequested(msg *message.Message) error {
+func (m *MockHandlers) HandleTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAssignmentRequested", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagAssignmentRequested indicates an expected call of HandleTagAssignmentRequested.
@@ -125,11 +131,12 @@ func (mr *MockHandlersMockRecorder) HandleTagAssignmentRequested(msg any) *gomoc
 }
 
 // HandleTagAvailabilityCheckRequested mocks base method.
-func (m *MockHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) error {
+func (m *MockHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAvailabilityCheckRequested", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagAvailabilityCheckRequested indicates an expected call of HandleTagAvailabilityCheckRequested.
@@ -139,11 +146,12 @@ func (mr *MockHandlersMockRecorder) HandleTagAvailabilityCheckRequested(msg any)
 }
 
 // HandleTagSwapInitiated mocks base method.
-func (m *MockHandlers) HandleTagSwapInitiated(msg *message.Message) error {
+func (m *MockHandlers) HandleTagSwapInitiated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagSwapInitiated", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagSwapInitiated indicates an expected call of HandleTagSwapInitiated.
@@ -153,11 +161,12 @@ func (mr *MockHandlersMockRecorder) HandleTagSwapInitiated(msg any) *gomock.Call
 }
 
 // HandleTagSwapRequested mocks base method.
-func (m *MockHandlers) HandleTagSwapRequested(msg *message.Message) error {
+func (m *MockHandlers) HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagSwapRequested", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagSwapRequested indicates an expected call of HandleTagSwapRequested.

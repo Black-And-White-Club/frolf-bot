@@ -16,4 +16,5 @@ observability:
   tempo_endpoint: "localhost:4317"
   tempo_insecure: true
   tempo_sample_rate: 0.1
+  environment: "something"
 # ... other configuration settings ...

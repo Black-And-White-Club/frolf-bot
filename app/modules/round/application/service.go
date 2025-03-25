@@ -13,7 +13,6 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -24,7 +23,6 @@ type RoundService struct {
 	RoundDB        rounddb.RoundDB
 	EventBus       eventbus.EventBus
 	logger         observability.Logger
-	eventUtil      eventutil.EventUtil
 	roundValidator roundutil.RoundValidator
 	metrics        observability.Metrics
 	tracer         observability.Tracer
@@ -36,7 +34,6 @@ func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger obse
 		RoundDB:        db,
 		EventBus:       eventBus,
 		logger:         logger,
-		eventUtil:      eventutil.NewEventUtil(),
 		roundValidator: roundutil.NewRoundValidator(),
 		metrics:        metrics,
 		tracer:         tracer,

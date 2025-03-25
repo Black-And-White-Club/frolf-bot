@@ -99,8 +99,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 				event: scoreevents.ProcessRoundScoresRequestPayload{
 					RoundID: "round1",
 					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
+						{UserID: "user1", TagNumber: 1234, Score: 95.0},
+						{UserID: "user2", TagNumber: 5678, Score: 90.0},
 					},
 				},
 			},
@@ -137,8 +137,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 				event: scoreevents.ProcessRoundScoresRequestPayload{
 					RoundID: "round1",
 					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
+						{UserID: "user1", TagNumber: 1234, Score: 95.0},
+						{UserID: "user2", TagNumber: 5678, Score: 90.0},
 					},
 				},
 			},
@@ -161,8 +161,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 				event: scoreevents.ProcessRoundScoresRequestPayload{
 					RoundID: "round1",
 					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
+						{UserID: "user1", TagNumber: 1234, Score: 95.0},
+						{UserID: "user2", TagNumber: 5678, Score: 90.0},
 					},
 				},
 			},
@@ -241,7 +241,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 
 				// Expect to fetch scores for the round
 				f.ScoreDB.EXPECT().GetScoresForRound(gomock.Any(), "round1").Return([]scoredbtypes.Score{
-					{DiscordID: "user1", RoundID: "round1", Score: 95, TagNumber: 1234},
+					{UserID: "user1", RoundID: "round1", Score: 95, TagNumber: 1234},
 				}, nil).Times(1)
 
 				// Expect the updated scores to be logged

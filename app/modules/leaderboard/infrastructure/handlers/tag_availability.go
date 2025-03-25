@@ -10,7 +10,7 @@ import (
 )
 
 // HandleTagAvailabilityCheckRequested handles the TagAvailabilityCheckRequested event.
-func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal TagAvailabilityCheckRequestedPayload: %w", err)

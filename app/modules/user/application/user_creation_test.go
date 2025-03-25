@@ -2,22 +2,16 @@ package userservice
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
-	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
 )
 
@@ -25,447 +19,169 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := context.Background()
+	testMsg := message.NewMessage("test-id", nil)
+	testUserID := usertypes.DiscordID("12345678901234567")
+	testTag := 42
+	testTagPtr := &testTag
 
-	testDiscordID := usertypes.DiscordID("12345")
-	testTag := 123
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background() // No need to set correlation ID here
+	// Mock dependencies
+	mockDB := userdb.NewMockUserDB(ctrl)
 
-	type fields struct {
-		UserDB   *userdb.MockUserDB
-		eventBus *eventbusmocks.MockEventBus
-		logger   *slog.Logger
-	}
-	type args struct {
-		ctx       context.Context
-		msg       *message.Message // Include msg in args
-		discordID usertypes.DiscordID
-		tag       *int
-	}
+	// Use No-Op implementations
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, args args)
+		name           string
+		mockDBSetup    func(*userdb.MockUserDB)
+		userID         usertypes.DiscordID
+		tag            *int
+		expectedResult *userevents.UserCreatedPayload
+		expectedFail   *userevents.UserCreationFailedPayload
 	}{
 		{
-			name: "Successful User Creation",
-			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+			name: "Successfully creates a user",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					CreateUser(gomock.Any(), gomock.Any()).
+					Return(nil)
 			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
+			userID: testUserID,
+			tag:    testTagPtr,
+			expectedResult: &userevents.UserCreatedPayload{
+				UserID:    testUserID,
+				TagNumber: testTagPtr,
 			},
-			wantErr: false,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				// Update the mock expectation
-				f.UserDB.EXPECT().
-					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
-					Return(nil).
-					Times(1)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupSuccess, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserSignupSuccess {
-							t.Errorf("Expected topic %s, got %s", userevents.UserSignupSuccess, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserCreatedPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.DiscordID != testDiscordID {
-							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
-						}
-
-						if payload.TagNumber == nil || *payload.TagNumber != testTag {
-							t.Errorf("Expected tag number %d, got %v", testTag, payload.TagNumber)
-						}
-
-						// Check correlation ID
-						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-						if correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
+			expectedFail: nil,
+		},
+		{
+			name: "Fails to create a user",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					CreateUser(gomock.Any(), gomock.Any()).
+					Return(errors.New("user already exists"))
+			},
+			userID:         testUserID,
+			tag:            testTagPtr,
+			expectedResult: nil,
+			expectedFail: &userevents.UserCreationFailedPayload{
+				UserID:    testUserID,
+				TagNumber: testTagPtr,
+				Reason:    "user already exists",
 			},
 		},
 		{
-			name: "Database Error",
-			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+			name: "With nil tag pointer",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					CreateUser(gomock.Any(), gomock.Any()).
+					Return(nil)
 			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
+			userID: testUserID,
+			tag:    nil,
+			expectedResult: &userevents.UserCreatedPayload{
+				UserID:    testUserID,
+				TagNumber: nil,
 			},
-			wantErr: false,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				// Fix the mock expectation to omit the Role field
-				f.UserDB.EXPECT().
-					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
-					Return(errors.New("database error")).
-					Times(1)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupFailed, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserSignupFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserSignupFailed, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						return nil
-					}).
-					Times(1)
+			expectedFail: nil,
+		},
+		{
+			name: "Fails due to unexpected database error",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					CreateUser(gomock.Any(), gomock.Any()).
+					Return(errors.New("database connection lost"))
+			},
+			userID:         testUserID,
+			tag:            testTagPtr,
+			expectedResult: nil,
+			expectedFail: &userevents.UserCreationFailedPayload{
+				UserID:    testUserID,
+				TagNumber: testTagPtr,
+				Reason:    "database connection lost",
 			},
 		},
 		{
-			name: "UserCreated Event Publish Error",
-			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+			name: "Fails due to empty Discord ID",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// No expectations since the function should return early
 			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag, // tag should be provided
+			userID:         "",
+			tag:            testTagPtr,
+			expectedResult: nil,
+			expectedFail: &userevents.UserCreationFailedPayload{
+				UserID:    "",
+				TagNumber: testTagPtr,
+				Reason:    "invalid Discord ID",
 			},
-			wantErr: true,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				// Expectation for CreateUser - Role is removed
-				f.UserDB.EXPECT().
-					CreateUser(args.ctx, gomock.Eq(&userdbtypes.User{DiscordID: testDiscordID})).
-					Return(nil).
-					Times(1)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupSuccess, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
+		},
+		{
+			name: "Fails due to negative tag number",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// No expectations since the function should return early
+			},
+			userID:         testUserID,
+			tag:            &[]int{-1}[0],
+			expectedResult: nil,
+			expectedFail: &userevents.UserCreationFailedPayload{
+				UserID:    testUserID,
+				TagNumber: &[]int{-1}[0],
+				Reason:    "tag number cannot be negative",
 			},
 		},
 	}
+
+	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockDBSetup(mockDB)
+
+			// Initialize service with No-Op implementations
 			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: eventutil.NewEventUtil(),
+				UserDB:  mockDB,
+				logger:  logger,
+				metrics: metrics,
+				tracer:  tracer,
+				serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc()
+				},
 			}
 
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
+			gotSuccess, gotFailure, err := s.CreateUser(ctx, testMsg, tt.userID, tt.tag)
+
+			// Validate success case
+			if tt.expectedResult != nil {
+				if gotSuccess == nil {
+					t.Errorf("❌ Expected success payload, got nil")
+				} else if gotSuccess.UserID != tt.expectedResult.UserID {
+					t.Errorf("❌ Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, tt.expectedResult.UserID)
+				}
+			} else if gotSuccess != nil {
+				t.Errorf("❌ Unexpected success payload: %v", gotSuccess)
 			}
 
-			if err := s.CreateUser(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.CreateUser() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestUserServiceImpl_PublishUserCreated(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	testDiscordID := usertypes.DiscordID("12345")
-	testTag := 123
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background()
-
-	type fields struct {
-		UserDB    *userdb.MockUserDB
-		eventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
-	type args struct {
-		ctx       context.Context
-		msg       *message.Message
-		discordID usertypes.DiscordID
-		tag       *int
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
-	}{
-		{
-			name: "Successful Publish",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
-			},
-			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupSuccess, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserSignupSuccess {
-							t.Errorf("Expected topic %s, got %s", userevents.UserSignupSuccess, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserCreatedPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.DiscordID != testDiscordID {
-							t.Errorf("Expected Discord ID %s, got %s", testDiscordID, payload.DiscordID)
-						}
-
-						if payload.TagNumber == nil || *payload.TagNumber != testTag {
-							t.Errorf("Expected tag number %d, got %v", testTag, payload.TagNumber)
-						}
-
-						// Check correlation ID
-						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-						if correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
-			},
-		},
-		{
-			name: "Publish Error",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupSuccess, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil,
+			// Validate failure case
+			if tt.expectedFail != nil {
+				if gotFailure == nil {
+					t.Errorf("❌ Expected failure payload, got nil")
+				} else if gotFailure.Reason != tt.expectedFail.Reason {
+					t.Errorf("❌ Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, tt.expectedFail.Reason)
+				}
+			} else if gotFailure != nil {
+				t.Errorf("❌ Unexpected failure payload: %v", gotFailure)
 			}
 
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
-			}
-
-			if err := s.PublishUserCreated(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.discordID), tt.args.tag); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.PublishUserCreated() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestUserServiceImpl_PublishUserCreationFailed(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	testDiscordID := usertypes.DiscordID("12345")
-	testTag := 123
-	testCorrelationID := watermill.NewUUID()
-	testReason := "Test Reason"
-	testCtx := context.Background()
-
-	type fields struct {
-		UserDB    *userdb.MockUserDB
-		eventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
-	type args struct {
-		ctx       context.Context
-		msg       *message.Message
-		discordID usertypes.DiscordID
-		tag       *int
-		reason    string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
-	}{
-		{
-			name: "Successful Publish",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
-				reason:    testReason,
-			},
-			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserSignupFailed, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserSignupFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserSignupFailed, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserCreationFailedPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.Reason != testReason {
-							t.Errorf("Expected reason %s, got %s", testReason, payload.Reason)
-						}
-
-						// Check correlation ID
-						correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-						if correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
-			},
-		},
-		{
-			name: "Publish Error",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil),
-				discordID: testDiscordID,
-				tag:       &testTag,
-				reason:    testReason,
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserCreationFailed, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil, // Set the eventUtil field
-			}
-
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
-			}
-
-			if err := s.PublishUserCreationFailed(tt.args.ctx, tt.args.msg, tt.args.discordID, tt.args.tag, tt.args.reason); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.PublishUserCreationFailed() error = %v, wantErr %v", err, tt.wantErr)
+			// Validate error presence
+			if tt.expectedFail != nil {
+				if err == nil {
+					t.Errorf("❌ Expected an error but got nil")
+				} else if err.Error() != tt.expectedFail.Reason {
+					t.Errorf("❌ Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedFail.Reason)
+				}
+			} else if err != nil {
+				t.Errorf("❌ Unexpected error: %v", err)
 			}
 		})
 	}

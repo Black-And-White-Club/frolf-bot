@@ -6,13 +6,13 @@ import (
 
 // Handlers defines the interface for leaderboard event handlers.
 type Handlers interface {
-	HandleRoundFinalized(msg *message.Message) error
-	HandleLeaderboardUpdateRequested(msg *message.Message) error
-	HandleTagAssigned(msg *message.Message) error
-	HandleTagAssignmentRequested(msg *message.Message) error
-	HandleTagSwapRequested(msg *message.Message) error
-	HandleTagSwapInitiated(msg *message.Message) error
-	HandleGetLeaderboardRequest(msg *message.Message) error
-	HandleGetTagByUserIDRequest(msg *message.Message) error
-	HandleTagAvailabilityCheckRequested(msg *message.Message) error
+	HandleRoundFinalized(msg *message.Message) ([]*message.Message, error)
+	HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error)
+	HandleTagAssigned(msg *message.Message) ([]*message.Message, error)
+	HandleTagAssignmentRequested(msg *message.Message) ([]*message.Message, error)
+	HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error)
+	HandleTagSwapInitiated(msg *message.Message) ([]*message.Message, error)
+	HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error)
+	HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error)
+	HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error)
 }

@@ -27,7 +27,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eventUtil := eventutil.NewEventUtil()
 
-	testDiscordID := leaderboardtypes.DiscordID("testDiscordID")
+	testUserID := leaderboardtypes.UserID("testUserID")
 	testTagNumber := 123
 	testUpdateID := "testUpdateID"
 	testCorrelationID := watermill.NewUUID()
@@ -64,7 +64,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAssignmentRequestedPayload{
-					DiscordID:  testDiscordID,
+					UserID:     testUserID,
 					TagNumber:  testTagNumber,
 					UpdateID:   testUpdateID,
 					Source:     "user",
@@ -74,7 +74,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			wantErr: false,
 			setup: func(f *fields, a *args) {
 				f.LeaderboardDB.EXPECT().
-					AssignTag(a.ctx, testDiscordID, testTagNumber, gomock.Any(), testUpdateID).
+					AssignTag(a.ctx, testUserID, testTagNumber, gomock.Any(), testUpdateID).
 					Return(nil).
 					Times(1)
 
@@ -108,7 +108,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAssignmentRequestedPayload{
-					DiscordID:  testDiscordID,
+					UserID:     testUserID,
 					TagNumber:  testTagNumber,
 					UpdateID:   testUpdateID,
 					Source:     "user",
@@ -118,7 +118,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			wantErr: true,
 			setup: func(f *fields, a *args) {
 				f.LeaderboardDB.EXPECT().
-					AssignTag(a.ctx, testDiscordID, testTagNumber, gomock.Any(), testUpdateID).
+					AssignTag(a.ctx, testUserID, testTagNumber, gomock.Any(), testUpdateID).
 					Return(errors.New("database error")).
 					Times(1)
 
@@ -145,7 +145,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			args: args{
 				ctx: testCtx,
 				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAssignmentRequestedPayload{
-					DiscordID:  testDiscordID,
+					UserID:     testUserID,
 					TagNumber:  testTagNumber,
 					UpdateID:   testUpdateID,
 					Source:     "user",
@@ -155,7 +155,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			wantErr: true,
 			setup: func(f *fields, a *args) {
 				f.LeaderboardDB.EXPECT().
-					AssignTag(a.ctx, testDiscordID, testTagNumber, gomock.Any(), testUpdateID).
+					AssignTag(a.ctx, testUserID, testTagNumber, gomock.Any(), testUpdateID).
 					Return(nil).
 					Times(1)
 

@@ -14,6 +14,6 @@ type LeaderboardDB interface {
 	UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string, scoreUpdateID string) error
 	SwapTags(ctx context.Context, requestorID, targetID string) error
 	AssignTag(ctx context.Context, userID leaderboardtypes.UserID, tagNumber int, source ServiceUpdateTagSource, updateID string) error
-	GetTagByUserID(ctx context.Context, userID string) (*int, error)
+	GetTagByUserID(ctx context.Context, userID usertypes.DiscordID) (*int, error)
 	CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error)
 }

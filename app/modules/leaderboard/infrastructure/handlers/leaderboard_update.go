@@ -11,7 +11,7 @@ import (
 )
 
 // HandleRoundFinalized handles the RoundFinalized event.
-func (h *LeaderboardHandlers) HandleRoundFinalized(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.RoundFinalizedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal RoundFinalizedPayload: %w", err)
@@ -36,7 +36,7 @@ func (h *LeaderboardHandlers) HandleRoundFinalized(msg *message.Message) error {
 }
 
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
-func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.LeaderboardUpdateRequestedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal LeaderboardUpdateRequestedPayload: %w", err)

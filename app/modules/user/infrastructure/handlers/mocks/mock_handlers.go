@@ -41,11 +41,12 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleGetUserRequest mocks base method.
-func (m *MockHandlers) HandleGetUserRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleGetUserRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleGetUserRequest indicates an expected call of HandleGetUserRequest.
@@ -55,11 +56,12 @@ func (mr *MockHandlersMockRecorder) HandleGetUserRequest(msg any) *gomock.Call {
 }
 
 // HandleGetUserRoleRequest mocks base method.
-func (m *MockHandlers) HandleGetUserRoleRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleGetUserRoleRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleGetUserRoleRequest indicates an expected call of HandleGetUserRoleRequest.
@@ -69,11 +71,12 @@ func (mr *MockHandlersMockRecorder) HandleGetUserRoleRequest(msg any) *gomock.Ca
 }
 
 // HandleTagAvailable mocks base method.
-func (m *MockHandlers) HandleTagAvailable(msg *message.Message) error {
+func (m *MockHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAvailable", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagAvailable indicates an expected call of HandleTagAvailable.
@@ -83,11 +86,12 @@ func (mr *MockHandlersMockRecorder) HandleTagAvailable(msg any) *gomock.Call {
 }
 
 // HandleTagUnavailable mocks base method.
-func (m *MockHandlers) HandleTagUnavailable(msg *message.Message) error {
+func (m *MockHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagUnavailable", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleTagUnavailable indicates an expected call of HandleTagUnavailable.
@@ -96,54 +100,13 @@ func (mr *MockHandlersMockRecorder) HandleTagUnavailable(msg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagUnavailable", reflect.TypeOf((*MockHandlers)(nil).HandleTagUnavailable), msg)
 }
 
-// HandleUserPermissionsCheckFailed mocks base method.
-func (m *MockHandlers) HandleUserPermissionsCheckFailed(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUserPermissionsCheckFailed", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleUserPermissionsCheckFailed indicates an expected call of HandleUserPermissionsCheckFailed.
-func (mr *MockHandlersMockRecorder) HandleUserPermissionsCheckFailed(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUserPermissionsCheckFailed", reflect.TypeOf((*MockHandlers)(nil).HandleUserPermissionsCheckFailed), msg)
-}
-
-// HandleUserPermissionsCheckRequest mocks base method.
-func (m *MockHandlers) HandleUserPermissionsCheckRequest(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUserPermissionsCheckRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleUserPermissionsCheckRequest indicates an expected call of HandleUserPermissionsCheckRequest.
-func (mr *MockHandlersMockRecorder) HandleUserPermissionsCheckRequest(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUserPermissionsCheckRequest", reflect.TypeOf((*MockHandlers)(nil).HandleUserPermissionsCheckRequest), msg)
-}
-
-// HandleUserPermissionsCheckResponse mocks base method.
-func (m *MockHandlers) HandleUserPermissionsCheckResponse(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUserPermissionsCheckResponse", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleUserPermissionsCheckResponse indicates an expected call of HandleUserPermissionsCheckResponse.
-func (mr *MockHandlersMockRecorder) HandleUserPermissionsCheckResponse(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUserPermissionsCheckResponse", reflect.TypeOf((*MockHandlers)(nil).HandleUserPermissionsCheckResponse), msg)
-}
-
 // HandleUserRoleUpdateRequest mocks base method.
-func (m *MockHandlers) HandleUserRoleUpdateRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleUserRoleUpdateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleUserRoleUpdateRequest indicates an expected call of HandleUserRoleUpdateRequest.
@@ -153,11 +116,12 @@ func (mr *MockHandlersMockRecorder) HandleUserRoleUpdateRequest(msg any) *gomock
 }
 
 // HandleUserSignupRequest mocks base method.
-func (m *MockHandlers) HandleUserSignupRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleUserSignupRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleUserSignupRequest indicates an expected call of HandleUserSignupRequest.

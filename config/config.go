@@ -35,6 +35,7 @@ type ObservabilityConfig struct {
 	TempoEndpoint   string  `yaml:"tempo_endpoint"`
 	TempoInsecure   bool    `yaml:"tempo_insecure"`
 	TempoSampleRate float64 `yaml:"tempo_sample_rate"`
+	Environment     string  `yaml:"environment"`
 }
 
 // DiscordConfig holds Discord configuration.
@@ -89,7 +90,7 @@ func loadConfigFromEnv() (*Config, error) {
 	if cfg.Observability.TempoEndpoint == "" {
 		return nil, fmt.Errorf("TEMPO_ENDPOINT environment variable not set")
 	}
-
+	cfg.Observability.Environment = os.Getenv("ENV")
 	tempoInsecure := os.Getenv("TEMPO_INSECURE")
 	if tempoInsecure == "" {
 		cfg.Observability.TempoInsecure = false // Default value

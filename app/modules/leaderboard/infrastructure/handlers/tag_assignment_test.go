@@ -22,7 +22,7 @@ func TestLeaderboardHandlers_HandleTagAssignmentRequested(t *testing.T) {
 	mockLeaderboardService := mocks.NewMockService(ctrl)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	testDiscordID := leaderboardtypes.DiscordID("testDiscordID")
+	testUserID := leaderboardtypes.UserID("testUserID")
 	testTagNumber := 123
 	testUpdateID := "testUpdateID"
 	testCorrelationID := watermill.NewUUID()
@@ -49,7 +49,7 @@ func TestLeaderboardHandlers_HandleTagAssignmentRequested(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, testCorrelationID, &leaderboardevents.TagAssignmentRequestedPayload{
-					DiscordID:  testDiscordID,
+					UserID:     testUserID,
 					TagNumber:  testTagNumber,
 					UpdateID:   testUpdateID,
 					Source:     "user",
@@ -82,7 +82,7 @@ func TestLeaderboardHandlers_HandleTagAssignmentRequested(t *testing.T) {
 			},
 			args: args{
 				msg: createTestMessageWithPayload(t, testCorrelationID, &leaderboardevents.TagAssignmentRequestedPayload{
-					DiscordID:  testDiscordID,
+					UserID:     testUserID,
 					TagNumber:  testTagNumber,
 					UpdateID:   testUpdateID,
 					Source:     "user",

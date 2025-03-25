@@ -1,17 +1,20 @@
 package userhandlers
 
 import (
-	"errors"
-	"io"
-	"log/slog"
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	"github.com/ThreeDotsLabs/watermill"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/mock/gomock"
 )
 
@@ -19,128 +22,184 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserService := mocks.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	testUserID := usertypes.DiscordID("12345678901234567")
+	testTagNumber := 1
 
-	testDiscordID := usertypes.DiscordID("123456789012345678") // Valid Discord ID
-	testTagNumber := 123
-	testCorrelationID := watermill.NewUUID()
+	testPayload := &userevents.UserSignupRequestPayload{
+		UserID:    testUserID,
+		TagNumber: &testTagNumber,
+	}
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	type fields struct {
-		userService *mocks.MockService
-		logger      *slog.Logger
-	}
-	type args struct {
-		msg *message.Message
-	}
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+
+	// Mock dependencies
+	mockUserService := userservice.NewMockService(ctrl)
+	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
+		name           string
+		mockSetup      func()
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
 	}{
 		{
-			name: "Successful Signup with Tag",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Successfully handle UserSignupRequest with tag",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserSignupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.TagAvailabilityCheckRequestedPayload{
+						TagNumber: testTagNumber,
+						UserID:    testUserID,
+					},
+					userevents.TagAvailabilityCheckRequested,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.UserSignupRequestPayload{
-					DiscordID: usertypes.DiscordID(testDiscordID),
-					TagNumber: &testTagNumber,
-				}),
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				// Expect CheckTagAvailability to be called because a tag is provided
-				f.userService.EXPECT().CheckTagAvailability(a.msg.Context(), a.msg, testTagNumber, gomock.Any()).Return(nil).Times(1)
-			},
 		},
 		{
-			name: "Successful Signup without Tag",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Successfully handle UserSignupRequest without tag",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							UserID: testUserID,
+						}
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Nil(),
+				).Return(
+					&userevents.UserCreatedPayload{UserID: testUserID},
+					nil,
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.UserCreatedPayload{UserID: testUserID},
+					userevents.UserCreated,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.UserSignupRequestPayload{
-					DiscordID: testDiscordID,
-					TagNumber: nil, // No tag provided
-				}),
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				// Expect CreateUser to be called because no tag is provided
-				f.userService.EXPECT().CreateUser(a.msg.Context(), a.msg, testDiscordID, nil).Return(nil).Times(1)
-			},
 		},
 		{
-			name: "Unmarshal Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Fail to unmarshal payload",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, "invalid-payload"),
-			},
-			wantErr: true,
-			setup:   func(f fields, a args) {},
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "CheckTagAvailability Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Service failure in CreateUser",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							UserID: testUserID,
+						}
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Nil(),
+				).Return(nil, nil, fmt.Errorf("internal service error"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.UserSignupRequestPayload{
-					DiscordID: testDiscordID,
-					TagNumber: &testTagNumber,
-				}),
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.userService.EXPECT().CheckTagAvailability(a.msg.Context(), a.msg, testTagNumber, gomock.Any()).Return(errors.New("error checking tag")).Times(1)
-			},
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to process UserSignupRequest: internal service error",
 		},
 		{
-			name: "CreateUser Error",
-			fields: fields{
-				userService: mockUserService,
-				logger:      logger,
+			name: "Failure to create success message",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							UserID: testUserID,
+						}
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					gomock.Nil(),
+				).Return(
+					&userevents.UserCreatedPayload{UserID: testUserID},
+					nil,
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.UserCreatedPayload{UserID: testUserID},
+					userevents.UserCreated,
+				).Return(nil, fmt.Errorf("failed to create success message"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, userevents.UserSignupRequestPayload{
-					DiscordID: usertypes.DiscordID(testDiscordID), // Explicitly use usertypes.DiscordID
-					TagNumber: nil,                                // No tag provided
-				}),
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.userService.EXPECT().
-					CreateUser(a.msg.Context(), a.msg, usertypes.DiscordID(testDiscordID), nil). // Expect usertypes.DiscordID
-					Return(errors.New("error creating user")).
-					Times(1)
-			},
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create success message",
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
 			h := &UserHandlers{
-				userService: tt.fields.userService,
-				logger:      tt.fields.logger,
+				userService: mockUserService,
+				logger:      logger,
+				tracer:      tracer,
+				metrics:     metrics,
+				helpers:     mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
+
+			got, err := h.HandleUserSignupRequest(tt.msg)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleUserSignupRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if err := h.HandleUserSignupRequest(tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("UserHandlers.HandleUserSignupRequest() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleUserSignupRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HandleUserSignupRequest() = %v, want %v", got, tt.want)
 			}
 		})
 	}

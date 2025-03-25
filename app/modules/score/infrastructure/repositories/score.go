@@ -33,12 +33,12 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID string, scores []S
 }
 
 // UpdateScore updates a specific score in the database.
-func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID, discordID string, newScore int) error {
+func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID, userID usertypes.DiscordID, newScore int) error {
 	// Assuming you have a column named 'score' in the 'scores' table
 	_, err := db.DB.NewUpdate().
 		Table("scores").
 		Set("score = ?", newScore).
-		Where("user_id = ? AND round_id = ?", discordID, roundID).
+		Where("user_id = ? AND round_id = ?", userID, roundID).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update score: %w", err)
@@ -48,10 +48,10 @@ func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID, discordID strin
 
 // UpdateOrAddScore updates a score if it exists, or adds a new score entry.
 func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, score *Score) error {
-	// Check if a score already exists for the given discordID and roundID
+	// Check if a score already exists for the given userID and roundID
 	exists, err := db.DB.NewSelect().
 		Table("scores").
-		Where("user_id = ? AND round_id = ?", score.DiscordID, score.RoundID).
+		Where("user_id = ? AND round_id = ?", score.UserID, score.RoundID).
 		Exists(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to check if score exists: %w", err)
@@ -61,7 +61,7 @@ func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, score *Score) error
 		// Update existing score
 		_, err := db.DB.NewUpdate().
 			Model(score).
-			Where("user_id = ? AND round_id = ?", score.DiscordID, score.RoundID).
+			Where("user_id = ? AND round_id = ?", score.UserID, score.RoundID).
 			Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to update score: %w", err)

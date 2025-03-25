@@ -11,7 +11,7 @@ import (
 )
 
 // HandleTagAssignmentRequested handles the TagAssignmentRequested event.
-func (h *LeaderboardHandlers) HandleTagAssignmentRequested(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAssignmentRequestedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal TagAssignmentRequestedPayload: %w", err)
@@ -37,7 +37,7 @@ func (h *LeaderboardHandlers) HandleTagAssignmentRequested(msg *message.Message)
 }
 
 // HandleTagAssigned handles the TagAssigned event.
-func (h *LeaderboardHandlers) HandleTagAssigned(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleTagAssigned(msg *message.Message) ([]*message.Message, error) {
 	h.logger.Info("HandleTagAssigned triggered",
 		slog.String("correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey)),
 		slog.String("message_id", msg.UUID),

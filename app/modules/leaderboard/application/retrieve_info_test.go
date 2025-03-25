@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
@@ -157,7 +157,7 @@ func TestLeaderboardService_GetLeaderboardRequest(t *testing.T) {
 	}
 }
 
-func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
+func TestLeaderboardService_GetTagByUserIDRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -166,7 +166,7 @@ func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eventUtil := eventutil.NewEventUtil()
 
-	testDiscordID := "testDiscordID"
+	testUserID := "testUserID"
 	testTagNumber := 123
 	testCorrelationID := watermill.NewUUID()
 
@@ -197,21 +197,21 @@ func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByDiscordIDRequestPayload{
-					DiscordID: leaderboardtypes.DiscordID(testDiscordID),
+				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByUserIDRequestPayload{
+					UserID: leaderboardtypes.UserID(testUserID),
 				}),
 			},
 			wantErr: false,
 			setup: func(f fields, a args) {
 				f.LeaderboardDB.EXPECT().
-					GetTagByDiscordID(gomock.Any(), testDiscordID).
+					GetTagByUserID(gomock.Any(), testUserID).
 					Return(testTagNumber, nil).
 					Times(1)
 				f.EventBus.EXPECT().
-					Publish(leaderboardevents.GetTagByDiscordIDResponse, gomock.Any()).
+					Publish(leaderboardevents.GetTagByUserIDResponse, gomock.Any()).
 					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != leaderboardevents.GetTagByDiscordIDResponse {
-							t.Errorf("Expected topic %s, got %s", leaderboardevents.GetTagByDiscordIDResponse, topic)
+						if topic != leaderboardevents.GetTagByUserIDResponse {
+							t.Errorf("Expected topic %s, got %s", leaderboardevents.GetTagByUserIDResponse, topic)
 						}
 						return nil
 					}).
@@ -228,14 +228,14 @@ func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByDiscordIDRequestPayload{
-					DiscordID: leaderboardtypes.DiscordID(testDiscordID),
+				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByUserIDRequestPayload{
+					UserID: leaderboardtypes.UserID(testUserID),
 				}),
 			},
 			wantErr: true,
 			setup: func(f fields, a args) {
 				f.LeaderboardDB.EXPECT().
-					GetTagByDiscordID(gomock.Any(), testDiscordID).
+					GetTagByUserID(gomock.Any(), testUserID).
 					Return(0, errors.New("database error")).
 					Times(1)
 			},
@@ -250,18 +250,18 @@ func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.WithValue(context.Background(), correlationIDKey, testCorrelationID),
-				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByDiscordIDRequestPayload{
-					DiscordID: leaderboardtypes.DiscordID(testDiscordID),
+				msg: createTestMessageWithPayload(testCorrelationID, leaderboardevents.GetTagByUserIDRequestPayload{
+					UserID: leaderboardtypes.UserID(testUserID),
 				}),
 			},
 			wantErr: true,
 			setup: func(f fields, a args) {
 				f.LeaderboardDB.EXPECT().
-					GetTagByDiscordID(gomock.Any(), testDiscordID).
+					GetTagByUserID(gomock.Any(), testUserID).
 					Return(testTagNumber, nil).
 					Times(1)
 				f.EventBus.EXPECT().
-					Publish(leaderboardevents.GetTagByDiscordIDResponse, gomock.Any()).
+					Publish(leaderboardevents.GetTagByUserIDResponse, gomock.Any()).
 					Return(errors.New("publish error")).
 					Times(1)
 			},
@@ -293,8 +293,8 @@ func TestLeaderboardService_GetTagByDiscordIDRequest(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(tt.fields, tt.args)
 			}
-			if err := s.GetTagByDiscordIDRequest(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("LeaderboardService.GetTagByDiscordIDRequest() error = %v, wantErr %v", err, tt.wantErr)
+			if err := s.GetTagByUserIDRequest(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
+				t.Errorf("LeaderboardService.GetTagByUserIDRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

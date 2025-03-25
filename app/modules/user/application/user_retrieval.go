@@ -2,218 +2,144 @@ package userservice
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"log/slog"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
-// ...
+// GetUser retrieves user data and returns a response payload.
+func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
+	operationName := "GetUser"
+	result, err := s.serviceWrapper(msg, operationName, userID, func() (UserOperationResult, error) {
+		user, err := s.UserDB.GetUserByUserID(ctx, userID)
+		if err != nil {
+			if errors.Is(err, userdb.ErrUserNotFound) {
+				s.logger.Info("User not found",
+					attr.String("user_id", string(userID)),
+					attr.CorrelationIDFromMsg(msg),
+				)
+				s.metrics.RecordUserRetrieval(false, userID)
 
-func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	role, err := s.UserDB.GetUserRole(ctx, discordID)
-	if err != nil {
-		s.logger.Error("Failed to get user role",
-			slog.Any("error", err),
-			slog.String("discordID", string(discordID)),
-			slog.String("correlation_id", correlationID),
-		)
-		// Publish a GetUserRoleFailed event and return the error
-		if pubErr := s.publishGetUserRoleFailed(ctx, msg, discordID, err.Error()); pubErr != nil {
-			return fmt.Errorf("failed to get user role and publish GetUserRoleFailed event: %w", pubErr)
-		}
-		return fmt.Errorf("failed to get user role: %w", err) // Return the error
-	}
-
-	// Publish a GetUserRoleResponse event
-	return s.publishGetUserRoleResponse(ctx, msg, discordID, role)
-}
-
-// GetUser retrieves user data and publishes a GetUserResponse event.
-func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-
-	s.logger.Info("Getting user",
-		slog.String("user_id", string(discordID)),
-		slog.String("correlation_id", correlationID),
-	)
-
-	user, err := s.UserDB.GetUserByDiscordID(ctx, usertypes.DiscordID(discordID))
-	if err != nil {
-		if errors.Is(err, userdb.ErrUserNotFound) {
-			s.logger.Error("User not found",
-				slog.String("user_id", string(discordID)),
-				slog.String("correlation_id", correlationID),
-			)
-			// Publish a GetUserFailed event when the user is not found
-			if pubErr := s.publishGetUserFailed(ctx, msg, discordID, "user not found"); pubErr != nil {
-				return fmt.Errorf("failed to get user and publish GetUserFailed event: %w", pubErr)
+				return UserOperationResult{
+					Failure: &userevents.GetUserFailedPayload{
+						UserID: userID,
+						Reason: "user not found",
+					},
+				}, errors.New("user not found") // Return an error message
 			}
-			return nil // User not found is a handled error case
+
+			s.logger.Error("Failed to get user",
+				attr.Error(err),
+				attr.String("user_id", string(userID)),
+				attr.CorrelationIDFromMsg(msg),
+			)
+			s.metrics.RecordUserRetrieval(false, userID)
+
+			return UserOperationResult{
+				Failure: &userevents.GetUserFailedPayload{
+					UserID: userID,
+					Reason: "failed to retrieve user from database",
+				},
+				Error: err,
+			}, err
 		}
-		s.logger.Error("Failed to get user",
-			slog.Any("error", err),
-			slog.String("user_id", string(discordID)),
-			slog.String("correlation_id", correlationID),
-		)
-		// Publish a GetUserFailed event for other database errors
-		if pubErr := s.publishGetUserFailed(ctx, msg, discordID, "failed to get user from database"); pubErr != nil {
-			return fmt.Errorf("failed to get user and publish GetUserFailed event: %w", pubErr)
+
+		s.metrics.RecordUserRetrieval(true, userID)
+
+		return UserOperationResult{
+			Success: &userevents.GetUserResponsePayload{
+				User: &usertypes.UserData{
+					ID:     user.ID,
+					UserID: user.UserID,
+					Role:   user.Role,
+				},
+			},
+		}, nil
+	})
+
+	if err != nil {
+		// Return failure payload if present
+		if result.Failure != nil {
+			return nil, result.Failure.(*userevents.GetUserFailedPayload), err
 		}
-		return fmt.Errorf("failed to get user: %w", err)
+
+		// Otherwise, return a generic failure response
+		return nil, &userevents.GetUserFailedPayload{
+			UserID: userID,
+			Reason: err.Error(),
+		}, err
 	}
 
-	return s.publishGetUserResponse(ctx, msg, user)
+	// Return success payload
+	return result.Success.(*userevents.GetUserResponsePayload), nil, nil
 }
 
-// publishGetUserRoleResponse publishes a GetUserRoleResponse event.
-func (s *UserServiceImpl) publishGetUserRoleResponse(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	eventPayload := &userevents.GetUserRoleResponsePayload{
-		DiscordID: discordID,
-		Role:      role,
-	}
+// GetUserRole retrieves a user's role and returns a response payload.
+func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
+	operationName := "GetUserRole"
 
-	payloadBytes, err := json.Marshal(eventPayload)
+	result, err := s.serviceWrapper(msg, operationName, userID, func() (UserOperationResult, error) {
+		role, err := s.UserDB.GetUserRole(ctx, userID)
+		if err != nil {
+			s.logger.Error("Failed to get user role",
+				attr.Error(err),
+				attr.String("userID", string(userID)),
+				attr.CorrelationIDFromMsg(msg),
+			)
+			s.metrics.RecordUserRoleRetrieval(false, userID)
+
+			return UserOperationResult{
+				Failure: &userevents.GetUserRoleFailedPayload{
+					UserID: userID,
+					Reason: "failed to retrieve user role",
+				},
+				Error: err,
+			}, errors.New("failed to retrieve user role")
+		}
+
+		// Ensure role is valid before returning
+		if !role.IsValid() {
+			s.logger.Error("Retrieved invalid role for user",
+				attr.String("userID", string(userID)),
+				attr.String("role", string(role)),
+			)
+
+			return UserOperationResult{
+				Failure: &userevents.GetUserRoleFailedPayload{
+					UserID: userID,
+					Reason: "retrieved invalid user role",
+				},
+				Error: errors.New("invalid role in database"),
+			}, errors.New("invalid role in database")
+		}
+
+		s.metrics.RecordUserRoleRetrieval(true, userID)
+
+		return UserOperationResult{
+			Success: &userevents.GetUserRoleResponsePayload{
+				UserID: userID,
+				Role:   role,
+			},
+		}, nil
+	})
+
 	if err != nil {
-		s.logger.Error("Failed to marshal GetUserRoleResponsePayload",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal GetUserRoleResponsePayload: %w", err)
+		// Return failure payload if present
+		if result.Failure != nil {
+			return nil, result.Failure.(*userevents.GetUserRoleFailedPayload), err
+		}
+
+		// Otherwise, return a generic failure response
+		return nil, &userevents.GetUserRoleFailedPayload{
+			UserID: userID,
+			Reason: err.Error(),
+		}, err
 	}
 
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage) // Use eventutil to copy metadata
-
-	// Set the context on the new message
-	newMessage.SetContext(ctx)
-
-	if err := s.eventBus.Publish(userevents.GetUserRoleResponse, newMessage); err != nil {
-		s.logger.Error("Failed to publish GetUserRoleResponse event",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish GetUserRoleResponse event: %w", err)
-	}
-
-	s.logger.Info("Published GetUserRoleResponse event", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-// publishGetUserResponse publishes a GetUserResponse event.
-func (s *UserServiceImpl) publishGetUserResponse(ctx context.Context, msg *message.Message, user *userdb.User) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	userData := &usertypes.UserData{
-		ID:        user.ID,
-		DiscordID: user.DiscordID,
-		Role:      user.Role,
-	}
-	eventPayload := &userevents.GetUserResponsePayload{
-		User: userData,
-	}
-
-	payloadBytes, err := json.Marshal(eventPayload)
-	if err != nil {
-		s.logger.Error("Failed to marshal GetUserResponsePayload",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal GetUserResponsePayload: %w", err)
-	}
-
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage) // Use eventutil to copy metadata
-
-	// Set the context on the new message
-	newMessage.SetContext(ctx)
-
-	if err := s.eventBus.Publish(userevents.GetUserResponse, newMessage); err != nil {
-		s.logger.Error("Failed to publish GetUserResponse event",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish GetUserResponse event: %w", err)
-	}
-
-	s.logger.Info("Published GetUserResponse event", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-// publishGetUserRoleFailed publishes a GetUserRoleFailed event.
-func (s *UserServiceImpl) publishGetUserRoleFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, reason string) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	eventPayload := &userevents.GetUserRoleFailedPayload{
-		DiscordID: discordID,
-		Reason:    reason,
-	}
-
-	payloadBytes, err := json.Marshal(eventPayload)
-	if err != nil {
-		s.logger.Error("Failed to marshal GetUserRoleFailedPayload",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal GetUserRoleFailedPayload: %w", err)
-	}
-
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage) // Use eventutil to copy metadata
-
-	// Set the context on the new message
-	newMessage.SetContext(ctx)
-
-	if err := s.eventBus.Publish(userevents.GetUserRoleFailed, newMessage); err != nil {
-		s.logger.Error("Failed to publish GetUserRoleFailed event",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish GetUserRoleFailed event: %w", err)
-	}
-
-	s.logger.Info("Published GetUserRoleFailed event", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-// publishGetUserFailed publishes a GetUserFailed event.
-func (s *UserServiceImpl) publishGetUserFailed(ctx context.Context, msg *message.Message, discordID usertypes.DiscordID, reason string) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-	eventPayload := &userevents.GetUserFailedPayload{
-		DiscordID: discordID,
-		Reason:    reason,
-	}
-
-	payloadBytes, err := json.Marshal(eventPayload)
-	if err != nil {
-		s.logger.Error("Failed to marshal GetUserFailedPayload",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal GetUserFailedPayload: %w", err)
-	}
-
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage) // Use eventutil to copy metadata
-
-	// Set the context on the new message
-	newMessage.SetContext(ctx)
-
-	if err := s.eventBus.Publish(userevents.GetUserFailed, newMessage); err != nil {
-		s.logger.Error("Failed to publish GetUserFailed event",
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish GetUserFailed event: %w", err)
-	}
-
-	s.logger.Info("Published GetUserFailed event", slog.String("correlation_id", correlationID))
-	return nil
+	// Return success payload
+	return result.Success.(*userevents.GetUserRoleResponsePayload), nil, nil
 }

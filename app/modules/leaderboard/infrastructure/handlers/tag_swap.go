@@ -10,7 +10,7 @@ import (
 )
 
 // HandleTagSwapRequested handles the TagSwapRequested event.
-func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapRequestedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal TagSwapRequestedPayload: %w", err)
@@ -36,7 +36,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) error
 }
 
 // HandleTagSwapInitiated handles the TagSwapInitiated event.
-func (h *LeaderboardHandlers) HandleTagSwapInitiated(msg *message.Message) error {
+func (h *LeaderboardHandlers) HandleTagSwapInitiated(msg *message.Message) ([]*message.Message, error) {
 	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapInitiatedPayload](msg, h.logger)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal TagSwapInitiatedPayload: %w", err)

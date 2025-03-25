@@ -6,8 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -17,17 +17,19 @@ import (
 type LeaderboardService struct {
 	LeaderboardDB leaderboarddb.LeaderboardDB
 	EventBus      eventbus.EventBus
-	logger        *slog.Logger
-	eventUtil     eventutil.EventUtil
+	logger        observability.Logger
+	metrics       observability.Metrics
+	tracer        observability.Tracer
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
-func NewLeaderboardService(db leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, logger *slog.Logger) Service {
+func NewLeaderboardService(db leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, logger observability.Logger, metrics observability.Metrics, tracer observability.Tracer) Service {
 	return &LeaderboardService{
 		LeaderboardDB: db,
 		EventBus:      eventBus,
 		logger:        logger,
-		eventUtil:     eventutil.NewEventUtil(),
+		metrics:       metrics,
+		tracer:        tracer,
 	}
 }
 
@@ -46,7 +48,6 @@ func (s *LeaderboardService) publishEvent(msg *message.Message, eventName string
 	}
 
 	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage)
 
 	// Set Nats-Msg-Id for JetStream deduplication
 	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID+"-"+eventName)

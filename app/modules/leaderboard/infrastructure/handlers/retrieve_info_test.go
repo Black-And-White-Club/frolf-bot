@@ -87,14 +87,14 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 	}
 }
 
-func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
+func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockLeaderboardService := mocks.NewMockService(ctrl)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	testDiscordID := "testDiscordID"
+	testUserID := "testUserID"
 	testCorrelationID := watermill.NewUUID()
 
 	type fields struct {
@@ -118,8 +118,8 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 				logger:             logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, leaderboardevents.GetTagByDiscordIDRequestPayload{
-					DiscordID: leaderboardtypes.DiscordID(testDiscordID),
+				msg: createTestMessageWithPayload(t, testCorrelationID, leaderboardevents.GetTagByUserIDRequestPayload{
+					UserID: leaderboardtypes.UserID(testUserID),
 				}),
 			},
 			wantErr: false,
@@ -129,7 +129,7 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 
 				// Set mock expectations
 				f.leaderboardService.EXPECT().
-					GetTagByDiscordIDRequest(gomock.Any(), gomock.AssignableToTypeOf(&message.Message{})).
+					GetTagByUserIDRequest(gomock.Any(), gomock.AssignableToTypeOf(&message.Message{})).
 					DoAndReturn(func(ctx context.Context, msg *message.Message) error {
 						// Verify metadata in the message
 						if msg.Metadata.Get(middleware.CorrelationIDMetadataKey) != testCorrelationID {
@@ -153,7 +153,7 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 			setup: func(f fields, a args) {
 				// Ensure the service is NOT called
 				f.leaderboardService.EXPECT().
-					GetTagByDiscordIDRequest(gomock.Any(), gomock.Any()).
+					GetTagByUserIDRequest(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 		},
@@ -164,8 +164,8 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 				logger:             logger,
 			},
 			args: args{
-				msg: createTestMessageWithPayload(t, testCorrelationID, leaderboardevents.GetTagByDiscordIDRequestPayload{
-					DiscordID: leaderboardtypes.DiscordID(testDiscordID),
+				msg: createTestMessageWithPayload(t, testCorrelationID, leaderboardevents.GetTagByUserIDRequestPayload{
+					UserID: leaderboardtypes.UserID(testUserID),
 				}),
 			},
 			wantErr: true,
@@ -175,7 +175,7 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 
 				// Set expectation for a service layer error
 				f.leaderboardService.EXPECT().
-					GetTagByDiscordIDRequest(gomock.Any(), gomock.AssignableToTypeOf(&message.Message{})).
+					GetTagByUserIDRequest(gomock.Any(), gomock.AssignableToTypeOf(&message.Message{})).
 					Return(fmt.Errorf("service error")).
 					Times(1)
 			},
@@ -190,8 +190,8 @@ func TestLeaderboardHandlers_HandleGetTagByDiscordIDRequest(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(tt.fields, tt.args)
 			}
-			if err := h.HandleGetTagByDiscordIDRequest(tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("LeaderboardHandlers.HandleGetTagByDiscordIDRequest() error = %v, wantErr %v", err, tt.wantErr)
+			if err := h.HandleGetTagByUserIDRequest(tt.args.msg); (err != nil) != tt.wantErr {
+				t.Errorf("LeaderboardHandlers.HandleGetTagByUserIDRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

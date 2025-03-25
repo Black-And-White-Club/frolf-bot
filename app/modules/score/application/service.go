@@ -9,6 +9,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -18,15 +19,19 @@ import (
 type ScoreService struct {
 	ScoreDB  scoredb.ScoreDB
 	EventBus eventbus.EventBus
-	logger   *slog.Logger
+	logger   observability.Logger
+	metrics  observability.Metrics
+	tracer   observability.Tracer
 }
 
 // NewScoreService creates a new ScoreService.
-func NewScoreService(eventBus eventbus.EventBus, db scoredb.ScoreDB, logger *slog.Logger) Service {
+func NewScoreService(eventBus eventbus.EventBus, db scoredb.ScoreDB, logger observability.Logger, metrics observability.Metrics, tracer observability.Tracer) Service {
 	return &ScoreService{
 		ScoreDB:  db,
 		EventBus: eventBus,
 		logger:   logger,
+		metrics:  metrics,
+		tracer:   tracer,
 	}
 }
 
@@ -50,7 +55,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, event scoreevents
 // CorrectScore handles score corrections (manual updates).
 func (s *ScoreService) CorrectScore(ctx context.Context, event scoreevents.ScoreUpdateRequestPayload) error {
 	score := scoredb.Score{
-		DiscordID: event.Participant,
+		UserID:    event.Participant,
 		RoundID:   event.RoundID,
 		Score:     *event.Score,
 		TagNumber: event.TagNumber,
@@ -80,7 +85,7 @@ func (s *ScoreService) prepareScores(eventScores []scoreevents.ParticipantScore)
 	var scores []scoredb.Score
 	for _, score := range eventScores {
 		scores = append(scores, scoredb.Score{
-			DiscordID: score.DiscordID,
+			UserID:    score.UserID,
 			Score:     int(score.Score),
 			TagNumber: score.TagNumber,
 		})
@@ -104,7 +109,7 @@ func (s *ScoreService) publishLeaderboardUpdate(_ context.Context, roundID strin
 	var eventScores []scoreevents.ParticipantScore
 	for _, score := range scores {
 		eventScores = append(eventScores, scoreevents.ParticipantScore{
-			DiscordID: score.DiscordID,
+			UserID:    score.UserID,
 			Score:     int(score.Score),
 			TagNumber: score.TagNumber,
 		})
