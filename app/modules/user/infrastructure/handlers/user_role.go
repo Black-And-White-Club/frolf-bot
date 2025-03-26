@@ -34,7 +34,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			// Call service function to update user role
 			successPayload, failedPayload, err := h.userService.UpdateUserRoleInDatabase(ctx, msg, userID, newRole)
 
-			// Different handling based on service response
+			// Determine appropriate payload
 			var resultPayload interface{}
 			var eventType string
 
@@ -48,39 +48,36 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 				// Track failure
 				h.metrics.RecordOperationFailure("UpdateUserRole", userID)
 
-				// Specific handling for different test scenarios
-				if err != nil {
-					// For the "Failure to create success message" scenario
-					resultPayload = &userevents.UserRoleUpdatedPayload{
-						UserID: userID,
-						Role:   newRole,
-					}
-					eventType = userevents.UserRoleUpdated
-				} else if failedPayload != nil {
+				// Prefer explicit failed payload, or create a generic one
+				if failedPayload != nil {
 					resultPayload = failedPayload
+					eventType = userevents.UserRoleUpdateFailed
+				} else {
+					resultPayload = &userevents.UserRoleUpdateFailedPayload{
+						UserID: userID,
+						Reason: err.Error(),
+					}
 					eventType = userevents.UserRoleUpdateFailed
 				}
 			} else {
 				// Success scenario
-				resultPayload = &userevents.UserRoleUpdateResultPayload{
-					UserID: userID,
-					Role:   newRole,
-				}
+				resultPayload = successPayload
 				eventType = userevents.UserRoleUpdated
-			}
-
-			// Fallback if no payload was set
-			if resultPayload == nil {
-				resultPayload = &userevents.UserRoleUpdateFailedPayload{
-					UserID: userID,
-					Reason: "internal service error",
-				}
-				eventType = userevents.UserRoleUpdateFailed
 			}
 
 			// Create result message
 			resultMsg, createErr := h.helpers.CreateResultMessage(msg, resultPayload, eventType)
 			if createErr != nil {
+				// Log the failure to create the result message
+				h.logger.Error("Failed to create result message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("event_type", eventType),
+					attr.Error(createErr),
+				)
+
+				// Track the failure in metrics
+				h.metrics.RecordOperationFailure("CreateResultMessage", userID)
+
 				return nil, fmt.Errorf("failed to create result message: %w", createErr)
 			}
 

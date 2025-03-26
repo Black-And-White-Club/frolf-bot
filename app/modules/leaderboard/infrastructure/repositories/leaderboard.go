@@ -241,7 +241,7 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 
 // Returns nil if no tag is found.
 // GetTagByUserID retrieves the tag number for a given user ID from leaderboard_data.
-func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID usertypes.DiscordID) (*int, error) {
+func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*int, error) {
 	leaderboardEntry := struct {
 		LeaderboardData map[string]string `bun:"leaderboard_data,type:jsonb"`
 	}{}

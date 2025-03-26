@@ -83,7 +83,7 @@ func (s *LeaderboardService) TagAssigned(ctx context.Context, msg *message.Messa
 	return nil
 }
 
-func (s *LeaderboardService) publishTagAssignmentFailed(_ context.Context, msg *message.Message, userID usertypes.DiscordID, tagNumber int, updateID string, source string, updateType string, reason string) error {
+func (s *LeaderboardService) publishTagAssignmentFailed(_ context.Context, msg *message.Message, userID sharedtypes.DiscordID, tagNumber int, updateID string, source string, updateType string, reason string) error {
 	eventPayload := &leaderboardevents.TagAssignmentFailedPayload{
 		UserID:     leaderboardtypes.UserID(userID),
 		TagNumber:  &tagNumber,

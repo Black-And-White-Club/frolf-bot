@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -44,7 +44,7 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockService) CreateUser(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, tag *int) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
+func (m *MockService) CreateUser(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, msg, userID, tag)
 	ret0, _ := ret[0].(*userevents.UserCreatedPayload)
@@ -60,7 +60,7 @@ func (mr *MockServiceMockRecorder) CreateUser(ctx, msg, userID, tag any) *gomock
 }
 
 // GetUser mocks base method.
-func (m *MockService) GetUser(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
+func (m *MockService) GetUser(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUser", ctx, msg, userID)
 	ret0, _ := ret[0].(*userevents.GetUserResponsePayload)
@@ -76,7 +76,7 @@ func (mr *MockServiceMockRecorder) GetUser(ctx, msg, userID any) *gomock.Call {
 }
 
 // GetUserRole mocks base method.
-func (m *MockService) GetUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
+func (m *MockService) GetUserRole(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserRole", ctx, msg, userID)
 	ret0, _ := ret[0].(*userevents.GetUserRoleResponsePayload)
@@ -92,7 +92,7 @@ func (mr *MockServiceMockRecorder) GetUserRole(ctx, msg, userID any) *gomock.Cal
 }
 
 // UpdateUserRoleInDatabase mocks base method.
-func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, newRole usertypes.UserRoleEnum) (*userevents.UserRoleUpdateResultPayload, *userevents.UserRoleUpdateFailedPayload, error) {
+func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (*userevents.UserRoleUpdateResultPayload, *userevents.UserRoleUpdateFailedPayload, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserRoleInDatabase", ctx, msg, userID, newRole)
 	ret0, _ := ret[0].(*userevents.UserRoleUpdateResultPayload)

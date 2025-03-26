@@ -17,14 +17,14 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			tagAvailablePayload := payload.(*userevents.TagAvailablePayload)
 
-			// Ensure UserID is of type usertypes.DiscordID
+			// Ensure UserID is of type sharedtypes.DiscordID
 			userID := tagAvailablePayload.UserID
 			tagNumber := tagAvailablePayload.TagNumber
 
 			h.logger.Info("Received TagAvailable event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)), // Ensure this matches
-				attr.Int("tag_number", tagNumber),
+				attr.Int("tag_number", int(tagNumber)),
 			)
 
 			// Call the service function to create the user
@@ -89,7 +89,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 			h.logger.Info("Received TagUnavailable event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
-				attr.Int("tag_number", tagNumber),
+				attr.Int("tag_number", int(tagNumber)),
 			)
 
 			// Create the UserCreationFailed payload directly in the handler

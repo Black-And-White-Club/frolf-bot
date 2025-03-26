@@ -7,13 +7,13 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // CreateUser creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, tag *int) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
+func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
 	//  Handle nil context
 	if ctx == nil {
 		return nil, nil, errors.New("context cannot be nil")
@@ -47,7 +47,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	}
 
 	userType := "base"
-	standardRole := usertypes.UserRoleRattler.String()
+	standardRole := sharedtypes.UserRoleRattler
 	source := msg.Metadata.Get("source")
 	if source == "" {
 		source = "user"

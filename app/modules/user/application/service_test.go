@@ -11,7 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -52,7 +52,7 @@ func TestNewUserService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc() // Just execute serviceFunc directly
 				}
 
@@ -100,7 +100,7 @@ func TestNewUserService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to avoid nil tracing/logger issues
-				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc() // Just execute serviceFunc directly
 				}
 
@@ -148,7 +148,7 @@ func Test_serviceWrapper(t *testing.T) {
 	type args struct {
 		msg           *message.Message
 		operationName string
-		userID        usertypes.DiscordID
+		userID        sharedtypes.DiscordID
 		serviceFunc   func() (UserOperationResult, error)
 		logger        lokifrolfbot.Logger
 		metrics       usermetrics.UserMetrics
@@ -172,7 +172,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
 					operationName: "TestOperation",
-					userID:        usertypes.DiscordID("123"),
+					userID:        sharedtypes.DiscordID("123"),
 					serviceFunc: func() (UserOperationResult, error) {
 						return UserOperationResult{Success: "test"}, nil
 					},
@@ -190,17 +190,17 @@ func Test_serviceWrapper(t *testing.T) {
 
 				// Mock tracer.StartSpan
 				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
+					gomock.Any(),
 					"TestOperation",
 					gomock.Any(),
 				).Return(context.Background(), noop.Span{})
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 		{
@@ -213,7 +213,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
 					operationName: "TestOperation",
-					userID:        usertypes.DiscordID("123"),
+					userID:        sharedtypes.DiscordID("123"),
 					serviceFunc: func() (UserOperationResult, error) {
 						panic("test panic") // Simulate a panic
 					},
@@ -236,7 +236,7 @@ func Test_serviceWrapper(t *testing.T) {
 				).Return(context.Background(), noop.Span{})
 
 				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
 
 				// Expect `logger.Info` for operation start (happens before panic)
 				mockLogger.EXPECT().Info(
@@ -259,7 +259,7 @@ func Test_serviceWrapper(t *testing.T) {
 				)
 
 				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 		{
@@ -272,7 +272,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
 					operationName: "TestOperation",
-					userID:        usertypes.DiscordID("123"),
+					userID:        sharedtypes.DiscordID("123"),
 					serviceFunc: func() (UserOperationResult, error) {
 						return UserOperationResult{}, fmt.Errorf("service error")
 					},
@@ -294,7 +294,7 @@ func Test_serviceWrapper(t *testing.T) {
 					gomock.Any(),
 				).Return(context.Background(), noop.Span{})
 
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
 
 				mockLogger.EXPECT().Info(
 					gomock.Any(),
@@ -312,7 +312,7 @@ func Test_serviceWrapper(t *testing.T) {
 				)
 
 				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", usertypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 	}

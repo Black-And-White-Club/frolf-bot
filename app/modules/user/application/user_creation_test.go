@@ -9,7 +9,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
@@ -21,9 +21,8 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 
 	ctx := context.Background()
 	testMsg := message.NewMessage("test-id", nil)
-	testUserID := usertypes.DiscordID("12345678901234567")
-	testTag := 42
-	testTagPtr := &testTag
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testTag := sharedtypes.TagNumber(42)
 
 	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
@@ -36,8 +35,8 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*userdb.MockUserDB)
-		userID         usertypes.DiscordID
-		tag            *int
+		userID         sharedtypes.DiscordID
+		tag            *sharedtypes.TagNumber
 		expectedResult *userevents.UserCreatedPayload
 		expectedFail   *userevents.UserCreationFailedPayload
 	}{
@@ -49,10 +48,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Return(nil)
 			},
 			userID: testUserID,
-			tag:    testTagPtr,
+			tag:    &testTag,
 			expectedResult: &userevents.UserCreatedPayload{
 				UserID:    testUserID,
-				TagNumber: testTagPtr,
+				TagNumber: &testTag,
 			},
 			expectedFail: nil,
 		},
@@ -64,11 +63,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Return(errors.New("user already exists"))
 			},
 			userID:         testUserID,
-			tag:            testTagPtr,
+			tag:            &testTag,
 			expectedResult: nil,
 			expectedFail: &userevents.UserCreationFailedPayload{
 				UserID:    testUserID,
-				TagNumber: testTagPtr,
+				TagNumber: &testTag,
 				Reason:    "user already exists",
 			},
 		},
@@ -95,11 +94,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					Return(errors.New("database connection lost"))
 			},
 			userID:         testUserID,
-			tag:            testTagPtr,
+			tag:            &testTag,
 			expectedResult: nil,
 			expectedFail: &userevents.UserCreationFailedPayload{
 				UserID:    testUserID,
-				TagNumber: testTagPtr,
+				TagNumber: &testTag,
 				Reason:    "database connection lost",
 			},
 		},
@@ -109,11 +108,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				// No expectations since the function should return early
 			},
 			userID:         "",
-			tag:            testTagPtr,
+			tag:            &testTag,
 			expectedResult: nil,
 			expectedFail: &userevents.UserCreationFailedPayload{
 				UserID:    "",
-				TagNumber: testTagPtr,
+				TagNumber: &testTag,
 				Reason:    "invalid Discord ID",
 			},
 		},
@@ -122,13 +121,19 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				// No expectations since the function should return early
 			},
-			userID:         testUserID,
-			tag:            &[]int{-1}[0],
+			userID: testUserID,
+			tag: func() *sharedtypes.TagNumber {
+				tagNumber := sharedtypes.TagNumber(-1)
+				return &tagNumber
+			}(),
 			expectedResult: nil,
 			expectedFail: &userevents.UserCreationFailedPayload{
-				UserID:    testUserID,
-				TagNumber: &[]int{-1}[0],
-				Reason:    "tag number cannot be negative",
+				UserID: testUserID,
+				TagNumber: func() *sharedtypes.TagNumber {
+					tagNumber := sharedtypes.TagNumber(-1)
+					return &tagNumber
+				}(),
+				Reason: "tag number cannot be negative",
 			},
 		},
 	}
@@ -144,7 +149,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc()
 				},
 			}

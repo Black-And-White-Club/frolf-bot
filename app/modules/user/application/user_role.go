@@ -8,13 +8,13 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // UpdateUserRoleInDatabase updates the user's role in the database.
-func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID usertypes.DiscordID, newRole usertypes.UserRoleEnum) (*userevents.UserRoleUpdateResultPayload, *userevents.UserRoleUpdateFailedPayload, error) {
+func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (*userevents.UserRoleUpdateResultPayload, *userevents.UserRoleUpdateFailedPayload, error) {
 	operationName := "UpdateUserRole"
 	// Start a new span for the operation
 	ctx, span := s.tracer.StartSpan(ctx, operationName, msg)

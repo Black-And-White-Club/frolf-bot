@@ -1,137 +1,120 @@
 package scoreservice
 
 import (
-	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log/slog"
-	"sort"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // ScoreService handles score processing logic.
 type ScoreService struct {
-	ScoreDB  scoredb.ScoreDB
-	EventBus eventbus.EventBus
-	logger   observability.Logger
-	metrics  observability.Metrics
-	tracer   observability.Tracer
+	ScoreDB        scoredb.ScoreDB
+	EventBus       eventbus.EventBus
+	logger         lokifrolfbot.Logger
+	metrics        scoremetrics.ScoreMetrics
+	tracer         tempofrolfbot.Tracer
+	serviceWrapper func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error)
 }
 
 // NewScoreService creates a new ScoreService.
-func NewScoreService(eventBus eventbus.EventBus, db scoredb.ScoreDB, logger observability.Logger, metrics observability.Metrics, tracer observability.Tracer) Service {
+func NewScoreService(
+	db scoredb.ScoreDB,
+	eventBus eventbus.EventBus,
+	logger lokifrolfbot.Logger,
+	metrics scoremetrics.ScoreMetrics,
+	tracer tempofrolfbot.Tracer,
+) Service {
 	return &ScoreService{
 		ScoreDB:  db,
 		EventBus: eventBus,
 		logger:   logger,
 		metrics:  metrics,
 		tracer:   tracer,
+		// Assign the serviceWrapper method
+		serviceWrapper: func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+			return serviceWrapper(msg, operationName, roundID, serviceFunc, logger, metrics, tracer)
+		},
 	}
 }
 
-// ProcessRoundScores processes scores received from the round module.
-func (s *ScoreService) ProcessRoundScores(ctx context.Context, event scoreevents.ProcessRoundScoresRequestPayload) error {
-	// 1. Convert and sort scores
-	scores, err := s.prepareScores(event.Scores)
-	if err != nil {
-		return fmt.Errorf("error preparing scores: %w", err)
-	}
+// serviceWrapper handles common tracing, logging, and metrics for service operations.
+func serviceWrapper(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error), logger lokifrolfbot.Logger, metrics scoremetrics.ScoreMetrics, tracer tempofrolfbot.Tracer) (result ScoreOperationResult, err error) {
+	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
+	defer span.End()
 
-	// 2. Log scores to the database
-	if err := s.ScoreDB.LogScores(ctx, event.RoundID, scores, "auto"); err != nil {
-		return fmt.Errorf("failed to log scores: %w", err)
-	}
+	msg = msg.Copy()
+	msg.SetContext(ctx)
 
-	// 3. Publish leaderboard update
-	return s.publishLeaderboardUpdate(ctx, event.RoundID, scores)
-}
+	metrics.RecordOperationAttempt(operationName, roundID)
 
-// CorrectScore handles score corrections (manual updates).
-func (s *ScoreService) CorrectScore(ctx context.Context, event scoreevents.ScoreUpdateRequestPayload) error {
-	score := scoredb.Score{
-		UserID:    event.Participant,
-		RoundID:   event.RoundID,
-		Score:     *event.Score,
-		TagNumber: event.TagNumber,
-	}
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordOperationDuration(operationName, duration)
+	}()
 
-	if err := s.ScoreDB.UpdateOrAddScore(ctx, &score); err != nil {
-		return fmt.Errorf("failed to update/add score: %w", err)
-	}
+	logger.Info(operationName+" triggered",
+		attr.CorrelationIDFromMsg(msg),
+		attr.String("message_id", msg.UUID),
+		attr.String("operation", operationName),
+		attr.Int64("round_id", int64(roundID)),
+	)
 
-	// 2. Fetch, sort, and log updated scores
-	scores, err := s.ScoreDB.GetScoresForRound(ctx, event.RoundID)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve scores for round: %w", err)
-	}
+	// Modify `err` directly inside the defer so it propagates correctly
+	defer func() {
+		if r := recover(); r != nil {
+			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
+			logger.Error(errorMsg,
+				attr.CorrelationIDFromMsg(msg),
+				attr.Int64("round_id", int64(roundID)),
+				attr.Any("panic", r),
+			)
+			metrics.RecordOperationFailure(operationName, roundID)
+			span.RecordError(errors.New(errorMsg))
 
-	sortedScores := s.sortScores(scores)
-	if err := s.ScoreDB.LogScores(ctx, event.RoundID, sortedScores, "manual"); err != nil {
-		return fmt.Errorf("failed to log updated scores: %w", err)
-	}
-
-	// 3. Publish leaderboard update
-	return s.publishLeaderboardUpdate(ctx, event.RoundID, sortedScores)
-}
-
-// prepareScores converts, sorts, and returns scores for further processing.
-func (s *ScoreService) prepareScores(eventScores []scoreevents.ParticipantScore) ([]scoredb.Score, error) {
-	var scores []scoredb.Score
-	for _, score := range eventScores {
-		scores = append(scores, scoredb.Score{
-			UserID:    score.UserID,
-			Score:     int(score.Score),
-			TagNumber: score.TagNumber,
-		})
-	}
-	return scores, nil
-}
-
-// sortScores sorts scores by score (ascending) and tag number (descending).
-func (s *ScoreService) sortScores(scores []scoredb.Score) []scoredb.Score {
-	sort.Slice(scores, func(i, j int) bool {
-		if scores[i].Score == scores[j].Score {
-			return scores[i].TagNumber > scores[j].TagNumber
+			// Since result and err are named return values, modifying them here affects the function return
+			result = ScoreOperationResult{}
+			err = fmt.Errorf("%s", errorMsg)
 		}
-		return scores[i].Score < scores[j].Score
-	})
-	return scores
+	}()
+
+	// Now, if `serviceFunc()` panics, `defer` will catch it and modify `err`
+	result, err = serviceFunc()
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
+
+		logger.Error("Error in "+operationName,
+			attr.CorrelationIDFromMsg(msg),
+			attr.Int64("round_id", int64(roundID)),
+			attr.Error(wrappedErr),
+		)
+		metrics.RecordOperationFailure(operationName, roundID)
+		span.RecordError(wrappedErr)
+		return result, wrappedErr
+	}
+
+	logger.Info(operationName+" completed successfully",
+		attr.CorrelationIDFromMsg(msg),
+		attr.Int64("round_id", int64(roundID)),
+		attr.String("operation", operationName),
+	)
+	metrics.RecordOperationSuccess(operationName, roundID)
+
+	return result, nil
 }
 
-// publishLeaderboardUpdate publishes a leaderboard update event.
-func (s *ScoreService) publishLeaderboardUpdate(_ context.Context, roundID string, scores []scoredb.Score) error {
-	var eventScores []scoreevents.ParticipantScore
-	for _, score := range scores {
-		eventScores = append(eventScores, scoreevents.ParticipantScore{
-			UserID:    score.UserID,
-			Score:     int(score.Score),
-			TagNumber: score.TagNumber,
-		})
-	}
-
-	event := scoreevents.LeaderboardUpdateRequestedPayload{
-		RoundID: roundID,
-		Scores:  eventScores,
-	}
-
-	eventData, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal leaderboard update event: %w", err)
-	}
-
-	msg := message.NewMessage(watermill.NewUUID(), eventData)
-	msg.Metadata.Set("correlation_id", watermill.NewUUID())
-
-	if err := s.EventBus.Publish(scoreevents.LeaderboardUpdateRequested, msg); err != nil {
-		return fmt.Errorf("failed to publish leaderboard update event: %w", err)
-	}
-
-	s.logger.Info("Leaderboard update published", slog.String("round_id", roundID))
-	return nil
+// ScoreOperationResult represents a generic result from a score operation
+type ScoreOperationResult struct {
+	Success interface{}
+	Failure interface{}
+	Error   error
 }

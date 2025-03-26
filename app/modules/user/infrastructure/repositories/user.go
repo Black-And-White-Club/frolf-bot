@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
@@ -40,7 +40,7 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 }
 
 // UpdateUserRole updates the role of an existing user within a transaction.
-func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, role sharedtypes.UserRoleEnum) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -68,7 +68,7 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID usertypes.Disco
 }
 
 // GetUserByUserID retrieves a user by their Discord ID.
-func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID usertypes.DiscordID) (*User, error) {
+func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*User, error) {
 	user := &User{}
 	err := db.DB.NewSelect().Model(user).Where("user_id = ?", userID).Scan(ctx)
 	if err != nil {
@@ -81,7 +81,7 @@ func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID usertypes.Disc
 }
 
 // GetUserRole retrieves the role of a user by their Discord ID.
-func (db *UserDBImpl) GetUserRole(ctx context.Context, userID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
+func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (sharedtypes.UserRoleEnum, error) {
 	user := &User{}
 	err := db.DB.NewSelect().
 		Model(user).

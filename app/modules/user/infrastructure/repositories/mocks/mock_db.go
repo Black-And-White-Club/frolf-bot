@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -57,7 +57,7 @@ func (mr *MockUserDBMockRecorder) CreateUser(ctx, user any) *gomock.Call {
 }
 
 // GetUserByUserID mocks base method.
-func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID usertypes.DiscordID) (*userdb.User, error) {
+func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*userdb.User, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserByUserID", ctx, userID)
 	ret0, _ := ret[0].(*userdb.User)
@@ -72,10 +72,10 @@ func (mr *MockUserDBMockRecorder) GetUserByUserID(ctx, userID any) *gomock.Call 
 }
 
 // GetUserRole mocks base method.
-func (m *MockUserDB) GetUserRole(ctx context.Context, userID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
+func (m *MockUserDB) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (sharedtypes.UserRoleEnum, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserRole", ctx, userID)
-	ret0, _ := ret[0].(usertypes.UserRoleEnum)
+	ret0, _ := ret[0].(sharedtypes.UserRoleEnum)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -87,7 +87,7 @@ func (mr *MockUserDBMockRecorder) GetUserRole(ctx, userID any) *gomock.Call {
 }
 
 // UpdateUserRole mocks base method.
-func (m *MockUserDB) UpdateUserRole(ctx context.Context, userID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
+func (m *MockUserDB) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, role sharedtypes.UserRoleEnum) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserRole", ctx, userID, role)
 	ret0, _ := ret[0].(error)

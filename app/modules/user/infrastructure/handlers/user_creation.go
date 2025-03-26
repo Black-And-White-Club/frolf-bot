@@ -32,7 +32,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				h.logger.Info("Tag availability check requested",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
-					attr.Int("tag_number", tagNumber),
+					attr.Int("tag_number", int(tagNumber)),
 				)
 
 				// Trace tag availability check

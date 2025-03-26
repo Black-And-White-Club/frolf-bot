@@ -116,7 +116,7 @@ func (mr *MockLeaderboardDBMockRecorder) GetActiveLeaderboard(ctx any) *gomock.C
 }
 
 // GetTagByUserID mocks base method.
-func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, userID usertypes.DiscordID) (*int, error) {
+func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID)
 	ret0, _ := ret[0].(*int)

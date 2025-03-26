@@ -10,7 +10,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -23,8 +23,8 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 
 	ctx := context.Background()
 	testMsg := message.NewMessage("test-id", nil)
-	testUserID := usertypes.DiscordID("12345678901234567")
-	testRole := usertypes.UserRoleAdmin
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testRole := sharedtypes.UserRoleAdmin
 
 	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
@@ -38,7 +38,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*userdb.MockUserDB)
-		newRole        usertypes.UserRoleEnum
+		newRole        sharedtypes.UserRoleEnum
 		expectedResult *userevents.UserRoleUpdateResultPayload
 		expectedFail   *userevents.UserRoleUpdateFailedPayload
 		expectedError  error
@@ -63,7 +63,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				// No database call expected for invalid role
 			},
-			newRole:        usertypes.UserRoleEnum("InvalidRole"),
+			newRole:        sharedtypes.UserRoleEnum("InvalidRole"),
 			expectedResult: nil,
 			expectedFail: &userevents.UserRoleUpdateFailedPayload{
 				UserID: testUserID,
@@ -114,7 +114,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc()
 				},
 			}

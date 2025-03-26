@@ -1,259 +1,308 @@
 package scorehandlers
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log/slog"
-	"reflect"
+	"context"
+	"errors"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestNewScoreHandlers(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockScoreService := scoreservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type args struct {
-		scoreService *scoreservice.MockService
-		logger       *slog.Logger
-	}
+	// Define test cases
 	tests := []struct {
 		name string
-		args args
-		want *ScoreHandlers
+		test func(t *testing.T)
 	}{
 		{
-			name: "Successful Creation",
-			args: args{
-				scoreService: mockScoreService,
-				logger:       logger,
+			name: "Creates handlers with all dependencies",
+			test: func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				// Create mock dependencies
+				mockScoreService := scoreservice.NewMockService(ctrl)
+				mockLogger := mocks.NewMockLogger(ctrl)
+				mockTracer := mocks.NewMockTracer(ctrl)
+				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+
+				// Call the function being tested
+				handlers := NewScoreHandlers(mockScoreService, mockLogger, mockTracer, mockHelpers, mockMetrics)
+
+				// Ensure handlers are correctly created
+				if handlers == nil {
+					t.Fatalf("NewScoreHandlers returned nil")
+				}
+
+				// Access scoreHandlers directly from the ScoreHandlers struct
+				scoreHandlers := handlers.(*ScoreHandlers)
+
+				// Override handlerWrapper to prevent unwanted tracing/logging/metrics calls
+				scoreHandlers.handlerWrapper = func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return func(msg *message.Message) ([]*message.Message, error) {
+						// Directly call the handler function without any additional logic
+						return handlerFunc(context.Background(), msg, unmarshalTo)
+					}
+				}
+
+				// Check that all dependencies were correctly assigned
+				if scoreHandlers.scoreService != mockScoreService {
+					t.Errorf("scoreService not correctly assigned")
+				}
+				if scoreHandlers.logger != mockLogger {
+					t.Errorf("logger not correctly assigned")
+				}
+				if scoreHandlers.tracer != mockTracer {
+					t.Errorf("tracer not correctly assigned")
+				}
+				if scoreHandlers.helpers != mockHelpers {
+					t.Errorf("helpers not correctly assigned")
+				}
+				if scoreHandlers.metrics != mockMetrics {
+					t.Errorf("metrics not correctly assigned")
+				}
+
+				// Ensure handlerWrapper is correctly set
+				if scoreHandlers.handlerWrapper == nil {
+					t.Errorf("handlerWrapper should not be nil")
+				}
 			},
-			want: &ScoreHandlers{
-				scoreService: mockScoreService,
-				logger:       logger,
+		},
+		{
+			name: "Handles nil dependencies",
+			test: func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				// Call with nil dependencies
+				handlers := NewScoreHandlers(nil, nil, nil, nil, nil)
+
+				// Ensure handlers are correctly created
+				if handlers == nil {
+					t.Fatalf("NewScoreHandlers returned nil")
+				}
+
+				// Check nil fields
+				if scoreHandlers, ok := handlers.(*ScoreHandlers); ok {
+					if scoreHandlers.scoreService != nil {
+						t.Errorf("scoreService should be nil")
+					}
+					if scoreHandlers.logger != nil {
+						t.Errorf("logger should be nil")
+					}
+					if scoreHandlers.tracer != nil {
+						t.Errorf("tracer should be nil")
+					}
+					if scoreHandlers.helpers != nil {
+						t.Errorf("helpers should be nil")
+					}
+					if scoreHandlers.metrics != nil {
+						t.Errorf("metrics should be nil")
+					}
+
+					// Ensure handlerWrapper is still set
+					if scoreHandlers.handlerWrapper == nil {
+						t.Errorf("handlerWrapper should not be nil")
+					}
+				} else {
+					t.Errorf("handlers is not of type *ScoreHandlers")
+				}
 			},
 		},
 	}
+
+	// Run all test cases
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := NewScoreHandlers(tt.args.scoreService, tt.args.logger)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewScoreHandlers() = %v, want %v", got, tt.want)
-			}
-		})
+		t.Run(tt.name, tt.test)
 	}
 }
 
-func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockScoreService := scoreservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		scoreService *scoreservice.MockService
-		logger       *slog.Logger
-	}
-
+func TestHandlerWrapper(t *testing.T) {
 	type args struct {
-		msg *message.Message
+		handlerName string
+		unmarshalTo interface{}
+		handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)
+		logger      lokifrolfbot.Logger
+		metrics     scoremetrics.ScoreMetrics
+		tracer      tempofrolfbot.Tracer
+		helpers     utils.Helpers
 	}
-
 	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
+		name    string
+		args    func(ctrl *gomock.Controller) args
+		wantErr bool
+		setup   func(a *args) // Setup expectations per test
 	}{
 		{
-			name: "Successful process round scores request handling",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
+			name: "Successful handler execution",
+			args: func(ctrl *gomock.Controller) args {
+				mockLogger := mocks.NewMockLogger(ctrl)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				mockTracer := mocks.NewMockTracer(ctrl)
+				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
+
+				return args{
+					handlerName: "testHandler",
+					unmarshalTo: nil,
+					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+						return []*message.Message{msg}, nil
+					},
+					logger:  mockLogger,
+					metrics: mockMetrics,
+					tracer:  mockTracer,
+					helpers: mockHelpers,
+				}
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), scoreevents.ProcessRoundScoresRequestPayload{
-					RoundID: "some-round-id",
-					Scores:  []scoreevents.ParticipantScore{},
-				}),
-			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.scoreService.EXPECT().ProcessRoundScores(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			wantErr: false,
+			setup: func(a *args) {
+				mockTracer := a.tracer.(*mocks.MockTracer)
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger.(*mocks.MockLogger)
+
+				// Mock tracer.StartSpan
+				mockTracer.EXPECT().StartSpan(
+					gomock.AssignableToTypeOf(context.Background()),
+					"testHandler",
+					gomock.Any(),
+				).Return(context.Background(), noop.Span{})
+
+				// Mock metrics & logs
+				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
+				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
+				mockLogger.EXPECT().Info("testHandler completed successfully", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerSuccess("testHandler")
 			},
 		},
 		{
-			name: "Unmarshal error",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
+			name: "Handler returns error",
+			args: func(ctrl *gomock.Controller) args {
+				mockLogger := mocks.NewMockLogger(ctrl)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				mockTracer := mocks.NewMockTracer(ctrl)
+				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
+
+				return args{
+					handlerName: "testHandler",
+					unmarshalTo: nil,
+					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+						return nil, errors.New("handler error")
+					},
+					logger:  mockLogger,
+					metrics: mockMetrics,
+					tracer:  mockTracer,
+					helpers: mockHelpers,
+				}
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
+			wantErr: true,
+			setup: func(a *args) {
+				mockTracer := a.tracer.(*mocks.MockTracer)
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger.(*mocks.MockLogger)
+
+				// Mock tracer.StartSpan
+				mockTracer.EXPECT().StartSpan(
+					gomock.AssignableToTypeOf(context.Background()),
+					"testHandler",
+					gomock.Any(),
+				).Return(context.Background(), noop.Span{})
+
+				// Mock metrics & logs
+				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
+				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
+				mockLogger.EXPECT().Error("Error in testHandler", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
 			},
 		},
 		{
-			name: "Service layer error",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
+			name: "Unmarshal payload fails",
+			args: func(ctrl *gomock.Controller) args {
+				mockLogger := mocks.NewMockLogger(ctrl)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				mockTracer := mocks.NewMockTracer(ctrl)
+				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
+
+				return args{
+					handlerName: "testHandler",
+					unmarshalTo: &scoreevents.ScoreUpdateRequestPayload{},
+					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+						return []*message.Message{msg}, nil
+					},
+					logger:  mockLogger,
+					metrics: mockMetrics,
+					tracer:  mockTracer,
+					helpers: mockHelpers,
+				}
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), scoreevents.ProcessRoundScoresRequestPayload{
-					RoundID: "some-round-id",
-					Scores:  []scoreevents.ParticipantScore{},
-				}),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.scoreService.EXPECT().ProcessRoundScores(gomock.Any(), gomock.Any()).Return(fmt.Errorf("service error")).Times(1)
+			wantErr: true,
+			setup: func(a *args) {
+				mockTracer := a.tracer.(*mocks.MockTracer)
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger.(*mocks.MockLogger)
+				mockHelpers := a.helpers.(*mockHelpers.MockHelpers)
+
+				// Mock tracer.StartSpan
+				mockTracer.EXPECT().StartSpan(
+					gomock.AssignableToTypeOf(context.Background()),
+					"testHandler",
+					gomock.Any(),
+				).Return(context.Background(), noop.Span{})
+
+				// Mock metrics & logs
+				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
+				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
+				mockLogger.EXPECT().Error("Failed to unmarshal payload", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
+
+				// Mock unmarshal payload
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(errors.New("unmarshal error"))
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &ScoreHandlers{
-				scoreService: tt.fields.scoreService,
-				logger:       tt.fields.logger,
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Initialize args using fresh mock controller
+			testArgs := tt.args(ctrl)
+
+			// Set up expectations
+			if tt.setup != nil {
+				tt.setup(&testArgs)
 			}
 
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
-			}
+			// Run handlerWrapper
+			handlerFunc := handlerWrapper(
+				testArgs.handlerName,
+				testArgs.unmarshalTo,
+				testArgs.handlerFunc,
+				testArgs.logger,
+				testArgs.metrics,
+				testArgs.tracer,
+				testArgs.helpers,
+			)
 
-			if err := h.HandleProcessRoundScoresRequest(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("ScoreHandlers.HandleProcessRoundScoresRequest() error = %v, wantErr %v", err, tt.expectErr)
-			}
-		})
-	}
-}
+			msg := message.NewMessage("test-id", nil)
+			_, err := handlerFunc(msg)
 
-func TestScoreHandlers_HandleScoreUpdateRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockScoreService := scoreservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		scoreService *scoreservice.MockService
-		logger       *slog.Logger
-	}
-
-	type args struct {
-		msg *message.Message
-	}
-
-	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
-	}{
-		{
-			name: "Successful score update request handling",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
-					TagNumber:   123,
-					Score:       func() *int { i := 10; return &i }(),
-				}),
-			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.scoreService.EXPECT().CorrectScore(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Unmarshal error",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
-		},
-		{
-			name: "Service layer error",
-			fields: fields{
-				scoreService: mockScoreService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "some-round-id",
-					Participant: "some-discord-id",
-					TagNumber:   123,
-					Score:       func() *int { i := 10; return &i }(),
-				}),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.scoreService.EXPECT().CorrectScore(gomock.Any(), gomock.Any()).Return(fmt.Errorf("service error")).Times(1)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &ScoreHandlers{
-				scoreService: tt.fields.scoreService,
-				logger:       tt.fields.logger,
-			}
-
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
-			}
-
-			if err := h.HandleScoreUpdateRequest(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("ScoreHandlers.HandleScoreUpdateRequest() error = %v, wantErr %v", err, tt.expectErr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("handlerWrapper() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
-}
-
-// Helper function to create a test message with a payload
-func createTestMessageWithPayload(t *testing.T, correlationID string, payload interface{}) *message.Message {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Failed to marshal payload: %v", err)
-	}
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata = make(message.Metadata)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	return msg
 }

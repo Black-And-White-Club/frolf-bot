@@ -14,6 +14,8 @@ import (
 	reflect "reflect"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
+	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,29 +44,31 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CorrectScore mocks base method.
-func (m *MockService) CorrectScore(ctx context.Context, event scoreevents.ScoreUpdateRequestPayload) error {
+func (m *MockService) CorrectScore(ctx context.Context, msg *message.Message, event scoreevents.ScoreUpdateRequestPayload) (scoreservice.ScoreOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CorrectScore", ctx, event)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "CorrectScore", ctx, msg, event)
+	ret0, _ := ret[0].(scoreservice.ScoreOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CorrectScore indicates an expected call of CorrectScore.
-func (mr *MockServiceMockRecorder) CorrectScore(ctx, event any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CorrectScore(ctx, msg, event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CorrectScore", reflect.TypeOf((*MockService)(nil).CorrectScore), ctx, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CorrectScore", reflect.TypeOf((*MockService)(nil).CorrectScore), ctx, msg, event)
 }
 
 // ProcessRoundScores mocks base method.
-func (m *MockService) ProcessRoundScores(ctx context.Context, event scoreevents.ProcessRoundScoresRequestPayload) error {
+func (m *MockService) ProcessRoundScores(ctx context.Context, msg *message.Message, event scoreevents.ProcessRoundScoresRequestPayload) (scoreservice.ScoreOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundScores", ctx, event)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ProcessRoundScores", ctx, msg, event)
+	ret0, _ := ret[0].(scoreservice.ScoreOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ProcessRoundScores indicates an expected call of ProcessRoundScores.
-func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, event any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, msg, event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, msg, event)
 }

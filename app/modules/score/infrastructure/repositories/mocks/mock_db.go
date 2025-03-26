@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -42,7 +43,7 @@ func (m *MockScoreDB) EXPECT() *MockScoreDBMockRecorder {
 }
 
 // GetScoresForRound mocks base method.
-func (m *MockScoreDB) GetScoresForRound(ctx context.Context, roundID string) ([]scoredb.Score, error) {
+func (m *MockScoreDB) GetScoresForRound(ctx context.Context, roundID sharedtypes.RoundID) ([]scoredb.Score, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetScoresForRound", ctx, roundID)
 	ret0, _ := ret[0].([]scoredb.Score)
@@ -57,7 +58,7 @@ func (mr *MockScoreDBMockRecorder) GetScoresForRound(ctx, roundID any) *gomock.C
 }
 
 // LogScores mocks base method.
-func (m *MockScoreDB) LogScores(ctx context.Context, roundID string, scores []scoredb.Score, source string) error {
+func (m *MockScoreDB) LogScores(ctx context.Context, roundID sharedtypes.RoundID, scores []scoredb.Score, source string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LogScores", ctx, roundID, scores, source)
 	ret0, _ := ret[0].(error)
@@ -85,7 +86,7 @@ func (mr *MockScoreDBMockRecorder) UpdateOrAddScore(ctx, score any) *gomock.Call
 }
 
 // UpdateScore mocks base method.
-func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID, userID usertypes.DiscordID, newScore int) error {
+func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateScore", ctx, roundID, userID, newScore)
 	ret0, _ := ret[0].(error)

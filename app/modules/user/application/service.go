@@ -10,7 +10,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -22,7 +22,7 @@ type UserServiceImpl struct {
 	logger         lokifrolfbot.Logger
 	metrics        usermetrics.UserMetrics
 	tracer         tempofrolfbot.Tracer
-	serviceWrapper func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error)
+	serviceWrapper func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error)
 }
 
 // NewUser Service creates a new UserService.
@@ -40,14 +40,14 @@ func NewUserService(
 		metrics:  metrics,
 		tracer:   tracer,
 		// Assign the serviceWrapper method
-		serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+		serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 			return serviceWrapper(msg, operationName, userID, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error), logger lokifrolfbot.Logger, metrics usermetrics.UserMetrics, tracer tempofrolfbot.Tracer) (result UserOperationResult, err error) {
+func serviceWrapper(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error), logger lokifrolfbot.Logger, metrics usermetrics.UserMetrics, tracer tempofrolfbot.Tracer) (result UserOperationResult, err error) {
 	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
 	defer span.End()
 

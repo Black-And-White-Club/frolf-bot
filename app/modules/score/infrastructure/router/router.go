@@ -6,8 +6,10 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
@@ -20,29 +22,29 @@ import (
 
 // ScoreRouter handles routing for score module events.
 type ScoreRouter struct {
-	logger           observability.Logger
-	router           *message.Router
+	logger           lokifrolfbot.Logger
+	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           observability.Tracer
+	tracer           tempofrolfbot.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewScoreRouter creates a new ScoreRouter.
 func NewScoreRouter(
-	logger observability.Logger,
+	logger lokifrolfbot.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer observability.Tracer,
+	tracer tempofrolfbot.Tracer,
 ) *ScoreRouter {
 	return &ScoreRouter{
 		logger:           logger,
-		router:           router,
+		Router:           router,
 		subscriber:       subscriber,
 		publisher:        publisher,
 		config:           config,
@@ -52,24 +54,25 @@ func NewScoreRouter(
 	}
 }
 
-// Configure sets up the router with the necessary handlers and dependencies.
-func (r *ScoreRouter) Configure(scoreService scoreservice.Service, eventbus eventbus.EventBus) error {
+// Configure sets up the router.
+func (r *ScoreRouter) Configure(scoreService scoreservice.Service, eventbus eventbus.EventBus, scoreMetrics scoremetrics.ScoreMetrics) error {
 	// Create Prometheus metrics builder
 	metricsBuilder := metrics.NewPrometheusMetricsBuilder(prometheus.NewRegistry(), "", "")
 	// Add metrics middleware to the router
-	metricsBuilder.AddPrometheusRouterMetrics(r.router)
+	metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 
 	// Create score handlers with logger and tracer
-	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper)
+	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper, scoreMetrics)
 
 	// Add middleware specific to the score module
-	r.router.AddMiddleware(
+	r.Router.AddMiddleware(
 		middleware.CorrelationID,
 		r.middlewareHelper.CommonMetadataMiddleware("score"),
 		r.middlewareHelper.DiscordMetadataMiddleware(),
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
+		r.tracer.TraceHandler,
 	)
 
 	if err := r.RegisterHandlers(context.Background(), scoreHandlers); err != nil {
@@ -80,7 +83,7 @@ func (r *ScoreRouter) Configure(scoreService scoreservice.Service, eventbus even
 
 // RegisterHandlers registers event handlers.
 func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandlers.Handlers) error {
-	r.logger.Info("Entering RegisterHandlers for Score")
+	r.logger.Info("Entering Register Handlers for Score")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
@@ -89,7 +92,7 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 
 	for topic, handlerFunc := range eventsToHandlers {
 		handlerName := fmt.Sprintf("score.%s", topic)
-		r.router.AddHandler(
+		r.Router.AddHandler(
 			handlerName,
 			topic,
 			r.subscriber,
@@ -121,5 +124,5 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 
 // Close stops the router.
 func (r *ScoreRouter) Close() error {
-	return r.router.Close()
+	return r.Router.Close()
 }

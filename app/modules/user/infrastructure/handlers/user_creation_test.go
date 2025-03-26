@@ -12,7 +12,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
@@ -22,8 +22,8 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testUserID := usertypes.DiscordID("12345678901234567")
-	testTagNumber := 1
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testTagNumber := sharedtypes.TagNumber(1)
 
 	testPayload := &userevents.UserSignupRequestPayload{
 		UserID:    testUserID,

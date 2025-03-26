@@ -9,6 +9,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
@@ -22,7 +23,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 
 	ctx := context.Background()
 	testMsg := message.NewMessage("test-id", nil)
-	testUserID := usertypes.DiscordID("12345678901234567")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
@@ -48,14 +49,14 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 					Return(&userdbtypes.User{
 						ID:     1,
 						UserID: testUserID,
-						Role:   usertypes.UserRoleAdmin,
+						Role:   sharedtypes.UserRoleAdmin,
 					}, nil)
 			},
 			expectedResult: &userevents.GetUserResponsePayload{
 				User: &usertypes.UserData{
 					ID:     1,
 					UserID: testUserID,
-					Role:   usertypes.UserRoleAdmin,
+					Role:   sharedtypes.UserRoleAdmin,
 				},
 			},
 			expectedFail: nil,
@@ -100,7 +101,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc()
 				},
 			}
@@ -139,7 +140,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 
 	ctx := context.Background()
 	testMsg := message.NewMessage("test-id", nil)
-	testUserID := usertypes.DiscordID("12345678901234567")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
@@ -162,11 +163,11 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID).
-					Return(usertypes.UserRoleAdmin, nil)
+					Return(sharedtypes.UserRoleAdmin, nil)
 			},
 			expectedResult: &userevents.GetUserRoleResponsePayload{
 				UserID: testUserID,
-				Role:   usertypes.UserRoleAdmin,
+				Role:   sharedtypes.UserRoleAdmin,
 			},
 			expectedFail: nil,
 		},
@@ -175,7 +176,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID).
-					Return(usertypes.UserRoleEnum(""), errors.New("failed to retrieve user role"))
+					Return(sharedtypes.UserRoleEnum(""), errors.New("failed to retrieve user role"))
 			},
 			expectedResult: nil,
 			expectedFail: &userevents.GetUserRoleFailedPayload{
@@ -189,7 +190,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID).
-					Return(usertypes.UserRoleEnum("InvalidRole"), nil)
+					Return(sharedtypes.UserRoleEnum("InvalidRole"), nil)
 			},
 			expectedResult: nil,
 			expectedFail: &userevents.GetUserRoleFailedPayload{
@@ -211,7 +212,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID usertypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
+				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
 					return serviceFunc()
 				},
 			}

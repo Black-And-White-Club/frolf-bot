@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
@@ -14,7 +15,7 @@ type ScoreDBImpl struct {
 }
 
 // LogScores logs scores to the database with a given source (e.g., "auto" or "manual").
-func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID string, scores []Score, source string) error {
+func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID sharedtypes.RoundID, scores []Score, source string) error {
 	// Convert scores to JSON
 	jsonData, err := json.Marshal(scores)
 	if err != nil {
@@ -24,7 +25,7 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID string, scores []S
 	// Insert JSON blob into the database with roundID and source
 	_, err = db.DB.NewInsert().
 		Model(&map[string]interface{}{"round_id": roundID, "scores_json": jsonData, "source": source}).
-		Table("scores_log"). // I suggest you change this table name to something like `scores_log` to distinguish from the `scores` table
+		Table("scores").
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to insert scores: %w", err)
@@ -33,7 +34,7 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID string, scores []S
 }
 
 // UpdateScore updates a specific score in the database.
-func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID, userID usertypes.DiscordID, newScore int) error {
+func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
 	// Assuming you have a column named 'score' in the 'scores' table
 	_, err := db.DB.NewUpdate().
 		Table("scores").
@@ -81,7 +82,7 @@ func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, score *Score) error
 }
 
 // GetScoresForRound retrieves all scores for a given round.
-func (db *ScoreDBImpl) GetScoresForRound(ctx context.Context, roundID string) ([]Score, error) {
+func (db *ScoreDBImpl) GetScoresForRound(ctx context.Context, roundID sharedtypes.RoundID) ([]Score, error) {
 	var scores []Score
 	err := db.DB.NewSelect().
 		Model(&scores).

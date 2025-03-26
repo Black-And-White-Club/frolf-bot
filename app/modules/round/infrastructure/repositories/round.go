@@ -47,7 +47,7 @@ func (db *RoundDBImpl) GetRound(ctx context.Context, roundID roundtypes.ID) (*ro
 }
 
 // GetParticipant retrieves a participant's information for a specific round
-func (db *RoundDBImpl) GetParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) (*roundtypes.Participant, error) {
+func (db *RoundDBImpl) GetParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error) {
 	slog.DebugContext(ctx, "Executing RoundDBImpl.GetParticipant", slog.Int64("round_id", int64(roundID)), slog.String("user_id", userID))
 
 	round := new(roundtypes.Round)
@@ -71,7 +71,7 @@ func (db *RoundDBImpl) GetParticipant(ctx context.Context, roundID roundtypes.ID
 }
 
 // RemoveParticipant removes a participant from a round
-func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) error {
+func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) error {
 	slog.DebugContext(ctx, "Executing RoundDBImpl.RemoveParticipant", slog.Int64("round_id", int64(roundID)), slog.String("user_id", userID))
 
 	// First, fetch the round

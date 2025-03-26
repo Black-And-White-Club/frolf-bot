@@ -12,6 +12,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -22,11 +23,11 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testUserID := usertypes.DiscordID("12345678901234567")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testUserData := &usertypes.UserData{
 		ID:     1,
 		UserID: testUserID,
-		Role:   usertypes.UserRoleEnum("admin"),
+		Role:   sharedtypes.UserRoleEnum("admin"),
 	}
 
 	testPayload := &userevents.GetUserRequestPayload{
@@ -195,7 +196,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testUserID := usertypes.DiscordID("12345678901234567")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	testPayload := &userevents.GetUserRoleRequestPayload{
 		UserID: testUserID,

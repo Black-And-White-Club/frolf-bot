@@ -22,7 +22,7 @@ type RoundDB interface {
 	LogRound(ctx context.Context, round *roundtypes.Round) error
 	GetParticipants(ctx context.Context, roundID roundtypes.ID) ([]roundtypes.Participant, error)
 	UpdateEventMessageID(ctx context.Context, roundID roundtypes.ID, eventMessageID string) error
-	GetParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) (*roundtypes.Participant, error)
-	RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID usertypes.DiscordID) error
+	GetParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error)
+	RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) error
 	GetEventMessageID(ctx context.Context, roundID roundtypes.ID) (*roundtypes.EventMessageID, error)
 }

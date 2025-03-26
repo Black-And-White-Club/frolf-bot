@@ -12,7 +12,7 @@ import (
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
@@ -22,9 +22,9 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testUserID := usertypes.DiscordID("12345678901234567")
-	testRequesterID := usertypes.DiscordID("98765432109876543")
-	testNewRole := usertypes.UserRoleEnum("admin")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testRequesterID := sharedtypes.DiscordID("98765432109876543")
+	testNewRole := sharedtypes.UserRoleEnum("admin")
 
 	testPayload := &userevents.UserRoleUpdateRequestPayload{
 		UserID:      testUserID,
@@ -132,7 +132,43 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Failure to create success message",
+			name: "Service success but CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				successPayload := &userevents.UserRoleUpdateResultPayload{
+					UserID: testUserID,
+					Role:   testNewRole,
+				}
+
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(
+					gomock.Any(),
+					gomock.Any(),
+					testUserID,
+					testNewRole,
+				).Return(
+					successPayload,
+					nil,
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					successPayload,
+					userevents.UserRoleUpdated,
+				).Return(nil, fmt.Errorf("failed to create result message"))
+			},
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to create result message: failed to create result message",
+		},
+		{
+			name: "Service failure and CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -157,13 +193,16 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserRoleUpdatedPayload{UserID: testUserID, Role: testNewRole},
-					userevents.UserRoleUpdated,
-				).Return(nil, fmt.Errorf("failed to create success message"))
+					&userevents.UserRoleUpdateFailedPayload{
+						UserID: testUserID,
+						Reason: "internal service error",
+					},
+					userevents.UserRoleUpdateFailed,
+				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			wantErr:        true,
-			expectedErrMsg: "failed to create UserRoleUpdateResult message: failed to create success message",
+			expectedErrMsg: "failed to create result message: failed to create result message",
 		},
 	}
 

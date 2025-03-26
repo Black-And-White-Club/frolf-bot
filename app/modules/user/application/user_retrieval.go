@@ -6,13 +6,14 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // GetUser retrieves user data and returns a response payload.
-func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
+func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
 	operationName := "GetUser"
 	result, err := s.serviceWrapper(msg, operationName, userID, func() (UserOperationResult, error) {
 		user, err := s.UserDB.GetUserByUserID(ctx, userID)
@@ -79,7 +80,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, use
 }
 
 // GetUserRole retrieves a user's role and returns a response payload.
-func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message, userID usertypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
+func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
 	operationName := "GetUserRole"
 
 	result, err := s.serviceWrapper(msg, operationName, userID, func() (UserOperationResult, error) {

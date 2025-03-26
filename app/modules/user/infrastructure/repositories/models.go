@@ -1,7 +1,7 @@
 package userdb
 
 import (
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
@@ -10,8 +10,8 @@ type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 	ID            int64 `bun:"id,pk,autoincrement" json:"id"`
 	// Name          string                 `bun:"name" json:"name"`
-	UserID usertypes.DiscordID    `bun:"user_id,unique"`
-	Role   usertypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
+	UserID sharedtypes.DiscordID    `bun:"user_id,unique"`
+	Role   sharedtypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
 }
 
 // Add these methods to your User struct
@@ -23,11 +23,11 @@ func (u *User) GetID() int64 {
 // 	return u.Name
 // }
 
-func (u *User) GetUserID() usertypes.DiscordID {
+func (u *User) GetUserID() sharedtypes.DiscordID {
 	return u.UserID
 }
 
-func (u *User) GetRole() usertypes.UserRoleEnum {
+func (u *User) GetRole() sharedtypes.UserRoleEnum {
 	return u.Role
 }
 
@@ -35,6 +35,6 @@ func (u *User) GetRole() usertypes.UserRoleEnum {
 type UserData struct {
 	ID int64 `json:"id"`
 	// Name      string                 `json:"name"`
-	UserID usertypes.DiscordID    `json:"user_id"`
-	Role   usertypes.UserRoleEnum `json:"role"` // Use UserRoleEnum here
+	UserID sharedtypes.DiscordID    `json:"user_id"`
+	Role   sharedtypes.UserRoleEnum `json:"role"` // Use UserRoleEnum here
 }

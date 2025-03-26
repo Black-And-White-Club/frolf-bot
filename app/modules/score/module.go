@@ -19,14 +19,11 @@ import (
 type Module struct {
 	EventBus      eventbus.EventBus
 	ScoreService  scoreservice.Service
-	logger        observability.Logger
-	metrics       observability.Metrics
-	tracer        observability.Tracer
 	config        *config.Config
 	ScoreRouter   *scorerouter.ScoreRouter
 	cancelFunc    context.CancelFunc
 	helper        utils.Helpers
-	observability observability.Observability // Still useful to have the complete object
+	observability observability.Observability
 }
 
 // NewScoreModule creates a new instance of the Score module.
@@ -39,30 +36,27 @@ func NewScoreModule(
 	router *message.Router,
 	helpers utils.Helpers,
 ) (*Module, error) {
-	// Extract the components once during initialization
+	// Extract observability components
 	logger := obs.GetLogger()
-	metrics := obs.GetMetrics()
+	metrics := obs.GetMetrics().ScoreMetrics()
 	tracer := obs.GetTracer()
 
 	logger.Info("score.NewScoreModule called")
 
 	// Initialize score service with observability components
-	scoreService := scoreservice.NewScoreService(eventBus, scoreDB, logger, metrics, tracer)
+	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer)
 
 	// Initialize score router with observability
 	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
 
 	// Configure the router with the score service.
-	if err := scoreRouter.Configure(scoreService, eventBus); err != nil {
+	if err := scoreRouter.Configure(scoreService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure score router: %w", err)
 	}
 
 	module := &Module{
 		EventBus:      eventBus,
 		ScoreService:  scoreService,
-		logger:        logger,
-		metrics:       metrics,
-		tracer:        tracer,
 		config:        cfg,
 		ScoreRouter:   scoreRouter,
 		helper:        helpers,
@@ -73,7 +67,8 @@ func NewScoreModule(
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	m.logger.Info("Starting score module")
+	logger := m.observability.GetLogger()
+	logger.Info("Starting score module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -87,17 +82,18 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	m.logger.Info("Score module goroutine stopped")
+	logger.Info("Score module goroutine stopped")
 }
 
 func (m *Module) Close() error {
-	m.logger.Info("Stopping score module")
+	logger := m.observability.GetLogger()
+	logger.Info("Stopping score module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	m.logger.Info("Score module stopped")
+	logger.Info("Score module stopped")
 	return nil
 }
