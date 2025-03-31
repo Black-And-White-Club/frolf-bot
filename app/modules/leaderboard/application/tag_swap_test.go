@@ -13,7 +13,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
@@ -31,13 +30,12 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		logger:        logger,
 		metrics:       metrics,
 		tracer:        tracer,
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 
 	requestorID := sharedtypes.DiscordID("user1")
 	targetID := sharedtypes.DiscordID("user2")
@@ -147,7 +145,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				TargetID:    targetID,
 			}
 
-			got, err := s.TagSwapRequested(ctx, testMsg, payload)
+			got, err := s.TagSwapRequested(ctx, payload)
 
 			if (err != nil) != tt.expectError {
 				t.Errorf("Unexpected error: got %v, expected error? %v", err, tt.expectError)

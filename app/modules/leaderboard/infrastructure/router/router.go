@@ -6,8 +6,10 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
@@ -20,25 +22,25 @@ import (
 
 // LeaderboardRouter handles routing for leaderboard module events.
 type LeaderboardRouter struct {
-	logger           observability.Logger
+	logger           lokifrolfbot.Logger
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           observability.Tracer
+	tracer           tempofrolfbot.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewLeaderboardRouter creates a new LeaderboardRouter.
 func NewLeaderboardRouter(
-	logger observability.Logger,
+	logger lokifrolfbot.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer observability.Tracer,
+	tracer tempofrolfbot.Tracer,
 ) *LeaderboardRouter {
 	return &LeaderboardRouter{
 		logger:           logger,
@@ -52,15 +54,15 @@ func NewLeaderboardRouter(
 	}
 }
 
-// Configure sets up the router with the necessary handlers and dependencies.
-func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Service, eventbus eventbus.EventBus) error {
+// Configure sets up the router.
+func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Service, eventbus eventbus.EventBus, leaderboardMetrics leaderboardmetrics.LeaderboardMetrics) error {
 	// Create Prometheus metrics builder
 	metricsBuilder := metrics.NewPrometheusMetricsBuilder(prometheus.NewRegistry(), "", "")
 	// Add metrics middleware to the router
 	metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 
 	// Create leaderboard handlers with logger and tracer
-	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, r.logger, r.tracer, r.helper)
+	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(leaderboardService, r.logger, r.tracer, r.helper, leaderboardMetrics)
 
 	// Add middleware specific to the leaderboard module
 	r.Router.AddMiddleware(
@@ -70,6 +72,7 @@ func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Serv
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
+		r.tracer.TraceHandler,
 	)
 
 	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers); err != nil {
@@ -80,23 +83,20 @@ func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Serv
 
 // RegisterHandlers registers event handlers.
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
-	r.logger.Info("🚀 Entering RegisterHandlers for Leaderboard")
+	r.logger.Info("Entering Register Handlers for Leaderboard")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
-		leaderboardevents.RoundFinalized:                    handlers.HandleRoundFinalized,
-		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
-		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
-		leaderboardevents.TagSwapInitiated:                  handlers.HandleTagSwapInitiated,
-		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,
-		leaderboardevents.GetTagByUserIDRequest:             handlers.HandleGetTagByUserIDRequest,
-		leaderboardevents.TagAssigned:                       handlers.HandleTagAssigned,
-		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
-		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignmentRequested,
+		leaderboardevents.LeaderboardUpdateRequested:             handlers.HandleLeaderboardUpdateRequested,
+		leaderboardevents.LeaderboardTagAssignmentRequested:      handlers.HandleTagAssignment,
+		leaderboardevents.TagSwapRequested:                       handlers.HandleTagSwapRequested,
+		leaderboardevents.GetLeaderboardRequest:                  handlers.HandleGetLeaderboardRequest,
+		leaderboardevents.GetTagByUserIDRequest:                  handlers.HandleGetTagByUserIDRequest,
+		leaderboardevents.TagAvailabilityCheckRequest:            handlers.HandleTagAvailabilityCheckRequested,
+		leaderboardevents.LeaderboardBatchTagAssignmentRequested: handlers.HandleBatchTagAssignmentRequested,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {
 		handlerName := fmt.Sprintf("leaderboard.%s", topic)
-
 		r.Router.AddHandler(
 			handlerName,
 			topic,

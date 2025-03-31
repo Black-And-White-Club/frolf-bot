@@ -1,6 +1,7 @@
 package leaderboardservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -16,7 +17,6 @@ import (
 // BenchmarkServiceWrapper benchmarks the performance of the serviceWrapper function
 func BenchmarkServiceWrapper(b *testing.B) {
 	// Create a simple message
-	msg := message.NewMessage("test-id", []byte("test-payload"))
 
 	// Use standard no-op implementations
 	logger := &lokifrolfbot.NoOpLogger{}
@@ -47,10 +47,10 @@ func BenchmarkServiceWrapper(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Create a fresh message copy for each iteration to avoid potential side effects
-				msgCopy := message.NewMessage(msg.UUID, msg.Payload)
+				ctx := context.Background()
 
 				// Call the service wrapper
-				serviceWrapper(msgCopy, "BenchmarkOperation", bm.serviceFunc, logger, metrics, tracer)
+				serviceWrapper(ctx, "BenchmarkOperation", bm.serviceFunc, logger, metrics, tracer)
 			}
 		})
 	}

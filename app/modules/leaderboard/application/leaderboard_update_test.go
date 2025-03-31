@@ -13,7 +13,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
@@ -23,7 +22,6 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testSortedParticipants := []string{"0:player1", "1:player2", "2:player3"}
 
@@ -192,12 +190,12 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
-			got, err := s.UpdateLeaderboard(ctx, testMsg, tt.roundID, tt.sortedTags)
+			got, err := s.UpdateLeaderboard(ctx, tt.roundID, tt.sortedTags)
 
 			// Validate success case
 			if tt.expectedResult != nil {

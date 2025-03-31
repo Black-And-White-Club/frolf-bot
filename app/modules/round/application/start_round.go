@@ -47,7 +47,7 @@ func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
 	participants := make([]roundevents.RoundParticipant, len(round.Participants))
 	for i, p := range round.Participants {
 		participants[i] = roundevents.RoundParticipant{
-			UserID:    roundtypes.UserID(p.UserID),
+			UserID:    sharedtypes.DiscordID(p.UserID),
 			TagNumber: p.TagNumber,
 			Response:  roundtypes.Response(p.Response),
 			Score:     nil,

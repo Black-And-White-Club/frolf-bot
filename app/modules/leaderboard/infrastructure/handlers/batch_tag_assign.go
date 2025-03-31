@@ -9,33 +9,33 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleTagAssignment handles the TagAssignmentRequested event.
-func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*message.Message, error) {
+// HandleBatchTagAssignmentRequested handles the BatchTagAssignmentRequested event.
+func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
-		"HandleTagAssignment",
-		&leaderboardevents.TagAssignmentRequestedPayload{},
+		"HandleBatchTagAssignmentRequested",
+		&leaderboardevents.BatchTagAssignmentRequestedPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagAssignmentRequestedPayload := payload.(*leaderboardevents.TagAssignmentRequestedPayload)
+			batchTagAssignmentRequestedPayload := payload.(*leaderboardevents.BatchTagAssignmentRequestedPayload)
 
-			h.logger.Info("Received TagAssignmentRequested event",
+			h.logger.Info("Received BatchTagAssignmentRequested event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
-				attr.Int("tag_number", int(*tagAssignmentRequestedPayload.TagNumber)),
+				attr.String("batch_id", batchTagAssignmentRequestedPayload.BatchID),
+				attr.String("requesting_user", string(batchTagAssignmentRequestedPayload.RequestingUserID)),
+				attr.Int("assignment_count", len(batchTagAssignmentRequestedPayload.Assignments)),
 			)
 
 			// Call the service function to handle the event
-			result, err := h.leaderboardService.TagAssignmentRequested(ctx, *tagAssignmentRequestedPayload)
+			result, err := h.leaderboardService.BatchTagAssignmentRequested(ctx, *batchTagAssignmentRequestedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle TagAssignmentRequested event",
+				h.logger.Error("Failed to handle BatchTagAssignmentRequested event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-				return nil, fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
+				return nil, fmt.Errorf("failed to handle BatchTagAssignmentRequested event: %w", err)
 			}
 
-			// Handle the result
 			if result.Failure != nil {
-				h.logger.Error("Tag assignment failed",
+				h.logger.Info("Batch tag assignment failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -44,7 +44,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					leaderboardevents.LeaderboardTagAssignmentFailed,
+					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -54,21 +54,25 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Tag assignment successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.Info("Batch tag assignment successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					leaderboardevents.LeaderboardTagAssignmentSuccess,
+					leaderboardevents.LeaderboardBatchTagAssigned,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
+
 				return []*message.Message{successMsg}, nil
 			}
 
-			// If neither Success nor Failure is set, return an error
+			// If neither Failure nor Success is set, return an error
+			h.logger.Error("Unexpected result from BatchTagAssignmentRequested service",
+				attr.CorrelationIDFromMsg(msg),
+			)
 			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)

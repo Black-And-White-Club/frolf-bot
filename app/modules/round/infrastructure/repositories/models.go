@@ -5,20 +5,21 @@ import (
 	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
-// Round represents a single round in the tournament.// Round represents a single round in the tournament.
+// Round represents a single round in the tournament.
 type Round struct {
 	bun.BaseModel  `bun:"table:rounds,alias:r"`
-	ID             roundtypes.ID             `bun:"id,pk,autoincrement"`
+	ID             sharedtypes.RoundID       `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
 	Title          roundtypes.Title          `bun:"title,notnull"`
 	Description    roundtypes.Description    `bun:"description"`
 	Location       roundtypes.Location       `bun:"location"`
 	EventType      *roundtypes.EventType     `bun:"event_type"`
 	StartTime      roundtypes.StartTime      `bun:"start_time,notnull"`
 	Finalized      roundtypes.Finalized      `bun:"finalized,notnull"`
-	CreatorID      roundtypes.CreatedBy      `bun:"created_by,notnull"`
+	CreatorID      sharedtypes.DiscordID     `bun:"created_by,notnull"`
 	State          roundtypes.RoundState     `bun:"state,notnull"`
 	Participants   []roundtypes.Participant  `bun:"participants,type:jsonb"`
 	EventMessageID roundtypes.EventMessageID `bun:"event_message_id"`
@@ -49,8 +50,8 @@ const (
 
 // Participant represents a user participating in a round.
 type Participant struct {
-	UserID    roundtypes.UserID `json:"user_id"`
-	TagNumber *int              `json:"tag_number"`
-	Response  Response          `json:"response"`
-	Score     *int              `json:"score"`
+	UserID    sharedtypes.DiscordID  `json:"user_id"`
+	TagNumber *sharedtypes.TagNumber `json:"tag_number"`
+	Response  Response               `json:"response"`
+	Score     *sharedtypes.Score     `json:"score"`
 }

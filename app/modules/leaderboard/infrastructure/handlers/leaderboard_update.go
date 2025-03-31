@@ -11,9 +11,7 @@ import (
 
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
 func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleLeaderboardUpdateRequested",
-		&leaderboardevents.LeaderboardUpdateRequestedPayload{},
+	wrappedHandler := h.handlerWrapper("HandleLeaderboardUpdateRequested", &leaderboardevents.LeaderboardUpdateRequestedPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			leaderboardUpdateRequestedPayload := payload.(*leaderboardevents.LeaderboardUpdateRequestedPayload)
 
@@ -28,7 +26,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			)
 
 			// Call the service function to update the leaderboard
-			result, err := h.leaderboardService.UpdateLeaderboard(ctx, msg, roundID, sortedParticipantTags)
+			result, err := h.leaderboardService.UpdateLeaderboard(ctx, roundID, sortedParticipantTags)
 			if err != nil {
 				h.logger.Error("Failed to update leaderboard",
 					attr.CorrelationIDFromMsg(msg),
@@ -56,19 +54,27 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 				return []*message.Message{failureMsg}, nil
 			}
 
-			h.logger.Info("Leaderboard updated successfully", attr.CorrelationIDFromMsg(msg))
+			if result.Success != nil {
+				h.logger.Info("Leaderboard updated successfully", attr.CorrelationIDFromMsg(msg))
 
-			// Create success message to publish
-			successMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				result.Success,
-				leaderboardevents.LeaderboardUpdated,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create success message: %w", err)
+				// Create success message to publish
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					leaderboardevents.LeaderboardUpdated,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
 			}
 
-			return []*message.Message{successMsg}, nil
+			// If neither Success nor Failure is set, return an error
+			h.logger.Error("Unexpected result from UpdateLeaderboard",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)
 

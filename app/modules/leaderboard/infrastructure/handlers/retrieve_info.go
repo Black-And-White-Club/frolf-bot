@@ -20,7 +20,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 			)
 
 			// Call the service function to get the leaderboard
-			result, err := h.leaderboardService.GetLeaderboard(ctx, msg)
+			result, err := h.leaderboardService.GetLeaderboard(ctx)
 			if err != nil {
 				h.logger.Error("Failed to get leaderboard",
 					attr.CorrelationIDFromMsg(msg),
@@ -48,21 +48,29 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 				return []*message.Message{failureMsg}, nil
 			}
 
-			h.logger.Info("Get leaderboard successful",
-				attr.CorrelationIDFromMsg(msg),
-			)
+			if result.Success != nil {
+				h.logger.Info("Get leaderboard successful",
+					attr.CorrelationIDFromMsg(msg),
+				)
 
-			// Create success message to publish
-			successMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				result.Success,
-				leaderboardevents.GetLeaderboardResponse,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create success message: %w", err)
+				// Create success message to publish
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					leaderboardevents.GetLeaderboardResponse,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
 			}
 
-			return []*message.Message{successMsg}, nil
+			// If neither Success nor Failure is set, return an error
+			h.logger.Error("Unexpected result from GetLeaderboard",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)
 
@@ -85,7 +93,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			)
 
 			// Call the service function to get the tag by userID
-			result, err := h.leaderboardService.GetTagByUserID(ctx, msg, tagNumberRequestPayload.UserID, tagNumberRequestPayload.RoundID)
+			result, err := h.leaderboardService.GetTagByUserID(ctx, tagNumberRequestPayload.UserID, tagNumberRequestPayload.RoundID)
 			if err != nil {
 				h.logger.Error("Failed to get tag by userID",
 					attr.CorrelationIDFromMsg(msg),
@@ -113,21 +121,29 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				return []*message.Message{failureMsg}, nil
 			}
 
-			h.logger.Info("Get tag by userID successful",
-				attr.CorrelationIDFromMsg(msg),
-			)
+			if result.Success != nil {
+				h.logger.Info("Get tag by userID successful",
+					attr.CorrelationIDFromMsg(msg),
+				)
 
-			// Create success message to publish
-			successMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				result.Success,
-				leaderboardevents.GetTagNumberResponse,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create success message: %w", err)
+				// Create success message to publish
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					leaderboardevents.GetTagNumberResponse,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
 			}
 
-			return []*message.Message{successMsg}, nil
+			// If neither Success nor Failure is set, return an error
+			h.logger.Error("Unexpected result from GetTagByUserID",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)
 

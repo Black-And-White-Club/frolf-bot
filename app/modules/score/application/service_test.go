@@ -144,6 +144,8 @@ func TestNewScoreService(t *testing.T) {
 }
 
 func Test_serviceWrapper(t *testing.T) {
+	testRoundID := sharedtypes.RoundID(uuid.New())
+
 	type args struct {
 		ctx           context.Context
 		operationName string
@@ -170,7 +172,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(uuid.New()),
+					roundID:       testRoundID,
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{Success: "test"}, nil
 					},
@@ -194,11 +196,11 @@ func Test_serviceWrapper(t *testing.T) {
 				).Return(context.Background(), noop.Span{})
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", testRoundID)
 			},
 		},
 		{
@@ -211,7 +213,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(uuid.New()),
+					roundID:       testRoundID,
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						panic("test panic") // Simulate a panic
 					},
@@ -230,7 +232,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer.EXPECT().StartSpan(gomock.AssignableToTypeOf(context.Background()), "TestOperation", gomock.Any()).Return(context.Background(), noop.Span{})
 
 				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
 
 				// Expect `logger.Info` for operation start (happens before panic)
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
@@ -242,7 +244,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", testRoundID)
 			},
 		},
 		{
@@ -255,7 +257,7 @@ func Test_serviceWrapper(t *testing.T) {
 				return args{
 					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(uuid.New()),
+					roundID:       testRoundID,
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{}, fmt.Errorf("service error")
 					},
@@ -277,7 +279,7 @@ func Test_serviceWrapper(t *testing.T) {
 					gomock.Any(),
 				).Return(context.Background(), noop.Span{})
 
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
 
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
@@ -286,7 +288,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger.EXPECT().Error("Error in TestOperation", gomock.Any(), gomock.Any(), gomock.Any())
 
 				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", testRoundID)
 			},
 		},
 	}

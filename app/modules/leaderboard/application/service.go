@@ -1,6 +1,7 @@
 package leaderboardservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -11,7 +12,6 @@ import (
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // LeaderboardService handles leaderboard-related logic.
@@ -21,7 +21,7 @@ type LeaderboardService struct {
 	logger         lokifrolfbot.Logger
 	metrics        leaderboardmetrics.LeaderboardMetrics
 	tracer         tempofrolfbot.Tracer
-	serviceWrapper func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -39,22 +39,20 @@ func NewLeaderboardService(
 		metrics:       metrics,
 		tracer:        tracer,
 		// Assign the serviceWrapper method
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
-			return serviceWrapper(msg, operationName, serviceFunc, logger, metrics, tracer)
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
+			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger lokifrolfbot.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
+func serviceWrapper(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger lokifrolfbot.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
 	if serviceFunc == nil {
 		return LeaderboardOperationResult{}, errors.New("service function is nil")
 	}
 
-	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
+	ctx, span := tracer.StartSpan(ctx, operationName, nil)
 	defer span.End()
-
-	msg.SetContext(ctx)
 
 	metrics.RecordOperationAttempt(operationName, "LeaderboardService")
 
@@ -64,9 +62,9 @@ func serviceWrapper(msg *message.Message, operationName string, serviceFunc func
 		metrics.RecordOperationDuration(operationName, "LeaderboardService", duration)
 	}()
 
+	correlationID := attr.ExtractCorrelationID(ctx)
 	logger.Info("Operation triggered",
-		attr.CorrelationIDFromMsg(msg),
-		attr.String("message_id", msg.UUID),
+		attr.LogAttr(correlationID),
 		attr.String("operation", operationName),
 	)
 
@@ -75,7 +73,7 @@ func serviceWrapper(msg *message.Message, operationName string, serviceFunc func
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
 			logger.Error(errorMsg,
-				attr.CorrelationIDFromMsg(msg),
+				attr.LogAttr(correlationID),
 				attr.Any("panic", r),
 			)
 			metrics.RecordOperationFailure(operationName, "LeaderboardService")
@@ -91,7 +89,7 @@ func serviceWrapper(msg *message.Message, operationName string, serviceFunc func
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
 		logger.Error("Error in "+operationName,
-			attr.CorrelationIDFromMsg(msg),
+			attr.LogAttr(correlationID),
 			attr.Error(wrappedErr),
 		)
 		metrics.RecordOperationFailure(operationName, "LeaderboardService")
@@ -100,7 +98,7 @@ func serviceWrapper(msg *message.Message, operationName string, serviceFunc func
 	}
 
 	logger.Info(operationName+" completed successfully",
-		attr.CorrelationIDFromMsg(msg),
+		attr.LogAttr(correlationID),
 		attr.String("operation", operationName),
 	)
 	metrics.RecordOperationSuccess(operationName, "LeaderboardService")

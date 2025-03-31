@@ -19,9 +19,6 @@ import (
 type Module struct {
 	EventBus           eventbus.EventBus
 	LeaderboardService leaderboardservice.Service
-	logger             observability.Logger
-	metrics            observability.Metrics
-	tracer             observability.Tracer
 	config             *config.Config
 	LeaderboardRouter  *leaderboardrouter.LeaderboardRouter
 	cancelFunc         context.CancelFunc
@@ -41,7 +38,7 @@ func NewLeaderboardModule(
 ) (*Module, error) {
 	// Extract observability components
 	logger := obs.GetLogger()
-	metrics := obs.GetMetrics()
+	metrics := obs.GetMetrics().LeaderboardMetrics() // Ensure to get the correct metrics for leaderboard
 	tracer := obs.GetTracer()
 
 	logger.Info("leaderboard.NewLeaderboardModule called")
@@ -53,16 +50,13 @@ func NewLeaderboardModule(
 	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
 
 	// Configure the router with the leaderboard service
-	if err := leaderboardRouter.Configure(leaderboardService, eventBus); err != nil {
+	if err := leaderboardRouter.Configure(leaderboardService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)
 	}
 
 	module := &Module{
 		EventBus:           eventBus,
 		LeaderboardService: leaderboardService,
-		logger:             logger,
-		metrics:            metrics,
-		tracer:             tracer,
 		config:             cfg,
 		LeaderboardRouter:  leaderboardRouter,
 		helper:             helpers,
@@ -74,7 +68,8 @@ func NewLeaderboardModule(
 
 // Run starts the leaderboard module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	m.logger.Info("Starting leaderboard module")
+	logger := m.observability.GetLogger()
+	logger.Info("Starting leaderboard module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -88,18 +83,19 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	m.logger.Info("Leaderboard module goroutine stopped")
+	logger.Info("Leaderboard module goroutine stopped")
 }
 
 // Close stops the leaderboard module and cleans up resources.
 func (m *Module) Close() error {
-	m.logger.Info("Stopping leaderboard module")
+	logger := m.observability.GetLogger()
+	logger.Info("Stopping leaderboard module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	m.logger.Info("Leaderboard module stopped")
+	logger.Info("Leaderboard module stopped")
 	return nil
 }

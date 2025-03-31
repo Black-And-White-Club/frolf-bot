@@ -250,7 +250,7 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 				payload: roundevents.RoundDeleteValidatedPayload{
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
 						RoundID:              1,
-						RequestingUserUserID: roundtypes.UserID("some-user-id"),
+						RequestingUserUserID: sharedtypes.DiscordID("some-user-id"),
 					},
 				},
 			},
@@ -268,7 +268,7 @@ func TestRoundService_CheckRoundExists(t *testing.T) {
 				payload: roundevents.RoundDeleteValidatedPayload{
 					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
 						RoundID:              1,
-						RequestingUserUserID: roundtypes.UserID("some-user-id"),
+						RequestingUserUserID: sharedtypes.DiscordID("some-user-id"),
 					},
 				},
 			},

@@ -11,7 +11,6 @@ import (
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
@@ -90,15 +89,14 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
 			ctx := context.Background()
-			testMsg := message.NewMessage("test-id", nil)
 
-			got, got1, err := s.CheckTagAvailability(ctx, testMsg, leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			got, got1, err := s.CheckTagAvailability(ctx, leaderboardevents.TagAvailabilityCheckRequestedPayload{
 				UserID:    tt.userID,
 				TagNumber: &tt.tagNumber,
 			})

@@ -9,23 +9,20 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
 
 // TagAssignmentRequested handles the TagAssignmentRequested event.
-func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
 	// Log the operation
 	s.logger.Info("Tag assignment triggered",
-		attr.CorrelationIDFromMsg(msg),
+		attr.ExtractCorrelationID(ctx),
 		attr.String("user_id", string(payload.UserID)),
 		attr.String("requesting_user", string(payload.UserID)),
 		attr.String("tag_number", fmt.Sprintf("%v", *payload.TagNumber)),
 	)
 
-	return s.serviceWrapper(msg, "TagAssignmentRequested", func() (LeaderboardOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "TagAssignmentRequested.Operation", msg)
-		defer span.End()
+	return s.serviceWrapper(ctx, "TagAssignmentRequested", func() (LeaderboardOperationResult, error) {
 
 		// 1. Get the current active leaderboard for validation
 		dbStartTime := time.Now()

@@ -8,17 +8,15 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
 
 // BatchTagAssignmentRequested handles multiple manual tag assignments in one operation
-func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, msg *message.Message,
-	payload leaderboardevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
 
 	// Log the batch operation - update to use UUID string representation
 	s.logger.Info("Batch tag assignment triggered",
-		attr.CorrelationIDFromMsg(msg),
+		attr.ExtractCorrelationID(ctx),
 		attr.String("batch_id", payload.BatchID),
 		attr.String("requesting_user", string(payload.RequestingUserID)),
 		attr.Int("assignment_count", len(payload.Assignments)),
@@ -31,7 +29,7 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, ms
 		if assignment.TagNumber < 0 {
 			s.logger.Warn("Skipping invalid tag number",
 				attr.String("user_id", string(assignment.UserID)),
-				attr.Int("tag_number", assignment.TagNumber),
+				attr.Int("tag_number", int(assignment.TagNumber)),
 			)
 			continue
 		}
@@ -42,10 +40,7 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, ms
 		})
 	}
 
-	return s.serviceWrapper(msg, "BatchTagAssignmentRequested", func() (LeaderboardOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "BatchTagAssignmentRequested.DatabaseOperation", msg)
-		defer span.End()
-
+	return s.serviceWrapper(ctx, "BatchTagAssignmentRequested", func() (LeaderboardOperationResult, error) {
 		// Execute batch assignment in a single database operation
 		startTime := time.Now()
 		err := s.LeaderboardDB.BatchAssignTags(ctx, dbAssignments, leaderboarddb.ServiceUpdateSourceAdminBatch, sharedtypes.RoundID(uuid.Nil), payload.RequestingUserID)

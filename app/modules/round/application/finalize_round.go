@@ -70,7 +70,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Messa
 		}
 
 		scores = append(scores, roundevents.ParticipantScore{
-			UserID:    roundtypes.UserID(p.UserID),
+			UserID:    sharedtypes.DiscordID(p.UserID),
 			TagNumber: &tagNumber,
 			Score:     score,
 		})

@@ -33,7 +33,7 @@ const (
 var (
 	validLocation    roundtypes.Location    = "Test Park"
 	validDescription roundtypes.Description = "Test Description"
-	validUserID      roundtypes.UserID      = "test-user-id"
+	validUserID      sharedtypes.DiscordID  = "test-user-id"
 	validChannelID                          = "test-channel-id"
 	validTimezone    roundtypes.Timezone    = "America/New_York"
 
@@ -64,7 +64,7 @@ var (
 		Description: &validDescription,
 		Location:    &validLocation,
 		StartTime:   (*roundtypes.StartTime)(&validStartTime),
-		CreatedBy:   roundtypes.UserID(validUserID),
+		CreatedBy:   sharedtypes.DiscordID(validUserID),
 		State:       roundtypes.RoundStateUpcoming,
 	}
 
@@ -333,7 +333,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 					Title:     roundtypes.Title(validTitle),
 					Location:  &validLocation,
 					StartTime: (*roundtypes.StartTime)(&validStartTime),
-					CreatedBy: roundtypes.UserID(validUserID),
+					CreatedBy: sharedtypes.DiscordID(validUserID),
 					State:     roundtypes.RoundStateUpcoming,
 				},
 				DiscordChannelID: validChannelID,
@@ -352,7 +352,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 					Title:       roundtypes.Title(validTitle),
 					Description: &validDescription,
 					StartTime:   (*roundtypes.StartTime)(&validStartTime),
-					CreatedBy:   roundtypes.UserID(validUserID),
+					CreatedBy:   sharedtypes.DiscordID(validUserID),
 					State:       roundtypes.RoundStateUpcoming,
 				},
 				DiscordChannelID: validChannelID,
@@ -371,7 +371,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 					Title:       roundtypes.Title(validTitle),
 					Description: &validDescription,
 					Location:    &validLocation,
-					CreatedBy:   roundtypes.UserID(validUserID),
+					CreatedBy:   sharedtypes.DiscordID(validUserID),
 					State:       roundtypes.RoundStateUpcoming,
 				},
 				DiscordChannelID: validChannelID,

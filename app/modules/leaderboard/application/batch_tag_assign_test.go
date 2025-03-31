@@ -12,7 +12,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
@@ -21,7 +20,6 @@ func TestLeaderboardService_BatchTagAssignmentRequested(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 
 	// Mock dependencies
 	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
@@ -129,12 +127,12 @@ func TestLeaderboardService_BatchTagAssignmentRequested(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
-			got, err := s.BatchTagAssignmentRequested(ctx, testMsg, tt.payload)
+			got, err := s.BatchTagAssignmentRequested(ctx, tt.payload)
 
 			// Validate error presence
 			if tt.expectedError != nil {

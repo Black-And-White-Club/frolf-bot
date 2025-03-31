@@ -1,6 +1,7 @@
 package leaderboardservice
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 func BenchmarkGenerateUpdatedLeaderboardSmall(b *testing.B) {
@@ -35,7 +35,7 @@ func BenchmarkGenerateUpdatedLeaderboardSmall(b *testing.B) {
 		logger:  &lokifrolfbot.NoOpLogger{},
 		metrics: &leaderboardmetrics.NoOpMetrics{},
 		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
@@ -68,7 +68,7 @@ func BenchmarkGenerateUpdatedLeaderboardMedium(b *testing.B) {
 		logger:  &lokifrolfbot.NoOpLogger{},
 		metrics: &leaderboardmetrics.NoOpMetrics{},
 		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
@@ -102,7 +102,7 @@ func BenchmarkGenerateUpdatedLeaderboardLarge(b *testing.B) {
 		logger:  &lokifrolfbot.NoOpLogger{},
 		metrics: &leaderboardmetrics.NoOpMetrics{},
 		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}

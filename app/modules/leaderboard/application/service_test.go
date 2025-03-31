@@ -6,13 +6,11 @@ import (
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -51,7 +49,7 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				leaderboardServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc() // Just execute serviceFunc directly
 				}
 
@@ -99,7 +97,7 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to avoid nil tracing/logger issues
-				leaderboardServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc() // Just execute serviceFunc directly
 				}
 
@@ -126,8 +124,7 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Test serviceWrapper runs correctly with nil dependencies
-				testMsg := message.NewMessage("test-id", []byte("test"))
-				_, err := leaderboardServiceImpl.serviceWrapper(testMsg, "TestOp", func() (LeaderboardOperationResult, error) {
+				_, err := leaderboardServiceImpl.serviceWrapper(context.Background(), "TestOp", func() (LeaderboardOperationResult, error) {
 					return LeaderboardOperationResult{Success: "test"}, nil
 				})
 				if err != nil {
@@ -145,7 +142,7 @@ func TestNewLeaderboardService(t *testing.T) {
 
 func Test_serviceWrapper(t *testing.T) {
 	type args struct {
-		msg           *message.Message
+		ctx           context.Context
 		operationName string
 		serviceFunc   func() (LeaderboardOperationResult, error)
 		logger        lokifrolfbot.Logger
@@ -158,7 +155,6 @@ func Test_serviceWrapper(t *testing.T) {
 		want    LeaderboardOperationResult
 		wantErr bool
 		setup   func(a *args) // Setup expectations per test
-
 	}{
 		{
 			name: "Successful operation",
@@ -168,7 +164,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					serviceFunc: func() (LeaderboardOperationResult, error) {
 						return LeaderboardOperationResult{Success: "test"}, nil
@@ -194,7 +190,7 @@ func Test_serviceWrapper(t *testing.T) {
 
 				// Mock metrics & logs
 				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", "LeaderboardService")
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", "LeaderboardService", gomock.Any())
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", "LeaderboardService")
@@ -208,7 +204,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					serviceFunc: func() (LeaderboardOperationResult, error) {
 						panic("test panic") // Simulate a panic
@@ -237,9 +233,8 @@ func Test_serviceWrapper(t *testing.T) {
 				// Expect `logger.Info` for operation start (happens before panic)
 				mockLogger.EXPECT().Info(
 					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
+					gomock.Any(),
+					gomock.Any(),
 				)
 
 				// Expect `RecordOperationDuration` since the function starts measuring time before panic
@@ -248,7 +243,7 @@ func Test_serviceWrapper(t *testing.T) {
 				// Expect panic error logging
 				mockLogger.EXPECT().Error(
 					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
+					gomock.Any(),
 					gomock.Any(),
 				)
 
@@ -264,7 +259,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					serviceFunc: func() (LeaderboardOperationResult, error) {
 						return LeaderboardOperationResult{}, fmt.Errorf("service error")
@@ -291,16 +286,16 @@ func Test_serviceWrapper(t *testing.T) {
 
 				mockLogger.EXPECT().Info(
 					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
+					gomock.Any(),
+					gomock.Any(),
 				)
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", "LeaderboardService", gomock.Any())
 
 				// Expect error logging
 				mockLogger.EXPECT().Error(
 					"Error in TestOperation",
-					attr.CorrelationIDFromMsg(a.msg),
+					gomock.Any(),
+					gomock.Any(),
 				)
 
 				// Expect metrics to record operation failure
@@ -323,7 +318,7 @@ func Test_serviceWrapper(t *testing.T) {
 			}
 
 			// Run serviceWrapper
-			got, err := serviceWrapper(testArgs.msg, testArgs.operationName, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
+			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)

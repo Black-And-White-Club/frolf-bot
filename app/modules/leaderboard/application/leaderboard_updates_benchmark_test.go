@@ -12,7 +12,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
@@ -40,7 +39,7 @@ func BenchmarkUpdateLeaderboardSmallInput(b *testing.B) {
 		logger:        &lokifrolfbot.NoOpLogger{},
 		metrics:       &leaderboardmetrics.NoOpMetrics{},
 		tracer:        tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
@@ -48,7 +47,7 @@ func BenchmarkUpdateLeaderboardSmallInput(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		_, err := service.UpdateLeaderboard(context.Background(), sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -84,7 +83,7 @@ func BenchmarkUpdateLeaderboardMediumInput(b *testing.B) {
 		logger:        &lokifrolfbot.NoOpLogger{},
 		metrics:       &leaderboardmetrics.NoOpMetrics{},
 		tracer:        tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
@@ -92,7 +91,7 @@ func BenchmarkUpdateLeaderboardMediumInput(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		_, err := service.UpdateLeaderboard(context.Background(), sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -128,7 +127,7 @@ func BenchmarkUpdateLeaderboardLargeInput(b *testing.B) {
 		logger:        &lokifrolfbot.NoOpLogger{},
 		metrics:       &leaderboardmetrics.NoOpMetrics{},
 		tracer:        tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceFunc()
 		},
 	}
@@ -136,7 +135,7 @@ func BenchmarkUpdateLeaderboardLargeInput(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		_, err := service.UpdateLeaderboard(context.Background(), sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
 		if err != nil {
 			b.Fatal(err)
 		}

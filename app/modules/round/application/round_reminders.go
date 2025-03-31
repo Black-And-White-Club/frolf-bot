@@ -7,7 +7,6 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -31,11 +30,11 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, msg *message.Me
 	}
 
 	// Filter participants who have accepted or are tentative
-	var userIDs []roundtypes.UserID
+	var userIDs []sharedtypes.DiscordID
 	for _, p := range round.Participants {
 		// In your test data, Response field is not set, so all participants should be included
 		// In production code, you might want to check p.Response here
-		userIDs = append(userIDs, roundtypes.UserID(p.UserID))
+		userIDs = append(userIDs, sharedtypes.DiscordID(p.UserID))
 	}
 
 	// If no participants to notify, log and return

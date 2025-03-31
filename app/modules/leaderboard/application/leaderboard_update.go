@@ -8,16 +8,15 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // -- Leaderboard Update --
 
 // UpdateLeaderboard updates the leaderboard based on the provided round ID and sorted participant tags.
-func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, msg *message.Message, roundID sharedtypes.RoundID, sortedParticipantTags []string) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID sharedtypes.RoundID, sortedParticipantTags []string) (LeaderboardOperationResult, error) {
 	// Record attempt once
 	s.metrics.RecordLeaderboardUpdateAttempt(roundID, "LeaderboardService")
-	correlationID := attr.CorrelationIDFromMsg(msg)
+	correlationID := attr.ExtractCorrelationID(ctx)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
 	// Single log for operation start
@@ -46,9 +45,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, msg *message
 		return handleError("invalid input: empty sorted participant tags", nil)
 	}
 
-	return s.serviceWrapper(msg, "UpdateLeaderboard", func() (LeaderboardOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "UpdateLeaderboard.DatabaseOperation", msg)
-		defer span.End()
+	return s.serviceWrapper(ctx, "UpdateLeaderboard", func() (LeaderboardOperationResult, error) {
 
 		// 1. Get the current active leaderboard
 		dbStartTime := time.Now()

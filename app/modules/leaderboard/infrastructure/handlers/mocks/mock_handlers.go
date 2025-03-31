@@ -85,49 +85,19 @@ func (mr *MockHandlersMockRecorder) HandleLeaderboardUpdateRequested(msg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleLeaderboardUpdateRequested", reflect.TypeOf((*MockHandlers)(nil).HandleLeaderboardUpdateRequested), msg)
 }
 
-// HandleRoundFinalized mocks base method.
-func (m *MockHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
+// HandleTagAssignment mocks base method.
+func (m *MockHandlers) HandleTagAssignment(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRoundFinalized", msg)
+	ret := m.ctrl.Call(m, "HandleTagAssignment", msg)
 	ret0, _ := ret[0].([]*message.Message)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// HandleRoundFinalized indicates an expected call of HandleRoundFinalized.
-func (mr *MockHandlersMockRecorder) HandleRoundFinalized(msg any) *gomock.Call {
+// HandleTagAssignment indicates an expected call of HandleTagAssignment.
+func (mr *MockHandlersMockRecorder) HandleTagAssignment(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundFinalized", reflect.TypeOf((*MockHandlers)(nil).HandleRoundFinalized), msg)
-}
-
-// HandleTagAssigned mocks base method.
-func (m *MockHandlers) HandleTagAssigned(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagAssigned", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleTagAssigned indicates an expected call of HandleTagAssigned.
-func (mr *MockHandlersMockRecorder) HandleTagAssigned(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAssigned", reflect.TypeOf((*MockHandlers)(nil).HandleTagAssigned), msg)
-}
-
-// HandleTagAssignmentRequested mocks base method.
-func (m *MockHandlers) HandleTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagAssignmentRequested", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleTagAssignmentRequested indicates an expected call of HandleTagAssignmentRequested.
-func (mr *MockHandlersMockRecorder) HandleTagAssignmentRequested(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAssignmentRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagAssignmentRequested), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAssignment", reflect.TypeOf((*MockHandlers)(nil).HandleTagAssignment), msg)
 }
 
 // HandleTagAvailabilityCheckRequested mocks base method.
@@ -143,21 +113,6 @@ func (m *MockHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message)
 func (mr *MockHandlersMockRecorder) HandleTagAvailabilityCheckRequested(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAvailabilityCheckRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagAvailabilityCheckRequested), msg)
-}
-
-// HandleTagSwapInitiated mocks base method.
-func (m *MockHandlers) HandleTagSwapInitiated(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagSwapInitiated", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleTagSwapInitiated indicates an expected call of HandleTagSwapInitiated.
-func (mr *MockHandlersMockRecorder) HandleTagSwapInitiated(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagSwapInitiated", reflect.TypeOf((*MockHandlers)(nil).HandleTagSwapInitiated), msg)
 }
 
 // HandleTagSwapRequested mocks base method.

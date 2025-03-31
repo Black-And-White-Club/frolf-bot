@@ -16,7 +16,6 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
-	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -44,10 +43,25 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
-// CheckTagAvailability mocks base method.
-func (m *MockService) CheckTagAvailability(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+// BatchTagAssignmentRequested mocks base method.
+func (m *MockService) BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, msg, payload)
+	ret := m.ctrl.Call(m, "BatchTagAssignmentRequested", ctx, payload)
+	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchTagAssignmentRequested indicates an expected call of BatchTagAssignmentRequested.
+func (mr *MockServiceMockRecorder) BatchTagAssignmentRequested(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchTagAssignmentRequested", reflect.TypeOf((*MockService)(nil).BatchTagAssignmentRequested), ctx, payload)
+}
+
+// CheckTagAvailability mocks base method.
+func (m *MockService) CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, payload)
 	ret0, _ := ret[0].(*leaderboardevents.TagAvailabilityCheckResultPayload)
 	ret1, _ := ret[1].(*leaderboardevents.TagAvailabilityCheckFailedPayload)
 	ret2, _ := ret[2].(error)
@@ -55,82 +69,82 @@ func (m *MockService) CheckTagAvailability(ctx context.Context, msg *message.Mes
 }
 
 // CheckTagAvailability indicates an expected call of CheckTagAvailability.
-func (mr *MockServiceMockRecorder) CheckTagAvailability(ctx, msg, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CheckTagAvailability(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockService)(nil).CheckTagAvailability), ctx, msg, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockService)(nil).CheckTagAvailability), ctx, payload)
 }
 
 // GetLeaderboard mocks base method.
-func (m *MockService) GetLeaderboard(ctx context.Context, msg *message.Message) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) GetLeaderboard(ctx context.Context) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLeaderboard", ctx, msg)
+	ret := m.ctrl.Call(m, "GetLeaderboard", ctx)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLeaderboard indicates an expected call of GetLeaderboard.
-func (mr *MockServiceMockRecorder) GetLeaderboard(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetLeaderboard(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboard", reflect.TypeOf((*MockService)(nil).GetLeaderboard), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboard", reflect.TypeOf((*MockService)(nil).GetLeaderboard), ctx)
 }
 
 // GetTagByUserID mocks base method.
-func (m *MockService) GetTagByUserID(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, msg, userID, roundID)
+	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID, roundID)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTagByUserID indicates an expected call of GetTagByUserID.
-func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, msg, userID, roundID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, userID, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, msg, userID, roundID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, userID, roundID)
 }
 
 // TagAssignmentRequested mocks base method.
-func (m *MockService) TagAssignmentRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAssignmentRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) TagAssignmentRequested(ctx context.Context, payload leaderboardevents.TagAssignmentRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagAssignmentRequested", ctx, msg, payload)
+	ret := m.ctrl.Call(m, "TagAssignmentRequested", ctx, payload)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TagAssignmentRequested indicates an expected call of TagAssignmentRequested.
-func (mr *MockServiceMockRecorder) TagAssignmentRequested(ctx, msg, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) TagAssignmentRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagAssignmentRequested", reflect.TypeOf((*MockService)(nil).TagAssignmentRequested), ctx, msg, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagAssignmentRequested", reflect.TypeOf((*MockService)(nil).TagAssignmentRequested), ctx, payload)
 }
 
 // TagSwapRequested mocks base method.
-func (m *MockService) TagSwapRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagSwapRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) TagSwapRequested(ctx context.Context, payload leaderboardevents.TagSwapRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagSwapRequested", ctx, msg, payload)
+	ret := m.ctrl.Call(m, "TagSwapRequested", ctx, payload)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TagSwapRequested indicates an expected call of TagSwapRequested.
-func (mr *MockServiceMockRecorder) TagSwapRequested(ctx, msg, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) TagSwapRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagSwapRequested", reflect.TypeOf((*MockService)(nil).TagSwapRequested), ctx, msg, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagSwapRequested", reflect.TypeOf((*MockService)(nil).TagSwapRequested), ctx, payload)
 }
 
 // UpdateLeaderboard mocks base method.
-func (m *MockService) UpdateLeaderboard(ctx context.Context, msg *message.Message, roundID sharedtypes.RoundID, sortedParticipantTags []string) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) UpdateLeaderboard(ctx context.Context, roundID sharedtypes.RoundID, sortedParticipantTags []string) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, msg, roundID, sortedParticipantTags)
+	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, roundID, sortedParticipantTags)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateLeaderboard indicates an expected call of UpdateLeaderboard.
-func (mr *MockServiceMockRecorder) UpdateLeaderboard(ctx, msg, roundID, sortedParticipantTags any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateLeaderboard(ctx, roundID, sortedParticipantTags any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockService)(nil).UpdateLeaderboard), ctx, msg, roundID, sortedParticipantTags)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockService)(nil).UpdateLeaderboard), ctx, roundID, sortedParticipantTags)
 }

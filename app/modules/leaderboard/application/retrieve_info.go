@@ -8,20 +8,17 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // GetLeaderboard returns the active leaderboard.
-func (s *LeaderboardService) GetLeaderboard(ctx context.Context, msg *message.Message) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOperationResult, error) {
 	// Record leaderboard retrieval attempt
 	s.metrics.RecordLeaderboardGetAttempt("LeaderboardService")
 
 	s.logger.Info("Leaderboard retrieval triggered",
-		attr.CorrelationIDFromMsg(msg))
+		attr.ExtractCorrelationID(ctx))
 
-	return s.serviceWrapper(msg, "GetLeaderboard", func() (LeaderboardOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "GetLeaderboard.DatabaseOperation", msg)
-		defer span.End()
+	return s.serviceWrapper(ctx, "GetLeaderboard", func() (LeaderboardOperationResult, error) {
 
 		// 1. Get the active leaderboard from the database.
 		dbStartTime := time.Now()
@@ -30,7 +27,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, msg *message.Me
 		s.metrics.RecordLeaderboardGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
 		if err != nil {
 			s.logger.Error("Failed to get active leaderboard",
-				attr.CorrelationIDFromMsg(msg),
+				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
 			s.metrics.RecordLeaderboardGetFailure("LeaderboardService")
@@ -55,7 +52,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, msg *message.Me
 		}
 
 		s.logger.Info("Successfully retrieved leaderboard",
-			attr.CorrelationIDFromMsg(msg))
+			attr.ExtractCorrelationID(ctx))
 
 		s.metrics.RecordLeaderboardGetSuccess("LeaderboardService")
 
@@ -68,17 +65,15 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, msg *message.Me
 }
 
 // GetTagByUserID returns the tag number for a given user ID.
-func (s *LeaderboardService) GetTagByUserID(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (LeaderboardOperationResult, error) {
 	// Record tag retrieval attempt
 	s.metrics.RecordTagGetAttempt("LeaderboardService")
 
 	s.logger.Info("Tag retrieval triggered for user",
-		attr.CorrelationIDFromMsg(msg),
+		attr.ExtractCorrelationID(ctx),
 		attr.String("user_id", string(userID)))
 
-	return s.serviceWrapper(msg, "GetTagByUserID", func() (LeaderboardOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "GetTagByUserID.DatabaseOperation", msg)
-		defer span.End()
+	return s.serviceWrapper(ctx, "GetTagByUserID", func() (LeaderboardOperationResult, error) {
 
 		// Fetch tag number from DB
 		dbStartTime := time.Now()
@@ -87,7 +82,7 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, msg *message.Me
 		s.metrics.RecordTagGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
 		if err != nil {
 			s.logger.Error("Failed to get tag by UserID",
-				attr.CorrelationIDFromMsg(msg),
+				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
 			s.metrics.RecordTagGetFailure("LeaderboardService")
@@ -103,12 +98,12 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, msg *message.Me
 		// Properly handle `nil` case
 		var tagPtr *sharedtypes.TagNumber
 		if tagNumber != nil {
-			tagValue := sharedtypes.TagNumber(*tagNumber) // Convert to sharedtypes.TagNumber
-			tagPtr = &tagValue                            // Create a new pointer
+			tagValue := sharedtypes.TagNumber(*tagNumber)
+			tagPtr = &tagValue
 		}
 
 		s.logger.Info("Retrieved tag number",
-			attr.CorrelationIDFromMsg(msg),
+			attr.ExtractCorrelationID(ctx),
 			attr.String("tag_number", fmt.Sprintf("%v", tagPtr)))
 
 		// Return response with correct tag number handling

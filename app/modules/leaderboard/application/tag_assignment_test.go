@@ -12,7 +12,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
@@ -124,15 +123,14 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
 			ctx := context.Background()
-			testMsg := message.NewMessage("test-id", nil)
 
-			got, err := s.TagAssignmentRequested(ctx, testMsg, leaderboardevents.TagAssignmentRequestedPayload{
+			got, err := s.TagAssignmentRequested(ctx, leaderboardevents.TagAssignmentRequestedPayload{
 				UserID:     tt.userID,
 				TagNumber:  &tt.tagNumber,
 				Source:     string(leaderboarddbtypes.ServiceUpdateSourceCreateUser),

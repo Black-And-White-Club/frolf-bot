@@ -14,7 +14,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
@@ -24,7 +23,6 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
 	// No-Op implementations for logging, metrics, and tracing
@@ -151,12 +149,12 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
-			got, err := s.GetLeaderboard(ctx, testMsg)
+			got, err := s.GetLeaderboard(ctx)
 
 			if (err != nil) != (tt.expectedError != nil) {
 				t.Errorf("LeaderboardService.GetLeaderboard() error = %v, wantErr %v", err, tt.expectedError)
@@ -218,7 +216,6 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("user1")
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testMsg := message.NewMessage("test-id", nil)
 
 	logger := &lokifrolfbot.NoOpLogger{}
 	metrics := &leaderboardmetrics.NoOpMetrics{}
@@ -297,12 +294,12 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 					return serviceFunc()
 				},
 			}
 
-			got, err := s.GetTagByUserID(ctx, testMsg, testUserID, testRoundID)
+			got, err := s.GetTagByUserID(ctx, testUserID, testRoundID)
 
 			if (err != nil) != (tt.expectedError != nil) {
 				t.Errorf("LeaderboardService.GetTagByUserID() error = %v, wantErr %v", err, tt.expectedError)

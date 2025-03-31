@@ -39,7 +39,7 @@ func (s *RoundService) ValidateRoundRequest(ctx context.Context, payload roundev
 
 		// Publish a failure event
 		failedPayload := roundevents.RoundValidationFailedPayload{
-			UserID:       roundtypes.UserID(payload.UserID),
+			UserID:       sharedtypes.DiscordID(payload.UserID),
 			ErrorMessage: errs,
 		}
 
@@ -72,7 +72,7 @@ func (s *RoundService) ProcessValidatedRound(ctx context.Context, payload rounde
 	if err != nil {
 		// Handle parsing failure
 		failurePayload := roundevents.RoundValidationFailedPayload{
-			UserID:       roundtypes.UserID(payload.CreateRoundRequestedPayload.UserID),
+			UserID:       sharedtypes.DiscordID(payload.CreateRoundRequestedPayload.UserID),
 			ErrorMessage: []string{err.Error()},
 		}
 
@@ -93,7 +93,7 @@ func (s *RoundService) ProcessValidatedRound(ctx context.Context, payload rounde
 		Description:  &payload.CreateRoundRequestedPayload.Description,
 		Location:     &payload.CreateRoundRequestedPayload.Location,
 		StartTime:    (*roundtypes.StartTime)(&parsedTime),
-		CreatedBy:    roundtypes.UserID(payload.CreateRoundRequestedPayload.UserID),
+		CreatedBy:    sharedtypes.DiscordID(payload.CreateRoundRequestedPayload.UserID),
 		State:        roundtypes.RoundStateUpcoming,
 		Participants: []roundtypes.Participant{},
 	}
