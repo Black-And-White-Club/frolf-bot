@@ -87,7 +87,7 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
-		scoreevents.ScoreUpdateRequest:        handlers.HandleScoreUpdateRequest,
+		scoreevents.ScoreUpdateRequest:        handlers.HandleCorrectScoreRequest,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

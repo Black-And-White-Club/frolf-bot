@@ -16,6 +16,7 @@ import (
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
 
@@ -23,10 +24,11 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testRoundID := sharedtypes.RoundID(123)
+	testRoundID := sharedtypes.RoundID(uuid.New())
 
 	testPayload := &scoreevents.ProcessRoundScoresRequestPayload{
 		RoundID: testRoundID,
+		Scores:  []sharedtypes.ScoreInfo{},
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
@@ -61,33 +63,21 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
+					testRoundID,        // Pass the RoundID directly
+					testPayload.Scores, // Pass the Scores directly
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: []scoreevents.ParticipantScore{
-							{
-								UserID:    sharedtypes.DiscordID("12345678901234567"),
-								TagNumber: sharedtypes.TagNumber(1),
-								Score:     sharedtypes.Score(10),
-							},
+						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+							RoundID:     testRoundID,
+							TagMappings: []sharedtypes.TagMapping{},
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &scoreevents.ProcessRoundScoresResponsePayload{
-					Success: true,
-					RoundID: testRoundID,
-					Scores: []scoreevents.ParticipantScore{
-						{
-							UserID:    sharedtypes.DiscordID("12345678901234567"),
-							TagNumber: sharedtypes.TagNumber(1),
-							Score:     sharedtypes.Score(10),
-						},
-					},
+				updateResultPayload := &scoreevents.ProcessRoundScoresSuccessPayload{
+					RoundID:     testRoundID,
+					TagMappings: []sharedtypes.TagMapping{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -122,10 +112,8 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
+					testRoundID,        // Pass the RoundID directly
+					testPayload.Scores, // Pass the Scores directly
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Failure: fmt.Errorf("internal service error"),
@@ -133,8 +121,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					fmt.Errorf("internal service error"),
 				)
 
-				failureResultPayload := &scoreevents.ProcessRoundScoresResponsePayload{
-					Success: false,
+				failureResultPayload := &scoreevents.ProcessRoundScoresFailurePayload{
 					RoundID: testRoundID,
 					Error:   "internal service error",
 				}
@@ -162,33 +149,21 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
+					testRoundID,        // Pass the RoundID directly
+					testPayload.Scores, // Pass the Scores directly
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: []scoreevents.ParticipantScore{
-							{
-								UserID:    sharedtypes.DiscordID("12345678901234567"),
-								TagNumber: sharedtypes.TagNumber(1),
-								Score:     sharedtypes.Score(10),
-							},
+						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+							RoundID:     testRoundID,
+							TagMappings: []sharedtypes.TagMapping{},
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &scoreevents.ProcessRoundScoresResponsePayload{
-					Success: true,
-					RoundID: testRoundID,
-					Scores: []scoreevents.ParticipantScore{
-						{
-							UserID:    sharedtypes.DiscordID("12345678901234567"),
-							TagNumber: sharedtypes.TagNumber(1),
-							Score:     sharedtypes.Score(10),
-						},
-					},
+				updateResultPayload := &scoreevents.ProcessRoundScoresSuccessPayload{
+					RoundID:     testRoundID,
+					TagMappings: []sharedtypes.TagMapping{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -198,6 +173,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
+			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "failed to create success message: failed to create result message",
 		},
@@ -213,101 +189,19 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: fmt.Errorf("internal service error"),
-					},
-					fmt.Errorf("internal service error"),
-				)
-
-				failureResultPayload := &scoreevents.ProcessRoundScoresResponsePayload{
-					Success: false,
-					RoundID: testRoundID,
-					Error:   "internal service error",
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failureResultPayload,
-					scoreevents.ProcessRoundScoresFailure,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to process round scores: internal service error",
-		},
-		{
-			name: "Service failure with non-error result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockScoreService.EXPECT().ProcessRoundScores(
-					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: "non-error failure",
-					},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to convert result to error",
-		},
-		{
-			name: "Service failure with error result and CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockScoreService.EXPECT().ProcessRoundScores(
-					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
+					testRoundID,
+					testPayload.Scores,
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Failure: fmt.Errorf("internal service error"),
 					},
 					nil,
 				)
-
-				failureResultPayload := &scoreevents.ProcessRoundScoresResponsePayload{
-					Success: false,
-					RoundID: testRoundID,
-					Error:   "internal service error",
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failureResultPayload,
-					scoreevents.ProcessRoundScoresFailure,
-				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: failed to create result message",
+			expectedErrMsg: "unknown result from ProcessRoundScores",
 		},
 		{
 			name: "Unknown result from ProcessRoundScores",
@@ -321,12 +215,62 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestPayload{
-						RoundID: testRoundID,
-					},
+					testRoundID,        // Pass the RoundID directly
+					testPayload.Scores, // Pass the Scores directly
 				).Return(
 					scoreservice.ScoreOperationResult{},
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "unknown result from ProcessRoundScores",
+		},
+		{
+			name: "Service failure with non-error result",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockScoreService.EXPECT().ProcessRoundScores(
+					gomock.Any(),
+					testRoundID,
+					testPayload.Scores,
+				).Return(
+					scoreservice.ScoreOperationResult{
+						Failure: "non-error failure",
+					},
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "unknown result from ProcessRoundScores",
+		},
+		{
+			name: "Service failure with error result and CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockScoreService.EXPECT().ProcessRoundScores(
+					gomock.Any(),
+					testRoundID,
+					testPayload.Scores,
+				).Return(
+					scoreservice.ScoreOperationResult{
+						Failure: fmt.Errorf("internal service error"),
+					},
 					nil,
 				)
 			},

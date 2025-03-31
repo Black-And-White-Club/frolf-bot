@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,7 +44,7 @@ func (m *MockLeaderboardDB) EXPECT() *MockLeaderboardDBMockRecorder {
 }
 
 // AssignTag mocks base method.
-func (m *MockLeaderboardDB) AssignTag(ctx context.Context, userID leaderboardtypes.UserID, tagNumber int, source leaderboarddb.ServiceUpdateTagSource, updateID string) error {
+func (m *MockLeaderboardDB) AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source leaderboarddb.ServiceUpdateSource, updateID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AssignTag", ctx, userID, tagNumber, source, updateID)
 	ret0, _ := ret[0].(error)
@@ -56,8 +57,22 @@ func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, userID, tagNumber, sourc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignTag", reflect.TypeOf((*MockLeaderboardDB)(nil).AssignTag), ctx, userID, tagNumber, source, updateID)
 }
 
+// BatchAssignTags mocks base method.
+func (m *MockLeaderboardDB) BatchAssignTags(ctx context.Context, assignments []leaderboarddb.TagAssignment, source leaderboarddb.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchAssignTags", ctx, assignments, source, updateID, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchAssignTags indicates an expected call of BatchAssignTags.
+func (mr *MockLeaderboardDBMockRecorder) BatchAssignTags(ctx, assignments, source, updateID, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchAssignTags", reflect.TypeOf((*MockLeaderboardDB)(nil).BatchAssignTags), ctx, assignments, source, updateID, userID)
+}
+
 // CheckTagAvailability mocks base method.
-func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
+func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, tagNumber sharedtypes.TagNumber) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, tagNumber)
 	ret0, _ := ret[0].(bool)
@@ -131,7 +146,7 @@ func (mr *MockLeaderboardDBMockRecorder) GetTagByUserID(ctx, userID any) *gomock
 }
 
 // SwapTags mocks base method.
-func (m *MockLeaderboardDB) SwapTags(ctx context.Context, requestorID, targetID string) error {
+func (m *MockLeaderboardDB) SwapTags(ctx context.Context, requestorID, targetID sharedtypes.DiscordID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SwapTags", ctx, requestorID, targetID)
 	ret0, _ := ret[0].(error)
@@ -145,7 +160,7 @@ func (mr *MockLeaderboardDBMockRecorder) SwapTags(ctx, requestorID, targetID any
 }
 
 // UpdateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string, scoreUpdateID string) error {
+func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, scoreUpdateID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, leaderboardData, scoreUpdateID)
 	ret0, _ := ret[0].(error)

@@ -3,121 +3,107 @@ package leaderboardservice
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
-// -- Tag Assignment --
-
 // TagAssignmentRequested handles the TagAssignmentRequested event.
-func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAssignmentRequestedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAssignmentRequestedPayload: %w", err)
-	}
+func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
+	// Log the operation
+	s.logger.Info("Tag assignment triggered",
+		attr.CorrelationIDFromMsg(msg),
+		attr.String("user_id", string(payload.UserID)),
+		attr.String("requesting_user", string(payload.UserID)),
+		attr.String("tag_number", fmt.Sprintf("%v", *payload.TagNumber)),
+	)
 
-	s.logger.Info("Handling TagAssignmentRequested event", "correlation_id", correlationID)
+	return s.serviceWrapper(msg, "TagAssignmentRequested", func() (LeaderboardOperationResult, error) {
+		ctx, span := s.tracer.StartSpan(ctx, "TagAssignmentRequested.Operation", msg)
+		defer span.End()
 
-	// Assign the tag to the user in the leaderboard.
-	err = s.LeaderboardDB.AssignTag(ctx, eventPayload.UserID, *eventPayload.TagNumber, leaderboarddb.ServiceUpdateTagSourceCreateUser, eventPayload.UpdateID)
-	if err != nil {
-		s.logger.Error("Failed to assign tag to user", "error", err, "correlation_id", correlationID)
-		// Publish a TagAssignmentFailed event here.
-		if pubErr := s.publishTagAssignmentFailed(ctx, msg, string(eventPayload.UserID), *eventPayload.TagNumber, eventPayload.UpdateID, "user", "new_tag", err.Error()); pubErr != nil {
-			return fmt.Errorf("failed to publish TagAssignmentFailed event: %w", err)
+		// 1. Get the current active leaderboard for validation
+		dbStartTime := time.Now()
+		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
+		if err != nil {
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagAssignmentFailedPayload{
+					UserID:     payload.UserID,
+					TagNumber:  payload.TagNumber,
+					Source:     payload.Source,
+					UpdateType: payload.UpdateType,
+					Reason:     err.Error(),
+				},
+			}, err
 		}
-		return fmt.Errorf("failed to assign tag to user: %w", err)
-	}
 
-	// Publish TagAssigned event
-	if err := s.publishTagAssigned(ctx, msg, *eventPayload.TagNumber, eventPayload.UserID, eventPayload.UpdateID); err != nil {
-		return fmt.Errorf("failed to publish TagAssigned event: %w", err)
-	}
+		// 2. Use the utility function to validate and prepare the tag assignment
+		discordID := sharedtypes.DiscordID(payload.UserID)
+		tagNumber := *payload.TagNumber
 
-	s.logger.Info("Tag assigned and leaderboard updated successfully", "correlation_id", correlationID)
-	return nil
-}
+		// Validate the tag assignment first using PrepareTagAssignment
+		_, err = s.PrepareTagAssignment(currentLeaderboard, discordID, tagNumber)
+		if err != nil {
+			var failTagNumber *sharedtypes.TagNumber
 
-// TagAssigned handles the TagAssigned event
-func (s *LeaderboardService) TagAssigned(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAssignedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAssignedPayload: %w", err)
-	}
+			// Only include the tag number if it's valid
+			if tagNumber >= 0 {
+				failTagNumber = payload.TagNumber
+			}
 
-	s.logger.Info("Processing TagAssigned event",
-		"correlation_id", correlationID,
-		"user_id", eventPayload.UserID,
-		"tag_number", eventPayload.TagNumber,
-		"assignment_id", eventPayload.AssignmentID,
-	)
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagAssignmentFailedPayload{
+					UserID:     payload.UserID,
+					TagNumber:  failTagNumber,
+					Source:     payload.Source,
+					UpdateType: payload.UpdateType,
+					Reason:     err.Error(),
+				},
+			}, err
+		}
 
-	// Notify the user module or other downstream systems.
-	notificationPayload := &leaderboardevents.TagAvailablePayload{
-		UserID:       eventPayload.UserID,
-		TagNumber:    eventPayload.TagNumber,
-		AssignmentID: eventPayload.AssignmentID,
-	}
+		// 3. If validation passes, call the AssignTag repository method
+		updateID := sharedtypes.RoundID(uuid.Nil) // Use nil UUID to let it be auto-generated
 
-	if err := s.publishEvent(msg, leaderboardevents.TagAvailable, notificationPayload); err != nil {
-		s.logger.Error("Failed to publish TagAvailable event",
-			"error", err,
-			"correlation_id", correlationID,
-			"user_id", eventPayload.UserID,
-			"tag_number", eventPayload.TagNumber,
+		dbStartTime = time.Now()
+		err = s.LeaderboardDB.AssignTag(
+			ctx,
+			discordID,
+			tagNumber,
+			leaderboarddb.ServiceUpdateSourceCreateUser, // Default source for new users
+			updateID,
 		)
-		return fmt.Errorf("failed to publish TagAvailable event: %w", err)
-	}
+		s.metrics.RecordOperationDuration("AssignTag", "LeaderboardService", time.Since(dbStartTime).Seconds())
 
-	s.logger.Info("TagAssigned processing completed successfully",
-		"correlation_id", correlationID,
-		"user_id", eventPayload.UserID,
-		"tag_number", eventPayload.TagNumber,
-	)
+		if err != nil {
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagAssignmentFailedPayload{
+					UserID:     payload.UserID,
+					TagNumber:  payload.TagNumber,
+					Source:     payload.Source,
+					UpdateType: payload.UpdateType,
+					Reason:     err.Error(),
+				},
+			}, err
+		}
 
-	return nil
-}
+		// Log success and return result
+		s.logger.Info("Tag assignment successful",
+			attr.String("user_id", string(payload.UserID)),
+			attr.String("tag_number", fmt.Sprintf("%v", *payload.TagNumber)),
+		)
 
-func (s *LeaderboardService) publishTagAssignmentFailed(_ context.Context, msg *message.Message, userID sharedtypes.DiscordID, tagNumber int, updateID string, source string, updateType string, reason string) error {
-	eventPayload := &leaderboardevents.TagAssignmentFailedPayload{
-		UserID:     leaderboardtypes.UserID(userID),
-		TagNumber:  &tagNumber,
-		UpdateID:   updateID,
-		Source:     source,
-		UpdateType: updateType,
-		Reason:     reason,
-	}
-
-	return s.publishEvent(msg, leaderboardevents.LeaderboardTagAssignmentFailed, eventPayload)
-}
-
-func (s *LeaderboardService) publishTagAssignmentRequested(_ context.Context, msg *message.Message, userID leaderboardtypes.UserID, tagNumber int, assignmentID string) error {
-	eventPayload := &leaderboardevents.TagAssignmentRequestedPayload{
-		UserID:     userID,
-		TagNumber:  &tagNumber,
-		UpdateID:   assignmentID,
-		Source:     "user",
-		UpdateType: "new_tag",
-	}
-
-	s.logger.Info("Publishing TagAssignmentRequested", slog.Any("payload", eventPayload)) // Log the payload
-
-	return s.publishEvent(msg, leaderboardevents.LeaderboardTagAssignmentRequested, eventPayload)
-}
-
-func (s *LeaderboardService) publishTagUnavailable(_ context.Context, msg *message.Message, tagNumber int, userID leaderboardtypes.UserID, reason string) error {
-	eventPayload := &leaderboardevents.TagUnavailablePayload{
-		UserID:    leaderboardtypes.UserID(userID),
-		TagNumber: &tagNumber,
-		Reason:    reason,
-	}
-
-	s.logger.Info("Publishing TagUnavailable", slog.Any("payload", eventPayload)) // Log the payload
-
-	return s.publishEvent(msg, leaderboardevents.TagUnavailable, eventPayload)
+		return LeaderboardOperationResult{
+			Success: &leaderboardevents.TagAssignedPayload{
+				UserID:    payload.UserID,
+				TagNumber: payload.TagNumber,
+			},
+		}, nil
+	})
 }

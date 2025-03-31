@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
@@ -18,7 +19,7 @@ func init() {
 
 		// Insert initial leaderboard data
 		initialLeaderboard := &leaderboarddb.Leaderboard{
-			LeaderboardData: make(map[int]string),
+			LeaderboardData: make(leaderboardtypes.LeaderboardData, 0), // Initialize as an empty slice
 			IsActive:        true,
 		}
 		if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {
@@ -46,7 +47,7 @@ func init() {
 
 func createInitialData(ctx context.Context, db *bun.DB) error {
 	initialLeaderboard := &leaderboarddb.Leaderboard{
-		LeaderboardData: make(map[int]string), // Initialize LeaderboardData as an empty map
+		LeaderboardData: make(leaderboardtypes.LeaderboardData, 0), // Initialize as an empty slice
 		IsActive:        true,
 	}
 	if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {

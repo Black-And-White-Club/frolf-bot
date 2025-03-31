@@ -2,243 +2,135 @@ package leaderboardservice
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
-	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/mock/gomock"
 )
 
-func TestLeaderboardService_TagAvailabilityCheckRequested(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
+	tagNumber := sharedtypes.TagNumber(42)
 
-	mockLeaderboardDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	eventUtil := eventutil.NewEventUtil()
-
-	testUserID := leaderboardtypes.UserID("testUserID")
-	testTagNumber := 123
-	testCorrelationID := watermill.NewUUID()
-	type contextKey string
-	const correlationIDKey contextKey = "correlationID"
-
-	testCtx := context.WithValue(context.Background(), correlationIDKey, testCorrelationID)
-
-	type fields struct {
-		LeaderboardDB *leaderboarddb.MockLeaderboardDB
-		EventBus      *eventbusmocks.MockEventBus
-		logger        *slog.Logger
-		eventUtil     eventutil.EventUtil
-	}
-	type args struct {
-		ctx context.Context
-		msg *message.Message
-	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f *fields, a *args)
+		name           string
+		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB)
+		userID         sharedtypes.DiscordID
+		tagNumber      sharedtypes.TagNumber
+		expectedResult *leaderboardevents.TagAvailabilityCheckResultPayload
+		expectedFail   *leaderboardevents.TagAvailabilityCheckFailedPayload
+		expectedError  error
 	}{
 		{
-			name: "Successful Tag Availability Check (Available)",
-			fields: fields{
-				LeaderboardDB: mockLeaderboardDB,
-				EventBus:      mockEventBus,
-				logger:        logger,
-				eventUtil:     eventUtil,
+			name: "Successfully checks available tag",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(true, nil)
 			},
-			args: args{
-				ctx: testCtx,
-				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					UserID:    testUserID,
-					TagNumber: testTagNumber,
-				}),
+			userID:    sharedtypes.DiscordID("test_user_id"),
+			tagNumber: tagNumber,
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+				UserID:    sharedtypes.DiscordID("test_user_id"),
+				TagNumber: &tagNumber,
 			},
-			wantErr: false,
-			setup: func(f *fields, a *args) {
-				// Mock active leaderboard
-				f.LeaderboardDB.EXPECT().
-					GetActiveLeaderboard(a.ctx).
-					Return(&leaderboarddbtypes.Leaderboard{
-						LeaderboardData: map[int]string{},
-						IsActive:        true,
-					}, nil).
-					Times(1)
-
-				// Mock tag availability check
-				f.LeaderboardDB.EXPECT().
-					CheckTagAvailability(a.ctx, testTagNumber).
-					Return(true, nil).
-					Times(1)
-
-				// Mock publishing TagAssignmentRequested
-				f.EventBus.EXPECT().
-					Publish(leaderboardevents.LeaderboardTagAssignmentRequested, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != leaderboardevents.LeaderboardTagAssignmentRequested {
-							t.Errorf("Expected topic %s, got %s", leaderboardevents.LeaderboardTagAssignmentRequested, topic)
-						}
-						msg := msgs[0]
-						payload := leaderboardevents.TagAssignmentRequestedPayload{}
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Errorf("Failed to unmarshal message payload: %v", err)
-						}
-						if payload.UserID != testUserID {
-							t.Errorf("Expected UserID %s, got %s", testUserID, payload.UserID)
-						}
-						if payload.TagNumber != testTagNumber {
-							t.Errorf("Expected TagNumber %d, got %d", testTagNumber, payload.TagNumber)
-						}
-						return nil
-					}).
-					Times(1)
-			},
+			expectedFail:  nil,
+			expectedError: nil,
 		},
 		{
-			name: "Successful Tag Availability Check (Unavailable)",
-			fields: fields{
-				LeaderboardDB: mockLeaderboardDB,
-				EventBus:      mockEventBus,
-				logger:        logger,
-				eventUtil:     eventUtil,
+			name: "Successfully checks unavailable tag",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(false, nil)
 			},
-			args: args{
-				ctx: testCtx,
-				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					UserID:    testUserID,
-					TagNumber: testTagNumber,
-				}),
+			userID:    sharedtypes.DiscordID("test_user_id"),
+			tagNumber: tagNumber,
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+				UserID:    sharedtypes.DiscordID("test_user_id"),
+				TagNumber: &tagNumber,
 			},
-			wantErr: false,
-			setup: func(f *fields, a *args) {
-				// Mock active leaderboard
-				f.LeaderboardDB.EXPECT().
-					GetActiveLeaderboard(a.ctx).
-					Return(&leaderboarddbtypes.Leaderboard{
-						LeaderboardData: map[int]string{
-							testTagNumber: string(testUserID),
-						},
-						IsActive: true,
-					}, nil).
-					Times(1)
-
-				// Mock tag availability check
-				f.LeaderboardDB.EXPECT().
-					CheckTagAvailability(a.ctx, testTagNumber).
-					Return(false, nil).
-					Times(1)
-
-				// Mock publishing TagUnavailable
-				f.EventBus.EXPECT().
-					Publish(leaderboardevents.TagUnavailable, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != leaderboardevents.TagUnavailable {
-							t.Errorf("Expected topic %s, got %s", leaderboardevents.TagUnavailable, topic)
-						}
-						msg := msgs[0]
-						payload := leaderboardevents.TagUnavailablePayload{}
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Errorf("Failed to unmarshal message payload: %v", err)
-						}
-						if payload.UserID != testUserID {
-							t.Errorf("Expected UserID %s, got %s", testUserID, payload.UserID)
-						}
-						if payload.TagNumber != testTagNumber {
-							t.Errorf("Expected TagNumber %d, got %d", testTagNumber, payload.TagNumber)
-						}
-						return nil
-					}).
-					Times(1)
-			},
+			expectedFail:  nil,
+			expectedError: nil,
 		},
 		{
-			name: "Database Error GetActiveLeaderboard",
-			fields: fields{
-				LeaderboardDB: mockLeaderboardDB,
-				EventBus:      mockEventBus,
-				logger:        logger,
-				eventUtil:     eventUtil,
+			name: "Database error when checking tag",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(false, errors.New("database error"))
 			},
-			args: args{
-				ctx: testCtx,
-				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					UserID:    testUserID,
-					TagNumber: testTagNumber,
-				}),
+			userID:         sharedtypes.DiscordID("test_user_id"),
+			tagNumber:      tagNumber,
+			expectedResult: nil,
+			expectedFail: &leaderboardevents.TagAvailabilityCheckFailedPayload{
+				UserID:    sharedtypes.DiscordID("test_user_id"),
+				TagNumber: &tagNumber,
+				Reason:    "failed to check tag availability",
 			},
-			wantErr: true,
-			setup: func(f *fields, a *args) {
-				// Mock database error
-				f.LeaderboardDB.EXPECT().
-					GetActiveLeaderboard(a.ctx).
-					Return(nil, errors.New("database error")).
-					Times(1)
-			},
-		},
-		{
-			name: "Database Error CheckTagAvailability",
-			fields: fields{
-				LeaderboardDB: mockLeaderboardDB,
-				EventBus:      mockEventBus,
-				logger:        logger,
-				eventUtil:     eventUtil,
-			},
-			args: args{
-				ctx: testCtx,
-				msg: createTestMessageWithPayload(testCorrelationID, &leaderboardevents.TagAvailabilityCheckRequestedPayload{
-					UserID:    testUserID,
-					TagNumber: testTagNumber,
-				}),
-			},
-			wantErr: true,
-			setup: func(f *fields, a *args) {
-				// Mock active leaderboard
-				f.LeaderboardDB.EXPECT().
-					GetActiveLeaderboard(a.ctx).
-					Return(&leaderboarddbtypes.Leaderboard{
-						LeaderboardData: make(map[int]string),
-						IsActive:        true,
-					}, nil).
-					Times(1)
-
-				// Mock database error on tag availability check
-				f.LeaderboardDB.EXPECT().
-					CheckTagAvailability(a.ctx, testTagNumber).
-					Return(false, errors.New("database error")).
-					Times(1)
-			},
+			expectedError: errors.New("database error"),
 		},
 	}
 
+	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
+			tt.mockDBSetup(mockDB)
+
+			logger := &lokifrolfbot.NoOpLogger{}
+			metrics := &leaderboardmetrics.NoOpMetrics{}
+			tracer := tempofrolfbot.NewNoOpTracer()
+
 			s := &LeaderboardService{
-				LeaderboardDB: tt.fields.LeaderboardDB,
-				EventBus:      tt.fields.EventBus,
-				logger:        tt.fields.logger,
-				eventUtil:     tt.fields.eventUtil,
+				LeaderboardDB: mockDB,
+				logger:        logger,
+				metrics:       metrics,
+				tracer:        tracer,
+				serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc()
+				},
 			}
-			if tt.setup != nil {
-				tt.setup(&tt.fields, &tt.args)
+
+			ctx := context.Background()
+			testMsg := message.NewMessage("test-id", nil)
+
+			got, got1, err := s.CheckTagAvailability(ctx, testMsg, leaderboardevents.TagAvailabilityCheckRequestedPayload{
+				UserID:    tt.userID,
+				TagNumber: &tt.tagNumber,
+			})
+
+			if tt.expectedResult != nil {
+				if got == nil {
+					t.Errorf("Expected success payload, got nil")
+				} else if got.UserID != tt.expectedResult.UserID || *got.TagNumber != *tt.expectedResult.TagNumber {
+					t.Errorf("Mismatched success payload, got: %+v, expected: %+v", got, tt.expectedResult)
+				}
+			} else if got != nil {
+				t.Errorf("Unexpected success payload: %v", got)
 			}
-			if err := s.TagAvailabilityCheckRequested(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("LeaderboardService.TagAvailabilityCheckRequested() error = %v, wantErr %v", err, tt.wantErr)
+
+			if tt.expectedFail != nil {
+				if got1 == nil {
+					t.Errorf("Expected failure payload, got nil")
+				} else if got1.UserID != tt.expectedFail.UserID || *got1.TagNumber != *tt.expectedFail.TagNumber || got1.Reason != tt.expectedFail.Reason {
+					t.Errorf("Mismatched failure payload, got: %+v, expected: %+v", got1, tt.expectedFail)
+				}
+			} else if got1 != nil {
+				t.Errorf("Unexpected failure payload: %v", got1)
+			}
+
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("Expected an error but got nil")
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
 			}
 		})
 	}

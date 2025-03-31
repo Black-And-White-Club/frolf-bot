@@ -6,61 +6,68 @@ import (
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// CorrectScore handles score corrections (manual updates).
-func (s *ScoreService) CorrectScore(ctx context.Context, msg *message.Message, event scoreevents.ScoreUpdateRequestPayload) (ScoreOperationResult, error) {
-	return s.serviceWrapper(msg, "CorrectScore", event.RoundID, func() (ScoreOperationResult, error) {
-		s.metrics.RecordScoreCorrectionAttempt(event.RoundID)
+// CorrectScore updates a player's score and returns the appropriate payload.
+func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error) {
+	return s.serviceWrapper(ctx, "CorrectScore", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
+		// Extract correlation ID for logging
+		correlationID := attr.ExtractCorrelationID(ctx)
 
-		startTime := time.Now()
+		// Start tracing span
+		ctx, span := s.tracer.StartSpan(ctx, "CorrectScore.DatabaseOperation", nil)
+		defer span.End()
 
-		s.logger.Info("Correcting score",
-			attr.CorrelationIDFromMsg(msg),
-			attr.Int64("round_id", int64(event.RoundID)),
-			attr.String("user_id", string(event.UserID)),
-			attr.Int("score", int(event.Score)),
-		)
-
-		score := &scoredb.Score{
-			UserID:    event.UserID,
-			RoundID:   event.RoundID,
-			Score:     event.Score,
-			TagNumber: event.TagNumber,
-			Source:    "manual",
+		// Prepare the score info
+		scoreInfo := sharedtypes.ScoreInfo{
+			UserID:    userID,
+			Score:     score,
+			TagNumber: tagNumber,
 		}
 
+		// Attempt to update score in the database
 		dbStart := time.Now()
-		if err := s.ScoreDB.UpdateOrAddScore(ctx, score); err != nil {
-			s.metrics.RecordScoreCorrectionFailure(event.RoundID)
-			s.logger.Error("Failed to update/add score",
-				attr.CorrelationIDFromMsg(msg),
-				attr.Int64("round_id", int64(event.RoundID)),
-				attr.String("user_id", string(event.UserID)),
-				attr.Error(err),
-			)
-			s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
-			s.metrics.RecordScoreCorrectionDuration(event.RoundID, time.Since(startTime).Seconds())
-			return ScoreOperationResult{
-				Failure: err,
-			}, err
-		}
+		err := s.ScoreDB.UpdateOrAddScore(ctx, roundID, scoreInfo)
 		s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
 
-		s.metrics.RecordScoreCorrectionSuccess(event.RoundID)
-		s.metrics.RecordScoreCorrectionDuration(event.RoundID, time.Since(startTime).Seconds())
+		if err != nil {
+			// Log error
+			s.logger.Error("Failed to update/add score",
+				attr.LogAttr(correlationID),
+				attr.RoundID("round_id", roundID),
+				attr.String("user_id", string(userID)),
+				attr.Error(err),
+			)
 
+			// Return failure payload
+			return ScoreOperationResult{
+				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					RoundID: roundID,
+					UserID:  userID,
+					Error:   err.Error(),
+				},
+				Error: err,
+			}, err
+		}
+
+		// Record successful score correction
+		s.metrics.RecordScoreCorrectionSuccess(roundID)
+
+		// Log success
 		s.logger.Info("Score corrected successfully",
-			attr.CorrelationIDFromMsg(msg),
-			attr.Int64("round_id", int64(event.RoundID)),
-			attr.String("user_id", string(event.UserID)),
-			attr.Float64("correction_duration_seconds", time.Since(startTime).Seconds()),
+			attr.LogAttr(correlationID),
+			attr.RoundID("round_id", roundID),
+			attr.String("user_id", string(userID)),
 		)
 
+		// Return success payload
 		return ScoreOperationResult{
-			Success: score,
+			Success: &scoreevents.ScoreUpdateSuccessPayload{
+				RoundID: roundID,
+				UserID:  userID,
+				Score:   score,
+			},
 		}, nil
 	})
 }

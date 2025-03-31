@@ -2,103 +2,114 @@ package leaderboardservice
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
-	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// -- Tag Swap --
+// TagSwapRequested handles the TagSwapRequested event.
+func (s *LeaderboardService) TagSwapRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error) {
+	s.metrics.RecordTagSwapAttempt(payload.RequestorID, payload.TargetID)
 
-// HandleTagSwapRequested handles the TagSwapRequested event.
-func (s *LeaderboardService) TagSwapRequested(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapRequestedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagSwapRequestedPayload: %w", err)
-	}
+	s.logger.Info("Tag swap triggered",
+		attr.CorrelationIDFromMsg(msg),
+		attr.String("requestor_id", string(payload.RequestorID)),
+		attr.String("target_id", string(payload.TargetID)),
+	)
 
-	s.logger.Info("Handling TagSwapRequested event", "correlation_id", correlationID)
+	return s.serviceWrapper(msg, "TagSwapRequested", func() (LeaderboardOperationResult, error) {
+		ctx, span := s.tracer.StartSpan(ctx, "TagSwapRequested.DatabaseOperation", msg)
+		defer span.End()
 
-	// 1. Get the current leaderboard.
-	currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-	if err != nil {
-		s.logger.Error("Failed to get active leaderboard", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
-	}
-
-	// 2. Check if both requestorID and targetID have tags on the leaderboard.
-	_, requestorExists := leaderboarddomain.FindTagByUserID(currentLeaderboard, leaderboardtypes.UserID(eventPayload.RequestorID))
-	_, targetExists := leaderboarddomain.FindTagByUserID(currentLeaderboard, leaderboardtypes.UserID(eventPayload.TargetID))
-
-	if !requestorExists || !targetExists {
-		s.logger.Error("One or both users do not have tags on the leaderboard", "requestor", eventPayload.RequestorID, "target", eventPayload.TargetID, "correlation_id", correlationID)
-		return fmt.Errorf("one or both users do not have tags on the leaderboard")
-	}
-
-	// Publish TagSwapInitiated event
-	return s.publishTagSwapInitiated(ctx, msg, eventPayload.RequestorID, eventPayload.TargetID)
-}
-
-// publishTagSwapInitiated publishes a TagSwapInitiated event.
-func (s *LeaderboardService) publishTagSwapInitiated(_ context.Context, msg *message.Message, requestorID, targetID string) error {
-	eventPayload := leaderboardevents.TagSwapInitiatedPayload{
-		RequestorID: string(requestorID),
-		TargetID:    targetID,
-	}
-
-	return s.publishEvent(msg, leaderboardevents.TagSwapInitiated, eventPayload)
-}
-
-// HandleTagSwapInitiated handles the TagSwapInitiated event.
-func (s *LeaderboardService) TagSwapInitiated(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapInitiatedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagSwapInitiatedPayload: %w", err)
-	}
-
-	s.logger.Info("Handling TagSwapInitiated event", "correlation_id", correlationID)
-
-	// Perform the tag swap in the database.
-	if err := s.LeaderboardDB.SwapTags(ctx, eventPayload.RequestorID, eventPayload.TargetID); err != nil {
-		s.logger.Error("Failed to swap tags in DB", "error", err, "correlation_id", correlationID)
-
-		// Publish TagSwapFailed event
-		if pubErr := s.publishTagSwapFailed(ctx, msg, leaderboardtypes.UserID(eventPayload.RequestorID), eventPayload.TargetID, err.Error()); pubErr != nil {
-			s.logger.Error("Failed to publish TagSwapFailed event", "error", pubErr, "correlation_id", correlationID)
+		// Get the current leaderboard.
+		startTime := time.Now()
+		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "TagSwapRequested", time.Since(startTime).Seconds())
+		if err != nil {
+			s.logger.Error("Failed to get active leaderboard",
+				attr.CorrelationIDFromMsg(msg),
+				attr.Error(err),
+			)
+			s.metrics.RecordTagSwapFailure(payload.RequestorID, payload.TargetID, err.Error())
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagSwapFailedPayload{
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+					Reason:      err.Error(),
+				},
+			}, nil
+		}
+		if currentLeaderboard == nil {
+			s.logger.Error("No active leaderboard found",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			s.metrics.RecordTagSwapFailure(payload.RequestorID, payload.TargetID, "no active leaderboard found")
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagSwapFailedPayload{
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+					Reason:      "no active leaderboard found",
+				},
+			}, nil
 		}
 
-		return fmt.Errorf("failed to swap tags in DB: %w", err) // Now we return the error
-	}
+		s.logger.Info("Active Leaderboard Data",
+			attr.CorrelationIDFromMsg(msg),
+			attr.Any("leaderboard_data", currentLeaderboard.LeaderboardData),
+		)
 
-	// Publish TagSwapProcessed event
-	if err := s.publishTagSwapProcessed(ctx, msg, leaderboardtypes.UserID(eventPayload.RequestorID), eventPayload.TargetID); err != nil {
-		s.logger.Error("Failed to publish TagSwapProcessed event", "error", err, "correlation_id", correlationID)
-	}
+		// Check if both requestorID and targetID have tags on the leaderboard.
+		_, requestorExists := s.FindTagByUserID(currentLeaderboard, sharedtypes.DiscordID(payload.RequestorID))
+		_, targetExists := s.FindTagByUserID(currentLeaderboard, sharedtypes.DiscordID(payload.TargetID))
+		if !requestorExists || !targetExists {
+			s.logger.Error("One or both users do not have tags on the leaderboard",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("requestor_id", string(payload.RequestorID)),
+				attr.String("target_id", string(payload.TargetID)),
+			)
+			s.metrics.RecordTagSwapFailure(payload.RequestorID, payload.TargetID, "one or both users do not have tags on the leaderboard")
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagSwapFailedPayload{
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+					Reason:      "one or both users do not have tags on the leaderboard",
+				},
+			}, nil
+		}
 
-	s.logger.Info("Tags swapped successfully", "correlation_id", correlationID)
-	return nil
-}
+		// Perform the tag swap in the database.
+		startTime = time.Now()
+		err = s.LeaderboardDB.SwapTags(ctx, payload.RequestorID, payload.TargetID)
+		s.metrics.RecordOperationDuration("SwapTags", "TagSwapRequested", time.Since(startTime).Seconds())
+		if err != nil {
+			s.logger.Error("Failed to swap tags in DB",
+				attr.CorrelationIDFromMsg(msg),
+				attr.Error(err),
+			)
+			s.metrics.RecordTagSwapFailure(payload.RequestorID, payload.TargetID, err.Error())
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagSwapFailedPayload{
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+					Reason:      err.Error(),
+				},
+			}, nil
+		}
 
-// publishTagSwapProcessed publishes a TagSwapProcessed event.
-func (s *LeaderboardService) publishTagSwapProcessed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.UserID, targetID string) error {
-	eventPayload := leaderboardevents.TagSwapProcessedPayload{
-		RequestorID: string(requestorID),
-		TargetID:    targetID,
-	}
+		s.logger.Info("Tags swapped successfully",
+			attr.CorrelationIDFromMsg(msg),
+		)
 
-	return s.publishEvent(msg, leaderboardevents.TagSwapProcessed, eventPayload)
-}
+		s.metrics.RecordTagSwapSuccess(payload.RequestorID, payload.TargetID)
 
-// publishTagSwapFailed publishes a TagSwapFailed event.
-func (s *LeaderboardService) publishTagSwapFailed(_ context.Context, msg *message.Message, requestorID leaderboardtypes.UserID, targetID string, reason string) error {
-	eventPayload := leaderboardevents.TagSwapFailedPayload{
-		RequestorID: string(requestorID),
-		TargetID:    targetID,
-		Reason:      reason,
-	}
-
-	return s.publishEvent(msg, leaderboardevents.TagSwapFailed, eventPayload)
+		return LeaderboardOperationResult{
+			Success: &leaderboardevents.TagSwapProcessedPayload{
+				RequestorID: payload.RequestorID,
+				TargetID:    payload.TargetID,
+			},
+		}, nil
+	})
 }

@@ -1,60 +1,136 @@
 package leaderboardhandlers
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // HandleGetLeaderboardRequest handles the GetLeaderboardRequest event.
 func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
-	correlationID, _, err := eventutil.UnmarshalPayload[leaderboardevents.GetLeaderboardRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal GetLeaderboardRequestPayload: %w", err)
-	}
+	wrappedHandler := h.handlerWrapper(
+		"HandleGetLeaderboardRequest",
+		&leaderboardevents.GetLeaderboardRequestPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			h.logger.Info("Received GetLeaderboardRequest event",
+				attr.CorrelationIDFromMsg(msg),
+			)
 
-	h.logger.Info("Received GetLeaderboardRequest event",
-		slog.String("correlation_id", correlationID),
+			// Call the service function to get the leaderboard
+			result, err := h.leaderboardService.GetLeaderboard(ctx, msg)
+			if err != nil {
+				h.logger.Error("Failed to get leaderboard",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to get leaderboard: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.Error("Get leaderboard failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					leaderboardevents.GetLeaderboardFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			h.logger.Info("Get leaderboard successful",
+				attr.CorrelationIDFromMsg(msg),
+			)
+
+			// Create success message to publish
+			successMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				result.Success,
+				leaderboardevents.GetLeaderboardResponse,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create success message: %w", err)
+			}
+
+			return []*message.Message{successMsg}, nil
+		},
 	)
 
-	// Call the service function to handle the event
-	if err := h.leaderboardService.GetLeaderboardRequest(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle GetLeaderboardRequest event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle GetLeaderboardRequest event: %w", err)
-	}
-
-	h.logger.Info("GetLeaderboardRequest event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }
 
 // HandleGetTagByUserIDRequest handles the GetTagByUserIDRequest event.
 func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagNumberRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal GetTagByUserIDRequestPayload: %w", err)
-	}
+	wrappedHandler := h.handlerWrapper(
+		"HandleGetTagByUserIDRequest",
+		&leaderboardevents.TagNumberRequestPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagNumberRequestPayload := payload.(*leaderboardevents.TagNumberRequestPayload)
 
-	h.logger.Info("✅ Inside HandleGetTagByUserIDRequest",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.UserID)))
+			h.logger.Info("Received GetTagByUserIDRequest event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(tagNumberRequestPayload.UserID)),
+				attr.RoundID("round_id", tagNumberRequestPayload.RoundID),
+			)
 
-	if err := h.leaderboardService.GetTagByUserIDRequest(msg.Context(), msg); err != nil {
-		h.logger.Error("❌ Failed to handle GetTagByUserIDRequest event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err))
+			// Call the service function to get the tag by userID
+			result, err := h.leaderboardService.GetTagByUserID(ctx, msg, tagNumberRequestPayload.UserID, tagNumberRequestPayload.RoundID)
+			if err != nil {
+				h.logger.Error("Failed to get tag by userID",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to get tag by userID: %w", err)
+			}
 
-		// ❌ **DON'T ACKNOWLEDGE on failure!** Let NATS retry.
-		return err
-	}
+			if result.Failure != nil {
+				h.logger.Error("Get tag by userID failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
 
-	// ✅ **Manually acknowledge the message**
-	msg.Ack()
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					leaderboardevents.GetTagNumberFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
 
-	return nil
+				return []*message.Message{failureMsg}, nil
+			}
+
+			h.logger.Info("Get tag by userID successful",
+				attr.CorrelationIDFromMsg(msg),
+			)
+
+			// Create success message to publish
+			successMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				result.Success,
+				leaderboardevents.GetTagNumberResponse,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create success message: %w", err)
+			}
+
+			return []*message.Message{successMsg}, nil
+		},
+	)
+
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }

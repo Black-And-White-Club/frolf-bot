@@ -1,6 +1,7 @@
 package scoreservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -12,7 +13,6 @@ import (
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // ScoreService handles score processing logic.
@@ -22,7 +22,7 @@ type ScoreService struct {
 	logger         lokifrolfbot.Logger
 	metrics        scoremetrics.ScoreMetrics
 	tracer         tempofrolfbot.Tracer
-	serviceWrapper func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error)
+	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error)
 }
 
 // NewScoreService creates a new ScoreService.
@@ -39,21 +39,34 @@ func NewScoreService(
 		logger:   logger,
 		metrics:  metrics,
 		tracer:   tracer,
-		// Assign the serviceWrapper method
-		serviceWrapper: func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-			return serviceWrapper(msg, operationName, roundID, serviceFunc, logger, metrics, tracer)
+		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+			return serviceWrapper(ctx, operationName, roundID, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error), logger lokifrolfbot.Logger, metrics scoremetrics.ScoreMetrics, tracer tempofrolfbot.Tracer) (result ScoreOperationResult, err error) {
-	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
+func serviceWrapper(
+	ctx context.Context,
+	operationName string,
+	roundID sharedtypes.RoundID,
+	serviceFunc func(ctx context.Context) (ScoreOperationResult, error),
+	logger lokifrolfbot.Logger,
+	metrics scoremetrics.ScoreMetrics,
+	tracer tempofrolfbot.Tracer,
+) (result ScoreOperationResult, err error) {
+	if serviceFunc == nil {
+		return ScoreOperationResult{}, errors.New("service function is nil")
+	}
+
+	// Start a new tracing span while preserving existing context
+	newCtx, span := tracer.StartSpan(ctx, operationName, nil)
 	defer span.End()
 
-	msg = msg.Copy()
-	msg.SetContext(ctx)
+	// Extract correlation ID (if available)
+	correlationID := attr.ExtractCorrelationID(ctx)
 
+	// Record the operation attempt
 	metrics.RecordOperationAttempt(operationName, roundID)
 
 	startTime := time.Now()
@@ -62,50 +75,51 @@ func serviceWrapper(msg *message.Message, operationName string, roundID sharedty
 		metrics.RecordOperationDuration(operationName, duration)
 	}()
 
+	// Log the operation start
 	logger.Info(operationName+" triggered",
-		attr.CorrelationIDFromMsg(msg),
-		attr.String("message_id", msg.UUID),
 		attr.String("operation", operationName),
-		attr.Int64("round_id", int64(roundID)),
+		attr.RoundID("round_id", roundID),
+		attr.LogAttr(correlationID),
 	)
 
-	// Modify `err` directly inside the defer so it propagates correctly
+	// Recover from panic and log the error
 	defer func() {
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
 			logger.Error(errorMsg,
-				attr.CorrelationIDFromMsg(msg),
-				attr.Int64("round_id", int64(roundID)),
+				attr.RoundID("round_id", roundID),
+				attr.LogAttr(correlationID),
 				attr.Any("panic", r),
 			)
 			metrics.RecordOperationFailure(operationName, roundID)
-			span.RecordError(errors.New(errorMsg))
 
-			// Since result and err are named return values, modifying them here affects the function return
-			result = ScoreOperationResult{}
-			err = fmt.Errorf("%s", errorMsg)
+			// Create error with panic information
+			err = fmt.Errorf("panic in %s: %v", operationName, r)
+
+			// Record error in span
+			span.RecordError(err)
 		}
 	}()
 
-	// Now, if `serviceFunc()` panics, `defer` will catch it and modify `err`
-	result, err = serviceFunc()
+	// Call the service function **with new context**
+	result, err = serviceFunc(newCtx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-
 		logger.Error("Error in "+operationName,
-			attr.CorrelationIDFromMsg(msg),
-			attr.Int64("round_id", int64(roundID)),
+			attr.RoundID("round_id", roundID),
+			attr.LogAttr(correlationID),
 			attr.Error(wrappedErr),
 		)
 		metrics.RecordOperationFailure(operationName, roundID)
 		span.RecordError(wrappedErr)
-		return result, wrappedErr
+		return ScoreOperationResult{}, wrappedErr
 	}
 
+	// Log success
 	logger.Info(operationName+" completed successfully",
-		attr.CorrelationIDFromMsg(msg),
-		attr.Int64("round_id", int64(roundID)),
 		attr.String("operation", operationName),
+		attr.RoundID("round_id", roundID),
+		attr.LogAttr(correlationID),
 	)
 	metrics.RecordOperationSuccess(operationName, roundID)
 

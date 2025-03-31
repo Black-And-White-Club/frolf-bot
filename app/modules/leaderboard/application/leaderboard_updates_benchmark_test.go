@@ -1,0 +1,144 @@
+package leaderboardservice
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+)
+
+func BenchmarkUpdateLeaderboardSmallInput(b *testing.B) {
+	// Create a small test sorted participant tags
+	sortedParticipantTags := []string{"1:user1", "2:user2", "3:user3"}
+
+	// Create a test service instance with mock dependencies
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
+	mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+		LeaderboardData: []leaderboardtypes.LeaderboardEntry{
+			{TagNumber: 1, UserID: "user1"},
+			{TagNumber: 2, UserID: "user2"},
+			{TagNumber: 3, UserID: "user3"},
+		},
+	}, nil).AnyTimes()
+	mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	service := &LeaderboardService{
+		LeaderboardDB: mockDB,
+		logger:        &lokifrolfbot.NoOpLogger{},
+		metrics:       &leaderboardmetrics.NoOpMetrics{},
+		tracer:        tempofrolfbot.NewNoOpTracer(),
+		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc()
+		},
+	}
+
+	// Run the benchmark
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkUpdateLeaderboardMediumInput(b *testing.B) {
+	// Create a medium-sized test leaderboard and sorted participant tags
+	leaderboard := &leaderboarddbtypes.Leaderboard{
+		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 100),
+	}
+	for i := range leaderboard.LeaderboardData {
+		leaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
+			TagNumber: sharedtypes.TagNumber(i + 1),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i+1)),
+		}
+	}
+	sortedParticipantTags := make([]string, 100)
+	for i := range sortedParticipantTags {
+		sortedParticipantTags[i] = fmt.Sprintf("%d:user%d", i+1, i+1)
+	}
+
+	// Create a test service instance with mock dependencies
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
+	mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(leaderboard, nil).AnyTimes()
+	mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	service := &LeaderboardService{
+		LeaderboardDB: mockDB,
+		logger:        &lokifrolfbot.NoOpLogger{},
+		metrics:       &leaderboardmetrics.NoOpMetrics{},
+		tracer:        tempofrolfbot.NewNoOpTracer(),
+		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc()
+		},
+	}
+
+	// Run the benchmark
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkUpdateLeaderboardLargeInput(b *testing.B) {
+	// Create a large test leaderboard and sorted participant tags
+	leaderboard := &leaderboarddbtypes.Leaderboard{
+		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 1000),
+	}
+	for i := range leaderboard.LeaderboardData {
+		leaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
+			TagNumber: sharedtypes.TagNumber(i + 1),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i+1)),
+		}
+	}
+	sortedParticipantTags := make([]string, 1000)
+	for i := range sortedParticipantTags {
+		sortedParticipantTags[i] = fmt.Sprintf("%d:user%d", i+1, i+1)
+	}
+
+	// Create a test service instance with mock dependencies
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
+	mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(leaderboard, nil).AnyTimes()
+	mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	service := &LeaderboardService{
+		LeaderboardDB: mockDB,
+		logger:        &lokifrolfbot.NoOpLogger{},
+		metrics:       &leaderboardmetrics.NoOpMetrics{},
+		tracer:        tempofrolfbot.NewNoOpTracer(),
+		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc()
+		},
+	}
+
+	// Run the benchmark
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := service.UpdateLeaderboard(context.Background(), &message.Message{}, sharedtypes.RoundID(uuid.New()), sortedParticipantTags)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

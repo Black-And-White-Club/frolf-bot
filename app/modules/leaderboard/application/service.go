@@ -1,71 +1,116 @@
 package leaderboardservice
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log/slog"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
-// LeaderboardService handles leaderboard logic.
+// LeaderboardService handles leaderboard-related logic.
 type LeaderboardService struct {
-	LeaderboardDB leaderboarddb.LeaderboardDB
-	EventBus      eventbus.EventBus
-	logger        observability.Logger
-	metrics       observability.Metrics
-	tracer        observability.Tracer
+	LeaderboardDB  leaderboarddb.LeaderboardDB
+	eventBus       eventbus.EventBus
+	logger         lokifrolfbot.Logger
+	metrics        leaderboardmetrics.LeaderboardMetrics
+	tracer         tempofrolfbot.Tracer
+	serviceWrapper func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
-func NewLeaderboardService(db leaderboarddb.LeaderboardDB, eventBus eventbus.EventBus, logger observability.Logger, metrics observability.Metrics, tracer observability.Tracer) Service {
+func NewLeaderboardService(
+	db leaderboarddb.LeaderboardDB,
+	eventBus eventbus.EventBus,
+	logger lokifrolfbot.Logger,
+	metrics leaderboardmetrics.LeaderboardMetrics,
+	tracer tempofrolfbot.Tracer,
+) Service {
 	return &LeaderboardService{
 		LeaderboardDB: db,
-		EventBus:      eventBus,
+		eventBus:      eventBus,
 		logger:        logger,
 		metrics:       metrics,
 		tracer:        tracer,
+		// Assign the serviceWrapper method
+		serviceWrapper: func(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
+			return serviceWrapper(msg, operationName, serviceFunc, logger, metrics, tracer)
+		},
 	}
 }
 
-// publishEvent is a generic helper function to publish events.
-func (s *LeaderboardService) publishEvent(msg *message.Message, eventName string, payload interface{}) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		s.logger.Error("Failed to marshal event payload",
-			slog.String("event", eventName),
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal event payload for %s: %w", eventName, err)
+// serviceWrapper handles common tracing, logging, and metrics for service operations.
+func serviceWrapper(msg *message.Message, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger lokifrolfbot.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
+	if serviceFunc == nil {
+		return LeaderboardOperationResult{}, errors.New("service function is nil")
 	}
 
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
+	defer span.End()
 
-	// Set Nats-Msg-Id for JetStream deduplication
-	newMessage.Metadata.Set("Nats-Msg-Id", newMessage.UUID+"-"+eventName)
+	msg.SetContext(ctx)
 
-	if err := s.EventBus.Publish(eventName, newMessage); err != nil {
-		s.logger.Error("Failed to publish event",
-			slog.String("event", eventName),
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish event %s: %w", eventName, err)
-	}
+	metrics.RecordOperationAttempt(operationName, "LeaderboardService")
 
-	s.logger.Info("Published event",
-		slog.String("event", eventName),
-		slog.String("correlation_id", correlationID),
-		slog.String("message_id", newMessage.UUID),
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordOperationDuration(operationName, "LeaderboardService", duration)
+	}()
+
+	logger.Info("Operation triggered",
+		attr.CorrelationIDFromMsg(msg),
+		attr.String("message_id", msg.UUID),
+		attr.String("operation", operationName),
 	)
 
-	return nil
+	// Important: The defer for panic recovery needs to modify the named return values
+	defer func() {
+		if r := recover(); r != nil {
+			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
+			logger.Error(errorMsg,
+				attr.CorrelationIDFromMsg(msg),
+				attr.Any("panic", r),
+			)
+			metrics.RecordOperationFailure(operationName, "LeaderboardService")
+			span.RecordError(errors.New(errorMsg))
+
+			// Set the return values explicitly for panic cases
+			result = LeaderboardOperationResult{}
+			err = fmt.Errorf("%s", errorMsg)
+		}
+	}()
+
+	result, err = serviceFunc()
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
+		logger.Error("Error in "+operationName,
+			attr.CorrelationIDFromMsg(msg),
+			attr.Error(wrappedErr),
+		)
+		metrics.RecordOperationFailure(operationName, "LeaderboardService")
+		span.RecordError(wrappedErr)
+		return result, wrappedErr
+	}
+
+	logger.Info(operationName+" completed successfully",
+		attr.CorrelationIDFromMsg(msg),
+		attr.String("operation", operationName),
+	)
+	metrics.RecordOperationSuccess(operationName, "LeaderboardService")
+
+	return result, nil
+}
+
+// LeaderboardOperationResult represents a generic result from a leaderboard operation
+type LeaderboardOperationResult struct {
+	Success interface{}
+	Failure interface{}
+	Error   error
 }

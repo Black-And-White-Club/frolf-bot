@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -52,8 +51,8 @@ func TestNewScoreService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				scoreServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check that all dependencies were correctly assigned
@@ -100,8 +99,8 @@ func TestNewScoreService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to avoid nil tracing/logger issues
-				scoreServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, roundID sharedtypes.RoundID, serviceFunc func() (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check nil fields
@@ -127,8 +126,8 @@ func TestNewScoreService(t *testing.T) {
 				}
 
 				// Test serviceWrapper runs correctly with nil dependencies
-				testMsg := message.NewMessage("test-id", []byte("test"))
-				_, err := scoreServiceImpl.serviceWrapper(testMsg, "TestOp", sharedtypes.RoundID(123), func() (ScoreOperationResult, error) {
+				ctx := context.Background()
+				_, err := scoreServiceImpl.serviceWrapper(ctx, "TestOp", sharedtypes.RoundID(uuid.New()), func(ctx context.Context) (ScoreOperationResult, error) {
 					return ScoreOperationResult{Success: "test"}, nil
 				})
 				if err != nil {
@@ -146,10 +145,10 @@ func TestNewScoreService(t *testing.T) {
 
 func Test_serviceWrapper(t *testing.T) {
 	type args struct {
-		msg           *message.Message
+		ctx           context.Context
 		operationName string
 		roundID       sharedtypes.RoundID
-		serviceFunc   func() (ScoreOperationResult, error)
+		serviceFunc   func(ctx context.Context) (ScoreOperationResult, error)
 		logger        lokifrolfbot.Logger
 		metrics       scoremetrics.ScoreMetrics
 		tracer        tempofrolfbot.Tracer
@@ -169,10 +168,10 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(123),
-					serviceFunc: func() (ScoreOperationResult, error) {
+					roundID:       sharedtypes.RoundID(uuid.New()),
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{Success: "test"}, nil
 					},
 					logger:  mockLogger,
@@ -195,11 +194,11 @@ func Test_serviceWrapper(t *testing.T) {
 				).Return(context.Background(), noop.Span{})
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(123))
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
+				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
 				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", sharedtypes.RoundID(123))
+				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", sharedtypes.RoundID(uuid.New()))
 			},
 		},
 		{
@@ -210,10 +209,10 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(123),
-					serviceFunc: func() (ScoreOperationResult, error) {
+					roundID:       sharedtypes.RoundID(uuid.New()),
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						panic("test panic") // Simulate a panic
 					},
 					logger:  mockLogger,
@@ -228,37 +227,22 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger := a.logger.(*mocks.MockLogger)
 
 				// Expect initial method calls before panic occurs
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
+				mockTracer.EXPECT().StartSpan(gomock.AssignableToTypeOf(context.Background()), "TestOperation", gomock.Any()).Return(context.Background(), noop.Span{})
 
 				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(123))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
 
 				// Expect `logger.Info` for operation start (happens before panic)
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
-					attr.Int64("round_id", int64(a.roundID)),
-				)
+				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 				// Expect `RecordOperationDuration` since the function starts measuring time before panic
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
 
 				// Expect panic error logging
-				mockLogger.EXPECT().Error(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.Int64("round_id", int64(a.roundID)),
-					gomock.Any(),
-				)
+				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(123))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(uuid.New()))
 			},
 		},
 		{
@@ -269,10 +253,10 @@ func Test_serviceWrapper(t *testing.T) {
 				mockTracer := mocks.NewMockTracer(ctrl)
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
-					roundID:       sharedtypes.RoundID(123),
-					serviceFunc: func() (ScoreOperationResult, error) {
+					roundID:       sharedtypes.RoundID(uuid.New()),
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{}, fmt.Errorf("service error")
 					},
 					logger:  mockLogger,
@@ -293,27 +277,16 @@ func Test_serviceWrapper(t *testing.T) {
 					gomock.Any(),
 				).Return(context.Background(), noop.Span{})
 
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(123))
+				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.RoundID(uuid.New()))
 
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
-					attr.Int64("round_id", int64(a.roundID)),
-				)
+				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
 
 				// Expect error logging
-				mockLogger.EXPECT().Error(
-					"Error in TestOperation",
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.Int64("round_id", int64(a.roundID)),
-					gomock.Any(),
-				)
+				mockLogger.EXPECT().Error("Error in TestOperation", gomock.Any(), gomock.Any(), gomock.Any())
 
 				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(123))
+				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.RoundID(uuid.New()))
 			},
 		},
 	}
@@ -332,7 +305,7 @@ func Test_serviceWrapper(t *testing.T) {
 			}
 
 			// Run serviceWrapper
-			got, err := serviceWrapper(testArgs.msg, testArgs.operationName, testArgs.roundID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
+			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.roundID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)

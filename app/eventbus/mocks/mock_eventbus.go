@@ -15,7 +15,7 @@ import (
 	time "time"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	nats "github.com/nats-io/nats.go"
 	jetstream "github.com/nats-io/nats.go/jetstream"
@@ -47,7 +47,7 @@ func (m *MockEventBus) EXPECT() *MockEventBusMockRecorder {
 }
 
 // CancelScheduledMessage mocks base method.
-func (m *MockEventBus) CancelScheduledMessage(ctx context.Context, roundID roundtypes.ID) error {
+func (m *MockEventBus) CancelScheduledMessage(ctx context.Context, roundID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CancelScheduledMessage", ctx, roundID)
 	ret0, _ := ret[0].(error)
@@ -117,7 +117,7 @@ func (mr *MockEventBusMockRecorder) GetNATSConnection() *gomock.Call {
 }
 
 // ProcessDelayedMessages mocks base method.
-func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID roundtypes.ID, scheduledTime time.Time) {
+func (m *MockEventBus) ProcessDelayedMessages(ctx context.Context, roundID sharedtypes.RoundID, scheduledTime time.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ProcessDelayedMessages", ctx, roundID, scheduledTime)
 }
@@ -160,7 +160,7 @@ func (mr *MockEventBusMockRecorder) RecoverScheduledRounds(ctx any) *gomock.Call
 }
 
 // ScheduleRoundProcessing mocks base method.
-func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID roundtypes.ID, scheduledTime time.Time) {
+func (m *MockEventBus) ScheduleRoundProcessing(ctx context.Context, roundID sharedtypes.RoundID, scheduledTime time.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ScheduleRoundProcessing", ctx, roundID, scheduledTime)
 }

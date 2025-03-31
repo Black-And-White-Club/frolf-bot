@@ -1,69 +1,87 @@
 package leaderboardhandlers
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
-// HandleTagAssignmentRequested handles the TagAssignmentRequested event.
-func (h *LeaderboardHandlers) HandleTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAssignmentRequestedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAssignmentRequestedPayload: %w", err)
-	}
+// HandleTagAssignment handles the TagAssignmentRequested event.
+func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleTagAssignment",
+		&leaderboardevents.TagAssignmentRequestedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagAssignmentRequestedPayload := payload.(*leaderboardevents.TagAssignmentRequestedPayload)
 
-	h.logger.Info("Received TagAssignmentRequested event",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.UserID)),
-		slog.Int("tag_number", *payload.TagNumber),
+			h.logger.Info("Received TagAssignmentRequested event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
+				attr.Int("tag_number", int(*tagAssignmentRequestedPayload.TagNumber)),
+			)
+
+			// Call the service function to handle the event
+			result, err := h.leaderboardService.TagAssignmentRequested(ctx, msg, *tagAssignmentRequestedPayload)
+			if err != nil {
+				h.logger.Error("Failed to handle TagAssignmentRequested event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.Error("Tag assignment failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					leaderboardevents.TagAssignmentFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			h.logger.Info("Tag assignment successful", attr.CorrelationIDFromMsg(msg))
+
+			// Create success message to publish
+			successMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				result.Success,
+				leaderboardevents.TagAssigned,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create success message: %w", err)
+			}
+
+			// Publish TagAvailable event to User module
+			tagAvailablePayload := &leaderboardevents.TagAvailablePayload{
+				UserID:    result.Success.(*leaderboardevents.TagAssignedPayload).UserID,
+				TagNumber: result.Success.(*leaderboardevents.TagAssignedPayload).TagNumber,
+			}
+			tagAvailableMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				tagAvailablePayload,
+				leaderboardevents.TagAvailable,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create TagAvailable message: %w", err)
+			}
+
+			return []*message.Message{successMsg, tagAvailableMsg}, nil
+		},
 	)
 
-	// Call the service function to handle the event
-	if err := h.leaderboardService.TagAssignmentRequested(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle TagAssignmentRequested event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
-	}
-
-	h.logger.Info("TagAssignmentRequested event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-// HandleTagAssigned handles the TagAssigned event.
-func (h *LeaderboardHandlers) HandleTagAssigned(msg *message.Message) ([]*message.Message, error) {
-	h.logger.Info("HandleTagAssigned triggered",
-		slog.String("correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey)),
-		slog.String("message_id", msg.UUID),
-	)
-
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAssignedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAssignedPayload: %w", err)
-	}
-
-	h.logger.Info("Received TagAssigned event",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.UserID)),
-		slog.Int("tag_number", *payload.TagNumber),
-		slog.String("assignment_id", payload.AssignmentID),
-	)
-
-	// Call the service function to publish TagAvailable to User module
-	if err := h.leaderboardService.PublishTagAvailable(msg.Context(), msg, &payload); err != nil {
-		h.logger.Error("Failed to publish TagAvailable event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to publish TagAvailable event: %w", err)
-	}
-
-	h.logger.Info("TagAssigned event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }

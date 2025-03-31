@@ -38,7 +38,6 @@ func NewScoreHandlers(
 		tracer:       tracer,
 		helpers:      helpers,
 		metrics:      metrics,
-		// Assign the standalone handlerWrapper function
 		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
 			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
 		},
@@ -87,6 +86,12 @@ func handlerWrapper(
 				metrics.RecordHandlerFailure(handlerName)
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
+		} else {
+			logger.Error("No payload instance provided",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			metrics.RecordHandlerFailure(handlerName)
+			return nil, fmt.Errorf("no payload instance provided")
 		}
 
 		// Call the actual handler logic

@@ -6,135 +6,66 @@ import (
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *ScoreHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleScoreUpdateRequest",
+// HandleCorrectScoreRequest handles correct score requests.
+func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
+	return h.handlerWrapper(
+		"HandleCorrectScoreRequest",
 		&scoreevents.ScoreUpdateRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scoreUpdateRequestPayload := payload.(*scoreevents.ScoreUpdateRequestPayload)
+			scoreUpdateRequestPayload, ok := payload.(*scoreevents.ScoreUpdateRequestPayload)
+			if !ok {
+				return nil, fmt.Errorf("invalid payload type: expected ScoreUpdateRequestPayload")
+			}
 
-			h.logger.Info("Received ScoreUpdateRequest event",
+			// Log received event
+			h.logger.Info("Received CorrectScoreRequest event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.Int64("round_id", int64(scoreUpdateRequestPayload.RoundID)),
+				attr.RoundID("round_id", scoreUpdateRequestPayload.RoundID),
 				attr.String("user_id", string(scoreUpdateRequestPayload.UserID)),
 				attr.Int("score", int(scoreUpdateRequestPayload.Score)),
-				attr.Int("tag_number", int(*scoreUpdateRequestPayload.TagNumber)),
+				attr.Any("tag_number", scoreUpdateRequestPayload.TagNumber),
 			)
 
-			// Call the service function to correct the score
-			result, err := h.scoreService.CorrectScore(ctx, msg, *scoreUpdateRequestPayload)
+			// Call the service
+			result, err := h.scoreService.CorrectScore(ctx, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID, scoreUpdateRequestPayload.Score, scoreUpdateRequestPayload.TagNumber)
+
+			// Check if an error occurred
 			if err != nil {
-				h.logger.Error("Failed to correct score",
+				// Handle the error
+				h.logger.Error("Error correcting score",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
-				h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-
-				failureResultPayload := &scoreevents.ScoreUpdateResponsePayload{
-					Success: false,
-					RoundID: scoreUpdateRequestPayload.RoundID,
-					Error:   err.Error(),
-				}
-
-				failureMsg, errCreateResult := h.helpers.CreateResultMessage(
-					msg,
-					failureResultPayload,
-					scoreevents.ScoreUpdateFailure,
-				)
-				if errCreateResult != nil {
-					h.logger.Error("Failed to create failure message",
-						attr.CorrelationIDFromMsg(msg),
-						attr.Error(errCreateResult),
-					)
-					return nil, fmt.Errorf("failed to correct score: %w", err)
-				}
-
-				h.logger.Info("ScoreUpdateRequest event processed", attr.CorrelationIDFromMsg(msg))
-				h.metrics.RecordHandlerFailure("HandleScoreUpdateRequest")
-
-				return []*message.Message{failureMsg}, nil
+				return nil, err
 			}
 
-			// Check if the operation was successful
-			if result.Success != nil {
-				score, ok := result.Success.(*scoredb.Score)
-				if !ok {
-					h.logger.Error("Failed to convert result to Score",
-						attr.CorrelationIDFromMsg(msg),
-					)
-					h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-					return nil, fmt.Errorf("failed to convert result to Score")
-				}
-
-				// Create success message to publish
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					&scoreevents.ScoreUpdateResponsePayload{
-						Success: true,
-						RoundID: scoreUpdateRequestPayload.RoundID,
-						Participant: scoreevents.Participant{
-							UserID:    score.UserID,
-							TagNumber: score.TagNumber,
-							Score:     score.Score,
-						},
-					},
-					scoreevents.ScoreUpdateSuccess,
-				)
-				if err != nil {
-					h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-
-				h.logger.Info("ScoreUpdateRequest event processed", attr.CorrelationIDFromMsg(msg))
-				h.metrics.RecordScoreUpdateAttempt(true, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-				h.metrics.RecordHandlerSuccess("HandleScoreUpdateRequest")
-
-				return []*message.Message{successMsg}, nil
-			} else if result.Failure != nil {
-				failure, ok := result.Failure.(error)
-				if !ok {
-					h.logger.Error("Failed to convert result to error",
-						attr.CorrelationIDFromMsg(msg),
-					)
-					h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-					return nil, fmt.Errorf("failed to convert result to error")
-				}
-
-				// Create failure message to publish
-				failureMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					&scoreevents.ScoreUpdateResponsePayload{
-						Success: false,
-						RoundID: scoreUpdateRequestPayload.RoundID,
-						Error:   failure.Error(),
-					},
-					scoreevents.ScoreUpdateFailure,
-				)
-				if err != nil {
-					h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-					return nil, fmt.Errorf("failed to create failure message: %w", err)
-				}
-
-				h.logger.Info("ScoreUpdateRequest event processed", attr.CorrelationIDFromMsg(msg))
-				h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-				h.metrics.RecordHandlerFailure("HandleScoreUpdateRequest")
-
-				return []*message.Message{failureMsg}, nil
+			// Determine if success or failure
+			var eventType string
+			var payloadToPublish interface{}
+			if result.Failure != nil {
+				eventType = scoreevents.ScoreUpdateFailure
+				payloadToPublish = result.Failure
+			} else if result.Success != nil {
+				eventType = scoreevents.ScoreUpdateSuccess
+				payloadToPublish = result.Success
 			} else {
-				// Handle unknown result
-				h.logger.Error("Unknown result from CorrectScore",
-					attr.CorrelationIDFromMsg(msg),
-				)
-				h.metrics.RecordScoreUpdateAttempt(false, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID)
-				return nil, fmt.Errorf("unknown result from CorrectScore")
+				return nil, fmt.Errorf("unexpected result from service")
 			}
-		},
-	)
 
-	// Execute the wrapped handler with the message
-	return wrappedHandler(msg)
+			// Create and return message
+			responseMsg, err := h.helpers.CreateResultMessage(msg, payloadToPublish, eventType)
+			if err != nil {
+				h.logger.Error("Failed to create response message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to create response message: %w", err)
+			}
+
+			return []*message.Message{responseMsg}, nil
+		},
+	)(msg)
 }

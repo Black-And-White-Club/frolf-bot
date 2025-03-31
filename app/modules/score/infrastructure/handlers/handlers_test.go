@@ -164,7 +164,7 @@ func TestHandlerWrapper(t *testing.T) {
 					helpers: mockHelpers,
 				}
 			},
-			wantErr: false,
+			wantErr: true,
 			setup: func(a *args) {
 				mockTracer := a.tracer.(*mocks.MockTracer)
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
@@ -181,8 +181,8 @@ func TestHandlerWrapper(t *testing.T) {
 				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
 				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Info("testHandler completed successfully", gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerSuccess("testHandler")
+				mockLogger.EXPECT().Error("No payload instance provided", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
 			},
 		},
 		{
@@ -222,7 +222,7 @@ func TestHandlerWrapper(t *testing.T) {
 				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
 				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
 				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Error("Error in testHandler", gomock.Any(), gomock.Any())
+				mockLogger.EXPECT().Error("No payload instance provided", gomock.Any())
 				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
 			},
 		},
@@ -269,6 +269,51 @@ func TestHandlerWrapper(t *testing.T) {
 
 				// Mock unmarshal payload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(errors.New("unmarshal error"))
+			},
+		},
+		{
+			name: "Unmarshal payload succeeds",
+			args: func(ctrl *gomock.Controller) args {
+				mockLogger := mocks.NewMockLogger(ctrl)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				mockTracer := mocks.NewMockTracer(ctrl)
+				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
+
+				return args{
+					handlerName: "testHandler",
+					unmarshalTo: &scoreevents.ScoreUpdateRequestPayload{},
+					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+						return []*message.Message{msg}, nil
+					},
+					logger:  mockLogger,
+					metrics: mockMetrics,
+					tracer:  mockTracer,
+					helpers: mockHelpers,
+				}
+			},
+			wantErr: false,
+			setup: func(a *args) {
+				mockTracer := a.tracer.(*mocks.MockTracer)
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger.(*mocks.MockLogger)
+				mockHelpers := a.helpers.(*mockHelpers.MockHelpers)
+
+				// Mock tracer.StartSpan
+				mockTracer.EXPECT().StartSpan(
+					gomock.AssignableToTypeOf(context.Background()),
+					"testHandler",
+					gomock.Any(),
+				).Return(context.Background(), noop.Span{})
+
+				// Mock metrics & logs
+				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
+				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
+				mockLogger.EXPECT().Info("testHandler completed successfully", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerSuccess("testHandler")
+
+				// Mock unmarshal payload
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(nil)
 			},
 		},
 	}

@@ -4,26 +4,21 @@ import (
 	"context"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // Service handles leaderboard logic.
 type Service interface {
-	// Leaderboard Updates
-	RoundFinalized(ctx context.Context, msg *message.Message) error
-	LeaderboardUpdateRequested(ctx context.Context, msg *message.Message) error
-
 	// Tag Assignment
-	TagAssigned(ctx context.Context, msg *message.Message) error
-	TagAssignmentRequested(ctx context.Context, msg *message.Message) error
-	PublishTagAvailable(_ context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error
+	TagAssignmentRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error)
 
 	// Tag Swapping
-	TagSwapRequested(ctx context.Context, msg *message.Message) error
-	TagSwapInitiated(ctx context.Context, msg *message.Message) error
+	TagSwapRequested(ctx context.Context, msg *message.Message, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error)
 
 	// Other Operations
-	GetLeaderboardRequest(ctx context.Context, msg *message.Message) error
-	GetTagByUserIDRequest(ctx context.Context, msg *message.Message) error
-	TagAvailabilityCheckRequested(ctx context.Context, msg *message.Message) error
+	GetLeaderboard(ctx context.Context, msg *message.Message) (LeaderboardOperationResult, error)
+	GetTagByUserID(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (LeaderboardOperationResult, error)
+	CheckTagAvailability(ctx context.Context, msg *message.Message, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error)
+	UpdateLeaderboard(ctx context.Context, msg *message.Message, roundID sharedtypes.RoundID, sortedParticipantTags []string) (LeaderboardOperationResult, error)
 }
