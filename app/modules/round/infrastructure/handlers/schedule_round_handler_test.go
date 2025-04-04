@@ -29,7 +29,7 @@ var (
 	scheduleHandlerLocation     roundtypes.Location  = "Test Location"
 	scheduleHandlerEventType    roundtypes.EventType = "casual"
 	scheduleHandlerNow          time.Time            = time.Now().UTC().Truncate(time.Second)
-	scheduleHandlerStartTime                         = roundtypes.StartTime(scheduleHandlerNow)
+	scheduleHandlerStartTime                         = sharedtypes.StartTime(scheduleHandlerNow)
 	validScheduleHandlerPayload                      = roundevents.RoundStoredPayload{
 		Round: roundtypes.Round{
 			ID:        scheduleHandlerRoundID,

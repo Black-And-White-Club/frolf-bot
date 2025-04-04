@@ -2,398 +2,300 @@ package roundservice
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log/slog"
 	"testing"
 
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
+
+// Helper to create a pointer to a value
+func ptr[T any](v T) *T {
+	return &v
+}
 
 func TestRoundService_FinalizeRound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
-	logger := slog.Default()
+	ctx := context.Background()
+	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockLogger := &lokifrolfbot.NoOpLogger{}
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+	mockTracer := tempofrolfbot.NewNoOpTracer()
+	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
 
-	type args struct {
-		ctx     context.Context
-		payload interface{}
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testFinalizedRound := &roundtypes.Round{
+		ID:           testRoundID,
+		State:        roundtypes.RoundStateFinalized,
+		Participants: []roundtypes.Participant{},
 	}
+	dbUpdateError := errors.New("db update failed")
+	dbGetError := errors.New("db get failed")
+
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		name                    string
+		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
+		mockEventBusSetup       func(*eventbus.MockEventBus)
+		payload                 roundevents.AllScoresSubmittedPayload
+		expectedResult          RoundOperationResult
+		expectedError           error
 	}{
 		{
-			name: "Successful round finalization",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.AllScoresSubmittedPayload{
-					RoundID: 1,
+			name: "success finalizing round",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(testFinalizedRound, nil)
+			},
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
+				// No expectations for the RoundValidator
+			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.AllScoresSubmittedPayload{
+				RoundID: testRoundID,
+			},
+			expectedResult: RoundOperationResult{
+				Success: roundevents.RoundFinalizedPayload{
+					RoundID:   testRoundID,
+					RoundData: *testFinalizedRound,
 				},
 			},
-			expectedEvent: roundevents.DiscordRoundFinalized,
-			expectErr:     false,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().UpdateRoundState(gomock.Any(), gomock.Eq(roundtypes.ID(1)), gomock.Eq(roundtypes.RoundStateFinalized)).Return(nil).Times(1)
-				// Expect both events in the order they're published
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFinalized), gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.DiscordRoundFinalized), gomock.Any()).Return(nil).Times(1)
-			},
+			expectedError: nil,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
+			name: "failure updating round state",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
 			},
-			expectErr: true,
-			mockExpects: func() {
-				// No mocks needed here as the function should fail before any mocked method is called
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
+				// No expectations for the RoundValidator
 			},
-		},
-		{
-			name: "Database error",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.AllScoresSubmittedPayload{
-					RoundID: 1,
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.AllScoresSubmittedPayload{
+				RoundID: testRoundID,
+			},
+			expectedResult: RoundOperationResult{
+				Failure: roundevents.RoundFinalizationErrorPayload{
+					RoundID: testRoundID,
+					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().UpdateRoundState(gomock.Any(), gomock.Eq(roundtypes.ID(1)), gomock.Eq(roundtypes.RoundStateFinalized)).Return(fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFinalizationError), gomock.Any()).Return(nil).Times(1)
-			},
+			expectedError: fmt.Errorf("failed to update round state: %w", dbUpdateError),
 		},
 		{
-			name: "Publish RoundFinalized event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.AllScoresSubmittedPayload{
-					RoundID: 1,
+			name: "failure fetching round after update",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, dbGetError)
+			},
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
+				// No expectations for the RoundValidator
+			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.AllScoresSubmittedPayload{
+				RoundID: testRoundID,
+			},
+			expectedResult: RoundOperationResult{
+				Failure: roundevents.RoundFinalizationErrorPayload{
+					RoundID: testRoundID,
+					Error:   fmt.Sprintf("failed to fetch round data: %v", dbGetError),
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().UpdateRoundState(gomock.Any(), gomock.Eq(roundtypes.ID(1)), gomock.Eq(roundtypes.RoundStateFinalized)).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFinalized), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-				// No expectation for DiscordRoundFinalized since the function should return after the first failure
-			},
-		},
-		{
-			name: "Publish DiscordRoundFinalized event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.AllScoresSubmittedPayload{
-					RoundID: 1,
-				},
-			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().UpdateRoundState(gomock.Any(), gomock.Eq(roundtypes.ID(1)), gomock.Eq(roundtypes.RoundStateFinalized)).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFinalized), gomock.Any()).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.DiscordRoundFinalized), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
+			expectedError: fmt.Errorf("failed to fetch round %s: %w", testRoundID, dbGetError),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
-			tt.mockExpects()
+			tt.mockDBSetup(mockDB)
+			tt.mockRoundValidatorSetup(mockRoundValidator)
+			tt.mockEventBusSetup(mockEventBus)
 
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				RoundDB:        mockDB,
+				logger:         mockLogger,
+				metrics:        mockMetrics,
+				tracer:         mockTracer,
+				roundValidator: mockRoundValidator,
+				EventBus:       mockEventBus,
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc()
+				},
 			}
 
-			// Call the service function
-			err := s.FinalizeRound(tt.args.ctx, msg)
-			if tt.expectErr {
-				if err == nil {
-					t.Error("FinalizeRound() expected error, got none")
+			_, err := s.FinalizeRound(ctx, tt.payload)
+
+			// Validate error
+			if tt.expectedError != nil {
+				if err == nil || err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("FinalizeRound() unexpected error: %v", err)
+					t.Errorf("expected no error, got: %v", err)
 				}
 			}
+
+			// Validate result
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+
 		})
 	}
 }
 
 func TestRoundService_NotifyScoreModule(t *testing.T) {
-	// Helper function to create a pointer to an int
-	intPtr := func(i int) *int {
-		return &i
-	}
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
-	logger := slog.Default()
+	ctx := context.Background()
+	mockLogger := &lokifrolfbot.NoOpLogger{}
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+	mockTracer := tempofrolfbot.NewNoOpTracer()
+	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
-	type args struct {
-		ctx     context.Context
-		payload interface{}
-	}
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	user1ID := sharedtypes.DiscordID("user1")
+	user2ID := sharedtypes.DiscordID("user2")
+	user3ID := sharedtypes.DiscordID("user3")
+	user4ID := sharedtypes.DiscordID("user4")
+
+	tag1 := sharedtypes.TagNumber(10)
+	tag2 := sharedtypes.TagNumber(0) // For nil or zero tag
+	tag4 := sharedtypes.TagNumber(40)
+
+	score1 := sharedtypes.Score(50)
+	score2 := sharedtypes.Score(0) // For nil score
+	score3 := sharedtypes.Score(60)
+
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		name           string
+		payload        roundevents.RoundFinalizedPayload
+		expectedResult RoundOperationResult
+		expectedError  error
 	}{
 		{
-			name: "Successful score module notification",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
-				},
-			},
-			expectedEvent: roundevents.ProcessRoundScoresRequest,
-			expectErr:     false,
-			mockExpects: func() {
-				intScore1 := 10
-				intScore2 := 10
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(&roundtypes.Round{
-					ID:    1,
-					Title: "Test Round",
-					State: roundtypes.RoundStateFinalized,
+			name: "success notifying score module with various participants",
+			payload: roundevents.RoundFinalizedPayload{
+				RoundID: testRoundID,
+				RoundData: roundtypes.Round{
+					ID: testRoundID,
 					Participants: []roundtypes.Participant{
-						{
-							UserID:    "user1",
-							TagNumber: intPtr(1234),
-							Score:     &intScore1,
-						},
-						{
-							UserID:    "user2",
-							TagNumber: intPtr(0),
-							Score:     &intScore2,
-						},
+						{UserID: user1ID, TagNumber: &tag1, Score: &score1},
+						{UserID: user2ID, TagNumber: nil, Score: nil},       // Nil tag, nil score
+						{UserID: user3ID, TagNumber: &tag2, Score: &score3}, // Zero tag
+						{UserID: user4ID, TagNumber: &tag4, Score: nil},     // Valid tag, nil score
 					},
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ProcessRoundScoresRequest), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
-					// Check topic first
-					if topic != roundevents.ProcessRoundScoresRequest {
-						return fmt.Errorf("unexpected topic: %s", topic)
-					}
-					// Unmarshal the payload
-					var payload roundevents.ProcessRoundScoresRequestPayload
-					err := json.Unmarshal(msg.Payload, &payload)
-					if err != nil {
-						return fmt.Errorf("failed to unmarshal payload: %w", err)
-					}
-
-					// Validate payload
-					if payload.RoundID != 1 {
-						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
-					}
-					if len(payload.Scores) != 2 {
-						return fmt.Errorf("unexpected number of scores: %d", len(payload.Scores))
-					}
-					//Compare the integer values, not the pointer addresses.
-					if payload.Scores[0].UserID != "user1" || *payload.Scores[0].TagNumber != 1234 || payload.Scores[0].Score != 10 {
-						return fmt.Errorf("unexpected score data for user1: %+v", payload.Scores[0])
-					}
-					if payload.Scores[1].UserID != "user2" || *payload.Scores[1].TagNumber != 0 || payload.Scores[1].Score != 10 {
-						return fmt.Errorf("unexpected score data for user2: %+v", payload.Scores[1])
-					}
-					return nil
-				}).Times(1)
-			},
-		},
-		{
-			name: "Successful score module notification with nil scores",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
 				},
 			},
-			expectedEvent: roundevents.ProcessRoundScoresRequest,
-			expectErr:     false,
-			mockExpects: func() {
-				intScore1 := 10
-				// No score for intScore2
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(&roundtypes.Round{
-					ID:    1,
-					Title: "Test Round",
-					State: roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{
-						{
-							UserID:    "user1",
-							TagNumber: intPtr(1234),
-							Score:     &intScore1,
-						},
-						{
-							UserID:    "user2",
-							TagNumber: intPtr(0),
-							Score:     nil, // No score for user2
-						},
+			expectedResult: RoundOperationResult{
+				Success: roundevents.ProcessRoundScoresRequestPayload{
+					RoundID: testRoundID,
+					Scores: []roundevents.ParticipantScore{
+						{UserID: user1ID, TagNumber: &tag1, Score: score1},
+						{UserID: user2ID, TagNumber: &tag2, Score: score2}, // Expect Tag 0, Score 0 for nil inputs
+						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Expect Tag 0 for explicit 0 input
+						{UserID: user4ID, TagNumber: &tag4, Score: score2}, // Expect Score 0 for nil input
 					},
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ProcessRoundScoresRequest), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
-					// Check topic first
-					if topic != roundevents.ProcessRoundScoresRequest {
-						return fmt.Errorf("unexpected topic: %s", topic)
-					}
-					// Unmarshal the payload
-					var payload roundevents.ProcessRoundScoresRequestPayload
-					err := json.Unmarshal(msg.Payload, &payload)
-					if err != nil {
-						return fmt.Errorf("failed to unmarshal payload: %w", err)
-					}
-
-					// Validate payload
-					if payload.RoundID != 1 {
-						return fmt.Errorf("unexpected round ID: %v", payload.RoundID)
-					}
-					if len(payload.Scores) != 2 {
-						return fmt.Errorf("unexpected number of scores: %d", len(payload.Scores))
-					}
-					//Compare the integer values, not the pointer addresses.
-					if payload.Scores[0].UserID != "user1" || *payload.Scores[0].TagNumber != 1234 || payload.Scores[0].Score != 10 {
-						return fmt.Errorf("unexpected score data for user1: %+v", payload.Scores[0])
-					}
-					// Expecting score of 0 for user2
-					if payload.Scores[1].UserID != "user2" || *payload.Scores[1].TagNumber != 0 || payload.Scores[1].Score != 0 {
-						return fmt.Errorf("unexpected score data for user2: %+v", payload.Scores[1])
-					}
-					return nil
-				}).Times(1)
-			},
-		},
-		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
-			},
-			expectErr: true,
-			mockExpects: func() {
-			},
-		},
-		{
-			name: "Database error",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(nil, fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ScoreModuleNotificationError), gomock.Any()).Return(nil).Times(1)
-			},
+			expectedError: nil,
 		},
 		{
-			name: "Publish ProcessRoundScoresRequest event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
+			name: "success notifying score module with no participants",
+			payload: roundevents.RoundFinalizedPayload{
+				RoundID: testRoundID,
+				RoundData: roundtypes.Round{
+					ID:           testRoundID,
+					Participants: []roundtypes.Participant{}, // Empty slice
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				intScore1 := 10
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(&roundtypes.Round{
-					ID:    1,
-					Title: "Test Round",
-					State: roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{
-						{
-							UserID:    "user1",
-							TagNumber: intPtr(1234),
-							Score:     &intScore1,
-						},
-					},
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ProcessRoundScoresRequest), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ScoreModuleNotificationError), gomock.Any()).Return(nil).Times(1)
+			expectedResult: RoundOperationResult{
+				Success: roundevents.ProcessRoundScoresRequestPayload{
+					RoundID: testRoundID,
+					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
+				},
 			},
+			expectedError: nil,
 		},
 		{
-			name: "GetRound returns error",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
+			name: "success notifying score module with nil participants",
+			payload: roundevents.RoundFinalizedPayload{
+				RoundID: testRoundID,
+				RoundData: roundtypes.Round{
+					ID:           testRoundID,
+					Participants: nil, // Nil slice
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(nil, fmt.Errorf("database error"))
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ScoreModuleNotificationError), gomock.Any()).Return(nil)
-			},
-		},
-		{
-			name: "Publish score.module.notification.error fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundFinalizedPayload{
-					RoundID: 1,
+			expectedResult: RoundOperationResult{
+				Success: roundevents.ProcessRoundScoresRequestPayload{
+					RoundID: testRoundID,
+					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
 				},
 			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), gomock.Eq(roundtypes.ID(1))).Return(nil, fmt.Errorf("database error"))
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.ScoreModuleNotificationError), gomock.Any()).Return(fmt.Errorf("publish error"))
-			},
+			expectedError: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
-			tt.mockExpects()
-
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				logger:         mockLogger,
+				metrics:        mockMetrics,
+				tracer:         mockTracer,
+				roundValidator: mockRoundValidator,
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc()
+				},
 			}
 
-			// Call the service function
-			err := s.NotifyScoreModule(tt.args.ctx, msg)
-			if tt.expectErr {
-				if err == nil {
-					t.Error("NotifyScoreModule() expected error, got none")
+			_, err := s.NotifyScoreModule(ctx, tt.payload)
+
+			// Validate error
+			if tt.expectedError != nil {
+				if err == nil || err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("NotifyScoreModule() unexpected error: %v", err)
+					t.Errorf("expected no error, got: %v", err)
 				}
 			}
+
+			// Validate result
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+
 		})
 	}
 }

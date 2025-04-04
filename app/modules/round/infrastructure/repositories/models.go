@@ -12,19 +12,19 @@ import (
 // Round represents a single round in the tournament.
 type Round struct {
 	bun.BaseModel  `bun:"table:rounds,alias:r"`
-	ID             sharedtypes.RoundID       `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
-	Title          roundtypes.Title          `bun:"title,notnull"`
-	Description    roundtypes.Description    `bun:"description"`
-	Location       roundtypes.Location       `bun:"location"`
-	EventType      *roundtypes.EventType     `bun:"event_type"`
-	StartTime      roundtypes.StartTime      `bun:"start_time,notnull"`
-	Finalized      roundtypes.Finalized      `bun:"finalized,notnull"`
-	CreatorID      sharedtypes.DiscordID     `bun:"created_by,notnull"`
-	State          roundtypes.RoundState     `bun:"state,notnull"`
-	Participants   []roundtypes.Participant  `bun:"participants,type:jsonb"`
-	EventMessageID roundtypes.EventMessageID `bun:"event_message_id"`
-	CreatedAt      time.Time                 `bun:",notnull,default:current_timestamp"`
-	UpdatedAt      time.Time                 `bun:",notnull,default:current_timestamp"`
+	ID             sharedtypes.RoundID      `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
+	Title          roundtypes.Title         `bun:"title,notnull"`
+	Description    roundtypes.Description   `bun:"description"`
+	Location       roundtypes.Location      `bun:"location"`
+	EventType      *roundtypes.EventType    `bun:"event_type"`
+	StartTime      sharedtypes.StartTime    `bun:"start_time,notnull"`
+	Finalized      roundtypes.Finalized     `bun:"finalized,notnull"`
+	CreatorID      sharedtypes.DiscordID    `bun:"created_by,notnull"`
+	State          roundtypes.RoundState    `bun:"state,notnull"`
+	Participants   []roundtypes.Participant `bun:"participants,type:jsonb"`
+	EventMessageID sharedtypes.RoundID      `bun:"event_message_id"`
+	CreatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
+	UpdatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
 }
 
 // Response represents the possible responses for a participant.

@@ -13,8 +13,10 @@ import (
 	context "context"
 	reflect "reflect"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
-	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,449 +45,316 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CheckAllScoresSubmitted mocks base method.
-func (m *MockService) CheckAllScoresSubmitted(ctx context.Context, msg *message.Message) error {
+func (m *MockService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckAllScoresSubmitted", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "CheckAllScoresSubmitted", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CheckAllScoresSubmitted indicates an expected call of CheckAllScoresSubmitted.
-func (mr *MockServiceMockRecorder) CheckAllScoresSubmitted(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CheckAllScoresSubmitted(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAllScoresSubmitted", reflect.TypeOf((*MockService)(nil).CheckAllScoresSubmitted), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAllScoresSubmitted", reflect.TypeOf((*MockService)(nil).CheckAllScoresSubmitted), ctx, payload)
 }
 
 // CheckParticipantStatus mocks base method.
-func (m *MockService) CheckParticipantStatus(ctx context.Context, msg *message.Message) error {
+func (m *MockService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckParticipantStatus", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "CheckParticipantStatus", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CheckParticipantStatus indicates an expected call of CheckParticipantStatus.
-func (mr *MockServiceMockRecorder) CheckParticipantStatus(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CheckParticipantStatus(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckParticipantStatus", reflect.TypeOf((*MockService)(nil).CheckParticipantStatus), ctx, msg)
-}
-
-// CheckRoundExists mocks base method.
-func (m *MockService) CheckRoundExists(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckRoundExists", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CheckRoundExists indicates an expected call of CheckRoundExists.
-func (mr *MockServiceMockRecorder) CheckRoundExists(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckRoundExists", reflect.TypeOf((*MockService)(nil).CheckRoundExists), ctx, msg)
-}
-
-// CheckUserAuthorization mocks base method.
-func (m *MockService) CheckUserAuthorization(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckUserAuthorization", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CheckUserAuthorization indicates an expected call of CheckUserAuthorization.
-func (mr *MockServiceMockRecorder) CheckUserAuthorization(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserAuthorization", reflect.TypeOf((*MockService)(nil).CheckUserAuthorization), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckParticipantStatus", reflect.TypeOf((*MockService)(nil).CheckParticipantStatus), ctx, payload)
 }
 
 // DeleteRound mocks base method.
-func (m *MockService) DeleteRound(ctx context.Context, msg *message.Message) error {
+func (m *MockService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteRound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "DeleteRound", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteRound indicates an expected call of DeleteRound.
-func (mr *MockServiceMockRecorder) DeleteRound(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) DeleteRound(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRound", reflect.TypeOf((*MockService)(nil).DeleteRound), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRound", reflect.TypeOf((*MockService)(nil).DeleteRound), ctx, payload)
 }
 
 // FinalizeRound mocks base method.
-func (m *MockService) FinalizeRound(ctx context.Context, msg *message.Message) error {
+func (m *MockService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FinalizeRound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "FinalizeRound", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // FinalizeRound indicates an expected call of FinalizeRound.
-func (mr *MockServiceMockRecorder) FinalizeRound(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) FinalizeRound(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinalizeRound", reflect.TypeOf((*MockService)(nil).FinalizeRound), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinalizeRound", reflect.TypeOf((*MockService)(nil).FinalizeRound), ctx, payload)
 }
 
 // GetRound mocks base method.
-func (m *MockService) GetRound(ctx context.Context, msg *message.Message) error {
+func (m *MockService) GetRound(ctx context.Context, roundID sharedtypes.RoundID) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "GetRound", ctx, roundID)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetRound indicates an expected call of GetRound.
-func (mr *MockServiceMockRecorder) GetRound(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetRound(ctx, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRound", reflect.TypeOf((*MockService)(nil).GetRound), ctx, msg)
-}
-
-// HandleDecline mocks base method.
-func (m *MockService) HandleDecline(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleDecline", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleDecline indicates an expected call of HandleDecline.
-func (mr *MockServiceMockRecorder) HandleDecline(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDecline", reflect.TypeOf((*MockService)(nil).HandleDecline), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRound", reflect.TypeOf((*MockService)(nil).GetRound), ctx, roundID)
 }
 
 // NotifyScoreModule mocks base method.
-func (m *MockService) NotifyScoreModule(ctx context.Context, msg *message.Message) error {
+func (m *MockService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NotifyScoreModule", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "NotifyScoreModule", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NotifyScoreModule indicates an expected call of NotifyScoreModule.
-func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyScoreModule", reflect.TypeOf((*MockService)(nil).NotifyScoreModule), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyScoreModule", reflect.TypeOf((*MockService)(nil).NotifyScoreModule), ctx, payload)
 }
 
 // ParticipantRemoval mocks base method.
-func (m *MockService) ParticipantRemoval(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParticipantRemoval", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ParticipantRemoval", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ParticipantRemoval indicates an expected call of ParticipantRemoval.
-func (mr *MockServiceMockRecorder) ParticipantRemoval(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ParticipantRemoval(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantRemoval", reflect.TypeOf((*MockService)(nil).ParticipantRemoval), ctx, msg)
-}
-
-// ParticipantTagFound mocks base method.
-func (m *MockService) ParticipantTagFound(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParticipantTagFound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ParticipantTagFound indicates an expected call of ParticipantTagFound.
-func (mr *MockServiceMockRecorder) ParticipantTagFound(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantTagFound", reflect.TypeOf((*MockService)(nil).ParticipantTagFound), ctx, msg)
-}
-
-// ParticipantTagNotFound mocks base method.
-func (m *MockService) ParticipantTagNotFound(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParticipantTagNotFound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ParticipantTagNotFound indicates an expected call of ParticipantTagNotFound.
-func (mr *MockServiceMockRecorder) ParticipantTagNotFound(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantTagNotFound", reflect.TypeOf((*MockService)(nil).ParticipantTagNotFound), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipantRemoval", reflect.TypeOf((*MockService)(nil).ParticipantRemoval), ctx, payload)
 }
 
 // ProcessRoundReminder mocks base method.
-func (m *MockService) ProcessRoundReminder(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundReminder", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ProcessRoundReminder", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ProcessRoundReminder indicates an expected call of ProcessRoundReminder.
-func (mr *MockServiceMockRecorder) ProcessRoundReminder(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundReminder(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundReminder", reflect.TypeOf((*MockService)(nil).ProcessRoundReminder), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundReminder", reflect.TypeOf((*MockService)(nil).ProcessRoundReminder), ctx, payload)
 }
 
 // ProcessRoundStart mocks base method.
-func (m *MockService) ProcessRoundStart(msg *message.Message) error {
+func (m *MockService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundStart", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ProcessRoundStart", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ProcessRoundStart indicates an expected call of ProcessRoundStart.
-func (mr *MockServiceMockRecorder) ProcessRoundStart(msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundStart(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), msg)
-}
-
-// ProcessValidatedRound mocks base method.
-func (m *MockService) ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundtime.TimeParserInterface) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessValidatedRound", ctx, msg, timeParser)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ProcessValidatedRound indicates an expected call of ProcessValidatedRound.
-func (mr *MockServiceMockRecorder) ProcessValidatedRound(ctx, msg, timeParser any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessValidatedRound", reflect.TypeOf((*MockService)(nil).ProcessValidatedRound), ctx, msg, timeParser)
-}
-
-// PublishRoundCreated mocks base method.
-func (m *MockService) PublishRoundCreated(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishRoundCreated", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PublishRoundCreated indicates an expected call of PublishRoundCreated.
-func (mr *MockServiceMockRecorder) PublishRoundCreated(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishRoundCreated", reflect.TypeOf((*MockService)(nil).PublishRoundCreated), ctx, msg)
-}
-
-// RequestTagNumber mocks base method.
-func (m *MockService) RequestTagNumber(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RequestTagNumber", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RequestTagNumber indicates an expected call of RequestTagNumber.
-func (mr *MockServiceMockRecorder) RequestTagNumber(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestTagNumber", reflect.TypeOf((*MockService)(nil).RequestTagNumber), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), ctx, payload)
 }
 
 // ScheduleRoundEvents mocks base method.
-func (m *MockService) ScheduleRoundEvents(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScheduleRoundEvents", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ScheduleRoundEvents", ctx, payload, startTime)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ScheduleRoundEvents indicates an expected call of ScheduleRoundEvents.
-func (mr *MockServiceMockRecorder) ScheduleRoundEvents(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ScheduleRoundEvents(ctx, payload, startTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundEvents", reflect.TypeOf((*MockService)(nil).ScheduleRoundEvents), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundEvents", reflect.TypeOf((*MockService)(nil).ScheduleRoundEvents), ctx, payload, startTime)
 }
 
 // StoreRound mocks base method.
-func (m *MockService) StoreRound(ctx context.Context, msg *message.Message) error {
+func (m *MockService) StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreRound", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "StoreRound", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // StoreRound indicates an expected call of StoreRound.
-func (mr *MockServiceMockRecorder) StoreRound(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) StoreRound(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreRound", reflect.TypeOf((*MockService)(nil).StoreRound), ctx, msg)
-}
-
-// StoreRoundUpdate mocks base method.
-func (m *MockService) StoreRoundUpdate(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreRoundUpdate", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// StoreRoundUpdate indicates an expected call of StoreRoundUpdate.
-func (mr *MockServiceMockRecorder) StoreRoundUpdate(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreRoundUpdate", reflect.TypeOf((*MockService)(nil).StoreRoundUpdate), ctx, msg)
-}
-
-// TagNumberRequest mocks base method.
-func (m *MockService) TagNumberRequest(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagNumberRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// TagNumberRequest indicates an expected call of TagNumberRequest.
-func (mr *MockServiceMockRecorder) TagNumberRequest(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagNumberRequest", reflect.TypeOf((*MockService)(nil).TagNumberRequest), ctx, msg)
-}
-
-// TagNumberResponse mocks base method.
-func (m *MockService) TagNumberResponse(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagNumberResponse", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// TagNumberResponse indicates an expected call of TagNumberResponse.
-func (mr *MockServiceMockRecorder) TagNumberResponse(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagNumberResponse", reflect.TypeOf((*MockService)(nil).TagNumberResponse), ctx, msg)
-}
-
-// UpdateEventMessageID mocks base method.
-func (m *MockService) UpdateEventMessageID(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateEventMessageID", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateEventMessageID indicates an expected call of UpdateEventMessageID.
-func (mr *MockServiceMockRecorder) UpdateEventMessageID(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventMessageID", reflect.TypeOf((*MockService)(nil).UpdateEventMessageID), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreRound", reflect.TypeOf((*MockService)(nil).StoreRound), ctx, payload)
 }
 
 // UpdateParticipantScore mocks base method.
-func (m *MockService) UpdateParticipantScore(ctx context.Context, msg *message.Message) error {
+func (m *MockService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateParticipantScore", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "UpdateParticipantScore", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateParticipantScore indicates an expected call of UpdateParticipantScore.
-func (mr *MockServiceMockRecorder) UpdateParticipantScore(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateParticipantScore(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateParticipantScore", reflect.TypeOf((*MockService)(nil).UpdateParticipantScore), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateParticipantScore", reflect.TypeOf((*MockService)(nil).UpdateParticipantScore), ctx, payload)
+}
+
+// UpdateParticipantStatus mocks base method.
+func (m *MockService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateParticipantStatus", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateParticipantStatus indicates an expected call of UpdateParticipantStatus.
+func (mr *MockServiceMockRecorder) UpdateParticipantStatus(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateParticipantStatus", reflect.TypeOf((*MockService)(nil).UpdateParticipantStatus), ctx, payload)
 }
 
 // UpdateRoundEntity mocks base method.
-func (m *MockService) UpdateRoundEntity(ctx context.Context, msg *message.Message) error {
+func (m *MockService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRoundEntity", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "UpdateRoundEntity", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateRoundEntity indicates an expected call of UpdateRoundEntity.
-func (mr *MockServiceMockRecorder) UpdateRoundEntity(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateRoundEntity(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundEntity", reflect.TypeOf((*MockService)(nil).UpdateRoundEntity), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundEntity", reflect.TypeOf((*MockService)(nil).UpdateRoundEntity), ctx, payload)
 }
 
 // UpdateScheduledRoundEvents mocks base method.
-func (m *MockService) UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error {
+func (m *MockService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScheduledRoundEvents", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "UpdateScheduledRoundEvents", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateScheduledRoundEvents indicates an expected call of UpdateScheduledRoundEvents.
-func (mr *MockServiceMockRecorder) UpdateScheduledRoundEvents(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateScheduledRoundEvents(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundEvents", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundEvents), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundEvents", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundEvents), ctx, payload)
 }
 
-// UserRoleCheckResult mocks base method.
-func (m *MockService) UserRoleCheckResult(ctx context.Context, msg *message.Message) error {
+// UpdateScheduledRoundsWithNewTags mocks base method.
+func (m *MockService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UserRoleCheckResult", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "UpdateScheduledRoundsWithNewTags", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// UserRoleCheckResult indicates an expected call of UserRoleCheckResult.
-func (mr *MockServiceMockRecorder) UserRoleCheckResult(ctx, msg any) *gomock.Call {
+// UpdateScheduledRoundsWithNewTags indicates an expected call of UpdateScheduledRoundsWithNewTags.
+func (mr *MockServiceMockRecorder) UpdateScheduledRoundsWithNewTags(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserRoleCheckResult", reflect.TypeOf((*MockService)(nil).UserRoleCheckResult), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundsWithNewTags", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundsWithNewTags), ctx, payload)
+}
+
+// ValidateAndProcessRound mocks base method.
+func (m *MockService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateAndProcessRound", ctx, payload, timeParser)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateAndProcessRound indicates an expected call of ValidateAndProcessRound.
+func (mr *MockServiceMockRecorder) ValidateAndProcessRound(ctx, payload, timeParser any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRound", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRound), ctx, payload, timeParser)
 }
 
 // ValidateParticipantJoinRequest mocks base method.
-func (m *MockService) ValidateParticipantJoinRequest(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateParticipantJoinRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ValidateParticipantJoinRequest", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ValidateParticipantJoinRequest indicates an expected call of ValidateParticipantJoinRequest.
-func (mr *MockServiceMockRecorder) ValidateParticipantJoinRequest(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ValidateParticipantJoinRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateParticipantJoinRequest", reflect.TypeOf((*MockService)(nil).ValidateParticipantJoinRequest), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateParticipantJoinRequest", reflect.TypeOf((*MockService)(nil).ValidateParticipantJoinRequest), ctx, payload)
 }
 
 // ValidateRoundDeleteRequest mocks base method.
-func (m *MockService) ValidateRoundDeleteRequest(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateRoundDeleteRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ValidateRoundDeleteRequest", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ValidateRoundDeleteRequest indicates an expected call of ValidateRoundDeleteRequest.
-func (mr *MockServiceMockRecorder) ValidateRoundDeleteRequest(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ValidateRoundDeleteRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundDeleteRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundDeleteRequest), ctx, msg)
-}
-
-// ValidateRoundRequest mocks base method.
-func (m *MockService) ValidateRoundRequest(ctx context.Context, msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateRoundRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ValidateRoundRequest indicates an expected call of ValidateRoundRequest.
-func (mr *MockServiceMockRecorder) ValidateRoundRequest(ctx, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundRequest), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundDeleteRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundDeleteRequest), ctx, payload)
 }
 
 // ValidateRoundUpdateRequest mocks base method.
-func (m *MockService) ValidateRoundUpdateRequest(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateRoundUpdateRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ValidateRoundUpdateRequest", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ValidateRoundUpdateRequest indicates an expected call of ValidateRoundUpdateRequest.
-func (mr *MockServiceMockRecorder) ValidateRoundUpdateRequest(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ValidateRoundUpdateRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundUpdateRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundUpdateRequest), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundUpdateRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundUpdateRequest), ctx, payload)
 }
 
 // ValidateScoreUpdateRequest mocks base method.
-func (m *MockService) ValidateScoreUpdateRequest(ctx context.Context, msg *message.Message) error {
+func (m *MockService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateScoreUpdateRequest", ctx, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ValidateScoreUpdateRequest", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ValidateScoreUpdateRequest indicates an expected call of ValidateScoreUpdateRequest.
-func (mr *MockServiceMockRecorder) ValidateScoreUpdateRequest(ctx, msg any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ValidateScoreUpdateRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateScoreUpdateRequest", reflect.TypeOf((*MockService)(nil).ValidateScoreUpdateRequest), ctx, msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateScoreUpdateRequest", reflect.TypeOf((*MockService)(nil).ValidateScoreUpdateRequest), ctx, payload)
 }

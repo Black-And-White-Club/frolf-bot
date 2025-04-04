@@ -2,19 +2,18 @@ package roundservice
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
+	"errors"
 	"testing"
 
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
 
@@ -22,117 +21,136 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.Default()
+	ctx := context.Background()
 
-	type args struct {
-		ctx     context.Context
-		payload interface{}
-	}
+	// Mock dependencies
+	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockLogger := &lokifrolfbot.NoOpLogger{}
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+	mockTracer := tempofrolfbot.NewNoOpTracer()
+	mockRoundValidator := &roundutil.MockRoundValidator{}
+	mockEventBus := &eventbus.MockEventBus{}
+
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		name                    string
+		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
+		mockEventBusSetup       func(*eventbus.MockEventBus)
+		payload                 roundevents.RoundDeleteRequestPayload
+		expectedResult          RoundOperationResult
+		expectedError           error
 	}{
 		{
-			name: "Successful round delete request validation",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID:              1,
-					RequestingUserUserID: "user-123",
+			name: "valid round delete request",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			},
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
+			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.RoundDeleteRequestPayload{
+				RoundID:              sharedtypes.RoundID(uuid.New()),
+				RequestingUserUserID: "Test User",
+			},
+			expectedResult: RoundOperationResult{
+				Success: &roundevents.RoundDeleteValidatedPayload{
+					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
+						RoundID:              sharedtypes.RoundID(uuid.New()),
+						RequestingUserUserID: "Test User",
+					},
 				},
 			},
-			expectedEvent: roundevents.RoundDeleteValidated,
-			expectErr:     false,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteValidated), gomock.Any()).Return(nil).Times(1)
-			},
+			expectedError: nil,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
+			name: "invalid round delete request - zero round ID",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
-		},
-		{
-			name: "Empty round ID",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteRequestPayload{
-					RequestingUserUserID: "user-123",
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.RoundDeleteRequestPayload{
+				RoundID:              sharedtypes.RoundID(uuid.Nil),
+				RequestingUserUserID: "Test User",
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						RoundID:              sharedtypes.RoundID(uuid.Nil),
+						RequestingUserUserID: "Test User",
+					},
+					Error: "round ID cannot be zero",
 				},
 			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
-			},
+			expectedError: errors.New("round ID cannot be zero"),
 		},
 		{
-			name: "Empty requesting user's Discord ID",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID: 1,
+			name: "invalid round delete request - empty requesting user ID",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			},
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
+			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.RoundDeleteRequestPayload{
+				RoundID:              sharedtypes.RoundID(uuid.New()),
+				RequestingUserUserID: "",
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						RoundID:              sharedtypes.RoundID(uuid.New()),
+						RequestingUserUserID: "",
+					},
+					Error: "requesting user's Discord ID cannot be empty",
 				},
 			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Publish RoundDeleteValidated event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteRequestPayload{
-					RoundID:              1,
-					RequestingUserUserID: "user-123",
-				},
-			},
-			expectedEvent: "",
-			expectErr:     true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteValidated), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
+			expectedError: errors.New("requesting user's Discord ID cannot be empty"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
-			tt.mockExpects()
+			tt.mockDBSetup(mockDB)
+			tt.mockRoundValidatorSetup(mockRoundValidator)
+			tt.mockEventBusSetup(mockEventBus)
 
 			s := &RoundService{
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				RoundDB:        mockDB,
+				logger:         mockLogger,
+				metrics:        mockMetrics,
+				tracer:         mockTracer,
+				roundValidator: mockRoundValidator,
+				EventBus:       mockEventBus,
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc()
+				},
 			}
 
-			// Call the service function
-			err := s.ValidateRoundDeleteRequest(tt.args.ctx, msg)
-			if tt.expectErr {
+			_, err := s.ValidateRoundDeleteRequest(ctx, tt.payload)
+
+			// Validate error presence
+			if tt.expectedError != nil {
 				if err == nil {
-					t.Error("ValidateRoundDeleteRequest() expected error, got none")
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("ValidateRoundDeleteRequest() unexpected error: %v", err)
+					t.Errorf("expected no error, got: %v", err)
 				}
+				if tt.expectedError != nil {
+					if err == nil {
+						t.Errorf("expected error: %v, got: nil", tt.expectedError)
+					} else if err.Error() != tt.expectedError.Error() {
+						t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+					}
+				} else if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+
 			}
 		})
 	}
@@ -142,145 +160,153 @@ func TestRoundService_DeleteRound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDBInterface(ctrl)
-	logger := slog.Default()
+	ctx := context.Background()
 
-	type args struct {
-		ctx context.Context
-		msg *message.Message
-	}
+	// Mock dependencies
+	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockLogger := &lokifrolfbot.NoOpLogger{}
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+	mockTracer := tempofrolfbot.NewNoOpTracer()
+	mockRoundValidator := &roundutil.MockRoundValidator{}
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
+
+	id := sharedtypes.RoundID(uuid.New())
+
 	tests := []struct {
-		name        string
-		args        args
-		wantErr     bool
-		mockExpects func()
+		name                    string
+		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
+		mockEventBusSetup       func(*eventbus.MockEventBus)
+		payload                 roundevents.RoundDeleteAuthorizedPayload
+		expectedResult          RoundOperationResult
+		expectedError           error
 	}{
 		{
-			name: "Successful round deletion",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
-					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: 1,
-					})
-					return payload
-				}()),
+			name: "delete round successfully",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetEventMessageID(ctx, gomock.Any()).Return(&id, nil)
+				mockDB.EXPECT().DeleteRound(ctx, gomock.Any()).Return(nil)
 			},
-			wantErr: false,
-			mockExpects: func() {
-				// Mock GetEventMessageID - this was missing in your original test
-				eventMessageID := roundtypes.EventMessageID("message-123")
-				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(&eventMessageID, nil).Times(1)
-
-				// Mock DeleteRound
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
-
-				// Mock CancelScheduledMessage - note the string parameter
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
-
-				// Mock Publish
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(nil).Times(1)
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+				mockEventBus.EXPECT().CancelScheduledMessage(ctx, id).Return(nil)
+			},
+			payload: roundevents.RoundDeleteAuthorizedPayload{
+				RoundID: id,
+			},
+			expectedResult: RoundOperationResult{
+				Success: &roundevents.RoundDeletedPayload{
+					RoundID:        id,
+					EventMessageID: id,
+				},
+			},
+			expectedError: nil,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), []byte("invalid json")),
+			name: "delete round fails - get event message ID error",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetEventMessageID(ctx, gomock.Any()).Return(nil, errors.New("get event message ID error"))
 			},
-			wantErr: true,
-			mockExpects: func() {
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.RoundDeleteAuthorizedPayload{
+				RoundID: id,
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						RoundID:              id,
+						RequestingUserUserID: "",
+					},
+					Error: "get event message ID error",
+				},
+			},
+			expectedError: errors.New("failed to retrieve EventMessageID for round"),
 		},
 		{
-			name: "Failed to retrieve EventMessageID",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
-					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: 1,
-					})
-					return payload
-				}()),
+			name: "delete round fails - delete round error",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetEventMessageID(ctx, gomock.Any()).Return(&id, nil)
+				mockDB.EXPECT().DeleteRound(ctx, gomock.Any()).Return(errors.New("delete round error"))
 			},
-			wantErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, fmt.Errorf("failed to get event message ID")).Times(1)
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			},
+			payload: roundevents.RoundDeleteAuthorizedPayload{
+				RoundID: id,
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						RoundID:              id,
+						RequestingUserUserID: "",
+					},
+					Error: "delete round error",
+				},
+			},
+			expectedError: errors.New("failed to delete round"),
 		},
 		{
-			name: "Failed to delete round from database",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
-					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: 1,
-					})
-					return payload
-				}()),
+			name: "delete round fails - cancel scheduled message error",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetEventMessageID(ctx, gomock.Any()).Return(&id, nil)
+				mockDB.EXPECT().DeleteRound(ctx, gomock.Any()).Return(nil)
 			},
-			wantErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, nil).Times(1)
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
+			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
-		},
-		{
-			name: "Failed to cancel scheduled messages",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
-					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: 1,
-					})
-					return payload
-				}()),
+			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+				mockEventBus.EXPECT().CancelScheduledMessage(ctx, id).Return(errors.New("cancel scheduled message error"))
 			},
-			wantErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(nil, nil).Times(1)
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(fmt.Errorf("cancel error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
+			payload: roundevents.RoundDeleteAuthorizedPayload{
+				RoundID: id,
 			},
-		},
-		{
-			name: "Failed to publish round.deleted event",
-			args: args{
-				ctx: context.Background(),
-				msg: message.NewMessage(watermill.NewUUID(), func() []byte {
-					payload, _ := json.Marshal(roundevents.RoundDeleteAuthorizedPayload{
-						RoundID: 1,
-					})
-					return payload
-				}()),
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						RoundID:              id,
+						RequestingUserUserID: "",
+					},
+					Error: "cancel scheduled message error",
+				},
 			},
-			wantErr: true,
-			mockExpects: func() {
-				eventMessageID := roundtypes.EventMessageID("message-123")
-				mockRoundDB.EXPECT().GetEventMessageID(gomock.Any(), roundtypes.ID(1)).Return(&eventMessageID, nil).Times(1)
-				mockRoundDB.EXPECT().DeleteRound(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
-				mockEventBus.EXPECT().CancelScheduledMessage(gomock.Any(), roundtypes.ID(1)).Return(nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleted), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
+			expectedError: errors.New("failed to cancel scheduled messages"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockExpects()
+			tt.mockDBSetup(mockDB)
+			tt.mockRoundValidatorSetup(mockRoundValidator)
+			tt.mockEventBusSetup(mockEventBus)
 
 			s := &RoundService{
-				RoundDB:  mockRoundDB,
-				EventBus: mockEventBus,
-				logger:   logger,
+				RoundDB:        mockDB,
+				logger:         mockLogger,
+				metrics:        mockMetrics,
+				tracer:         mockTracer,
+				roundValidator: mockRoundValidator,
+				EventBus:       mockEventBus,
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc()
+				},
 			}
 
-			if err := s.DeleteRound(tt.args.ctx, tt.args.msg); (err != nil) != tt.wantErr {
-				t.Errorf("RoundService.DeleteRound() error = %v, wantErr %v", err, tt.wantErr)
+			_, err := s.DeleteRound(ctx, tt.payload)
+
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
 			}
 		})
 	}

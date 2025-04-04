@@ -1,131 +1,125 @@
 package roundservice
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"log/slog"
-
-	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
-func (s *RoundService) ScheduleRoundEvents(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundStoredPayload: %w", err)
-	}
+func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ScheduleRoundEvents", func() (RoundOperationResult, error) {
+		s.logger.Info("Scheduling round events",
+			attr.RoundID("round_id", payload.Round.ID),
+		)
 
-	s.logger.Info("ScheduleRoundEvents: Received RoundStored event", slog.Int64("round_id", int64(eventPayload.Round.ID)))
+		// Ensure the consumer is created for this round ID
+		if err := s.EventBus.ProcessDelayedMessages(ctx, payload.Round.ID, startTime); err != nil {
+			s.logger.Error("Failed to create consumer for round",
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: payload.Round.ID,
+					Error:   err.Error(),
+				},
+			}, fmt.Errorf("failed to create consumer for round %s: %w", payload.Round.ID, err)
+		}
 
-	// Ensure StartTime is treated as UTC
-	startTime := time.Time(*eventPayload.Round.StartTime) // Convert to time.Time
-	startTime = startTime.UTC()
+		// Schedule reminder
+		reminderPayload := roundevents.DiscordReminderPayload{
+			RoundID:        payload.Round.ID,
+			ReminderType:   "1h",
+			RoundTitle:     payload.Round.Title,
+			EventMessageID: payload.Round.EventMessageID,
+		}
+		reminderBytes, err := json.Marshal(reminderPayload)
+		if err != nil {
+			s.logger.Error("Failed to encode reminder payload",
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: payload.Round.ID,
+					Error:   err.Error(),
+				},
+			}, fmt.Errorf("failed to encode reminder payload: %w", err)
+		}
+		reminderTime := startTime.Add(-1 * time.Hour) // Reminder time is 1 hour before the round starts
+		if err := s.EventBus.ScheduleDelayedMessage(ctx, roundevents.RoundReminder, payload.Round.ID, reminderTime, reminderBytes); err != nil {
+			s.logger.Error("Failed to schedule reminder",
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: payload.Round.ID,
+					Error:   err.Error(),
+				},
+			}, fmt.Errorf("failed to schedule reminder: %w", err)
+		}
 
-	if time.Until(startTime) < 0 {
-		s.logger.Warn("Round start time is in the past, scheduling for immediate execution", "round_id", eventPayload.Round.ID)
-	}
+		// Schedule round start
+		startPayload := roundevents.DiscordRoundStartPayload{
+			RoundID:        payload.Round.ID,
+			Title:          payload.Round.Title,
+			Location:       payload.Round.Location,
+			StartTime:      (*sharedtypes.StartTime)(&startTime),
+			Participants:   []roundevents.RoundParticipant{},
+			EventMessageID: payload.Round.EventMessageID,
+		}
+		startBytes, err := json.Marshal(startPayload)
+		if err != nil {
+			s.logger.Error("Failed to encode round start payload",
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: payload.Round.ID,
+					Error:   err.Error(),
+				},
+			}, fmt.Errorf("failed to encode round start payload: %w", err)
+		}
+		if err := s.EventBus.ScheduleDelayedMessage(ctx, roundevents.RoundStarted, payload.Round.ID, startTime, startBytes); err != nil {
+			s.logger.Error("Failed to schedule round start",
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: payload.Round.ID,
+					Error:   err.Error(),
+				},
+			}, fmt.Errorf("failed to schedule round start: %w", err)
+		}
 
-	// Prepare reusable JSON encoder & buffer for performance optimization
-	var payloadBuf bytes.Buffer
-	encoder := json.NewEncoder(&payloadBuf)
+		s.logger.Info("Round events scheduled",
+			attr.RoundID("round_id", payload.Round.ID),
+		)
 
-	// --- Schedule 1-Hour Reminder ---
-	payloadBuf.Reset()
-	reminderPayload := roundevents.DiscordReminderPayload{
-		RoundID:      eventPayload.Round.ID,
-		ReminderType: "1h",
-		RoundTitle:   eventPayload.Round.Title,
-	}
+		scheduledPayload := roundevents.RoundScheduledPayload{
+			BaseRoundPayload: roundtypes.BaseRoundPayload{
+				RoundID:     payload.Round.ID,
+				Title:       payload.Round.Title,
+				Description: payload.Round.Description,
+				Location:    payload.Round.Location,
+				StartTime:   (*sharedtypes.StartTime)(&startTime),
+				UserID:      payload.Round.CreatedBy,
+			},
+			EventMessageID: &payload.Round.EventMessageID,
+		}
 
-	if err := encoder.Encode(reminderPayload); err != nil {
-		s.logger.Error("Failed to encode reminder payload", "error", err)
-		return fmt.Errorf("failed to encode reminder payload: %w", err)
-	}
-
-	payloadBytes := payloadBuf.Bytes()
-	reminderMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	reminderMsg.Metadata.Set("Execute-At", startTime.Add(-1*time.Hour).UTC().Format(time.RFC3339))
-	reminderMsg.Metadata.Set("Original-Subject", roundevents.RoundReminder)
-	reminderMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%d-1h-reminder-%d", eventPayload.Round.ID, time.Now().Unix()))
-
-	// Publish reminder message with correct subject
-	reminderSubject := fmt.Sprintf("%s.%d", eventbus.DelayedMessagesSubject, eventPayload.Round.ID)
-	s.logger.InfoContext(ctx, "Publishing delayed reminder message", slog.String("subject", reminderSubject), slog.Int64("round_id", int64(eventPayload.Round.ID)), slog.Time("execute_at", startTime.Add(-1*time.Hour).UTC()))
-	if err := s.EventBus.Publish(reminderSubject, reminderMsg); err != nil {
-		s.logger.Error("Failed to schedule reminder", "error", err, "round_id", eventPayload.Round.ID, "reminder_type", "1h")
-		return fmt.Errorf("failed to schedule 1h reminder: %w", err)
-	}
-
-	// --- Schedule Round Start ---
-	payloadBuf.Reset()
-	startPayload := roundevents.RoundStartedPayload{
-		RoundID:   eventPayload.Round.ID,
-		Title:     eventPayload.Round.Title,
-		Location:  eventPayload.Round.Location,
-		StartTime: (*roundtypes.StartTime)(&startTime),
-	}
-
-	if err := encoder.Encode(startPayload); err != nil {
-		s.logger.Error("Failed to encode round start payload", "error", err)
-		return fmt.Errorf("failed to encode round start payload: %w", err)
-	}
-
-	startPayloadBytes := payloadBuf.Bytes()
-	startMsg := message.NewMessage(watermill.NewUUID(), startPayloadBytes)
-	startMsg.Metadata.Set("Execute-At", startTime.UTC().Format(time.RFC3339))
-	startMsg.Metadata.Set("Original-Subject", roundevents.RoundStarted)
-	startMsg.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%d-round-start-%d", eventPayload.Round.ID, time.Now().Unix()))
-
-	// Schedule the round processing
-	s.EventBus.ScheduleRoundProcessing(ctx, eventPayload.Round.ID, startTime.UTC())
-	s.logger.Info("ScheduleRoundEvents: Round processing scheduled", slog.Int64("round_id", int64(eventPayload.Round.ID)), slog.Time("execute_at", startTime.UTC()))
-
-	// Determine if this is an initial creation or an update
-	eventType := msg.Metadata.Get("event_type")
-	var publishTopic string
-	switch eventType {
-	case roundevents.RoundCreateRequest:
-		publishTopic = roundevents.RoundScheduled
-	case roundevents.RoundUpdateRequest:
-		publishTopic = roundevents.RoundScheduleUpdate
-	default:
-		s.logger.Warn("Unknown event_type metadata, defaulting to RoundScheduled", "round_id", eventPayload.Round.ID, "event_type", eventType)
-		publishTopic = roundevents.RoundScheduled // Default to creation event
-	}
-
-	// Validate publish topic
-	if publishTopic == "" {
-		return fmt.Errorf("missing publish topic for round scheduling, round_id: %d", eventPayload.Round.ID)
-	}
-
-	// Publish final event
-	scheduledMsg := roundevents.RoundScheduledPayload{
-		BaseRoundPayload: roundtypes.BaseRoundPayload{
-			RoundID:     eventPayload.Round.ID,
-			Title:       eventPayload.Round.Title,
-			Description: eventPayload.Round.Description,
-			Location:    eventPayload.Round.Location,
-			StartTime:   eventPayload.Round.StartTime,
-			UserID:      eventPayload.Round.CreatedBy,
-		},
-		EventMessageID: nil,
-	}
-
-	if err := s.publishEvent(msg, publishTopic, scheduledMsg); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, fmt.Sprintf("Failed to publish %s event", publishTopic), nil)
-		return fmt.Errorf("failed to publish %s event: %w", publishTopic, err)
-	}
-
-	s.logger.Info("ScheduleRoundEvents: Round events scheduled successfully", slog.Int64("round_id", int64(eventPayload.Round.ID)))
-	return nil
+		return RoundOperationResult{
+			Success: scheduledPayload,
+		}, nil
+	})
 }

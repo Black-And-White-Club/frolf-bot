@@ -12,9 +12,10 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	bun "github.com/uptrace/bun"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -57,7 +58,7 @@ func (mr *MockRoundDBMockRecorder) CreateRound(ctx, round any) *gomock.Call {
 }
 
 // DeleteRound mocks base method.
-func (m *MockRoundDB) DeleteRound(ctx context.Context, roundID roundtypes.ID) error {
+func (m *MockRoundDB) DeleteRound(ctx context.Context, roundID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteRound", ctx, roundID)
 	ret0, _ := ret[0].(error)
@@ -71,10 +72,10 @@ func (mr *MockRoundDBMockRecorder) DeleteRound(ctx, roundID any) *gomock.Call {
 }
 
 // GetEventMessageID mocks base method.
-func (m *MockRoundDB) GetEventMessageID(ctx context.Context, roundID roundtypes.ID) (*roundtypes.EventMessageID, error) {
+func (m *MockRoundDB) GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventMessageID", ctx, roundID)
-	ret0, _ := ret[0].(*roundtypes.EventMessageID)
+	ret0, _ := ret[0].(*sharedtypes.RoundID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -86,7 +87,7 @@ func (mr *MockRoundDBMockRecorder) GetEventMessageID(ctx, roundID any) *gomock.C
 }
 
 // GetParticipant mocks base method.
-func (m *MockRoundDB) GetParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error) {
+func (m *MockRoundDB) GetParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParticipant", ctx, roundID, userID)
 	ret0, _ := ret[0].(*roundtypes.Participant)
@@ -101,7 +102,7 @@ func (mr *MockRoundDBMockRecorder) GetParticipant(ctx, roundID, userID any) *gom
 }
 
 // GetParticipants mocks base method.
-func (m *MockRoundDB) GetParticipants(ctx context.Context, roundID roundtypes.ID) ([]roundtypes.Participant, error) {
+func (m *MockRoundDB) GetParticipants(ctx context.Context, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParticipants", ctx, roundID)
 	ret0, _ := ret[0].([]roundtypes.Participant)
@@ -116,7 +117,7 @@ func (mr *MockRoundDBMockRecorder) GetParticipants(ctx, roundID any) *gomock.Cal
 }
 
 // GetParticipantsWithResponses mocks base method.
-func (m *MockRoundDB) GetParticipantsWithResponses(ctx context.Context, roundID roundtypes.ID, responses ...string) ([]roundtypes.Participant, error) {
+func (m *MockRoundDB) GetParticipantsWithResponses(ctx context.Context, roundID sharedtypes.RoundID, responses ...string) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{ctx, roundID}
 	for _, a := range responses {
@@ -136,7 +137,7 @@ func (mr *MockRoundDBMockRecorder) GetParticipantsWithResponses(ctx, roundID any
 }
 
 // GetRound mocks base method.
-func (m *MockRoundDB) GetRound(ctx context.Context, roundID roundtypes.ID) (*roundtypes.Round, error) {
+func (m *MockRoundDB) GetRound(ctx context.Context, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRound", ctx, roundID)
 	ret0, _ := ret[0].(*roundtypes.Round)
@@ -151,7 +152,7 @@ func (mr *MockRoundDBMockRecorder) GetRound(ctx, roundID any) *gomock.Call {
 }
 
 // GetRoundState mocks base method.
-func (m *MockRoundDB) GetRoundState(ctx context.Context, roundID roundtypes.ID) (roundtypes.RoundState, error) {
+func (m *MockRoundDB) GetRoundState(ctx context.Context, roundID sharedtypes.RoundID) (roundtypes.RoundState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRoundState", ctx, roundID)
 	ret0, _ := ret[0].(roundtypes.RoundState)
@@ -166,18 +167,18 @@ func (mr *MockRoundDBMockRecorder) GetRoundState(ctx, roundID any) *gomock.Call 
 }
 
 // GetUpcomingRounds mocks base method.
-func (m *MockRoundDB) GetUpcomingRounds(ctx context.Context, startTime, endTime time.Time) ([]*roundtypes.Round, error) {
+func (m *MockRoundDB) GetUpcomingRounds(ctx context.Context) ([]*roundtypes.Round, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpcomingRounds", ctx, startTime, endTime)
+	ret := m.ctrl.Call(m, "GetUpcomingRounds", ctx)
 	ret0, _ := ret[0].([]*roundtypes.Round)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetUpcomingRounds indicates an expected call of GetUpcomingRounds.
-func (mr *MockRoundDBMockRecorder) GetUpcomingRounds(ctx, startTime, endTime any) *gomock.Call {
+func (mr *MockRoundDBMockRecorder) GetUpcomingRounds(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpcomingRounds", reflect.TypeOf((*MockRoundDB)(nil).GetUpcomingRounds), ctx, startTime, endTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpcomingRounds", reflect.TypeOf((*MockRoundDB)(nil).GetUpcomingRounds), ctx)
 }
 
 // LogRound mocks base method.
@@ -195,7 +196,7 @@ func (mr *MockRoundDBMockRecorder) LogRound(ctx, round any) *gomock.Call {
 }
 
 // RemoveParticipant mocks base method.
-func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID roundtypes.ID, userID sharedtypes.DiscordID) error {
+func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveParticipant", ctx, roundID, userID)
 	ret0, _ := ret[0].(error)
@@ -208,8 +209,22 @@ func (mr *MockRoundDBMockRecorder) RemoveParticipant(ctx, roundID, userID any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveParticipant", reflect.TypeOf((*MockRoundDB)(nil).RemoveParticipant), ctx, roundID, userID)
 }
 
+// TagUpdates mocks base method.
+func (m *MockRoundDB) TagUpdates(ctx context.Context, bun bun.IDB, round *roundtypes.Round) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TagUpdates", ctx, bun, round)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TagUpdates indicates an expected call of TagUpdates.
+func (mr *MockRoundDBMockRecorder) TagUpdates(ctx, bun, round any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagUpdates", reflect.TypeOf((*MockRoundDB)(nil).TagUpdates), ctx, bun, round)
+}
+
 // UpdateEventMessageID mocks base method.
-func (m *MockRoundDB) UpdateEventMessageID(ctx context.Context, roundID roundtypes.ID, eventMessageID string) error {
+func (m *MockRoundDB) UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateEventMessageID", ctx, roundID, eventMessageID)
 	ret0, _ := ret[0].(error)
@@ -223,7 +238,7 @@ func (mr *MockRoundDBMockRecorder) UpdateEventMessageID(ctx, roundID, eventMessa
 }
 
 // UpdateParticipant mocks base method.
-func (m *MockRoundDB) UpdateParticipant(ctx context.Context, roundID roundtypes.ID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
+func (m *MockRoundDB) UpdateParticipant(ctx context.Context, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateParticipant", ctx, roundID, participant)
 	ret0, _ := ret[0].([]roundtypes.Participant)
@@ -238,7 +253,7 @@ func (mr *MockRoundDBMockRecorder) UpdateParticipant(ctx, roundID, participant a
 }
 
 // UpdateParticipantScore mocks base method.
-func (m *MockRoundDB) UpdateParticipantScore(ctx context.Context, roundID roundtypes.ID, participantID string, score int) error {
+func (m *MockRoundDB) UpdateParticipantScore(ctx context.Context, roundID sharedtypes.RoundID, participantID sharedtypes.DiscordID, score sharedtypes.Score) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateParticipantScore", ctx, roundID, participantID, score)
 	ret0, _ := ret[0].(error)
@@ -252,7 +267,7 @@ func (mr *MockRoundDBMockRecorder) UpdateParticipantScore(ctx, roundID, particip
 }
 
 // UpdateRound mocks base method.
-func (m *MockRoundDB) UpdateRound(ctx context.Context, roundID roundtypes.ID, round *roundtypes.Round) error {
+func (m *MockRoundDB) UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRound", ctx, roundID, round)
 	ret0, _ := ret[0].(error)
@@ -266,7 +281,7 @@ func (mr *MockRoundDBMockRecorder) UpdateRound(ctx, roundID, round any) *gomock.
 }
 
 // UpdateRoundState mocks base method.
-func (m *MockRoundDB) UpdateRoundState(ctx context.Context, roundID roundtypes.ID, state roundtypes.RoundState) error {
+func (m *MockRoundDB) UpdateRoundState(ctx context.Context, roundID sharedtypes.RoundID, state roundtypes.RoundState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRoundState", ctx, roundID, state)
 	ret0, _ := ret[0].(error)
@@ -277,4 +292,18 @@ func (m *MockRoundDB) UpdateRoundState(ctx context.Context, roundID roundtypes.I
 func (mr *MockRoundDBMockRecorder) UpdateRoundState(ctx, roundID, state any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundState", reflect.TypeOf((*MockRoundDB)(nil).UpdateRoundState), ctx, roundID, state)
+}
+
+// UpdateRoundsAndParticipants mocks base method.
+func (m *MockRoundDB) UpdateRoundsAndParticipants(ctx context.Context, updates []roundtypes.RoundUpdate) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRoundsAndParticipants", ctx, updates)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateRoundsAndParticipants indicates an expected call of UpdateRoundsAndParticipants.
+func (mr *MockRoundDBMockRecorder) UpdateRoundsAndParticipants(ctx, updates any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundsAndParticipants", reflect.TypeOf((*MockRoundDB)(nil).UpdateRoundsAndParticipants), ctx, updates)
 }

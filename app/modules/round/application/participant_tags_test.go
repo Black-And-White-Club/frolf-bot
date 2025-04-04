@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -19,31 +18,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-var (
-	testRoundID   = sharedtypes.RoundID(uuid.New())
-	testTitle     = roundtypes.Title("Test Round")
-	testDesc      = roundtypes.Description("Test Description")
-	testLoc       = roundtypes.Location("Test Location")
-	testEventType = roundtypes.EventType("Test Event Type")
-	testStartTime = sharedtypes.StartTime(time.Now())
-	testCreatedBy = sharedtypes.DiscordID("Test User")
-	testState     = roundtypes.RoundState("Test State")
-)
-
-var testRound = roundtypes.Round{
-	ID:           testRoundID,
-	Title:        testTitle,
-	Description:  &testDesc,
-	Location:     &testLoc,
-	EventType:    &testEventType,
-	StartTime:    &testStartTime,
-	Finalized:    false,
-	CreatedBy:    testCreatedBy,
-	State:        testState,
-	Participants: []roundtypes.Participant{},
-}
-
-func TestRoundService_GetRound(t *testing.T) {
+func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -55,34 +30,95 @@ func TestRoundService_GetRound(t *testing.T) {
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 	mockEventBus := eventbus.NewMockEventBus(ctrl)
 
+	// Test data
+	user1ID := sharedtypes.DiscordID("user1")
+	user2ID := sharedtypes.DiscordID("user2")
+	user3ID := sharedtypes.DiscordID("user3")
+
+	round1ID := sharedtypes.RoundID(uuid.New())
+	round2ID := sharedtypes.RoundID(uuid.New())
+
+	// Define tag numbers
+	tag1 := sharedtypes.TagNumber(42)
+	tag2 := sharedtypes.TagNumber(17)
+	tag3 := sharedtypes.TagNumber(99)
+
+	newTag1 := sharedtypes.TagNumber(23)
+	newTag2 := sharedtypes.TagNumber(31)
+
+	// Create participants with existing tags
+	participant1 := roundtypes.Participant{
+		UserID:    user1ID,
+		TagNumber: &tag1,
+		Response:  roundtypes.ResponseAccept,
+	}
+	participant2 := roundtypes.Participant{
+		UserID:    user2ID,
+		TagNumber: &tag2,
+		Response:  roundtypes.ResponseAccept,
+	}
+	participant3 := roundtypes.Participant{
+		UserID:    user3ID,
+		TagNumber: &tag3,
+		Response:  roundtypes.ResponseAccept,
+	}
+
+	// Setup test rounds with participants
+	round1 := roundtypes.Round{
+		ID:           round1ID,
+		Participants: []roundtypes.Participant{participant1, participant2},
+	}
+
+	round2 := roundtypes.Round{
+		ID:           round2ID,
+		Participants: []roundtypes.Participant{participant2, participant3},
+	}
+
+	// Create slice of pointers to rounds
+	upcomingRounds := []*roundtypes.Round{&round1, &round2}
+
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
+		payload        roundevents.ScheduledRoundTagUpdatePayload
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
 		{
-			name: "successful retrieval",
+			name: "successful update with valid tags",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&testRound, nil)
+				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
+				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, gomock.Any()).Return(nil)
+			},
+			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
+					user1ID: &newTag1,
+					user2ID: &newTag2,
+				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: testRound,
+				Success: roundevents.RoundUpdateSuccess,
 			},
 			expectedError: nil,
 		},
 		{
-			name: "error retrieving round",
+			name: "error fetching rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
+				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(nil, errors.New("database error"))
 			},
-			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
-					RoundID: testRoundID,
-					Error:   "database error",
-				},
+			payload:        roundevents.ScheduledRoundTagUpdatePayload{},
+			expectedResult: RoundOperationResult{},
+			expectedError:  errors.New("failed to get rounds and participants: failed to get upcoming rounds: database error"),
+		},
+		{
+			name: "error updating rounds",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
+				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, gomock.Any()).Return(errors.New("update failed"))
 			},
-			expectedError: errors.New("failed to retrieve round: database error"),
+			payload:        roundevents.ScheduledRoundTagUpdatePayload{},
+			expectedResult: RoundOperationResult{},
+			expectedError:  errors.New("failed to update rounds: update failed"),
 		},
 	}
 
@@ -102,7 +138,7 @@ func TestRoundService_GetRound(t *testing.T) {
 				},
 			}
 
-			_, err := s.GetRound(ctx, testRoundID)
+			_, err := s.UpdateScheduledRoundsWithNewTags(ctx, tt.payload)
 			if (err != nil) && (tt.expectedError == nil || err.Error() != tt.expectedError.Error()) {
 				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
 			}
@@ -126,6 +162,7 @@ func TestRoundService_GetRound(t *testing.T) {
 			} else if err != nil {
 				t.Errorf("expected no error, got: %v", err)
 			}
+
 		})
 	}
 }

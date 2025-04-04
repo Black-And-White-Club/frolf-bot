@@ -3,58 +3,53 @@ package roundservice
 import (
 	"context"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// RoundService defines the interface for the round service.
+// Service defines the interface for the round service.
 type Service interface {
 	// Create Round
-	ValidateRoundRequest(ctx context.Context, msg *message.Message) error
-	StoreRound(ctx context.Context, msg *message.Message) error
-	ProcessValidatedRound(ctx context.Context, msg *message.Message, timeParser roundtime.TimeParserInterface) error
-	ScheduleRoundEvents(ctx context.Context, msg *message.Message) error
-	PublishRoundCreated(ctx context.Context, msg *message.Message) error
-	UpdateEventMessageID(ctx context.Context, msg *message.Message) error
+	ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
+	StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error)
 
 	// Update Round
-	ValidateRoundUpdateRequest(ctx context.Context, msg *message.Message) error
-	GetRound(ctx context.Context, msg *message.Message) error
-	UpdateRoundEntity(ctx context.Context, msg *message.Message) error
-	StoreRoundUpdate(ctx context.Context, msg *message.Message) error
-	UpdateScheduledRoundEvents(ctx context.Context, msg *message.Message) error
+	ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (RoundOperationResult, error)
+	UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error)
+	UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error)
+
 	// Delete Round
-	ValidateRoundDeleteRequest(ctx context.Context, msg *message.Message) error
-	CheckRoundExists(ctx context.Context, msg *message.Message) error
-	CheckUserAuthorization(ctx context.Context, msg *message.Message) error
-	UserRoleCheckResult(ctx context.Context, msg *message.Message) error
-	DeleteRound(ctx context.Context, msg *message.Message) error
+	ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (RoundOperationResult, error)
+	DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (RoundOperationResult, error)
 
 	// Start Round
-	ProcessRoundStart(msg *message.Message) error
+	ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error)
 
 	// Join Round
-	ValidateParticipantJoinRequest(ctx context.Context, msg *message.Message) error
-	ParticipantTagFound(ctx context.Context, msg *message.Message) error
-	ParticipantTagNotFound(ctx context.Context, msg *message.Message) error
-	HandleDecline(ctx context.Context, msg *message.Message) error
-	ParticipantRemoval(ctx context.Context, msg *message.Message) error
-	CheckParticipantStatus(ctx context.Context, msg *message.Message) error
+	ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
+	UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
+	ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (RoundOperationResult, error)
+	CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
 
 	// Score Round
-	ValidateScoreUpdateRequest(ctx context.Context, msg *message.Message) error
-	UpdateParticipantScore(ctx context.Context, msg *message.Message) error
-	CheckAllScoresSubmitted(ctx context.Context, msg *message.Message) error
+	ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (RoundOperationResult, error)
+	UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (RoundOperationResult, error)
+	CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (RoundOperationResult, error)
 
 	// Finalize Round
-	FinalizeRound(ctx context.Context, msg *message.Message) error
-	NotifyScoreModule(ctx context.Context, msg *message.Message) error
-
-	// Tag Retrieval
-	RequestTagNumber(ctx context.Context, msg *message.Message) error
-	TagNumberRequest(ctx context.Context, msg *message.Message) error
-	TagNumberResponse(ctx context.Context, msg *message.Message) error
+	FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (RoundOperationResult, error)
+	NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error)
 
 	// Round Reminder
-	ProcessRoundReminder(ctx context.Context, msg *message.Message) error
+	ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (RoundOperationResult, error)
+
+	// Retrieve Round
+	GetRound(ctx context.Context, roundID sharedtypes.RoundID) (RoundOperationResult, error)
+
+	// Schedule Round Events
+	ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (RoundOperationResult, error)
+
+	// Update Participant Tags
+	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error)
 }
