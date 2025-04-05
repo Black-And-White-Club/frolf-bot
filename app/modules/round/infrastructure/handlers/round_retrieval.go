@@ -6,33 +6,34 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Message, error) {
+func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
-		"HandleRoundStored",
-		&roundevents.RoundStoredPayload{},
+		"HandleGetRoundRequest",
+		&roundevents.GetRoundRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundStoredPayload := payload.(*roundevents.RoundStoredPayload)
+			getRoundRequestPayload := payload.(*roundevents.GetRoundRequestPayload)
 
-			h.logger.Info("Received RoundStored event",
+			h.logger.Info("Received GetRoundRequest event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundStoredPayload.Round.ID),
+				attr.RoundID("round_id", getRoundRequestPayload.RoundID),
 			)
 
 			// Call the service function to handle the event
-			result, err := h.roundService.ScheduleRoundEvents(ctx, *roundStoredPayload, *roundStoredPayload.Round.StartTime)
+			result, err := h.roundService.GetRound(ctx, getRoundRequestPayload.RoundID)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundStored event",
+				h.logger.Error("Failed to handle GetRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-				return nil, fmt.Errorf("failed to handle RoundStored event: %w", err)
+				return nil, fmt.Errorf("failed to handle GetRoundRequest event: %w", err)
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round scheduling failed",
+				h.logger.Info("Get round request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,14 +52,14 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round scheduling successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.Info("Get round request successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				scheduledPayload := result.Success.(*roundevents.RoundScheduledPayload)
+				round := result.Success.(*roundtypes.Round)
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
-					scheduledPayload,
-					roundevents.RoundScheduled,
+					round,
+					roundevents.RoundRetrieved,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -68,7 +69,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ScheduleRoundEvents service",
+			h.logger.Error("Unexpected result from GetRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

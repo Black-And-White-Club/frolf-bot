@@ -9,30 +9,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Message, error) {
+func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
-		"HandleRoundStored",
-		&roundevents.RoundStoredPayload{},
+		"HandleScheduledRoundTagUpdate",
+		&roundevents.ScheduledRoundTagUpdatePayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundStoredPayload := payload.(*roundevents.RoundStoredPayload)
+			scheduledRoundTagUpdatePayload := payload.(*roundevents.ScheduledRoundTagUpdatePayload)
 
-			h.logger.Info("Received RoundStored event",
+			h.logger.Info("Received ScheduledRoundTagUpdate event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundStoredPayload.Round.ID),
+				attr.Any("changed_tags", scheduledRoundTagUpdatePayload.ChangedTags),
 			)
 
 			// Call the service function to handle the event
-			result, err := h.roundService.ScheduleRoundEvents(ctx, *roundStoredPayload, *roundStoredPayload.Round.StartTime)
+			result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, *scheduledRoundTagUpdatePayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundStored event",
+				h.logger.Error("Failed to handle ScheduledRoundTagUpdate event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-				return nil, fmt.Errorf("failed to handle RoundStored event: %w", err)
+				return nil, fmt.Errorf("failed to handle ScheduledRoundTagUpdate event: %w", err)
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round scheduling failed",
+				h.logger.Info("Scheduled round tag update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -41,7 +41,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError,
+					roundevents.RoundUpdateError,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -51,14 +51,14 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round scheduling successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.Info("Scheduled round tag update successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				scheduledPayload := result.Success.(*roundevents.RoundScheduledPayload)
+				discordUpdatePayload := result.Success.(*roundevents.DiscordRoundUpdatePayload)
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
-					scheduledPayload,
-					roundevents.RoundScheduled,
+					discordUpdatePayload,
+					roundevents.TagsUpdatedForScheduledRounds,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ScheduleRoundEvents service",
+			h.logger.Error("Unexpected result from UpdateScheduledRoundsWithNewTags service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

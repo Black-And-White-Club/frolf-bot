@@ -1,17 +1,22 @@
 package roundhandlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
+	"reflect"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/ThreeDotsLabs/watermill"
+	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
 
@@ -19,289 +24,563 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRoundService := roundservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testUserID := sharedtypes.DiscordID("12345678901234567")
 
-	type fields struct {
-		RoundService *roundservice.MockService
-		logger       *slog.Logger
+	testPayload := &roundevents.RoundDeleteRequestPayload{
+		RoundID:              testRoundID,
+		RequestingUserUserID: testUserID,
 	}
 
-	type args struct {
-		msg *message.Message
-	}
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
+
+	// Mock dependencies
+	mockRoundService := roundmocks.NewMockService(ctrl)
+	mockHelpers := mocks.NewMockHelpers(ctrl)
+
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &roundmetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
+		name           string
+		mockSetup      func()
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
 	}{
 		{
-			name: "Successful round delete request handling",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
+			name: "Successfully handle RoundDeleteRequest",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.RoundDeleteAuthorizedPayload{
+							RoundID: testRoundID,
+						},
+					},
+					nil,
+				)
+
+				updateResultPayload := &roundevents.RoundDeleteAuthorizedPayload{
+					RoundID: testRoundID,
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					updateResultPayload,
+					roundevents.RoundDeleteAuthorized,
+				).Return(testMsg, nil)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteRequestPayload{
-					RoundID: RoundID,
-				}),
-			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateRoundDeleteRequest(gomock.Any(), a.msg).Return(nil).Times(1)
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
 		},
 		{
-			name: "Unmarshal error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
+			name: "Fail to unmarshal payload",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service layer error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
+			name: "Service failure in ValidateRoundDeleteRequest",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{},
+					fmt.Errorf("internal service error"),
+				)
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteRequestPayload{
-					RoundID: RoundID,
-				}),
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to handle RoundDeleteRequest event: internal service error",
+		},
+		{
+			name: "Service success but CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.RoundDeleteAuthorizedPayload{
+							RoundID: testRoundID,
+						},
+					},
+					nil,
+				)
+
+				updateResultPayload := &roundevents.RoundDeleteAuthorizedPayload{
+					RoundID: testRoundID,
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					updateResultPayload,
+					roundevents.RoundDeleteAuthorized,
+				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().ValidateRoundDeleteRequest(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create result message",
+		},
+		{
+			name: "Service failure with non-error result",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundDeleteErrorPayload{
+							Error: "non-error failure",
+						},
+					},
+					nil,
+				)
+
+				failureResultPayload := &roundevents.RoundDeleteErrorPayload{
+					Error: "non-error failure",
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					roundevents.RoundDeleteError,
+				).Return(testMsg, nil)
 			},
+			msg:            testMsg,
+			want:           []*message.Message{testMsg},
+			wantErr:        false,
+			expectedErrMsg: "",
+		},
+		{
+			name: "Service failure with error result and CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundDeleteErrorPayload{
+							Error: "internal service error",
+						},
+					},
+					fmt.Errorf("internal service error"),
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to handle RoundDeleteRequest event: internal service error",
+		},
+		{
+			name: "Unknown result from ValidateRoundDeleteRequest",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
+					gomock.Any(),
+					roundevents.RoundDeleteRequestPayload{
+						RoundID:              testRoundID,
+						RequestingUserUserID: testUserID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{},
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "unexpected result from service",
+		},
+		{
+			name: "Invalid payload type",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundDeleteRequestPayload"))
+			},
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundDeleteRequestPayload",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
 			h := &RoundHandlers{
-				RoundService: tt.fields.RoundService,
-				logger:       tt.fields.logger,
+				roundService: mockRoundService,
+				logger:       logger,
+				tracer:       tracer,
+				metrics:      metrics,
+				helpers:      mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
 
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
+			got, err := h.HandleRoundDeleteRequest(tt.msg)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleRoundDeleteRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleRoundDeleteRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			if err := h.HandleRoundDeleteRequest(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundDeleteRequest() error = %v, wantErr %v", err, tt.expectErr)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HandleRoundDeleteRequest() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
+func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRoundService := roundservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	type fields struct {
-		RoundService *roundservice.MockService
-		logger       *slog.Logger
+	testPayload := &roundevents.RoundDeleteAuthorizedPayload{
+		RoundID: testRoundID,
 	}
 
-	type args struct {
-		msg *message.Message
-	}
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
+
+	// Mock dependencies
+	mockRoundService := roundmocks.NewMockService(ctrl)
+	mockHelpers := mocks.NewMockHelpers(ctrl)
+
+	logger := &lokifrolfbot.NoOpLogger{}
+	metrics := &roundmetrics.NoOpMetrics{}
+	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
+		name           string
+		mockSetup      func()
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
 	}{
 		{
-			name: "Successful round delete validated handling",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: RoundID,
+			name: "Successfully handle RoundDeleteAuthorized",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
 					},
-				}),
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.RoundDeletedPayload{
+							RoundID: testRoundID,
+						},
+					},
+					nil,
+				)
+
+				updateResultPayload := &roundevents.RoundDeletedPayload{
+					RoundID: testRoundID,
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					updateResultPayload,
+					roundevents.RoundDeleted,
+				).Return(testMsg, nil)
 			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckRoundExists(gomock.Any(), a.msg).Return(nil).Times(1)
-			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
 		},
 		{
-			name: "Unmarshal error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
+			name: "Fail to unmarshal payload",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service layer error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: RoundID,
+			name: "Service failure in DeleteRound",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
 					},
-				}),
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{},
+					fmt.Errorf("internal service error"),
+				)
 			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckRoundExists(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to handle RoundDeleteAuthorized event: internal service error",
+		},
+		{
+			name: "Service success but CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.RoundDeletedPayload{
+							RoundID: testRoundID,
+						},
+					},
+					nil,
+				)
+
+				updateResultPayload := &roundevents.RoundDeletedPayload{
+					RoundID: testRoundID,
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					updateResultPayload,
+					roundevents.RoundDeleted,
+				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create result message",
+		},
+		{
+			name: "Service failure with non-error result",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundDeleteErrorPayload{
+							Error: "non-error failure",
+						},
+					},
+					nil,
+				)
+
+				failureResultPayload := &roundevents.RoundDeleteErrorPayload{
+					Error: "non-error failure",
+				}
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					roundevents.RoundDeleteError,
+				).Return(testMsg, nil)
+			},
+			msg:            testMsg,
+			want:           []*message.Message{testMsg},
+			wantErr:        false,
+			expectedErrMsg: "",
+		},
+		{
+			name: "Service failure with error result and CreateResultMessage fails",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundDeleteErrorPayload{
+							Error: "internal service error",
+						},
+					},
+					fmt.Errorf("internal service error"),
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to handle RoundDeleteAuthorized event: internal service error",
+		},
+		{
+			name: "Unknown result from DeleteRound",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().DeleteRound(
+					gomock.Any(),
+					roundevents.RoundDeleteAuthorizedPayload{
+						RoundID: testRoundID,
+					},
+				).Return(
+					roundservice.RoundOperationResult{},
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "unexpected result from service",
+		},
+		{
+			name: "Invalid payload type",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundDeleteAuthorizedPayload"))
+			},
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundDeleteAuthorizedPayload",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
 			h := &RoundHandlers{
-				RoundService: tt.fields.RoundService,
-				logger:       tt.fields.logger,
-			}
-
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
-			}
-
-			if err := h.HandleRoundDeleteValidated(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundDeleteValidated() error = %v, wantErr %v", err, tt.expectErr)
-			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleRoundToDeleteFetched(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRoundService := roundservice.NewMockService(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		RoundService *roundservice.MockService
-		logger       *slog.Logger
-	}
-
-	type args struct {
-		msg *message.Message
-	}
-
-	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func(f fields, a args)
-	}{
-		{
-			name: "Successful round to delete fetched handling",
-			fields: fields{
-				RoundService: mockRoundService,
+				roundService: mockRoundService,
 				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundToDeleteFetchedPayload{
-					Round: roundtypes.Round{
-						ID:        RoundID,
-						CreatedBy: "some-user-id",
-					},
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserUserID: "some-user-id",
-					},
-				}),
-			},
-			expectErr: false,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckUserAuthorization(gomock.Any(), a.msg).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Unmarshal error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), "invalid-payload"),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				// No expectations on the service layer as unmarshalling should fail first
-			},
-		},
-		{
-			name: "Service layer error",
-			fields: fields{
-				RoundService: mockRoundService,
-				logger:       logger,
-			},
-			args: args{
-				msg: createTestMessageWithPayload(t, watermill.NewUUID(), roundevents.RoundToDeleteFetchedPayload{
-					Round: roundtypes.Round{
-						ID:        RoundID,
-						CreatedBy: "some-user-id",
-					},
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RequestingUserUserID: "some-user-id",
-					},
-				}),
-			},
-			expectErr: true,
-			mockExpects: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, "test-correlation-id")
-				f.RoundService.EXPECT().CheckUserAuthorization(gomock.Any(), a.msg).Return(fmt.Errorf("service error")).Times(1)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &RoundHandlers{
-				RoundService: tt.fields.RoundService,
-				logger:       tt.fields.logger,
+				tracer:       tracer,
+				metrics:      metrics,
+				helpers:      mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
 
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields, tt.args)
+			got, err := h.HandleRoundDeleteAuthorized(tt.msg)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleRoundDeleteAuthorized() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleRoundDeleteAuthorized() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			if err := h.HandleRoundToDeleteFetched(tt.args.msg); (err != nil) != tt.expectErr {
-				t.Errorf("RoundHandlers.HandleRoundToDeleteFetched() error = %v, wantErr %v", err, tt.expectErr)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HandleRoundDeleteAuthorized() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
@@ -22,25 +20,14 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
+func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testTitle := roundtypes.Title("Test Round")
-	testDescription := roundtypes.Description("This is a test round")
-	testLocation := roundtypes.Location("Test Location")
-	testStartTime := sharedtypes.StartTime(time.Now())
-	testStartTimeString := "2024-01-01T12:00:00Z"
-	testCreateRoundID := sharedtypes.RoundID(uuid.New())
+	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	testUserID := sharedtypes.DiscordID("12345678901234567")
-
-	testPayload := &roundevents.CreateRoundRequestedPayload{
-		Title:       testTitle,
-		Description: testDescription,
-		Location:    testLocation,
-		StartTime:   testStartTimeString,
-		UserID:      testUserID,
+	testPayload := &roundevents.AllScoresSubmittedPayload{
+		RoundID: testRoundID,
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -65,58 +52,37 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle CreateRoundRequest",
+			name: "Successfully handle AllScoresSubmitted",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundCreatedPayload{
-							BaseRoundPayload: roundtypes.BaseRoundPayload{
-								RoundID:     testCreateRoundID,
-								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
-								StartTime:   &testStartTime,
-								UserID:      testUserID,
-							},
-							ChannelID: "test-channel-id",
+						Success: &roundevents.RoundFinalizedPayload{
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundCreatedPayload{
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     testCreateRoundID,
-						Title:       testTitle,
-						Description: &testDescription,
-						Location:    &testLocation,
-						StartTime:   &testStartTime,
-						UserID:      testUserID,
-					},
-					ChannelID: "test-channel-id",
+				updateResultPayload := &roundevents.RoundFinalizedPayload{
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundEntityCreated,
+					roundevents.RoundFinalized,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -134,25 +100,20 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service failure in ValidateAndProcessRound",
+			name: "Service failure in FinalizeRound",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("internal service error"),
@@ -161,61 +122,40 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle CreateRoundRequest event: internal service error",
+			expectedErrMsg: "failed to handle AllScoresSubmitted event: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundCreatedPayload{
-							BaseRoundPayload: roundtypes.BaseRoundPayload{
-								RoundID:     testCreateRoundID,
-								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
-								StartTime:   &testStartTime,
-								UserID:      testUserID,
-							},
-							ChannelID: "test-channel-id",
+						Success: &roundevents.RoundFinalizedPayload{
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundCreatedPayload{
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     testCreateRoundID,
-						Title:       testTitle,
-						Description: &testDescription,
-						Location:    &testLocation,
-						StartTime:   &testStartTime,
-						UserID:      testUserID,
-					},
-					ChannelID: "test-channel-id",
+				updateResultPayload := &roundevents.RoundFinalizedPayload{
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundEntityCreated,
+					roundevents.RoundFinalized,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -228,40 +168,33 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundValidationFailedPayload{
-							UserID:       testUserID,
-							ErrorMessage: []string{"non-error failure"},
+						Failure: &roundevents.RoundFinalizationErrorPayload{
+							Error: "non-error failure",
 						},
 					},
 					nil,
 				)
 
-				failureResultPayload := &roundevents.RoundValidationFailedPayload{
-					UserID:       testUserID,
-					ErrorMessage: []string{"non-error failure"},
+				failureResultPayload := &roundevents.RoundFinalizationErrorPayload{
+					Error: "non-error failure",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					roundevents.RoundValidationFailed,
+					roundevents.RoundFinalizationError,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -274,26 +207,20 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundValidationFailedPayload{
-							UserID:       testUserID,
-							ErrorMessage: []string{"internal service error"},
+						Failure: &roundevents.RoundFinalizationErrorPayload{
+							Error: "internal service error",
 						},
 					},
 					fmt.Errorf("internal service error"),
@@ -302,28 +229,23 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle CreateRoundRequest event: internal service error",
+			expectedErrMsg: "failed to handle AllScoresSubmitted event: internal service error",
 		},
 		{
-			name: "Unknown result from ValidateAndProcessRound",
+			name: "Unknown result from FinalizeRound",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.CreateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.AllScoresSubmittedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().FinalizeRound(
 					gomock.Any(),
-					roundevents.CreateRoundRequestedPayload{
-						Title:       testTitle,
-						Description: testDescription,
-						Location:    testLocation,
-						StartTime:   testStartTimeString,
-						UserID:      testUserID,
+					roundevents.AllScoresSubmittedPayload{
+						RoundID: testRoundID,
 					},
-					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
 					nil,
@@ -337,12 +259,12 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 		{
 			name: "Invalid payload type",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected CreateRoundRequestedPayload"))
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected AllScoresSubmittedPayload"))
 			},
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected CreateRoundRequestedPayload",
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected AllScoresSubmittedPayload",
 		},
 	}
 
@@ -361,47 +283,32 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 				},
 			}
 
-			got, err := h.HandleCreateRoundRequest(tt.msg)
+			got, err := h.HandleAllScoresSubmitted(tt.msg)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleCreateRoundRequest() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HandleAllScoresSubmitted() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleCreateRoundRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				t.Errorf("HandleAllScoresSubmitted() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleCreateRoundRequest() = %v, want %v", got, tt.want)
+				t.Errorf("HandleAllScoresSubmitted() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
+func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testTitle := roundtypes.Title("Test Round")
-	testDescription := roundtypes.Description("This is a test round")
-	testLocation := roundtypes.Location("Test Location")
-	testStartTime := sharedtypes.StartTime(time.Now())
-	testUserID := sharedtypes.DiscordID("12345678901234567")
 
-	testRound := roundtypes.Round{
-		ID:          testRoundID,
-		Title:       testTitle,
-		Description: &testDescription,
-		Location:    &testLocation,
-		StartTime:   &testStartTime,
-		CreatedBy:   testUserID,
+	testPayload := &roundevents.RoundFinalizedPayload{
+		RoundID: testRoundID,
 	}
 
-	testPayload := &roundevents.RoundEntityCreatedPayload{
-		Round:            testRound,
-		DiscordChannelID: "test-channel-id",
-		DiscordGuildID:   "test-guild-id",
-	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
@@ -424,55 +331,37 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle RoundEntityCreated",
+			name: "Successfully handle RoundFinalized",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundCreatedPayload{
-							BaseRoundPayload: roundtypes.BaseRoundPayload{
-								RoundID:     testRoundID,
-								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
-								StartTime:   &testStartTime,
-								UserID:      testUserID,
-							},
-							ChannelID: "test-channel-id",
+						Success: &roundevents.ProcessRoundScoresRequestPayload{
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundCreatedPayload{
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     testRoundID,
-						Title:       testTitle,
-						Description: &testDescription,
-						Location:    &testLocation,
-						StartTime:   &testStartTime,
-						UserID:      testUserID,
-					},
-					ChannelID: "test-channel-id",
+				updateResultPayload := &roundevents.ProcessRoundScoresRequestPayload{
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundCreated,
+					roundevents.ProcessRoundScoresRequest,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -490,21 +379,19 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service failure in StoreRound",
+			name: "Service failure in NotifyScoreModule",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -514,58 +401,40 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle RoundEntityCreated event: internal service error",
+			expectedErrMsg: "failed to handle RoundFinalized event: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundCreatedPayload{
-							BaseRoundPayload: roundtypes.BaseRoundPayload{
-								RoundID:     testRoundID,
-								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
-								StartTime:   &testStartTime,
-								UserID:      testUserID,
-							},
-							ChannelID: "test-channel-id",
+						Success: &roundevents.ProcessRoundScoresRequestPayload{
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundCreatedPayload{
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     testRoundID,
-						Title:       testTitle,
-						Description: &testDescription,
-						Location:    &testLocation,
-						StartTime:   &testStartTime,
-						UserID:      testUserID,
-					},
-					ChannelID: "test-channel-id",
+				updateResultPayload := &roundevents.ProcessRoundScoresRequestPayload{
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundCreated,
+					roundevents.ProcessRoundScoresRequest,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -578,35 +447,33 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundCreationFailedPayload{
-							ErrorMessage: "non-error failure",
+						Failure: &roundevents.RoundFinalizationErrorPayload{
+							Error: "non-error failure",
 						},
 					},
 					nil,
 				)
 
-				failureResultPayload := &roundevents.RoundCreationFailedPayload{
-					ErrorMessage: "non-error failure",
+				failureResultPayload := &roundevents.RoundFinalizationErrorPayload{
+					Error: "non-error failure",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					roundevents.RoundCreationFailed,
+					roundevents.RoundFinalizationError,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -619,22 +486,20 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundCreationFailedPayload{
-							ErrorMessage: "internal service error",
+						Failure: &roundevents.RoundFinalizationErrorPayload{
+							Error: "internal service error",
 						},
 					},
 					fmt.Errorf("internal service error"),
@@ -643,24 +508,22 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle RoundEntityCreated event: internal service error",
+			expectedErrMsg: "failed to handle RoundFinalized event: internal service error",
 		},
 		{
-			name: "Unknown result from StoreRound",
+			name: "Unknown result from NotifyScoreModule",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityCreatedPayload) = *testPayload
+						*out.(*roundevents.RoundFinalizedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().StoreRound(
+				mockRoundService.EXPECT().NotifyScoreModule(
 					gomock.Any(),
-					roundevents.RoundEntityCreatedPayload{
-						Round:            testRound,
-						DiscordChannelID: "test-channel-id",
-						DiscordGuildID:   "test-guild-id",
+					roundevents.RoundFinalizedPayload{
+						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -675,12 +538,12 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		{
 			name: "Invalid payload type",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundEntityCreatedPayload"))
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundFinalizedPayload"))
 			},
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundEntityCreatedPayload",
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundFinalizedPayload",
 		},
 	}
 
@@ -699,17 +562,17 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 				},
 			}
 
-			got, err := h.HandleRoundEntityCreated(tt.msg)
+			got, err := h.HandleRoundFinalized(tt.msg)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleRoundEntityCreated() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HandleRoundFinalized() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleRoundEntityCreated() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				t.Errorf("HandleRoundFinalized() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleRoundEntityCreated() = %v, want %v", got, tt.want)
+				t.Errorf("HandleRoundFinalized() = %v, want %v", got, tt.want)
 			}
 		})
 	}

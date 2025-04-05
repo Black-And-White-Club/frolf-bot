@@ -131,7 +131,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 			return RoundOperationResult{Failure: failurePayload}, fmt.Errorf("failed to fetch round details: %w", err)
 		}
 
-		// Example: Check if the state is 'InProgress' or 'Finalized'
+		// Check if the state is 'InProgress' or 'Finalized'
 		isLateJoin := round.State == roundtypes.RoundStateInProgress || round.State == roundtypes.RoundStateFinalized
 
 		s.logger.Info("Determined late join status",
