@@ -19,14 +19,11 @@ import (
 type Module struct {
 	EventBus      eventbus.EventBus
 	RoundService  roundservice.Service
-	logger        observability.Logger
-	metrics       observability.Metrics
-	tracer        observability.Tracer
 	config        *config.Config
 	RoundRouter   *roundrouter.RoundRouter
 	cancelFunc    context.CancelFunc
 	helper        utils.Helpers
-	observability observability.Observability // Still useful to have the complete object
+	observability observability.Observability
 }
 
 // NewRoundModule creates a new instance of the Round module.
@@ -39,30 +36,27 @@ func NewRoundModule(
 	router *message.Router,
 	helpers utils.Helpers,
 ) (*Module, error) {
-	// Extract the components once during initialization
+	// Extract observability components
 	logger := obs.GetLogger()
-	metrics := obs.GetMetrics()
+	metrics := obs.GetMetrics().RoundMetrics() // Ensure to get the correct metrics for round
 	tracer := obs.GetTracer()
 
 	logger.Info("round.NewRoundModule called")
 
 	// Initialize round service with observability components
-	roundService := roundservice.NewRoundService(roundDB, eventBus, logger, metrics, tracer)
+	roundService := roundservice.NewRoundService(roundDB, logger, metrics, tracer)
 
 	// Initialize round router with observability
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
 
 	// Configure the router with the round service.
-	if err := roundRouter.Configure(roundService, eventBus); err != nil {
+	if err := roundRouter.Configure(roundService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
 
 	module := &Module{
 		EventBus:      eventBus,
 		RoundService:  roundService,
-		logger:        logger,
-		metrics:       metrics,
-		tracer:        tracer,
 		config:        cfg,
 		RoundRouter:   roundRouter,
 		helper:        helpers,
@@ -72,8 +66,10 @@ func NewRoundModule(
 	return module, nil
 }
 
+// Run starts the round module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	m.logger.Info("Starting round module")
+	logger := m.observability.GetLogger()
+	logger.Info("Starting round module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -87,17 +83,19 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	m.logger.Info("Round module goroutine stopped")
+	logger.Info("Round module goroutine stopped")
 }
 
+// Close stops the round module and cleans up resources.
 func (m *Module) Close() error {
-	m.logger.Info("Stopping round module")
+	logger := m.observability.GetLogger()
+	logger.Info("Stopping round module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	m.logger.Info("Round module stopped")
+	logger.Info("Round module stopped")
 	return nil
 }

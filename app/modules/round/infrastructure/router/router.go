@@ -6,8 +6,10 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
@@ -20,25 +22,25 @@ import (
 
 // RoundRouter handles routing for round module events.
 type RoundRouter struct {
-	logger           observability.Logger
+	logger           lokifrolfbot.Logger
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           observability.Tracer
+	tracer           tempofrolfbot.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewRoundRouter creates a new RoundRouter.
 func NewRoundRouter(
-	logger observability.Logger,
+	logger lokifrolfbot.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer observability.Tracer,
+	tracer tempofrolfbot.Tracer,
 ) *RoundRouter {
 	return &RoundRouter{
 		logger:           logger,
@@ -53,14 +55,15 @@ func NewRoundRouter(
 }
 
 // Configure sets up the router with the necessary handlers and dependencies.
-func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus eventbus.EventBus) error {
+func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus eventbus.EventBus, roundMetrics roundmetrics.RoundMetrics) error {
 	// Create Prometheus metrics builder
 	metricsBuilder := metrics.NewPrometheusMetricsBuilder(prometheus.NewRegistry(), "", "")
 	// Add metrics middleware to the router
 	metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 
-	// Create round handlers with logger and tracer only
-	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper)
+	// Create round handlers with logger and tracer
+	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper, roundMetrics)
+
 	// Add middleware specific to the round module
 	r.Router.AddMiddleware(
 		middleware.CorrelationID,
@@ -69,6 +72,7 @@ func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus even
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
+		r.tracer.TraceHandler,
 	)
 
 	if err := r.RegisterHandlers(context.Background(), roundHandlers); err != nil {
@@ -82,38 +86,23 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 	r.logger.Info("Entering RegisterHandlers for Round")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
-		roundevents.RoundCreateRequest:                    handlers.HandleRoundCreateRequest,
+		roundevents.RoundCreateRequest:                    handlers.HandleCreateRoundRequest,
 		roundevents.RoundStored:                           handlers.HandleRoundStored,
-		roundevents.RoundValidated:                        handlers.HandleRoundValidated,
-		roundevents.RoundEntityCreated:                    handlers.HandleRoundEntityCreated,
-		roundevents.RoundScheduled:                        handlers.HandleRoundScheduled,
-		roundevents.RoundEventMessageIDUpdate:             handlers.HandleUpdateEventMessageID,
 		roundevents.RoundUpdateRequest:                    handlers.HandleRoundUpdateRequest,
 		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
-		roundevents.RoundFetched:                          handlers.HandleRoundFetched,
-		roundevents.RoundEntityUpdated:                    handlers.HandleRoundEntityUpdated,
-		roundevents.RoundScheduleUpdate:                   handlers.HandleRoundScheduleUpdate,
+		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
 		roundevents.RoundDeleteRequest:                    handlers.HandleRoundDeleteRequest,
-		roundevents.RoundDeleteValidated:                  handlers.HandleRoundDeleteValidated,
-		roundevents.RoundToDeleteFetched:                  handlers.HandleRoundToDeleteFetched,
 		roundevents.RoundDeleteAuthorized:                 handlers.HandleRoundDeleteAuthorized,
-		roundevents.RoundUserRoleCheckResult:              handlers.HandleRoundUserRoleCheckResult,
-		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
+		roundevents.RoundParticipantJoinRequest:           handlers.HandleParticipantJoinRequest,
+		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleParticipantJoinValidationRequest,
+		roundevents.RoundParticipantRemovalRequest:        handlers.HandleParticipantRemovalRequest,
+		roundevents.RoundScoreUpdateRequest:               handlers.HandleScoreUpdateRequest,
+		roundevents.RoundScoreUpdateValidated:             handlers.HandleScoreUpdateValidated,
+		roundevents.RoundAllScoresSubmitted:               handlers.HandleAllScoresSubmitted,
 		roundevents.RoundReminder:                         handlers.HandleRoundReminder,
-		roundevents.RoundParticipantJoinRequest:           handlers.HandleRoundParticipantJoinRequest,
-		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleRoundParticipantJoinValidationRequest,
-		roundevents.RoundTagNumberFound:                   handlers.HandleRoundTagNumberFound,
-		roundevents.RoundTagNumberNotFound:                handlers.HandleRoundTagNumberNotFound,
-		roundevents.RoundTagNumberRequest:                 handlers.HandleRoundTagNumberRequest,
-		roundevents.RoundParticipantRemovalRequest:        handlers.HandleRoundParticipantRemovalRequest,
-		roundevents.LeaderboardGetTagNumberResponse:       handlers.HandleLeaderboardGetTagNumberResponse,
-		roundevents.RoundParticipantDeclined:              handlers.HandleRoundParticipantDeclined,
-		roundevents.RoundScoreUpdateRequest:               handlers.HandleRoundScoreUpdateRequest,
-		roundevents.RoundScoreUpdateValidated:             handlers.HandleRoundScoreUpdateValidated,
-		roundevents.RoundParticipantScoreUpdated:          handlers.HandleRoundParticipantScoreUpdated,
-		roundevents.RoundAllScoresSubmitted:               handlers.HandleRoundAllScoresSubmitted,
-		roundevents.RoundUpdateReschedule:                 handlers.HandleRoundScheduleUpdate,
-		roundevents.RoundParticipantJoinValidated:         handlers.HandleRoundParticipantJoinValidated,
+		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
+		roundevents.RoundTagNumberFound:                   handlers.HandleTagNumberFound,
+		roundevents.RoundTagNumberNotFound:                handlers.HandleTagNumberNotFound,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

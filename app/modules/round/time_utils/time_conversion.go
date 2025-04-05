@@ -44,16 +44,11 @@ func NewTimeParser() *TimeParser {
 func (tp *TimeParser) GetTimezoneFromInput(input string) (string, bool) {
 	inputUpper := strings.ToUpper(input)
 
-	// Direct match against full timezone names
-	for _, fullName := range tp.TimezoneMap {
-		if inputUpper == strings.ToUpper(fullName) {
+	// Match against abbreviations
+	for abbreviation, fullName := range tp.TimezoneMap {
+		if strings.Contains(inputUpper, abbreviation) {
 			return fullName, true
 		}
-	}
-
-	// Match against abbreviations
-	if fullName, exists := tp.TimezoneMap[inputUpper]; exists {
-		return fullName, true
 	}
 
 	return "", false
