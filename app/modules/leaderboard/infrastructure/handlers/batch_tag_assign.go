@@ -17,7 +17,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			batchTagAssignmentRequestedPayload := payload.(*leaderboardevents.BatchTagAssignmentRequestedPayload)
 
-			h.logger.Info("Received BatchTagAssignmentRequested event",
+			h.logger.InfoContext(ctx, "Received BatchTagAssignmentRequested event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("batch_id", batchTagAssignmentRequestedPayload.BatchID),
 				attr.String("requesting_user", string(batchTagAssignmentRequestedPayload.RequestingUserID)),
@@ -27,7 +27,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 			// Call the service function to handle the event
 			result, err := h.leaderboardService.BatchTagAssignmentRequested(ctx, *batchTagAssignmentRequestedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle BatchTagAssignmentRequested event",
+				h.logger.ErrorContext(ctx, "Failed to handle BatchTagAssignmentRequested event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -35,7 +35,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Batch tag assignment failed",
+				h.logger.InfoContext(ctx, "Batch tag assignment failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -54,7 +54,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Batch tag assignment successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Batch tag assignment successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -70,7 +70,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from BatchTagAssignmentRequested service",
+			h.logger.ErrorContext(ctx, "Unexpected result from BatchTagAssignmentRequested service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

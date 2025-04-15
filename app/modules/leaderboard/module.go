@@ -41,7 +41,7 @@ func NewLeaderboardModule(
 	metrics := obs.GetMetrics().LeaderboardMetrics() // Ensure to get the correct metrics for leaderboard
 	tracer := obs.GetTracer()
 
-	logger.Info("leaderboard.NewLeaderboardModule called")
+	logger.InfoContext(ctx, "leaderboard.NewLeaderboardModule called")
 
 	// Initialize leaderboard service with observability components
 	leaderboardService := leaderboardservice.NewLeaderboardService(leaderboardDB, eventBus, logger, metrics, tracer)
@@ -69,7 +69,7 @@ func NewLeaderboardModule(
 // Run starts the leaderboard module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 	logger := m.observability.GetLogger()
-	logger.Info("Starting leaderboard module")
+	logger.InfoContext(ctx, "Starting leaderboard module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -83,19 +83,19 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	logger.Info("Leaderboard module goroutine stopped")
+	logger.InfoContext(ctx, "Leaderboard module goroutine stopped")
 }
 
 // Close stops the leaderboard module and cleans up resources.
 func (m *Module) Close() error {
 	logger := m.observability.GetLogger()
-	logger.Info("Stopping leaderboard module")
+	logger.InfoContext(ctx, "Stopping leaderboard module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.Info("Leaderboard module stopped")
+	logger.InfoContext(ctx, "Leaderboard module stopped")
 	return nil
 }

@@ -20,7 +20,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
 	// Single log for operation start
-	s.logger.Info("Leaderboard update triggered", correlationID, roundIDAttr)
+	s.logger.InfoContext(ctx, "Leaderboard update triggered", correlationID, roundIDAttr)
 
 	// Common error handler to avoid code duplication
 	handleError := func(reason string, err error) (LeaderboardOperationResult, error) {
@@ -28,7 +28,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 			err = errors.New(reason)
 		}
 
-		s.logger.Error(reason, correlationID, roundIDAttr, attr.Error(err))
+		s.logger.ErrorContext(ctx, reason, correlationID, roundIDAttr, attr.Error(err))
 		s.metrics.RecordLeaderboardUpdateFailure(roundID, "LeaderboardService")
 
 		return LeaderboardOperationResult{
@@ -46,7 +46,6 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 	}
 
 	return s.serviceWrapper(ctx, "UpdateLeaderboard", func() (LeaderboardOperationResult, error) {
-
 		// 1. Get the current active leaderboard
 		dbStartTime := time.Now()
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
@@ -80,7 +79,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 		}
 
 		// 4. Return success result
-		s.logger.Info("Leaderboard updated successfully", correlationID, roundIDAttr)
+		s.logger.InfoContext(ctx, "Leaderboard updated successfully", correlationID, roundIDAttr)
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.LeaderboardUpdatedPayload{
 				RoundID: roundID,

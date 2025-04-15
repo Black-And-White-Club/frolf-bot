@@ -3,25 +3,27 @@ package userservice
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // UserServiceImpl handles user-related logic.
 type UserServiceImpl struct {
 	UserDB         userdb.UserDB
 	eventBus       eventbus.EventBus
-	logger         lokifrolfbot.Logger
+	logger         *slog.Logger
 	metrics        usermetrics.UserMetrics
-	tracer         tempofrolfbot.Tracer
+	tracer         trace.Tracer
 	serviceWrapper func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error)
 }
 
@@ -29,9 +31,9 @@ type UserServiceImpl struct {
 func NewUserService(
 	db userdb.UserDB,
 	eventBus eventbus.EventBus,
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics usermetrics.UserMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) Service {
 	return &UserServiceImpl{
 		UserDB:   db,
@@ -47,22 +49,26 @@ func NewUserService(
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error), logger lokifrolfbot.Logger, metrics usermetrics.UserMetrics, tracer tempofrolfbot.Tracer) (result UserOperationResult, err error) {
-	ctx, span := tracer.StartSpan(msg.Context(), operationName, msg)
+func serviceWrapper(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error), logger *slog.Logger, metrics usermetrics.UserMetrics, tracer trace.Tracer) (result UserOperationResult, err error) {
+	ctx, span := tracer.Start(msg.Context(), operationName, trace.WithAttributes(
+		attribute.String("message.id", msg.UUID),
+		attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
+	))
+	// Ensure the span ends when the function returns
 	defer span.End()
 
 	msg = msg.Copy()
 	msg.SetContext(ctx)
 
-	metrics.RecordOperationAttempt(operationName, userID)
+	metrics.RecordOperationAttempt(ctx, operationName, userID)
 
 	startTime := time.Now()
 	defer func() {
-		duration := time.Since(startTime).Seconds()
-		metrics.RecordOperationDuration(operationName, duration)
+		duration := time.Duration(time.Since(startTime).Seconds())
+		metrics.RecordOperationDuration(ctx, operationName, duration, userID)
 	}()
 
-	logger.Info(operationName+" triggered",
+	logger.InfoContext(ctx, operationName+" triggered",
 		attr.CorrelationIDFromMsg(msg),
 		attr.String("message_id", msg.UUID),
 		attr.String("operation", operationName),
@@ -73,12 +79,12 @@ func serviceWrapper(msg *message.Message, operationName string, userID sharedtyp
 	defer func() {
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-			logger.Error(errorMsg,
+			logger.ErrorContext(ctx, errorMsg,
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.Any("panic", r),
 			)
-			metrics.RecordOperationFailure(operationName, userID)
+			metrics.RecordOperationFailure(ctx, operationName, userID)
 			span.RecordError(errors.New(errorMsg))
 
 			// Since result and err are named return values, modifying them here affects the function return
@@ -92,22 +98,22 @@ func serviceWrapper(msg *message.Message, operationName string, userID sharedtyp
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
 
-		logger.Error("Error in "+operationName,
+		logger.ErrorContext(ctx, "Error in "+operationName,
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("user_id", string(userID)),
 			attr.Error(wrappedErr),
 		)
-		metrics.RecordOperationFailure(operationName, userID)
+		metrics.RecordOperationFailure(ctx, operationName, userID)
 		span.RecordError(wrappedErr)
 		return result, wrappedErr
 	}
 
-	logger.Info(operationName+" completed successfully",
+	logger.InfoContext(ctx, operationName+" completed successfully",
 		attr.CorrelationIDFromMsg(msg),
 		attr.String("user_id", string(userID)),
 		attr.String("operation", operationName),
 	)
-	metrics.RecordOperationSuccess(operationName, userID)
+	metrics.RecordOperationSuccess(ctx, operationName, userID)
 
 	return result, nil
 }

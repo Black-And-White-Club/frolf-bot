@@ -87,7 +87,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		}
 
 		// Log round creation
-		s.logger.Info("Round object created",
+		s.logger.InfoContext(ctx, "Round object created",
 			attr.String("title", string(roundObject.Title)),
 			attr.String("description", string(*roundObject.Description)),
 			attr.String("location", string(*roundObject.Location)),
@@ -136,7 +136,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		}
 
 		// Log before storing
-		s.logger.Info("About to create round in DB",
+		s.logger.InfoContext(ctx, "About to create round in DB",
 			attr.String("title", string(roundDB.Title)),
 			attr.String("description", string(*roundDB.Description)),
 			attr.String("location", string(*roundDB.Location)),
@@ -161,7 +161,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		s.metrics.RecordRoundCreated(location)
 
 		// Log after storing
-		s.logger.Info("Round created successfully",
+		s.logger.InfoContext(ctx, "Round created successfully",
 			attr.StringUUID("round_id", roundDB.ID.String()),
 			attr.String("title", string(roundDB.Title)),
 			attr.String("description", string(*roundDB.Description)),

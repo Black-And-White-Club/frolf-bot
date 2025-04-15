@@ -63,3 +63,9 @@ mocks-eventbus:
 	
 # Generate all mocks for user and eventbus
 mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score
+
+
+build-version:
+	LDFLAGS = -X 'main.Version=$(shell git describe --tags --always)'
+
+	go build -ldflags="$(LDFLAGS)" ...

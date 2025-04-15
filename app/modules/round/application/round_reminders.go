@@ -13,7 +13,7 @@ import (
 // ProcessRoundReminder handles the reminder event when it's triggered from the delayed queue
 func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ProcessRoundReminder", func() (RoundOperationResult, error) {
-		s.logger.Info("Processing round reminder",
+		s.logger.InfoContext(ctx, "Processing round reminder",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.String("reminder_type", payload.ReminderType),
 		)
@@ -23,7 +23,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 		// Get participants from DB
 		participants, err := s.RoundDB.GetParticipants(ctx, payload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to get participants for round",
+			s.logger.ErrorContext(ctx, "Failed to get participants for round",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -65,7 +65,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 			EventMessageID: payload.EventMessageID,
 		}
 
-		s.logger.Info("Round reminder processed",
+		s.logger.InfoContext(ctx, "Round reminder processed",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.Int("participants", len(userIDs)),
 		)

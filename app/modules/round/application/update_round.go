@@ -26,7 +26,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 
 		if len(errs) > 0 {
 			err := fmt.Errorf("validation errors: %s", strings.Join(errs, "; "))
-			s.logger.Error("Round update request validation failed",
+			s.logger.ErrorContext(ctx, "Round update request validation failed",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -38,7 +38,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 			}, err
 		}
 
-		s.logger.Info("Round update request validated",
+		s.logger.InfoContext(ctx, "Round update request validated",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
@@ -53,14 +53,14 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 // UpdateRoundEntity updates the round entity with the new values.
 func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateRoundEntity", func() (RoundOperationResult, error) {
-		s.logger.Info("Updating round entity",
+		s.logger.InfoContext(ctx, "Updating round entity",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 		)
 
 		// Fetch the existing round
 		existingRound, err := s.RoundDB.GetRound(ctx, payload.RoundUpdateRequestPayload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to fetch round",
+			s.logger.ErrorContext(ctx, "Failed to fetch round",
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
@@ -89,7 +89,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 
 		// Update the round in the database
 		if err := s.RoundDB.UpdateRound(ctx, existingRound.ID, existingRound); err != nil {
-			s.logger.Error("Failed to update round entity",
+			s.logger.ErrorContext(ctx, "Failed to update round entity",
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
@@ -101,7 +101,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			}, err
 		}
 
-		s.logger.Info("Round entity updated successfully",
+		s.logger.InfoContext(ctx, "Round entity updated successfully",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 		)
 
@@ -127,7 +127,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
 func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateScheduledRoundEvents", func() (RoundOperationResult, error) {
-		s.logger.Info("Processing scheduled round update",
+		s.logger.InfoContext(ctx, "Processing scheduled round update",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
@@ -142,7 +142,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		// Step 2: Fetch the complete round information from the database
 		round, fetchErr := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if fetchErr != nil {
-			s.logger.Error("Failed to fetch round for rescheduling",
+			s.logger.ErrorContext(ctx, "Failed to fetch round for rescheduling",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(fetchErr),
 			)

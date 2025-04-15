@@ -10,7 +10,7 @@ import (
 // CheckTagAvailability checks the availability of a tag in the database.
 func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
 	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func() (LeaderboardOperationResult, error) {
-		s.logger.Info("Checking tag availability",
+		s.logger.InfoContext(ctx, "Checking tag availability",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("tag_number", payload.TagNumber.String()),
@@ -18,14 +18,14 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload l
 
 		available, err := s.LeaderboardDB.CheckTagAvailability(ctx, *payload.TagNumber)
 		if err != nil {
-			s.logger.Error("Failed to check tag availability",
+			s.logger.ErrorContext(ctx, "Failed to check tag availability",
 				attr.ExtractCorrelationID(ctx),
 				attr.String("user_id", string(payload.UserID)),
 				attr.String("tag_number", payload.TagNumber.String()),
 				attr.Error(err),
 			)
 
-			s.metrics.RecordTagAvailabilityCheck(false, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
+			s.metrics.RecordTagAvailabilityCheck(ctx, false, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
 
 			return LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagAvailabilityCheckFailedPayload{
@@ -36,14 +36,14 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload l
 			}, err
 		}
 
-		s.logger.Info("Tag availability check result",
+		s.logger.InfoContext(ctx, "Tag availability check result",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("tag_number", payload.TagNumber.String()),
 			attr.Bool("is_available", available),
 		)
 
-		s.metrics.RecordTagAvailabilityCheck(available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
+		s.metrics.RecordTagAvailabilityCheck(ctx, available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
 
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.TagAvailabilityCheckResultPayload{
@@ -53,7 +53,6 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload l
 			},
 		}, nil
 	})
-
 	if err != nil {
 		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayload)
 		if !ok {

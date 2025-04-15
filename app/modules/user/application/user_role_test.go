@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -30,9 +30,10 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	mockDB := userdb.NewMockUserDB(ctrl)
 
 	// Use No-Op implementations
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 
 	// Define test cases
 	tests := []struct {
@@ -44,7 +45,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name: "Successfully updates user role",
+			name: "Successfully updates userrole",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testRole).
@@ -97,9 +98,9 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			expectedResult: nil,
 			expectedFail: &userevents.UserRoleUpdateFailedPayload{
 				UserID: testUserID,
-				Reason: "failed to update user role",
+				Reason: "failed to update userrole",
 			},
-			expectedError: errors.New("failed to update user role: database connection failed"),
+			expectedError: errors.New("failed to update userrole: database connection failed"),
 		},
 	}
 

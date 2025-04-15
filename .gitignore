@@ -14,7 +14,7 @@
 .vscode/
 
 # Environments
-.env
+.env*
 .env.local
 .env.dev
 .env.staging

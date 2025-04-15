@@ -13,7 +13,7 @@ import (
 func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error) {
 	s.metrics.RecordTagSwapAttempt(payload.RequestorID, payload.TargetID)
 
-	s.logger.Info("Tag swap triggered",
+	s.logger.InfoContext(ctx, "Tag swap triggered",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("requestor_id", string(payload.RequestorID)),
 		attr.String("target_id", string(payload.TargetID)),
@@ -24,7 +24,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
 		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "TagSwapRequested", time.Since(startTime).Seconds())
 		if err != nil {
-			s.logger.Error("Failed to get active leaderboard",
+			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err),
 			)
@@ -38,7 +38,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 			}, nil
 		}
 		if currentLeaderboard == nil {
-			s.logger.Error("No active leaderboard found",
+			s.logger.ErrorContext(ctx, "No active leaderboard found",
 				attr.ExtractCorrelationID(ctx),
 			)
 			s.metrics.RecordTagSwapFailure(payload.RequestorID, payload.TargetID, "no active leaderboard found")
@@ -51,7 +51,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 			}, nil
 		}
 
-		s.logger.Info("Active Leaderboard Data",
+		s.logger.InfoContext(ctx, "Active Leaderboard Data",
 			attr.ExtractCorrelationID(ctx),
 			attr.Any("leaderboard_data", currentLeaderboard.LeaderboardData),
 		)
@@ -59,7 +59,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 		_, requestorExists := s.FindTagByUserID(currentLeaderboard, sharedtypes.DiscordID(payload.RequestorID))
 		_, targetExists := s.FindTagByUserID(currentLeaderboard, sharedtypes.DiscordID(payload.TargetID))
 		if !requestorExists || !targetExists {
-			s.logger.Error("One or both users do not have tags on the leaderboard",
+			s.logger.ErrorContext(ctx, "One or both users do not have tags on the leaderboard",
 				attr.ExtractCorrelationID(ctx),
 				attr.String("requestor_id", string(payload.RequestorID)),
 				attr.String("target_id", string(payload.TargetID)),
@@ -78,7 +78,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 		err = s.LeaderboardDB.SwapTags(ctx, payload.RequestorID, payload.TargetID)
 		s.metrics.RecordOperationDuration("SwapTags", "TagSwapRequested", time.Since(startTime).Seconds())
 		if err != nil {
-			s.logger.Error("Failed to swap tags in DB",
+			s.logger.ErrorContext(ctx, "Failed to swap tags in DB",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err),
 			)
@@ -92,7 +92,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 			}, nil
 		}
 
-		s.logger.Info("Tags swapped successfully",
+		s.logger.InfoContext(ctx, "Tags swapped successfully",
 			attr.ExtractCorrelationID(ctx),
 		)
 

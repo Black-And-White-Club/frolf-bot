@@ -3,12 +3,12 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -17,7 +17,7 @@ import (
 // LeaderboardHandlers handles leaderboard-related events.
 type LeaderboardHandlers struct {
 	leaderboardService leaderboardservice.Service
-	logger             lokifrolfbot.Logger
+	logger             *slog.Logger
 	tracer             tempofrolfbot.Tracer
 	metrics            leaderboardmetrics.LeaderboardMetrics
 	helpers            utils.Helpers
@@ -27,7 +27,7 @@ type LeaderboardHandlers struct {
 // NewLeaderboardHandlers creates a new instance of LeaderboardHandlers.
 func NewLeaderboardHandlers(
 	leaderboardService leaderboardservice.Service,
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	tracer tempofrolfbot.Tracer,
 	helpers utils.Helpers,
 	metrics leaderboardmetrics.LeaderboardMetrics,
@@ -50,7 +50,7 @@ func handlerWrapper(
 	handlerName string,
 	unmarshalTo interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
 	tracer tempofrolfbot.Tracer,
 	helpers utils.Helpers,
@@ -61,15 +61,15 @@ func handlerWrapper(
 		defer span.End()
 
 		// Record metrics for handler attempt
-		metrics.RecordHandlerAttempt(handlerName)
+		metrics.RecordHandlerAttempt(ctx, handlerName)
 
 		startTime := time.Now()
 		defer func() {
 			duration := time.Since(startTime).Seconds()
-			metrics.RecordHandlerDuration(handlerName, duration)
+			metrics.RecordHandlerDuration(ctx, handlerName, duration)
 		}()
 
-		logger.Info(handlerName+" triggered",
+		logger.InfoContext(ctx, handlerName+" triggered",
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("message_id", msg.UUID),
 		)
@@ -80,7 +80,7 @@ func handlerWrapper(
 		// Unmarshal payload if a target is provided
 		if payloadInstance != nil {
 			if err := helpers.UnmarshalPayload(msg, payloadInstance); err != nil {
-				logger.Error("Failed to unmarshal payload",
+				logger.ErrorContext(ctx, "Failed to unmarshal payload",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err))
 				metrics.RecordHandlerFailure(handlerName)
@@ -91,7 +91,7 @@ func handlerWrapper(
 		// Call the actual handler logic
 		result, err := handlerFunc(ctx, msg, payloadInstance)
 		if err != nil {
-			logger.Error("Error in "+handlerName,
+			logger.ErrorContext(ctx, "Error in "+handlerName,
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(err),
 			)
@@ -99,7 +99,7 @@ func handlerWrapper(
 			return nil, err
 		}
 
-		logger.Info(handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
+		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
 		metrics.RecordHandlerSuccess(handlerName)
 		return result, nil
 	}

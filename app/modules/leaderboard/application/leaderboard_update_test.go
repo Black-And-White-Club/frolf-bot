@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
@@ -74,7 +74,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("database connection error"),
 		},
 		{
-			name: "Fails to create new leaderboard", //This test was incorrect
+			name: "Fails to create new leaderboard", // This test was incorrect
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
@@ -83,7 +83,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
-				//The original test expected CreateLeaderboard, but the function doesn't call CreateLeaderboard in this scenario.
+				// The original test expected CreateLeaderboard, but the function doesn't call CreateLeaderboard in this scenario.
 				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("update failure"))
 			},
 			roundID:        testRoundID,
@@ -96,7 +96,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("update failure"), // Corrected expected error
 		},
 		{
-			name: "Fails to deactivate old leaderboard", //This test was incorrect
+			name: "Fails to deactivate old leaderboard", // This test was incorrect
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
@@ -105,7 +105,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil) //Simulate successful update
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil) // Simulate successful update
 			},
 			roundID:        testRoundID,
 			sortedTags:     testSortedParticipants,
@@ -142,7 +142,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("database connection error"),
 		},
 		{
-			name: "Concurrent updates", //This test was correct.
+			name: "Concurrent updates", // This test was correct.
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
@@ -162,7 +162,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			name: "Invalid leaderboard data",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{}, //Return empty leaderboard data
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{}, // Return empty leaderboard data
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,

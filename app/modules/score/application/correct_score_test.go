@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"

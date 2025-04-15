@@ -7,9 +7,9 @@ import (
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"

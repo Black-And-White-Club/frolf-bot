@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"

@@ -41,7 +41,7 @@ func NewScoreModule(
 	metrics := obs.GetMetrics().ScoreMetrics()
 	tracer := obs.GetTracer()
 
-	logger.Info("score.NewScoreModule called")
+	logger.InfoContext(ctx, "score.NewScoreModule called")
 
 	// Initialize score service with observability components
 	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer)
@@ -68,7 +68,7 @@ func NewScoreModule(
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 	logger := m.observability.GetLogger()
-	logger.Info("Starting score module")
+	logger.InfoContext(ctx, "Starting score module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -82,18 +82,18 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	logger.Info("Score module goroutine stopped")
+	logger.InfoContext(ctx, "Score module goroutine stopped")
 }
 
 func (m *Module) Close() error {
 	logger := m.observability.GetLogger()
-	logger.Info("Stopping score module")
+	logger.InfoContext(ctx, "Stopping score module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.Info("Score module stopped")
+	logger.InfoContext(ctx, "Score module stopped")
 	return nil
 }

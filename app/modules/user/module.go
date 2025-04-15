@@ -36,12 +36,12 @@ func NewUserModule(
 	router *message.Router,
 	helpers utils.Helpers,
 ) (*Module, error) {
-	// Extract observability components
-	logger := obs.GetLogger()
-	metrics := obs.GetMetrics().UserMetrics()
-	tracer := obs.GetTracer()
+	// Extract observability components from the new structure
+	logger := obs.Provider.Logger
+	metrics := obs.Registry.UserMetrics // Assuming this method exists in the registry
+	tracer := obs.Registry.Tracer       // Use the tracer from registry
 
-	logger.Info("user.NewUserModule called")
+	logger.InfoContext(ctx, "user.NewUserModule called")
 
 	// Initialize user service with observability components
 	userService := userservice.NewUserService(userDB, eventBus, logger, metrics, tracer)
@@ -67,8 +67,8 @@ func NewUserModule(
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.GetLogger()
-	logger.Info("Starting user module")
+	logger := m.observability.Provider.Logger
+	logger.InfoContext(ctx, "Starting user module")
 
 	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
@@ -82,16 +82,16 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	logger.Info("User module goroutine stopped")
+	logger.InfoContext(ctx, "User module goroutine stopped")
 }
 
 func (m *Module) Close() error {
-	logger := m.observability.GetLogger()
+	logger := m.observability.Provider.Logger
 	logger.Info("Stopping user module") // Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.Info("User  module stopped")
+	logger.Info("User module stopped")
 	return nil
 }

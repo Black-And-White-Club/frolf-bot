@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			allScoresSubmittedPayload := payload.(*roundevents.AllScoresSubmittedPayload)
 
-			h.logger.Info("Received AllScoresSubmitted event",
+			h.logger.InfoContext(ctx, "Received AllScoresSubmitted event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", allScoresSubmittedPayload.RoundID.String()),
 			)
@@ -24,7 +24,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.FinalizeRound(ctx, *allScoresSubmittedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle AllScoresSubmitted event",
+				h.logger.ErrorContext(ctx, "Failed to handle AllScoresSubmitted event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -32,7 +32,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round finalization failed",
+				h.logger.InfoContext(ctx, "Round finalization failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,7 +51,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round finalization successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round finalization successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -67,7 +67,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from FinalizeRound service",
+			h.logger.ErrorContext(ctx, "Unexpected result from FinalizeRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -85,7 +85,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundFinalizedPayload := payload.(*roundevents.RoundFinalizedPayload)
 
-			h.logger.Info("Received RoundFinalized event",
+			h.logger.InfoContext(ctx, "Received RoundFinalized event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", roundFinalizedPayload.RoundID.String()),
 			)
@@ -93,7 +93,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 			// Call the service function to handle the event
 			result, err := h.roundService.NotifyScoreModule(ctx, *roundFinalizedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundFinalized event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundFinalized event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -101,7 +101,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Notify Score Module failed",
+				h.logger.InfoContext(ctx, "Notify Score Module failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -120,7 +120,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Notify Score Module successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Notify Score Module successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -136,7 +136,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from NotifyScoreModule service",
+			h.logger.ErrorContext(ctx, "Unexpected result from NotifyScoreModule service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

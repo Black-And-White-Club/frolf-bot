@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundUpdateRequestPayload := payload.(*roundevents.RoundUpdateRequestPayload)
 
-			h.logger.Info("Received RoundUpdateRequest event",
+			h.logger.InfoContext(ctx, "Received RoundUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundUpdateRequestPayload.RoundID),
 			)
@@ -24,7 +24,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.ValidateRoundUpdateRequest(ctx, *roundUpdateRequestPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundUpdateRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundUpdateRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -32,7 +32,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round update request validation failed",
+				h.logger.InfoContext(ctx, "Round update request validation failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,7 +51,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round update request validated", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round update request validated", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				validatedPayload := result.Success.(*roundevents.RoundUpdateValidatedPayload)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ValidateRoundUpdateRequest service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateRoundUpdateRequest service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -86,7 +86,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundUpdateValidatedPayload := payload.(*roundevents.RoundUpdateValidatedPayload)
 
-			h.logger.Info("Received RoundUpdateValidated event",
+			h.logger.InfoContext(ctx, "Received RoundUpdateValidated event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundUpdateValidatedPayload.RoundUpdateRequestPayload.RoundID),
 			)
@@ -94,7 +94,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 			// Call the service function to handle the event
 			result, err := h.roundService.UpdateRoundEntity(ctx, *roundUpdateValidatedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundUpdateValidated event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundUpdateValidated event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -102,7 +102,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round entity update failed",
+				h.logger.InfoContext(ctx, "Round entity update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -121,7 +121,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round entity updated successfully", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round entity updated successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				updatedPayload := result.Success.(*roundevents.RoundEntityUpdatedPayload)
@@ -138,7 +138,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from UpdateRoundEntity service",
+			h.logger.ErrorContext(ctx, "Unexpected result from UpdateRoundEntity service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -156,7 +156,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundScheduleUpdatePayload := payload.(*roundevents.RoundScheduleUpdatePayload)
 
-			h.logger.Info("Received RoundScheduleUpdate event",
+			h.logger.InfoContext(ctx, "Received RoundScheduleUpdate event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundScheduleUpdatePayload.RoundID),
 			)
@@ -164,7 +164,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 			// Call the service function to handle the event
 			result, err := h.roundService.UpdateScheduledRoundEvents(ctx, *roundScheduleUpdatePayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundScheduleUpdate event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundScheduleUpdate event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -172,7 +172,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Scheduled round update failed",
+				h.logger.InfoContext(ctx, "Scheduled round update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -191,7 +191,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Scheduled round update successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Scheduled round update successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				storedPayload := result.Success.(*roundevents.RoundStoredPayload)
@@ -208,7 +208,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from UpdateScheduledRoundEvents service",
+			h.logger.ErrorContext(ctx, "Unexpected result from UpdateScheduledRoundEvents service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

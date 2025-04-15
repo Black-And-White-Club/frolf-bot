@@ -19,11 +19,11 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, use
 		user, err := s.UserDB.GetUserByUserID(ctx, userID)
 		if err != nil {
 			if errors.Is(err, userdb.ErrUserNotFound) {
-				s.logger.Info("User not found",
+				s.logger.InfoContext(ctx, "User not found",
 					attr.String("user_id", string(userID)),
 					attr.CorrelationIDFromMsg(msg),
 				)
-				s.metrics.RecordUserRetrieval(false, userID)
+				s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 				return UserOperationResult{
 					Failure: &userevents.GetUserFailedPayload{
@@ -33,12 +33,12 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, use
 				}, errors.New("user not found") // Return an error message
 			}
 
-			s.logger.Error("Failed to get user",
+			s.logger.ErrorContext(ctx, "Failed to get user",
 				attr.Error(err),
 				attr.String("user_id", string(userID)),
 				attr.CorrelationIDFromMsg(msg),
 			)
-			s.metrics.RecordUserRetrieval(false, userID)
+			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 			return UserOperationResult{
 				Failure: &userevents.GetUserFailedPayload{
@@ -49,7 +49,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, use
 			}, err
 		}
 
-		s.metrics.RecordUserRetrieval(true, userID)
+		s.metrics.RecordUserRetrievalSuccess(ctx, userID)
 
 		return UserOperationResult{
 			Success: &userevents.GetUserResponsePayload{
@@ -61,7 +61,6 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, msg *message.Message, use
 			},
 		}, nil
 	})
-
 	if err != nil {
 		// Return failure payload if present
 		if result.Failure != nil {
@@ -86,12 +85,12 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message,
 	result, err := s.serviceWrapper(msg, operationName, userID, func() (UserOperationResult, error) {
 		role, err := s.UserDB.GetUserRole(ctx, userID)
 		if err != nil {
-			s.logger.Error("Failed to get user role",
+			s.logger.ErrorContext(ctx, "Failed to get user role",
 				attr.Error(err),
 				attr.String("userID", string(userID)),
 				attr.CorrelationIDFromMsg(msg),
 			)
-			s.metrics.RecordUserRoleRetrieval(false, userID)
+			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 			return UserOperationResult{
 				Failure: &userevents.GetUserRoleFailedPayload{
@@ -104,7 +103,7 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message,
 
 		// Ensure role is valid before returning
 		if !role.IsValid() {
-			s.logger.Error("Retrieved invalid role for user",
+			s.logger.ErrorContext(ctx, "Retrieved invalid role for user",
 				attr.String("userID", string(userID)),
 				attr.String("role", string(role)),
 			)
@@ -118,7 +117,7 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message,
 			}, errors.New("invalid role in database")
 		}
 
-		s.metrics.RecordUserRoleRetrieval(true, userID)
+		s.metrics.RecordUserRetrievalSuccess(ctx, userID)
 
 		return UserOperationResult{
 			Success: &userevents.GetUserRoleResponsePayload{
@@ -127,7 +126,6 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, msg *message.Message,
 			},
 		}, nil
 	})
-
 	if err != nil {
 		// Return failure payload if present
 		if result.Failure != nil {

@@ -15,7 +15,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 	result, err := s.serviceWrapper(ctx, "FinalizeRound", func() (RoundOperationResult, error) {
 		// Update the round state to finalized in the database
 		rounddbState := roundtypes.RoundStateFinalized
-		s.logger.Info("Attempting to update round state to finalized",
+		s.logger.InfoContext(ctx, "Attempting to update round state to finalized",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
 		if err := s.RoundDB.UpdateRoundState(ctx, payload.RoundID, rounddbState); err != nil {
@@ -24,7 +24,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 				RoundID: payload.RoundID,
 				Error:   fmt.Sprintf("failed to update round state to finalized: %v", err),
 			}
-			s.logger.Error("Failed to update round state to finalized",
+			s.logger.ErrorContext(ctx, "Failed to update round state to finalized",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.Error(err),
 			)
@@ -39,7 +39,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 				RoundID: payload.RoundID,
 				Error:   fmt.Sprintf("failed to fetch round data: %v", err),
 			}
-			s.logger.Error("Failed to fetch round data after finalization",
+			s.logger.ErrorContext(ctx, "Failed to fetch round data after finalization",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.Error(err),
 			)
@@ -51,7 +51,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 			RoundID:   payload.RoundID,
 			RoundData: *round, // Include the round data here
 		}
-		s.logger.Info("Round state updated to finalized successfully",
+		s.logger.InfoContext(ctx, "Round state updated to finalized successfully",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
 
@@ -94,7 +94,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 			RoundID: round.ID,
 			Scores:  scores,
 		}
-		s.logger.Info("Prepared score data for Score Module",
+		s.logger.InfoContext(ctx, "Prepared score data for Score Module",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.Int("participant_count_processed", len(scores)),
 		)

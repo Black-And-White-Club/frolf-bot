@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundStoredPayload := payload.(*roundevents.RoundStoredPayload)
 
-			h.logger.Info("Received RoundStored event",
+			h.logger.InfoContext(ctx, "Received RoundStored event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundStoredPayload.Round.ID),
 			)
@@ -24,7 +24,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			// Call the service function to handle the event
 			result, err := h.roundService.ScheduleRoundEvents(ctx, *roundStoredPayload, *roundStoredPayload.Round.StartTime)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundStored event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundStored event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -32,7 +32,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round scheduling failed",
+				h.logger.InfoContext(ctx, "Round scheduling failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,7 +51,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round scheduling successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round scheduling successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				scheduledPayload := result.Success.(*roundevents.RoundScheduledPayload)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundStored(msg *message.Message) ([]*message.Mess
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ScheduleRoundEvents service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ScheduleRoundEvents service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

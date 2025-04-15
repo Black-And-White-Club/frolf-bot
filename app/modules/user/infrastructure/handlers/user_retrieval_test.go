@@ -9,13 +9,13 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -41,10 +41,10 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 	// Mock dependencies
 	mockUserService := userservice.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+	mockMetrics := usermetrics.NewNoop() // Use no-op metrics
 
-	logger := &lokifrolfbot.NoOpLogger{}
-	metrics := &usermetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 
 	tests := []struct {
 		name           string
@@ -55,15 +55,17 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle GetUserRequest",
+			name: "Successfully handle GetUser Request", // Changed from Role to Request
 			mockSetup: func() {
+				// Expect the payload to be unmarshalled correctly
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRequestPayload) = *testPayload // Use testPayload, not testRolePayload
 						return nil
 					},
 				)
 
+				// Expect GetUser (not GetUserRole)
 				mockUserService.EXPECT().GetUser(
 					gomock.Any(),
 					gomock.Any(),
@@ -74,6 +76,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					nil,
 				)
 
+				// Expect CreateResultMessage for user response
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					&userevents.GetUserResponsePayload{User: testUserData},
@@ -108,13 +111,10 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					testUserID,
-				).Return(
-					nil, &userevents.GetUserFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
-					},
-					nil,
-				)
+				).Return(nil, &userevents.GetUserFailedPayload{
+					UserID: testUserID,
+					Reason: "internal service error",
+				}, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
@@ -132,6 +132,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		{
 			name: "Failure to create success message",
 			mockSetup: func() {
+				// Expect the payload to be unmarshalled correctly
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.GetUserRequestPayload) = *testPayload
@@ -139,21 +140,27 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
+				// Expect the GetUser  method to be called with the correct parameters
 				mockUserService.EXPECT().GetUser(
 					gomock.Any(),
 					gomock.Any(),
 					testUserID,
 				).Return(
-					&userevents.GetUserResponsePayload{User: testUserData},
-					nil,
-					nil,
+					&userevents.GetUserResponsePayload{
+						User: testUserData, // Correctly return the user data
+					},
+					nil, // No error
+					nil, // No additional error
 				)
 
+				// Expect the CreateResultMessage method to be called with the correct parameters
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.GetUserResponsePayload{User: testUserData},
+					&userevents.GetUserResponsePayload{
+						User: testUserData, // Pass the correct user data
+					},
 					userevents.GetUserResponse,
-				).Return(nil, fmt.Errorf("failed to create success message"))
+				).Return(nil, fmt.Errorf("failed to create success message")) // Simulate failure
 			},
 			msg:            testMsg,
 			wantErr:        true,
@@ -169,10 +176,10 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     metrics,
+				metrics:     mockMetrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
 				},
 			}
 
@@ -209,10 +216,10 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	// Mock dependencies
 	mockUserService := userservice.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+	mockMetrics := usermetrics.NewNoop() // Use no-op metrics
 
-	logger := &lokifrolfbot.NoOpLogger{}
-	metrics := &usermetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 
 	tests := []struct {
 		name           string
@@ -331,10 +338,10 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     metrics,
+				metrics:     mockMetrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
 				},
 			}
 

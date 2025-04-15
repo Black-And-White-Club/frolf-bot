@@ -15,18 +15,17 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 	// Record leaderboard retrieval attempt
 	s.metrics.RecordLeaderboardGetAttempt("LeaderboardService")
 
-	s.logger.Info("Leaderboard retrieval triggered",
+	s.logger.InfoContext(ctx, "Leaderboard retrieval triggered",
 		attr.ExtractCorrelationID(ctx))
 
 	return s.serviceWrapper(ctx, "GetLeaderboard", func() (LeaderboardOperationResult, error) {
-
 		// 1. Get the active leaderboard from the database.
 		dbStartTime := time.Now()
 		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
 		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
 		s.metrics.RecordLeaderboardGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
 		if err != nil {
-			s.logger.Error("Failed to get active leaderboard",
+			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
@@ -51,7 +50,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 			})
 		}
 
-		s.logger.Info("Successfully retrieved leaderboard",
+		s.logger.InfoContext(ctx, "Successfully retrieved leaderboard",
 			attr.ExtractCorrelationID(ctx))
 
 		s.metrics.RecordLeaderboardGetSuccess("LeaderboardService")
@@ -69,19 +68,18 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedty
 	// Record tag retrieval attempt
 	s.metrics.RecordTagGetAttempt("LeaderboardService")
 
-	s.logger.Info("Tag retrieval triggered for user",
+	s.logger.InfoContext(ctx, "Tag retrieval triggered for user",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("user_id", string(userID)))
 
 	return s.serviceWrapper(ctx, "GetTagByUserID", func() (LeaderboardOperationResult, error) {
-
 		// Fetch tag number from DB
 		dbStartTime := time.Now()
 		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, userID)
 		s.metrics.RecordOperationDuration("GetTagByUserID", "LeaderboardService", time.Since(dbStartTime).Seconds())
 		s.metrics.RecordTagGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
 		if err != nil {
-			s.logger.Error("Failed to get tag by UserID",
+			s.logger.ErrorContext(ctx, "Failed to get tag by UserID",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
@@ -102,7 +100,7 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedty
 			tagPtr = &tagValue
 		}
 
-		s.logger.Info("Retrieved tag number",
+		s.logger.InfoContext(ctx, "Retrieved tag number",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("tag_number", fmt.Sprintf("%v", tagPtr)))
 

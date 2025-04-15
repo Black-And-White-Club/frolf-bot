@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
@@ -18,7 +18,7 @@ import (
 type LeaderboardService struct {
 	LeaderboardDB  leaderboarddb.LeaderboardDB
 	eventBus       eventbus.EventBus
-	logger         lokifrolfbot.Logger
+	logger         *slog.Logger
 	metrics        leaderboardmetrics.LeaderboardMetrics
 	tracer         tempofrolfbot.Tracer
 	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
@@ -28,7 +28,7 @@ type LeaderboardService struct {
 func NewLeaderboardService(
 	db leaderboarddb.LeaderboardDB,
 	eventBus eventbus.EventBus,
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
 	tracer tempofrolfbot.Tracer,
 ) Service {
@@ -46,7 +46,7 @@ func NewLeaderboardService(
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger lokifrolfbot.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
+func serviceWrapper(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger *slog.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
 	if serviceFunc == nil {
 		return LeaderboardOperationResult{}, errors.New("service function is nil")
 	}
@@ -63,7 +63,7 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 	}()
 
 	correlationID := attr.ExtractCorrelationID(ctx)
-	logger.Info("Operation triggered",
+	logger.InfoContext(ctx, "Operation triggered",
 		attr.LogAttr(correlationID),
 		attr.String("operation", operationName),
 	)
@@ -72,7 +72,7 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 	defer func() {
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-			logger.Error(errorMsg,
+			logger.ErrorContext(ctx, errorMsg,
 				attr.LogAttr(correlationID),
 				attr.Any("panic", r),
 			)
@@ -88,7 +88,7 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 	result, err = serviceFunc()
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-		logger.Error("Error in "+operationName,
+		logger.ErrorContext(ctx, "Error in "+operationName,
 			attr.LogAttr(correlationID),
 			attr.Error(wrappedErr),
 		)
@@ -97,7 +97,7 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 		return result, wrappedErr
 	}
 
-	logger.Info(operationName+" completed successfully",
+	logger.InfoContext(ctx, operationName+" completed successfully",
 		attr.LogAttr(correlationID),
 		attr.String("operation", operationName),
 	)

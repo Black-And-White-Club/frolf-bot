@@ -21,7 +21,7 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*mess
 			}
 
 			// Log received event
-			h.logger.Info("Received CorrectScoreRequest event",
+			h.logger.InfoContext(ctx, "Received CorrectScoreRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", scoreUpdateRequestPayload.RoundID),
 				attr.String("user_id", string(scoreUpdateRequestPayload.UserID)),
@@ -31,11 +31,10 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*mess
 
 			// Call the service
 			result, err := h.scoreService.CorrectScore(ctx, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID, scoreUpdateRequestPayload.Score, scoreUpdateRequestPayload.TagNumber)
-
 			// Check if an error occurred
 			if err != nil {
 				// Handle the error
-				h.logger.Error("Error correcting score",
+				h.logger.ErrorContext(ctx, "Error correcting score",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -58,7 +57,7 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*mess
 			// Create and return message
 			responseMsg, err := h.helpers.CreateResultMessage(msg, payloadToPublish, eventType)
 			if err != nil {
-				h.logger.Error("Failed to create response message",
+				h.logger.ErrorContext(ctx, "Failed to create response message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)

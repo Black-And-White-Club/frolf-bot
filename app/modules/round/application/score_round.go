@@ -28,7 +28,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 
 		if len(errs) > 0 {
 			err := fmt.Errorf("validation errors: %s", strings.Join(errs, "; "))
-			s.logger.Error("Score update request validation failed",
+			s.logger.ErrorContext(ctx, "Score update request validation failed",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -40,7 +40,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 			}, err
 		}
 
-		s.logger.Info("Score update request validated",
+		s.logger.InfoContext(ctx, "Score update request validated",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
@@ -57,7 +57,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 	return s.serviceWrapper(ctx, "UpdateParticipantScore", func() (RoundOperationResult, error) {
 		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.Participant, *payload.ScoreUpdateRequestPayload.Score)
 		if err != nil {
-			s.logger.Error("Failed to update participant score",
+			s.logger.ErrorContext(ctx, "Failed to update participant score",
 				attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
@@ -72,7 +72,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 		// Get the round information, including the EventMessageID
 		round, err := s.RoundDB.GetRound(ctx, payload.ScoreUpdateRequestPayload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to get round",
+			s.logger.ErrorContext(ctx, "Failed to get round",
 				attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
@@ -84,7 +84,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 			}, err
 		}
 
-		s.logger.Info("Participant score updated in database",
+		s.logger.InfoContext(ctx, "Participant score updated in database",
 			attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 			attr.String("participant_id", string(payload.ScoreUpdateRequestPayload.Participant)),
 			attr.Int("score", int(*payload.ScoreUpdateRequestPayload.Score)),
@@ -106,7 +106,7 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", func() (RoundOperationResult, error) {
 		allScoresSubmitted, err := s.checkIfAllScoresSubmitted(ctx, payload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to check if all scores have been submitted",
+			s.logger.ErrorContext(ctx, "Failed to check if all scores have been submitted",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -119,7 +119,7 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 		}
 
 		if allScoresSubmitted {
-			s.logger.Info("All scores submitted for round",
+			s.logger.InfoContext(ctx, "All scores submitted for round",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.RoundID("event_message_id", *payload.EventMessageID),
 			)
@@ -131,7 +131,7 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 				},
 			}, nil
 		} else {
-			s.logger.Info("Not all scores submitted yet, updating Discord",
+			s.logger.InfoContext(ctx, "Not all scores submitted yet, updating Discord",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.String("participant_id", string(payload.Participant)),
 				attr.Int("score", int(payload.Score)),

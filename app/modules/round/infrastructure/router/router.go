@@ -7,9 +7,9 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
@@ -83,7 +83,7 @@ func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus even
 
 // RegisterHandlers registers event handlers.
 func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandlers.Handlers) error {
-	r.logger.Info("Entering RegisterHandlers for Round")
+	r.logger.InfoContext(ctx, "Entering RegisterHandlers for Round")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		roundevents.RoundCreateRequest:                    handlers.HandleCreateRoundRequest,
@@ -116,13 +116,13 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					r.logger.Error("Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
-						r.logger.Info("🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						r.logger.InfoContext(ctx, "🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 						}

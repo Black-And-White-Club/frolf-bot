@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundDeleteRequestPayload := payload.(*roundevents.RoundDeleteRequestPayload)
 
-			h.logger.Info("Received RoundDeleteRequest event",
+			h.logger.InfoContext(ctx, "Received RoundDeleteRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", roundDeleteRequestPayload.RoundID.String()),
 				attr.String("requesting_user", string(roundDeleteRequestPayload.RequestingUserUserID)),
@@ -25,7 +25,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.ValidateRoundDeleteRequest(ctx, *roundDeleteRequestPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundDeleteRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundDeleteRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -33,7 +33,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round delete request failed",
+				h.logger.InfoContext(ctx, "Round delete request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -52,7 +52,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round delete request validated", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round delete request validated", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ValidateRoundDeleteRequest service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateRoundDeleteRequest service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -86,7 +86,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundDeleteAuthorizedPayload := payload.(*roundevents.RoundDeleteAuthorizedPayload)
 
-			h.logger.Info("Received RoundDeleteAuthorized event",
+			h.logger.InfoContext(ctx, "Received RoundDeleteAuthorized event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", roundDeleteAuthorizedPayload.RoundID.String()),
 			)
@@ -94,7 +94,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 			// Call the service function to handle the event
 			result, err := h.roundService.DeleteRound(ctx, *roundDeleteAuthorizedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundDeleteAuthorized event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundDeleteAuthorized event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -102,7 +102,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round delete authorized failed",
+				h.logger.InfoContext(ctx, "Round delete authorized failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -121,7 +121,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round delete authorized successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round delete authorized successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -137,7 +137,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from DeleteRound service",
+			h.logger.ErrorContext(ctx, "Unexpected result from DeleteRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

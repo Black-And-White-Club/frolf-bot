@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 
 	"go.uber.org/mock/gomock"
 )

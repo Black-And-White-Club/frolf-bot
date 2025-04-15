@@ -13,14 +13,14 @@ import (
 // ProcessRoundStart handles the start of a round, updates participant data, updates DB, and notifies Discord.
 func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ProcessRoundStart", func() (RoundOperationResult, error) {
-		s.logger.Info("Processing round start",
+		s.logger.InfoContext(ctx, "Processing round start",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
 		// Fetch the round from DB
 		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to get round from database",
+			s.logger.ErrorContext(ctx, "Failed to get round from database",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -37,7 +37,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 		round.State = roundtypes.RoundStateInProgress
 
 		if err := s.RoundDB.UpdateRound(ctx, round.ID, round); err != nil {
-			s.logger.Error("Failed to update round",
+			s.logger.ErrorContext(ctx, "Failed to update round",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -71,7 +71,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			EventMessageID: round.EventMessageID,
 		}
 
-		s.logger.Info("Round start processed",
+		s.logger.InfoContext(ctx, "Round start processed",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 

@@ -43,7 +43,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 
 	// Record user creation attempt
 	if tag != nil {
-		s.metrics.UserCreationByTag(*tag)
+		s.metrics.RecordUserCreationByTag(ctx, *tag)
 	}
 
 	userType := "base"
@@ -53,11 +53,10 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		source = "user"
 	}
 
-	s.metrics.RecordUserCreation(userType, source, "attempted")
-	s.metrics.RecordUserRoleUpdateAttempt(userID, standardRole)
+	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
 	result, err := s.serviceWrapper(msg, "CreateUser", userID, func() (UserOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "CreateUser.DatabaseOperation", msg)
+		ctx, span := s.tracer.Start(ctx, "CreateUser.DatabaseOperation")
 		defer span.End()
 
 		user := userdb.User{UserID: userID}
@@ -66,19 +65,18 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		dbStart := time.Now()
 
 		err := s.UserDB.CreateUser(ctx, &user)
-		dbDuration := time.Since(dbStart).Seconds()
-		s.metrics.DBQueryDuration(dbDuration)
+		dbDuration := time.Duration(time.Since(dbStart).Seconds())
+		s.metrics.RecordDBQueryDuration(ctx, dbDuration)
 
 		if err != nil {
-			s.logger.Error("Database error during user creation",
+			s.logger.ErrorContext(ctx, "Database error during user creation",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.Error(err),
 				attr.String("db_operation", "insert"),
 			)
 
-			s.metrics.RecordUserCreation(userType, source, "failed")
-			s.metrics.RecordUserRoleUpdateFailure(userID, standardRole)
+			s.metrics.RecordUserCreationFailure(ctx, userType, source)
 
 			return UserOperationResult{
 				Failure: &userevents.UserCreationFailedPayload{
@@ -89,11 +87,11 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 			}, err
 		}
 
-		s.metrics.RecordUserCreation(userType, source, "success")
-		s.metrics.RecordUserRoleUpdateSuccess(userID, standardRole)
+		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
+		s.metrics.RecordRoleUpdateSuccess(ctx, userID, "no_role", standardRole)
 
 		if tag != nil {
-			s.metrics.RecordTagAvailabilityCheck(true, *tag)
+			s.metrics.RecordTagAvailabilityCheck(ctx, true, *tag)
 		}
 
 		return UserOperationResult{
@@ -105,7 +103,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 	})
 
 	// Record total user creation duration
-	s.metrics.UserCreationDuration(time.Since(startTime).Seconds())
+	s.metrics.RecordUserCreationDuration(ctx, userType, source, time.Duration(time.Since(startTime).Seconds()))
 
 	if err != nil {
 		if result.Failure != nil {
@@ -118,7 +116,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		}, err
 	}
 
-	s.logger.Info("User successfully created",
+	s.logger.InfoContext(ctx, "User successfully created",
 		attr.CorrelationIDFromMsg(msg),
 		attr.String("user_id", string(userID)),
 		attr.Float64("creation_duration_seconds", time.Since(startTime).Seconds()),

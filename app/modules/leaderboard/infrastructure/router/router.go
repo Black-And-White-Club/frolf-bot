@@ -7,9 +7,9 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
@@ -83,7 +83,7 @@ func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Serv
 
 // RegisterHandlers registers event handlers.
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
-	r.logger.Info("Entering Register Handlers for Leaderboard")
+	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		leaderboardevents.LeaderboardUpdateRequested:             handlers.HandleLeaderboardUpdateRequested,
@@ -106,13 +106,13 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					r.logger.Error("Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
-						r.logger.Info("🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						r.logger.InfoContext(ctx, "🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 						}

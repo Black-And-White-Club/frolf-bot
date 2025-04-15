@@ -17,7 +17,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			tagAssignmentRequestedPayload := payload.(*leaderboardevents.TagAssignmentRequestedPayload)
 
-			h.logger.Info("Received TagAssignmentRequested event",
+			h.logger.InfoContext(ctx, "Received TagAssignmentRequested event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
 				attr.Int("tag_number", int(*tagAssignmentRequestedPayload.TagNumber)),
@@ -26,7 +26,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 			// Call the service function to handle the event
 			result, err := h.leaderboardService.TagAssignmentRequested(ctx, *tagAssignmentRequestedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle TagAssignmentRequested event",
+				h.logger.ErrorContext(ctx, "Failed to handle TagAssignmentRequested event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -35,7 +35,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 
 			// Handle the result
 			if result.Failure != nil {
-				h.logger.Error("Tag assignment failed",
+				h.logger.ErrorContext(ctx, "Tag assignment failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -54,7 +54,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Tag assignment successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Tag assignment successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(

@@ -17,7 +17,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			tagAvailabilityCheckRequestedPayload := payload.(*leaderboardevents.TagAvailabilityCheckRequestedPayload)
 
-			h.logger.Info("Received TagAvailabilityCheckRequested event",
+			h.logger.InfoContext(ctx, "Received TagAvailabilityCheckRequested event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(tagAvailabilityCheckRequestedPayload.UserID)),
 				attr.Int("tag_number", int(*tagAvailabilityCheckRequestedPayload.TagNumber)),
@@ -26,7 +26,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 			// Call the service function to handle the event
 			result, failure, err := h.leaderboardService.CheckTagAvailability(ctx, *tagAvailabilityCheckRequestedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle TagAvailabilityCheckRequested event",
+				h.logger.ErrorContext(ctx, "Failed to handle TagAvailabilityCheckRequested event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -34,7 +34,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 			}
 
 			if failure != nil {
-				h.logger.Info("Tag availability check failed",
+				h.logger.InfoContext(ctx, "Tag availability check failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", failure),
 				)
@@ -52,11 +52,11 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				return []*message.Message{failureMsg}, nil
 			}
 
-			h.logger.Info("Tag availability check successful", attr.CorrelationIDFromMsg(msg))
+			h.logger.InfoContext(ctx, "Tag availability check successful", attr.CorrelationIDFromMsg(msg))
 
 			// Create success message to publish
 			if result.Available {
-				h.logger.Info("Tag is available",
+				h.logger.InfoContext(ctx, "Tag is available",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(result.UserID)),
 					attr.Int("tag_number", int(*result.TagNumber)),
@@ -74,7 +74,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 				return []*message.Message{successMsg}, nil
 			} else {
-				h.logger.Info("Tag is not available",
+				h.logger.InfoContext(ctx, "Tag is not available",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(result.UserID)),
 					attr.Int("tag_number", int(*result.TagNumber)),

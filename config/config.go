@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"gopkg.in/yaml.v3"
+
+	obs "github.com/Black-And-White-Club/frolf-bot-shared/observability"
 )
 
 // Config struct to hold the configuration settings
@@ -117,4 +119,17 @@ func loadConfigFromEnv() (*Config, error) {
 	// }
 
 	return &cfg, nil
+}
+
+func ToObsConfig(appCfg *Config) obs.Config {
+	return obs.Config{
+		ServiceName:     "frolf-bot", // Or dynamic from app build
+		Environment:     appCfg.Observability.Environment,
+		Version:         "1.2.3", // Could inject via `ldflags`
+		LokiURL:         appCfg.Observability.LokiURL,
+		MetricsAddress:  appCfg.Observability.MetricsAddress,
+		TempoEndpoint:   appCfg.Observability.TempoEndpoint,
+		TempoInsecure:   appCfg.Observability.TempoInsecure,
+		TempoSampleRate: appCfg.Observability.TempoSampleRate,
+	}
 }

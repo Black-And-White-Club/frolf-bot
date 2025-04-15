@@ -7,10 +7,10 @@ import (
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"

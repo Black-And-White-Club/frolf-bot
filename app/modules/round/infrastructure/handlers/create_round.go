@@ -18,7 +18,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			createRoundRequestedPayload := payload.(*roundevents.CreateRoundRequestedPayload)
 
-			h.logger.Info("Received CreateRoundRequest event",
+			h.logger.InfoContext(ctx, "Received CreateRoundRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("title", string(createRoundRequestedPayload.Title)),
 				attr.String("description", string(createRoundRequestedPayload.Description)),
@@ -30,7 +30,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.ValidateAndProcessRound(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser())
 			if err != nil {
-				h.logger.Error("Failed to handle CreateRoundRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle CreateRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -38,7 +38,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Create round request failed",
+				h.logger.InfoContext(ctx, "Create round request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -57,7 +57,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Create round request successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Create round request successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -73,7 +73,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ValidateAndProcessRound service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateAndProcessRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -92,7 +92,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundEntityCreatedPayload := payload.(*roundevents.RoundEntityCreatedPayload)
 
-			h.logger.Info("Received RoundEntityCreated event",
+			h.logger.InfoContext(ctx, "Received RoundEntityCreated event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", roundEntityCreatedPayload.Round.ID.String()),
 				attr.String("title", string(roundEntityCreatedPayload.Round.Title)),
@@ -105,7 +105,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.StoreRound(ctx, *roundEntityCreatedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundEntityCreated event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundEntityCreated event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -113,7 +113,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Store round failed",
+				h.logger.InfoContext(ctx, "Store round failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -132,7 +132,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Store round successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Store round successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -148,7 +148,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from StoreRound service",
+			h.logger.ErrorContext(ctx, "Unexpected result from StoreRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

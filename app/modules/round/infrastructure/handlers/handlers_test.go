@@ -7,10 +7,10 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"

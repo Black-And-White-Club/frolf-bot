@@ -9,12 +9,12 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -39,10 +39,10 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	// Mock dependencies
 	mockUserService := userservice.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
+	mockMetrics := usermetrics.NewNoop() // Use NoOp metrics instead of mocks
 
-	logger := &lokifrolfbot.NoOpLogger{}
-	metrics := &usermetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 
 	tests := []struct {
 		name           string
@@ -83,6 +83,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					updateResultPayload,
 					userevents.UserRoleUpdated,
 				).Return(testMsg, nil)
+				// No metrics expectations needed with NoOp
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -92,6 +93,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			name: "Fail to unmarshal payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+				// No metrics expectations needed with NoOp
 			},
 			msg:            invalidMsg,
 			want:           nil,
@@ -126,6 +128,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 					userevents.UserRoleUpdateFailed,
 				).Return(testMsg, nil)
+				// No metrics expectations needed with NoOp
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -162,6 +165,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					successPayload,
 					userevents.UserRoleUpdated,
 				).Return(nil, fmt.Errorf("failed to create result message"))
+				// No metrics expectations needed with NoOp
 			},
 			msg:            testMsg,
 			wantErr:        true,
@@ -199,6 +203,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 					userevents.UserRoleUpdateFailed,
 				).Return(nil, fmt.Errorf("failed to create result message"))
+				// No metrics expectations needed with NoOp
 			},
 			msg:            testMsg,
 			wantErr:        true,
@@ -214,10 +219,10 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     metrics,
+				metrics:     mockMetrics, // Use NoOp metrics
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
 				},
 			}
 

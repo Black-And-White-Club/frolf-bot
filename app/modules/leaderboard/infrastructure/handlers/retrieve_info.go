@@ -15,14 +15,14 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 		"HandleGetLeaderboardRequest",
 		&leaderboardevents.GetLeaderboardRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			h.logger.Info("Received GetLeaderboardRequest event",
+			h.logger.InfoContext(ctx, "Received GetLeaderboardRequest event",
 				attr.CorrelationIDFromMsg(msg),
 			)
 
 			// Call the service function to get the leaderboard
 			result, err := h.leaderboardService.GetLeaderboard(ctx)
 			if err != nil {
-				h.logger.Error("Failed to get leaderboard",
+				h.logger.ErrorContext(ctx, "Failed to get leaderboard",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -30,7 +30,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 			}
 
 			if result.Failure != nil {
-				h.logger.Error("Get leaderboard failed",
+				h.logger.ErrorContext(ctx, "Get leaderboard failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -49,7 +49,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Get leaderboard successful",
+				h.logger.InfoContext(ctx, "Get leaderboard successful",
 					attr.CorrelationIDFromMsg(msg),
 				)
 
@@ -67,7 +67,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 			}
 
 			// If neither Success nor Failure is set, return an error
-			h.logger.Error("Unexpected result from GetLeaderboard",
+			h.logger.ErrorContext(ctx, "Unexpected result from GetLeaderboard",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -86,7 +86,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			tagNumberRequestPayload := payload.(*leaderboardevents.TagNumberRequestPayload)
 
-			h.logger.Info("Received GetTagByUserIDRequest event",
+			h.logger.InfoContext(ctx, "Received GetTagByUserIDRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(tagNumberRequestPayload.UserID)),
 				attr.RoundID("round_id", tagNumberRequestPayload.RoundID),
@@ -95,7 +95,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			// Call the service function to get the tag by userID
 			result, err := h.leaderboardService.GetTagByUserID(ctx, tagNumberRequestPayload.UserID, tagNumberRequestPayload.RoundID)
 			if err != nil {
-				h.logger.Error("Failed to get tag by userID",
+				h.logger.ErrorContext(ctx, "Failed to get tag by userID",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -103,7 +103,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			}
 
 			if result.Failure != nil {
-				h.logger.Error("Get tag by userID failed",
+				h.logger.ErrorContext(ctx, "Get tag by userID failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -122,7 +122,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Get tag by userID successful",
+				h.logger.InfoContext(ctx, "Get tag by userID successful",
 					attr.CorrelationIDFromMsg(msg),
 				)
 
@@ -140,7 +140,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			}
 
 			// If neither Success nor Failure is set, return an error
-			h.logger.Error("Unexpected result from GetTagByUserID",
+			h.logger.ErrorContext(ctx, "Unexpected result from GetTagByUserID",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

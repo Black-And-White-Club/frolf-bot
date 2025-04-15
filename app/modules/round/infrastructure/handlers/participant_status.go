@@ -17,7 +17,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			participantJoinRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayload)
 
-			h.logger.Info("Received ParticipantJoinRequest event",
+			h.logger.InfoContext(ctx, "Received ParticipantJoinRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", participantJoinRequestPayload.RoundID.String()),
 				attr.String("user_id", string(participantJoinRequestPayload.UserID)),
@@ -27,7 +27,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			// Call the service function to handle the event
 			result, err := h.roundService.CheckParticipantStatus(ctx, *participantJoinRequestPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ParticipantJoinRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle ParticipantJoinRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -35,7 +35,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Participant join request failed",
+				h.logger.InfoContext(ctx, "Participant join request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -54,7 +54,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Participant join request validated", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Participant join request validated", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -70,7 +70,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from CheckParticipantStatus service",
+			h.logger.ErrorContext(ctx, "Unexpected result from CheckParticipantStatus service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -88,7 +88,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			participantJoinValidationRequestPayload := payload.(*roundevents.ParticipantJoinValidationRequestPayload)
 
-			h.logger.Info("Received ParticipantJoinValidationRequest event",
+			h.logger.InfoContext(ctx, "Received ParticipantJoinValidationRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", participantJoinValidationRequestPayload.RoundID.String()),
 				attr.String("user_id", string(participantJoinValidationRequestPayload.UserID)),
@@ -102,7 +102,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 				Response: participantJoinValidationRequestPayload.Response,
 			})
 			if err != nil {
-				h.logger.Error("Failed to handle ParticipantJoinValidationRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle ParticipantJoinValidationRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -110,7 +110,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Participant join validation failed",
+				h.logger.InfoContext(ctx, "Participant join validation failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -129,7 +129,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Participant join validation successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Participant join validation successful", attr.CorrelationIDFromMsg(msg))
 
 				// Check if the response is Declined
 				if participantJoinValidationRequestPayload.Response == roundtypes.ResponseDecline {
@@ -168,7 +168,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ValidateParticipantJoinRequest service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateParticipantJoinRequest service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -186,7 +186,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			participantRemovalRequestPayload := payload.(*roundevents.ParticipantRemovalRequestPayload)
 
-			h.logger.Info("Received ParticipantRemovalRequest event",
+			h.logger.InfoContext(ctx, "Received ParticipantRemovalRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", participantRemovalRequestPayload.RoundID.String()),
 				attr.String("user_id", string(participantRemovalRequestPayload.UserID)),
@@ -195,7 +195,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 			// Call the service function to handle the event
 			result, err := h.roundService.ParticipantRemoval(ctx, *participantRemovalRequestPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ParticipantRemovalRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle ParticipantRemovalRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -203,7 +203,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Participant removal request failed",
+				h.logger.InfoContext(ctx, "Participant removal request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -222,7 +222,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Participant removal request successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Participant removal request successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -238,7 +238,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ParticipantRemoval service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ParticipantRemoval service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -257,7 +257,7 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 			tagNumberFoundPayload := payload.(*roundevents.RoundTagNumberFoundPayload)
 
 			// Log the received event
-			h.logger.Info("Received TagNumberFound event",
+			h.logger.InfoContext(ctx, "Received TagNumberFound event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", tagNumberFoundPayload.RoundID.String()),
 				attr.String("user_id", string(tagNumberFoundPayload.UserID)),
@@ -281,7 +281,7 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 			tagNumberNotFoundPayload := payload.(*roundevents.RoundTagNumberNotFoundPayload)
 
 			// Log the received event
-			h.logger.Info("Received TagNumberNotFound event",
+			h.logger.InfoContext(ctx, "Received TagNumberNotFound event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", tagNumberNotFoundPayload.RoundID.String()),
 				attr.String("user_id", string(tagNumberNotFoundPayload.UserID)),
@@ -304,7 +304,7 @@ func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*mess
 			participantDeclinedPayload := payload.(*roundevents.ParticipantDeclinedPayload)
 
 			// Log the received event
-			h.logger.Info("Received ParticipantDeclined event",
+			h.logger.InfoContext(ctx, "Received ParticipantDeclined event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", participantDeclinedPayload.RoundID.String()),
 				attr.String("user_id", string(participantDeclinedPayload.UserID)),
@@ -326,7 +326,7 @@ func (h *RoundHandlers) handleParticipantUpdate(ctx context.Context, msg *messag
 	tagNumber := payload.GetTagNumber()
 
 	// Log the received event
-	h.logger.Info("Processing participant update",
+	h.logger.InfoContext(ctx, "Processing participant update",
 		attr.CorrelationIDFromMsg(msg),
 		attr.String("round_id", roundID.String()),
 		attr.String("user_id", string(userID)),
@@ -335,12 +335,12 @@ func (h *RoundHandlers) handleParticipantUpdate(ctx context.Context, msg *messag
 
 	// Check if the tag number is nil
 	if tagNumber != nil {
-		h.logger.Info("Tag number is not nil",
+		h.logger.InfoContext(ctx, "Tag number is not nil",
 			attr.CorrelationIDFromMsg(msg),
 			attr.Int("tag_number", int(*tagNumber)),
 		)
 	} else {
-		h.logger.Info("Tag number is nil",
+		h.logger.InfoContext(ctx, "Tag number is nil",
 			attr.CorrelationIDFromMsg(msg),
 		)
 	}
@@ -353,7 +353,7 @@ func (h *RoundHandlers) handleParticipantUpdate(ctx context.Context, msg *messag
 		TagNumber: tagNumber,
 	})
 	if err != nil {
-		h.logger.Error("Failed to update participant status",
+		h.logger.ErrorContext(ctx, "Failed to update participant status",
 			attr.CorrelationIDFromMsg(msg),
 			attr.Any("error", err),
 		)

@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,9 +28,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	mockDB := userdb.NewMockUserDB(ctrl)
 
 	// Use No-Op implementations
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 
 	tests := []struct {
 		name           string

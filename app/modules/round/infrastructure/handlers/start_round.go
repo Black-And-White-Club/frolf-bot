@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundStartedPayload := payload.(*roundevents.RoundStartedPayload)
 
-			h.logger.Info("Received RoundStarted event",
+			h.logger.InfoContext(ctx, "Received RoundStarted event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundStartedPayload.RoundID),
 			)
@@ -24,7 +24,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 			// Call the service function to handle the event
 			result, err := h.roundService.ProcessRoundStart(ctx, *roundStartedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundStarted event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundStarted event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -32,7 +32,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round start processing failed",
+				h.logger.InfoContext(ctx, "Round start processing failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,7 +51,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round start processed successfully", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round start processed successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				discordStartPayload := result.Success.(*roundevents.DiscordRoundStartPayload)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ProcessRoundStart service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ProcessRoundStart service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

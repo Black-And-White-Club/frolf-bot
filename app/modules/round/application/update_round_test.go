@@ -3,19 +3,19 @@ package roundservice
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 )
@@ -121,8 +121,8 @@ func TestRoundService_ValidateRoundUpdateRequest(t *testing.T) {
 				t.Errorf("RoundService.ValidateRoundUpdateRequest() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("RoundService.ValidateRoundUpdateRequest() = \n%+v, want \n%+v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Errorf("RoundService.ValidateRoundUpdateRequest() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}
@@ -256,8 +256,8 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				t.Errorf("RoundService.UpdateRoundEntity() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("RoundService.UpdateRoundEntity() = \n%+v, want \n%+v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Errorf("RoundService.UpdateRoundEntity() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}
@@ -373,8 +373,8 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				t.Errorf("RoundService.UpdateScheduledRoundEvents() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("RoundService.UpdateScheduledRoundEvents() = \n%+v, want \n%+v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Errorf("RoundService.UpdateScheduledRoundEvents() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}

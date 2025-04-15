@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			scoreUpdateRequestPayload := payload.(*roundevents.ScoreUpdateRequestPayload)
 
-			h.logger.Info("Received ScoreUpdateRequest event",
+			h.logger.InfoContext(ctx, "Received ScoreUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", scoreUpdateRequestPayload.RoundID),
 				attr.String("participant_id", string(scoreUpdateRequestPayload.Participant)),
@@ -26,7 +26,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 			// Call the service function to handle the event
 			result, err := h.roundService.ValidateScoreUpdateRequest(ctx, *scoreUpdateRequestPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ScoreUpdateRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle ScoreUpdateRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -34,7 +34,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Score update request validation failed",
+				h.logger.InfoContext(ctx, "Score update request validation failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -53,7 +53,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Score update request validated", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Score update request validated", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				validatedPayload := result.Success.(*roundevents.ScoreUpdateValidatedPayload)
@@ -70,7 +70,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ValidateScoreUpdateRequest service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateScoreUpdateRequest service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -88,7 +88,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			scoreUpdateValidatedPayload := payload.(*roundevents.ScoreUpdateValidatedPayload)
 
-			h.logger.Info("Received ScoreUpdateValidated event",
+			h.logger.InfoContext(ctx, "Received ScoreUpdateValidated event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", scoreUpdateValidatedPayload.ScoreUpdateRequestPayload.RoundID),
 				attr.String("participant_id", string(scoreUpdateValidatedPayload.ScoreUpdateRequestPayload.Participant)),
@@ -98,7 +98,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 			// Call the service function to handle the event
 			result, err := h.roundService.UpdateParticipantScore(ctx, *scoreUpdateValidatedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ScoreUpdateValidated event",
+				h.logger.ErrorContext(ctx, "Failed to handle ScoreUpdateValidated event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -106,7 +106,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Participant score update failed",
+				h.logger.InfoContext(ctx, "Participant score update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -125,7 +125,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Participant score updated successfully", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Participant score updated successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				updatedPayload := result.Success.(*roundevents.ParticipantScoreUpdatedPayload)
@@ -142,7 +142,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from UpdateParticipantScore service",
+			h.logger.ErrorContext(ctx, "Unexpected result from UpdateParticipantScore service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
@@ -160,7 +160,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			participantScoreUpdatedPayload := payload.(*roundevents.ParticipantScoreUpdatedPayload)
 
-			h.logger.Info("Received ParticipantScoreUpdated event",
+			h.logger.InfoContext(ctx, "Received ParticipantScoreUpdated event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", participantScoreUpdatedPayload.RoundID),
 				attr.String("participant_id", string(participantScoreUpdatedPayload.Participant)),
@@ -171,7 +171,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 			// Call the service function to handle the event
 			result, err := h.roundService.CheckAllScoresSubmitted(ctx, *participantScoreUpdatedPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ParticipantScoreUpdated event",
+				h.logger.ErrorContext(ctx, "Failed to handle ParticipantScoreUpdated event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -179,7 +179,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("All scores submitted check failed",
+				h.logger.InfoContext(ctx, "All scores submitted check failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -198,7 +198,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 			}
 
 			if result.Success != nil {
-				h.logger.Info("All scores submitted check successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "All scores submitted check successful", attr.CorrelationIDFromMsg(msg))
 
 				// Check if all scores have been submitted
 				if allScoresSubmittedPayload, ok := result.Success.(*roundevents.AllScoresSubmittedPayload); ok {
@@ -226,14 +226,14 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 				}
 
 				// If neither AllScoresSubmitted nor NotAllScoresSubmitted is set, return an error
-				h.logger.Error("Unexpected result from CheckAllScoresSubmitted service",
+				h.logger.ErrorContext(ctx, "Unexpected result from CheckAllScoresSubmitted service",
 					attr.CorrelationIDFromMsg(msg),
 				)
 				return nil, fmt.Errorf("unexpected result from service")
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from CheckAllScoresSubmitted service",
+			h.logger.ErrorContext(ctx, "Unexpected result from CheckAllScoresSubmitted service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

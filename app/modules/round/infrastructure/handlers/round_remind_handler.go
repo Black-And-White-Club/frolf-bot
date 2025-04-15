@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			discordReminderPayload := payload.(*roundevents.DiscordReminderPayload)
 
-			h.logger.Info("Received RoundReminder event",
+			h.logger.InfoContext(ctx, "Received RoundReminder event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", discordReminderPayload.RoundID),
 				attr.String("reminder_type", discordReminderPayload.ReminderType),
@@ -25,7 +25,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			// Call the service function to handle the event
 			result, err := h.roundService.ProcessRoundReminder(ctx, *discordReminderPayload)
 			if err != nil {
-				h.logger.Error("Failed to handle RoundReminder event",
+				h.logger.ErrorContext(ctx, "Failed to handle RoundReminder event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -33,7 +33,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Round reminder processing failed",
+				h.logger.InfoContext(ctx, "Round reminder processing failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -52,7 +52,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Round reminder processed successfully", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Round reminder processed successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				reminderProcessedPayload := result.Success.(*roundevents.RoundReminderProcessedPayload)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				return []*message.Message{successMsg}, nil
 			}
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from ProcessRoundReminder service",
+			h.logger.ErrorContext(ctx, "Unexpected result from ProcessRoundReminder service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

@@ -3,23 +3,23 @@ package userservice
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestNewUserService(t *testing.T) {
-	// Define test cases
 	tests := []struct {
 		name string
 		test func(t *testing.T)
@@ -27,53 +27,50 @@ func TestNewUserService(t *testing.T) {
 		{
 			name: "Creates service with all dependencies",
 			test: func(t *testing.T) {
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				// Create mock dependencies
 				mockDB := userdb.NewMockUserDB(ctrl)
 				mockEventBus := eventbus.NewMockEventBus(ctrl)
-				mockLogger := mocks.NewMockLogger(ctrl)
 				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
 
-				// Call the function being tested
-				service := NewUserService(mockDB, mockEventBus, mockLogger, mockMetrics, mockTracer)
+				// Use real no-op tracer (no in-memory exporter)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
-				// Ensure service is correctly created
+				service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
 				if service == nil {
 					t.Fatalf("NewUserService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
 				userServiceImpl, ok := service.(*UserServiceImpl)
 				if !ok {
 					t.Fatalf("service is not of type *UserServiceImpl")
 				}
 
-				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
+				// Override serviceWrapper to avoid side effects during test
 				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+					return serviceFunc()
 				}
 
-				// Check that all dependencies were correctly assigned
 				if userServiceImpl.UserDB != mockDB {
-					t.Errorf("User DB not correctly assigned")
+					t.Errorf("UserDB not correctly assigned")
 				}
 				if userServiceImpl.eventBus != mockEventBus {
 					t.Errorf("eventBus not correctly assigned")
 				}
-				if userServiceImpl.logger != mockLogger {
+				if userServiceImpl.logger != logger {
 					t.Errorf("logger not correctly assigned")
 				}
 				if userServiceImpl.metrics != mockMetrics {
 					t.Errorf("metrics not correctly assigned")
 				}
-				if userServiceImpl.tracer != mockTracer {
+				if userServiceImpl.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
 
-				// Ensure serviceWrapper is correctly set
 				if userServiceImpl.serviceWrapper == nil {
 					t.Errorf("serviceWrapper should not be nil")
 				}
@@ -85,28 +82,23 @@ func TestNewUserService(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				// Call with nil dependencies
 				service := NewUserService(nil, nil, nil, nil, nil)
 
-				// Ensure service is correctly created
 				if service == nil {
 					t.Fatalf("NewUserService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
 				userServiceImpl, ok := service.(*UserServiceImpl)
 				if !ok {
 					t.Fatalf("service is not of type *UserServiceImpl")
 				}
 
-				// Override serviceWrapper to avoid nil tracing/logger issues
 				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+					return serviceFunc()
 				}
 
-				// Check nil fields
 				if userServiceImpl.UserDB != nil {
-					t.Errorf("User DB should be nil")
+					t.Errorf("UserDB should be nil")
 				}
 				if userServiceImpl.eventBus != nil {
 					t.Errorf("eventBus should be nil")
@@ -121,12 +113,10 @@ func TestNewUserService(t *testing.T) {
 					t.Errorf("tracer should be nil")
 				}
 
-				// Ensure serviceWrapper is still set
 				if userServiceImpl.serviceWrapper == nil {
 					t.Errorf("serviceWrapper should not be nil")
 				}
 
-				// Test serviceWrapper runs correctly with nil dependencies
 				testMsg := message.NewMessage("test-id", []byte("test"))
 				_, err := userServiceImpl.serviceWrapper(testMsg, "TestOp", "123", func() (UserOperationResult, error) {
 					return UserOperationResult{Success: "test"}, nil
@@ -138,7 +128,6 @@ func TestNewUserService(t *testing.T) {
 		},
 	}
 
-	// Run all test cases
 	for _, tt := range tests {
 		t.Run(tt.name, tt.test)
 	}
@@ -150,24 +139,24 @@ func Test_serviceWrapper(t *testing.T) {
 		operationName string
 		userID        sharedtypes.DiscordID
 		serviceFunc   func() (UserOperationResult, error)
-		logger        lokifrolfbot.Logger
+		logger        *slog.Logger
 		metrics       usermetrics.UserMetrics
-		tracer        tempofrolfbot.Tracer
+		tracer        trace.Tracer
 	}
 	tests := []struct {
 		name    string
 		args    func(ctrl *gomock.Controller) args
 		want    UserOperationResult
 		wantErr bool
-		setup   func(a *args) // Setup expectations per test
-
+		setup   func(a *args, ctx context.Context)
 	}{
 		{
 			name: "Successful operation",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
@@ -176,98 +165,63 @@ func Test_serviceWrapper(t *testing.T) {
 					serviceFunc: func() (UserOperationResult, error) {
 						return UserOperationResult{Success: "test"}, nil
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			want:    UserOperationResult{Success: "test"},
 			wantErr: false,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockUserMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
+				mockLogger := a.logger
 
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.Any(),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", sharedtypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
+				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
+				mockLogger.Info("Operation succeeded", attr.CorrelationIDFromMsg(a.msg), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockMetrics.EXPECT().RecordOperationSuccess(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 		{
 			name: "Handles panic in service function",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
 					operationName: "TestOperation",
 					userID:        sharedtypes.DiscordID("123"),
 					serviceFunc: func() (UserOperationResult, error) {
-						panic("test panic") // Simulate a panic
+						panic("test panic")
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockUserMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
+				mockLogger := a.logger
 
-				// Expect initial method calls before panic occurs
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
-
-				// Expect `logger.Info` for operation start (happens before panic)
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
-					attr.String("user_id", "123"),
-				)
-
-				// Expect `RecordOperationDuration` since the function starts measuring time before panic
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-
-				// Expect panic error logging
-				mockLogger.EXPECT().Error(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("user_id", "123"),
-					gomock.Any(),
-				)
-
-				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
+				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
+				mockLogger.Error("Panic in TestOperation: test panic", attr.CorrelationIDFromMsg(a.msg), attr.String("user_id", "123"), attr.Any("panic", "test panic"))
+				mockMetrics.EXPECT().RecordOperationFailure(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 		{
 			name: "Handles service function returning an error",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					msg:           message.NewMessage("test-id", []byte("test")),
@@ -276,43 +230,21 @@ func Test_serviceWrapper(t *testing.T) {
 					serviceFunc: func() (UserOperationResult, error) {
 						return UserOperationResult{}, fmt.Errorf("service error")
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockUserMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
+				mockLogger := a.logger
 
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", sharedtypes.DiscordID("123"))
-
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					attr.CorrelationIDFromMsg(a.msg),
-					attr.String("message_id", a.msg.UUID),
-					attr.String("operation", "TestOperation"),
-					attr.String("user_id", "123"),
-				)
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-
-				// Expect error logging
-				mockLogger.EXPECT().Error(
-					"Error in TestOperation",
-					attr.CorrelationIDFromMsg(a.msg),
-				)
-
-				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", sharedtypes.DiscordID("123"))
+				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
+				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
+				mockLogger.Error("Error in TestOperation: service error", attr.CorrelationIDFromMsg(a.msg))
+				mockMetrics.EXPECT().RecordOperationFailure(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
 	}
@@ -322,22 +254,19 @@ func Test_serviceWrapper(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Initialize args using fresh mock controller
 			testArgs := tt.args(ctrl)
+			ctx, span := testArgs.tracer.Start(context.Background(), testArgs.operationName)
+			defer span.End()
 
-			// Set up expectations
 			if tt.setup != nil {
-				tt.setup(&testArgs)
+				tt.setup(&testArgs, ctx)
 			}
 
-			// Run serviceWrapper
 			got, err := serviceWrapper(testArgs.msg, testArgs.operationName, testArgs.userID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
-
 			if (err != nil) != tt.wantErr {
 				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
 			if got.Success != tt.want.Success {
 				t.Errorf("serviceWrapper() Success = %v, want %v", got.Success, tt.want.Success)
 			}

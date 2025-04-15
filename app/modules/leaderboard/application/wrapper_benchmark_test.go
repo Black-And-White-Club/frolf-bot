@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -96,7 +96,7 @@ func BenchmarkServiceWrapperMethod(b *testing.B) {
 			service.metrics.RecordOperationDuration(operationName, "LeaderboardService", duration)
 		}()
 
-		service.logger.Info("Operation triggered",
+		service.logger.InfoContext(ctx, "Operation triggered",
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("message_id", msg.UUID),
 			attr.String("operation", operationName),
@@ -105,7 +105,7 @@ func BenchmarkServiceWrapperMethod(b *testing.B) {
 		defer func() {
 			if r := recover(); r != nil {
 				errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-				service.logger.Error(errorMsg,
+				service.logger.ErrorContext(ctx, errorMsg,
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("panic", r),
 				)
@@ -117,7 +117,7 @@ func BenchmarkServiceWrapperMethod(b *testing.B) {
 		result, err := serviceFunc()
 		if err != nil {
 			wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-			service.logger.Error("Error in "+operationName,
+			service.logger.ErrorContext(ctx, "Error in "+operationName,
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(wrappedErr),
 			)
@@ -126,7 +126,7 @@ func BenchmarkServiceWrapperMethod(b *testing.B) {
 			return result, wrappedErr
 		}
 
-		service.logger.Info(operationName+" completed successfully",
+		service.logger.InfoContext(ctx, operationName+" completed successfully",
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("operation", operationName),
 		)

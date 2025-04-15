@@ -21,14 +21,14 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			// Create convenient variables for frequently used fields
 			userID := getUserPayload.UserID
 
-			h.logger.Info("Received GetUserRequest event",
+			h.logger.InfoContext(ctx, "Received GetUserRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
 
 			successPayload, failedPayload, err := h.userService.GetUser(ctx, msg, userID)
 			if err != nil {
-				h.logger.Error("Failed to get user",
+				h.logger.ErrorContext(ctx, "Failed to get user",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -37,7 +37,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 
 			if failedPayload != nil {
 				// Log user retrieval failure
-				h.logger.Info("User retrieval failed",
+				h.logger.InfoContext(ctx, "User retrieval failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("reason", failedPayload.Reason),
 				)
@@ -56,7 +56,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			}
 
 			// Log user retrieval success
-			h.logger.Info("User retrieval succeeded",
+			h.logger.InfoContext(ctx, "User retrieval succeeded",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
@@ -89,31 +89,31 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			requestPayload := payload.(*userevents.GetUserRoleRequestPayload)
 			userID := requestPayload.UserID
 
-			h.logger.Info("Received GetUserRoleRequest event",
+			h.logger.InfoContext(ctx, "Received GetUserRoleRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
 
 			// Track operation attempt
-			h.metrics.RecordOperationAttempt("GetUserRole", userID)
+			h.metrics.RecordOperationAttempt(ctx, "GetUserRole", userID)
 
 			// Trace user role retrieval
-			ctx, span := h.tracer.StartSpan(ctx, "GetUserRole", msg)
+			ctx, span := h.tracer.Start(ctx, "GetUserRole")
 			defer span.End()
 
 			// Retrieve user role from service
 			successPayload, failedPayload, err := h.userService.GetUserRole(ctx, msg, userID)
 			if err != nil {
 				span.RecordError(err)
-				h.logger.Error("Failed to get user role",
+				h.logger.ErrorContext(ctx, "Failed to get user role",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
 					attr.Error(err),
 				)
 
 				// Track failure
-				h.metrics.RecordOperationFailure("GetUserRole", userID)
-				h.metrics.RecordUserRoleRetrieval(false, userID)
+				h.metrics.RecordOperationFailure(ctx, "GetUserRole", userID)
+				h.metrics.RecordUserRoleRetrievalFailure(ctx, userID)
 
 				// If failedPayload is not nil, use it
 				var failurePayload *userevents.GetUserRoleFailedPayload
@@ -145,11 +145,11 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			}
 
 			// Track success
-			h.metrics.RecordOperationSuccess("GetUserRole", userID)
-			h.metrics.RecordUserRoleRetrieval(true, userID)
+			h.metrics.RecordOperationSuccess(ctx, "GetUserRole", userID)
+			h.metrics.RecordUserRetrievalSuccess(ctx, userID)
 
 			// Track duration
-			h.metrics.RecordUserRetrievalDuration(time.Since(startTime).Seconds())
+			h.metrics.RecordUserRetrievalDuration(ctx, userID, time.Duration(time.Since(startTime).Seconds()))
 
 			return []*message.Message{successMsg}, nil
 		},

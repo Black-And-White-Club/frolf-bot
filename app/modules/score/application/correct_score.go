@@ -33,7 +33,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 
 		if err != nil {
 			// Log error
-			s.logger.Error("Failed to update/add score",
+			s.logger.ErrorContext(ctx, "Failed to update/add score",
 				attr.LogAttr(correlationID),
 				attr.RoundID("round_id", roundID),
 				attr.String("user_id", string(userID)),
@@ -55,7 +55,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 		s.metrics.RecordScoreCorrectionSuccess(roundID)
 
 		// Log success
-		s.logger.Info("Score corrected successfully",
+		s.logger.InfoContext(ctx, "Score corrected successfully",
 			attr.LogAttr(correlationID),
 			attr.RoundID("round_id", roundID),
 			attr.String("user_id", string(userID)),

@@ -75,7 +75,7 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *lead
 // FindTagByUserID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
 func (s *LeaderboardService) FindTagByUserID(leaderboard *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID) (int, bool) {
 	operationName := "FindTagByUserID"
-	s.logger.Info("Starting "+operationName,
+	s.logger.InfoContext(ctx, "Starting "+operationName,
 		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)
@@ -93,7 +93,7 @@ func (s *LeaderboardService) FindTagByUserID(leaderboard *leaderboarddb.Leaderbo
 	// Iterate over the leaderboard data to find the user's tag
 	for _, entry := range leaderboard.LeaderboardData {
 		if entry.UserID == userID {
-			s.logger.Info("Tag found",
+			s.logger.InfoContext(ctx, "Tag found",
 				attr.Int("tag", int(entry.TagNumber)),
 				attr.String("user_id", string(userID)),
 			)
@@ -101,7 +101,7 @@ func (s *LeaderboardService) FindTagByUserID(leaderboard *leaderboarddb.Leaderbo
 		}
 	}
 
-	s.logger.Info("Tag not found",
+	s.logger.InfoContext(ctx, "Tag not found",
 		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)

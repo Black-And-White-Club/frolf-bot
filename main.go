@@ -8,10 +8,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	// Assuming app and config are in the correct paths relative to this main package
 	"github.com/Black-And-White-Club/frolf-bot/app"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+
+	// Import the updated observability package
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr" // Keep using attr for structured logging if desired
 )
 
 func main() {
@@ -19,160 +22,128 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Parse config first
+	// --- Configuration Loading ---
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
+		// Use standard fmt here as logger isn't initialized yet
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Initialize observability with expanded configuration
+	// --- Observability Initialization ---
+	// Map your application config to the new observability config struct
 	obsConfig := observability.Config{
-		LokiURL:         cfg.Observability.LokiURL,
-		LokiTenantID:    cfg.Observability.LokiTenantID,
-		ServiceName:     "frolf-bot",
-		ServiceVersion:  "1.0.0", // Get this from build info or config
+		ServiceName:     "frolf-bot", // Or get from cfg if available
 		Environment:     cfg.Observability.Environment,
+		Version:         "1.0.0",
 		MetricsAddress:  cfg.Observability.MetricsAddress,
 		TempoEndpoint:   cfg.Observability.TempoEndpoint,
 		TempoInsecure:   cfg.Observability.TempoInsecure,
 		TempoSampleRate: cfg.Observability.TempoSampleRate,
 	}
 
-	// Initialize observability service
-	obs, err := observability.NewObservability(ctx, obsConfig)
+	// Initialize the new observability stack (Provider + Registry)
+	obs, err := observability.Init(ctx, obsConfig)
 	if err != nil {
+		// Use standard fmt as the logger might have failed during init
 		fmt.Printf("Failed to initialize observability: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Get logger from observability for cleaner error reporting
-	logger := obs.GetLogger()
+	// Get logger from the observability provider
+	logger := obs.Provider.Logger // Access logger via Provider
 
-	// Initialize application with observability
-	// Initialize application with observability
+	logger.Info("Observability initialized successfully")
+
+	// --- Application Initialization ---
+	// Initialize application, passing the new observability struct
+	// Ensure app.Initialize signature matches (accepts *observability.Observability)
 	application := &app.App{}
-	if err := application.Initialize(ctx, cfg, obs); err != nil {
+	if err := application.Initialize(ctx, cfg, *obs); err != nil { // Pass the new obs struct
 		logger.Error("Failed to initialize application", attr.Error(err))
 		os.Exit(1)
 	}
+	logger.Info("Application initialized successfully")
 
-	// Register health checkers from the EventBus
-	if application.EventBus != nil {
-		healthCheckers := application.EventBus.GetHealthCheckers()
-		if len(healthCheckers) > 0 {
-			logger.Info("Registering EventBus health checkers", attr.Int("checker_count", len(healthCheckers)))
-
-			for _, checker := range healthCheckers {
-				obs.RegisterHealthChecker(checker)
-				logger.Info("Registered health checker", attr.String("checker", checker.Name()))
-			}
-		} else {
-			logger.Warn("No EventBus health checkers available")
-		}
-	} else {
-		logger.Warn("EventBus not initialized, skipping health checker registration")
-	}
-
-	// Start observability components
-	if err := obs.Start(ctx); err != nil {
-		logger.Error("Failed to start observability", attr.Error(err))
-		os.Exit(1)
-	}
-
-	// Improved shutdown with timeout context and better error handling
-	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer shutdownCancel()
-
-		if err := obs.Stop(shutdownCtx); err != nil {
-			logger.Error("Error shutting down observability", attr.Error(err))
-		} else {
-			logger.Info("Observability shutdown successful")
-		}
-	}()
-
-	// Handle graceful shutdown with proper logging
+	// --- Graceful Shutdown Setup ---
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	cleanShutdown := make(chan struct{}) // Channel to signal clean shutdown completion
 
-	// Health check ticker
-	healthCheckTicker := time.NewTicker(2 * time.Minute)
-	defer healthCheckTicker.Stop()
-
-	// Clean shutdown channel
-	cleanShutdown := make(chan struct{})
-
+	// Goroutine to handle signals and initiate shutdown
 	go func() {
 		select {
 		case sig := <-interrupt:
 			logger.Info("Received signal", attr.String("signal", sig.String()))
-			cancel() // Cancel the context to signal shutdown
 		case <-ctx.Done():
 			logger.Info("Application context cancelled")
 		}
 
 		logger.Info("Initiating graceful shutdown...")
+		cancel() // Cancel the main context to signal all components
 
-		// Set a timeout for shutdown
-		shutdownTimer := time.NewTimer(15 * time.Second)
-		defer shutdownTimer.Stop()
+		// Create a timeout for the entire shutdown process
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second) // Increased timeout
+		defer shutdownCancel()
 
 		// Shutdown application first
-		cleanup := func() {
+		go func() {
+			defer close(cleanShutdown) // Signal that cleanup is done
+			logger.Info("Closing application...")
 			if err := application.Close(); err != nil {
 				logger.Error("Error during application shutdown", attr.Error(err))
 			} else {
 				logger.Info("Application closed successfully")
 			}
-			close(cleanShutdown)
-		}
 
-		// Handle cleanup with timeout
-		go cleanup()
+			// Shutdown observability components (provider handles internal shutdowns)
+			logger.Info("Shutting down observability components...")
+			obsShutdownCtx, obsShutdownCancel := context.WithTimeout(shutdownCtx, 10*time.Second)
+			defer obsShutdownCancel()
+			if err := obs.Provider.Shutdown(obsShutdownCtx); err != nil { // Use Provider.Shutdown
+				logger.Error("Error shutting down observability", attr.Error(err))
+			} else {
+				logger.Info("Observability shutdown successful")
+			}
+		}()
 
+		// Wait for cleanup or timeout
 		select {
-		case <-shutdownTimer.C:
-			logger.Error("Graceful shutdown timeout reached, forcing exit")
-			os.Exit(1)
+		case <-shutdownCtx.Done():
+			if shutdownCtx.Err() == context.DeadlineExceeded {
+				logger.Error("Graceful shutdown timeout reached, forcing exit")
+				os.Exit(1) // Force exit if shutdown takes too long
+			}
 		case <-cleanShutdown:
 			logger.Info("Graceful shutdown completed successfully")
 		}
 	}()
 
-	// Health check goroutine
+	// --- Run Application ---
 	go func() {
-		for {
-			select {
-			case <-healthCheckTicker.C:
-				if err := obs.HealthCheck(ctx); err != nil {
-					logger.Warn("Health check failed", attr.Error(err))
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	// Run the application
-	go func() {
-		logger.Info("Starting application")
+		logger.Info("Starting application run loop")
 		if err := application.Run(ctx); err != nil && err != context.Canceled {
 			logger.Error("Application run failed", attr.Error(err))
-			cancel() // Signal shutdown on error
+			cancel() // Signal shutdown on unexpected error
+		} else {
+			logger.Info("Application run loop finished")
 		}
 	}()
 
 	logger.Info("Application is running. Press Ctrl+C to gracefully shut down.")
 
-	// Wait for context cancellation
-	<-ctx.Done()
+	// --- Wait for Shutdown Signal ---
+	<-ctx.Done() // Wait until context is cancelled (either by signal or error)
 
-	// Wait for clean shutdown to complete
+	// --- Final Wait for Cleanup ---
+	// Wait a bit longer to ensure the shutdown goroutine finishes logging etc.
 	select {
 	case <-cleanShutdown:
-		// Already logged in the shutdown goroutine
-	case <-time.After(20 * time.Second):
-		logger.Error("Final shutdown timeout reached, exiting")
+		// Shutdown completed cleanly, already logged.
+	case <-time.After(5 * time.Second): // Short extra wait after cleanShutdown should have closed
+		logger.Warn("Did not receive clean shutdown signal within final wait period.")
 	}
+
+	logger.Info("Exiting main.")
+	os.Exit(0) // Optional: Explicitly exit with code 0
 }

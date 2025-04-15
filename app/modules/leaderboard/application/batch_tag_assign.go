@@ -13,9 +13,8 @@ import (
 
 // BatchTagAssignmentRequested handles multiple manual tag assignments in one operation
 func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
-
 	// Log the batch operation - update to use UUID string representation
-	s.logger.Info("Batch tag assignment triggered",
+	s.logger.InfoContext(ctx, "Batch tag assignment triggered",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("batch_id", payload.BatchID),
 		attr.String("requesting_user", string(payload.RequestingUserID)),
@@ -44,7 +43,7 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, pa
 		// Execute batch assignment in a single database operation
 		startTime := time.Now()
 		err := s.LeaderboardDB.BatchAssignTags(ctx, dbAssignments, leaderboarddb.ServiceUpdateSourceAdminBatch, sharedtypes.RoundID(uuid.Nil), payload.RequestingUserID)
-		s.metrics.RecordOperationDuration("BatchAssignTags", "BatchTagAssignmentRequested", time.Since(startTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "BatchAssignTags", "BatchTagAssignmentRequested", time.Since(startTime).Seconds())
 
 		if err != nil {
 			return LeaderboardOperationResult{

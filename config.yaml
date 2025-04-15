@@ -1,20 +1,13 @@
 postgres:
-  dsn: "postgres://postgres:postgres@localhost:5432/tcr_bot?sslmode=disable"
-  log_statement: "all"
-  log_min_duration_statement: 0
+  dsn: "postgres://local:local@my-postgresql.postgres:5432/tcr-bot?sslmode=disable"
 
 nats:
-  url: "nats://localhost:4222"
-
-discord:
-  token: "YOUR_DISCORD_BOT_TOKEN"
+  url: "nats://my-nats.nats:4222"
 
 observability:
-  loki_url: "http://localhost:3100/loki/api/v1/push"
-  loki_tenant_id: "frolf-bot"
-  metrics_address: ":9090"
-  tempo_endpoint: "localhost:4317"
+  loki_url: "http://loki.observability:3100/loki/api/v1/push"
+  metrics_address: "http://prometheus-kube-prometheus-prometheus.observability:9090"
+  tempo_endpoint: "http://my-tempo.observability:3100"
   tempo_insecure: true
   tempo_sample_rate: 0.1
-  environment: "something"
-# ... other configuration settings ...
+  environment: "local"

@@ -39,7 +39,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdate(ctx context.Context, cha
 		}
 	}
 
-	s.logger.Info("Rounds and participants to update retrieved",
+	s.logger.InfoContext(ctx, "Rounds and participants to update retrieved",
 		attr.Int("num_updates", len(updates)),
 	)
 
@@ -59,7 +59,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			}, fmt.Errorf("failed to get rounds and participants: %w", err)
 		}
 
-		s.logger.Info("Round updates created",
+		s.logger.InfoContext(ctx, "Round updates created",
 			attr.Int("num_updates", len(updates)),
 		)
 
@@ -72,7 +72,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			}, fmt.Errorf("failed to update rounds: %w", err)
 		}
 
-		s.logger.Info("Rounds updated successfully",
+		s.logger.InfoContext(ctx, "Rounds updated successfully",
 			attr.Int("num_updates", len(updates)),
 		)
 

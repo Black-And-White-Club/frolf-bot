@@ -14,7 +14,7 @@ import (
 // CheckParticipantStatus checks if a join request is a toggle or requires validation.
 func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "CheckParticipantStatus", func() (RoundOperationResult, error) {
-		s.logger.Info("Checking participant status",
+		s.logger.InfoContext(ctx, "Checking participant status",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("requested_response", string(payload.Response)),
@@ -23,7 +23,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 		// Check if the user is already a participant
 		participant, err := s.RoundDB.GetParticipant(ctx, payload.RoundID, payload.UserID)
 		if err != nil {
-			s.logger.Error("Failed to get participant's current status",
+			s.logger.ErrorContext(ctx, "Failed to get participant's current status",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
@@ -41,7 +41,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 		if participant != nil {
 			currentStatus = string(participant.Response)
 		}
-		s.logger.Info("Current participant status retrieved",
+		s.logger.InfoContext(ctx, "Current participant status retrieved",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("current_status", currentStatus),
@@ -49,7 +49,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 
 		// Handle toggle removal (if the same status is clicked again)
 		if currentStatus == string(payload.Response) {
-			s.logger.Info("Toggle action detected - preparing removal request",
+			s.logger.InfoContext(ctx, "Toggle action detected - preparing removal request",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.String("status", currentStatus),
@@ -63,7 +63,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 		}
 
 		// Otherwise, prepare a validation request payload
-		s.logger.Info("Status change or new join detected - preparing validation request",
+		s.logger.InfoContext(ctx, "Status change or new join detected - preparing validation request",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 		)
@@ -82,7 +82,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 // ValidateParticipantJoinRequest validates the basic details and determines if the join is late.
 func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ValidateParticipantJoinRequest", func() (RoundOperationResult, error) {
-		s.logger.Info("Validating participant join request",
+		s.logger.InfoContext(ctx, "Validating participant join request",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("response", string(payload.Response)),
@@ -99,7 +99,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 		// Add any other necessary validations
 
 		if len(errorMessages) > 0 {
-			s.logger.Error("Participant join request validation failed",
+			s.logger.ErrorContext(ctx, "Participant join request validation failed",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Any("errors", errorMessages),
@@ -113,13 +113,13 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 		}
 
 		// --- Determine if Join is Late ---
-		s.logger.Info("Fetching round details to determine if join is late",
+		s.logger.InfoContext(ctx, "Fetching round details to determine if join is late",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
 		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if err != nil {
 			// Handle error fetching round
-			s.logger.Error("Failed to fetch round during join validation",
+			s.logger.ErrorContext(ctx, "Failed to fetch round during join validation",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
@@ -134,7 +134,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 		// Check if the state is 'InProgress' or 'Finalized'
 		isLateJoin := round.State == roundtypes.RoundStateInProgress || round.State == roundtypes.RoundStateFinalized
 
-		s.logger.Info("Determined late join status",
+		s.logger.InfoContext(ctx, "Determined late join status",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("round_state", string(round.State)),
@@ -173,7 +173,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 // ParticipantRemoval handles removing a participant from a round if they select the same RSVP response
 func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ParticipantRemoval", func() (RoundOperationResult, error) {
-		s.logger.Info("Attempting to remove participant",
+		s.logger.InfoContext(ctx, "Attempting to remove participant",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 		)
@@ -181,7 +181,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 		// Retrieve round details to get EventMessageID
 		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if err != nil {
-			s.logger.Error("Failed to fetch round during participant removal",
+			s.logger.ErrorContext(ctx, "Failed to fetch round during participant removal",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
@@ -197,7 +197,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 		// Get current response before removing (for event payload)
 		participant, err := s.RoundDB.GetParticipant(ctx, payload.RoundID, payload.UserID)
 		if err != nil {
-			s.logger.Error("Failed to get participant response before removal",
+			s.logger.ErrorContext(ctx, "Failed to get participant response before removal",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
@@ -224,7 +224,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 
 		// Remove participant from database
 		if err := s.RoundDB.RemoveParticipant(ctx, payload.RoundID, payload.UserID); err != nil {
-			s.logger.Error("Failed to remove participant from database",
+			s.logger.ErrorContext(ctx, "Failed to remove participant from database",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
@@ -237,7 +237,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 			return RoundOperationResult{Failure: failurePayload}, fmt.Errorf("failed to remove participant from database: %w", err)
 		}
 
-		s.logger.Info("Participant removed successfully from database",
+		s.logger.InfoContext(ctx, "Participant removed successfully from database",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 		)
@@ -264,7 +264,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 			isLateJoin = *payload.JoinedLate
 		}
 
-		s.logger.Info("Processing participant status update",
+		s.logger.InfoContext(ctx, "Processing participant status update",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("response", string(payload.Response)),
@@ -289,7 +289,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 			// Retrieve round details to get EventMessageID
 			round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 			if err != nil {
-				s.logger.Error("Failed to fetch round during participant update",
+				s.logger.ErrorContext(ctx, "Failed to fetch round during participant update",
 					attr.StringUUID("round_id", payload.RoundID.String()),
 					attr.String("user_id", string(payload.UserID)),
 					attr.Error(err),
@@ -313,7 +313,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 			// Update participant in the database
 			updatedParticipants, err := s.RoundDB.UpdateParticipant(ctx, payload.RoundID, participant)
 			if err != nil {
-				s.logger.Error("Failed to update participant status for decline",
+				s.logger.ErrorContext(ctx, "Failed to update participant status for decline",
 					attr.StringUUID("round_id", payload.RoundID.String()),
 					attr.String("user_id", string(payload.UserID)),
 					attr.Error(err),
@@ -342,7 +342,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 
 		default:
 			// Handle unknown response types
-			s.logger.Error("Unknown response type",
+			s.logger.ErrorContext(ctx, "Unknown response type",
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.String("user_id", string(payload.UserID)),
 				attr.String("response", string(payload.Response)),

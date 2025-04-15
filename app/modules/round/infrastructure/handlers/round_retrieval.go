@@ -17,7 +17,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			getRoundRequestPayload := payload.(*roundevents.GetRoundRequestPayload)
 
-			h.logger.Info("Received GetRoundRequest event",
+			h.logger.InfoContext(ctx, "Received GetRoundRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", getRoundRequestPayload.RoundID),
 			)
@@ -25,7 +25,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 			// Call the service function to handle the event
 			result, err := h.roundService.GetRound(ctx, getRoundRequestPayload.RoundID)
 			if err != nil {
-				h.logger.Error("Failed to handle GetRoundRequest event",
+				h.logger.ErrorContext(ctx, "Failed to handle GetRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -33,7 +33,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Get round request failed",
+				h.logger.InfoContext(ctx, "Get round request failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -52,7 +52,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Get round request successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Get round request successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				round := result.Success.(*roundtypes.Round)
@@ -69,7 +69,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from GetRound service",
+			h.logger.ErrorContext(ctx, "Unexpected result from GetRound service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

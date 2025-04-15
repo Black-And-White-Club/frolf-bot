@@ -3,13 +3,13 @@ package userrouter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/user"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/handlers"
@@ -18,29 +18,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // UserRouter handles routing for user module events.
 type UserRouter struct {
-	logger           lokifrolfbot.Logger
+	logger           *slog.Logger
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           tempofrolfbot.Tracer
+	tracer           trace.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewUserRouter creates a new UserRouter.
 func NewUserRouter(
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) *UserRouter {
 	return &UserRouter{
 		logger:           logger,
@@ -72,7 +73,7 @@ func (r *UserRouter) Configure(userService userservice.Service, eventbus eventbu
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
-		r.tracer.TraceHandler,
+		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
 	if err := r.RegisterHandlers(context.Background(), userHandlers); err != nil {
@@ -83,7 +84,7 @@ func (r *UserRouter) Configure(userService userservice.Service, eventbus eventbu
 
 // RegisterHandlers registers event handlers.
 func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers.Handlers) error {
-	r.logger.Info("Entering Register Handlers for User")
+	r.logger.InfoContext(ctx, "Entering Register Handlers for User")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		userevents.UserSignupRequest:           handlers.HandleUserSignupRequest,
@@ -106,13 +107,13 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					r.logger.Error("Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
-						r.logger.Info("🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						r.logger.InfoContext(ctx, "🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 						}

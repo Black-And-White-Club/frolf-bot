@@ -15,7 +15,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 	correlationID := attr.ExtractCorrelationID(ctx)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
-	s.logger.Info("Starting to process round scores",
+	s.logger.InfoContext(ctx, "Starting to process round scores",
 		attr.LogAttr(correlationID),
 		roundIDAttr,
 		attr.Int("num_scores", len(scores)),
@@ -29,7 +29,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		// Process scores for storage
 		processedScores, err := s.ProcessScoresForStorage(ctx, roundID, scores)
 		if err != nil {
-			s.logger.Error("Failed to process scores for storage",
+			s.logger.ErrorContext(ctx, "Failed to process scores for storage",
 				attr.LogAttr(correlationID),
 				roundIDAttr,
 				attr.Error(err),
@@ -57,7 +57,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		dbStart := time.Now()
 		if err := s.ScoreDB.LogScores(ctx, roundID, processedScores, "auto"); err != nil {
 			s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
-			s.logger.Error("Failed to log scores to database",
+			s.logger.ErrorContext(ctx, "Failed to log scores to database",
 				attr.LogAttr(correlationID),
 				roundIDAttr,
 				attr.Error(err),

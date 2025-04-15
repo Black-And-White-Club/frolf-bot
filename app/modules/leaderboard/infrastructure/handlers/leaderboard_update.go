@@ -19,7 +19,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			roundID := leaderboardUpdateRequestedPayload.RoundID
 			sortedParticipantTags := leaderboardUpdateRequestedPayload.SortedParticipantTags
 
-			h.logger.Info("Received LeaderboardUpdateRequested event",
+			h.logger.InfoContext(ctx, "Received LeaderboardUpdateRequested event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundID),
 				attr.Any("sorted_participant_tags", sortedParticipantTags),
@@ -28,7 +28,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			// Call the service function to update the leaderboard
 			result, err := h.leaderboardService.UpdateLeaderboard(ctx, roundID, sortedParticipantTags)
 			if err != nil {
-				h.logger.Error("Failed to update leaderboard",
+				h.logger.ErrorContext(ctx, "Failed to update leaderboard",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -36,7 +36,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			}
 
 			if result.Failure != nil {
-				h.logger.Error("Leaderboard update failed",
+				h.logger.ErrorContext(ctx, "Leaderboard update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -55,7 +55,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Leaderboard updated successfully", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Leaderboard updated successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				successMsg, err := h.helpers.CreateResultMessage(
@@ -71,7 +71,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			}
 
 			// If neither Success nor Failure is set, return an error
-			h.logger.Error("Unexpected result from UpdateLeaderboard",
+			h.logger.ErrorContext(ctx, "Unexpected result from UpdateLeaderboard",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

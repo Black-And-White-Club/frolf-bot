@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			scheduledRoundTagUpdatePayload := payload.(*roundevents.ScheduledRoundTagUpdatePayload)
 
-			h.logger.Info("Received ScheduledRoundTagUpdate event",
+			h.logger.InfoContext(ctx, "Received ScheduledRoundTagUpdate event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.Any("changed_tags", scheduledRoundTagUpdatePayload.ChangedTags),
 			)
@@ -24,7 +24,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			// Call the service function to handle the event
 			result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, *scheduledRoundTagUpdatePayload)
 			if err != nil {
-				h.logger.Error("Failed to handle ScheduledRoundTagUpdate event",
+				h.logger.ErrorContext(ctx, "Failed to handle ScheduledRoundTagUpdate event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
@@ -32,7 +32,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			if result.Failure != nil {
-				h.logger.Info("Scheduled round tag update failed",
+				h.logger.InfoContext(ctx, "Scheduled round tag update failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -51,7 +51,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			if result.Success != nil {
-				h.logger.Info("Scheduled round tag update successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Scheduled round tag update successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
 				discordUpdatePayload := result.Success.(*roundevents.DiscordRoundUpdatePayload)
@@ -68,7 +68,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			// If neither Failure nor Success is set, return an error
-			h.logger.Error("Unexpected result from UpdateScheduledRoundsWithNewTags service",
+			h.logger.ErrorContext(ctx, "Unexpected result from UpdateScheduledRoundsWithNewTags service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")

@@ -32,7 +32,7 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 			}, fmt.Errorf("requesting user's Discord ID cannot be empty")
 		}
 
-		s.logger.Info("Round delete request validated",
+		s.logger.InfoContext(ctx, "Round delete request validated",
 			attr.String("round_id", payload.RoundID.String()),
 			attr.String("requesting_user", string(payload.RequestingUserUserID)),
 		)
@@ -62,7 +62,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 
 	// Delete the round
 	if err := s.RoundDB.DeleteRound(ctx, payload.RoundID); err != nil {
-		s.logger.Error("Failed to delete round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
+		s.logger.ErrorContext(ctx, "Failed to delete round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
 		return RoundOperationResult{
 			Failure: &roundevents.RoundDeleteErrorPayload{
 				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
@@ -76,7 +76,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 
 	// Cancel the scheduled message
 	if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
-		s.logger.Error("Failed to cancel scheduled message for round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
+		s.logger.ErrorContext(ctx, "Failed to cancel scheduled message for round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
 		return RoundOperationResult{
 			Failure: &roundevents.RoundDeleteErrorPayload{
 				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{

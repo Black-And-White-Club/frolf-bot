@@ -15,7 +15,7 @@ import (
 // TagAssignmentRequested handles the TagAssignmentRequested event.
 func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
 	// Log the operation
-	s.logger.Info("Tag assignment triggered",
+	s.logger.InfoContext(ctx, "Tag assignment triggered",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("user_id", string(payload.UserID)),
 		attr.String("requesting_user", string(payload.UserID)),
@@ -23,7 +23,6 @@ func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload
 	)
 
 	return s.serviceWrapper(ctx, "TagAssignmentRequested", func() (LeaderboardOperationResult, error) {
-
 		// 1. Get the current active leaderboard for validation
 		dbStartTime := time.Now()
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
@@ -91,7 +90,7 @@ func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload
 		}
 
 		// Log success and return result
-		s.logger.Info("Tag assignment successful",
+		s.logger.InfoContext(ctx, "Tag assignment successful",
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("tag_number", fmt.Sprintf("%v", *payload.TagNumber)),
 		)

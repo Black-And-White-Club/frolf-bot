@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -68,7 +68,7 @@ func handlerWrapper(
 			metrics.RecordHandlerDuration(handlerName, duration)
 		}()
 
-		logger.Info(handlerName+" triggered",
+		logger.InfoContext(ctx, handlerName+" triggered",
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("message_id", msg.UUID),
 		)
@@ -79,7 +79,7 @@ func handlerWrapper(
 		// Unmarshal payload if a target is provided
 		if payloadInstance != nil {
 			if err := helpers.UnmarshalPayload(msg, payloadInstance); err != nil {
-				logger.Error("Failed to unmarshal payload",
+				logger.ErrorContext(ctx, "Failed to unmarshal payload",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -87,7 +87,7 @@ func handlerWrapper(
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
 		} else {
-			logger.Error("No payload instance provided",
+			logger.ErrorContext(ctx, "No payload instance provided",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			metrics.RecordHandlerFailure(handlerName)
@@ -97,7 +97,7 @@ func handlerWrapper(
 		// Call the actual handler logic
 		result, err := handlerFunc(ctx, msg, payloadInstance)
 		if err != nil {
-			logger.Error("Error in "+handlerName,
+			logger.ErrorContext(ctx, "Error in "+handlerName,
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(err),
 			)
@@ -105,7 +105,7 @@ func handlerWrapper(
 			return nil, err
 		}
 
-		logger.Info(handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
+		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
 		metrics.RecordHandlerSuccess(handlerName)
 		return result, nil
 	}

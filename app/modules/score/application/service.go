@@ -8,9 +8,9 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/loki"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/prometheus/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/tempo"
+	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 )
@@ -76,7 +76,7 @@ func serviceWrapper(
 	}()
 
 	// Log the operation start
-	logger.Info(operationName+" triggered",
+	logger.InfoContext(ctx, operationName+" triggered",
 		attr.String("operation", operationName),
 		attr.RoundID("round_id", roundID),
 		attr.LogAttr(correlationID),
@@ -86,7 +86,7 @@ func serviceWrapper(
 	defer func() {
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-			logger.Error(errorMsg,
+			logger.ErrorContext(ctx, errorMsg,
 				attr.RoundID("round_id", roundID),
 				attr.LogAttr(correlationID),
 				attr.Any("panic", r),
@@ -105,7 +105,7 @@ func serviceWrapper(
 	result, err = serviceFunc(newCtx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-		logger.Error("Error in "+operationName,
+		logger.ErrorContext(ctx, "Error in "+operationName,
 			attr.RoundID("round_id", roundID),
 			attr.LogAttr(correlationID),
 			attr.Error(wrappedErr),
@@ -116,7 +116,7 @@ func serviceWrapper(
 	}
 
 	// Log success
-	logger.Info(operationName+" completed successfully",
+	logger.InfoContext(ctx, operationName+" completed successfully",
 		attr.String("operation", operationName),
 		attr.RoundID("round_id", roundID),
 		attr.LogAttr(correlationID),

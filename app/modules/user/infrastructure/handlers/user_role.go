@@ -21,7 +21,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			userID := requestPayload.UserID
 			newRole := requestPayload.Role
 
-			h.logger.Info("Received UserRoleUpdateRequest event",
+			h.logger.InfoContext(ctx, "Received UserRoleUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.String("role", string(newRole)),
@@ -29,7 +29,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			)
 
 			// Track operation attempt
-			h.metrics.RecordOperationAttempt("UpdateUserRole", userID)
+			h.metrics.RecordHandlerAttempt(ctx, "HandleUpdateUserRole")
 
 			// Call service function to update user role
 			successPayload, failedPayload, err := h.userService.UpdateUserRoleInDatabase(ctx, msg, userID, newRole)
@@ -39,14 +39,14 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			var eventType string
 
 			if err != nil || failedPayload != nil {
-				h.logger.Error("Failed to update user role",
+				h.logger.ErrorContext(ctx, "Failed to update user role",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
 					attr.Error(err),
 				)
 
 				// Track failure
-				h.metrics.RecordOperationFailure("UpdateUserRole", userID)
+				h.metrics.RecordHandlerFailure(ctx, "HandleUpdateUserRole")
 
 				// Prefer explicit failed payload, or create a generic one
 				if failedPayload != nil {
@@ -69,21 +69,21 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			resultMsg, createErr := h.helpers.CreateResultMessage(msg, resultPayload, eventType)
 			if createErr != nil {
 				// Log the failure to create the result message
-				h.logger.Error("Failed to create result message",
+				h.logger.ErrorContext(ctx, "Failed to create result message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("event_type", eventType),
 					attr.Error(createErr),
 				)
 
 				// Track the failure in metrics
-				h.metrics.RecordOperationFailure("CreateResultMessage", userID)
+				h.metrics.RecordHandlerFailure(ctx, "CreateResultMessage")
 
 				return nil, fmt.Errorf("failed to create result message: %w", createErr)
 			}
 
 			// Track duration and success
-			h.metrics.RecordOperationSuccess("UpdateUserRole", userID)
-			h.metrics.RecordUserRetrievalDuration(time.Since(startTime).Seconds())
+			h.metrics.RecordHandlerSuccess(ctx, "HandleUpdateUserRole")
+			h.metrics.RecordUserRetrievalDuration(ctx, userID, time.Duration(time.Since(startTime).Seconds()))
 
 			return []*message.Message{resultMsg}, nil
 		},

@@ -47,7 +47,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
 
-				h.metrics.RecordTagAvailabilityCheck(false, tagNumber)
+				h.metrics.RecordTagAvailabilityCheck(ctx, false, tagNumber)
 
 				// Even if `CreateUser` returned an error, we should still return the failure message.
 				return []*message.Message{failureMsg}, nil
@@ -64,7 +64,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			}
 
 			// Record the success metric
-			h.metrics.RecordTagAvailabilityCheck(true, tagNumber)
+			h.metrics.RecordTagAvailabilityCheck(ctx, true, tagNumber)
 
 			return []*message.Message{successMsg}, nil
 		},
@@ -86,7 +86,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 			userID := tagUnavailablePayload.UserID
 			tagNumber := tagUnavailablePayload.TagNumber
 
-			h.logger.Info("Received TagUnavailable event",
+			h.logger.InfoContext(ctx, "Received TagUnavailable event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.Int("tag_number", int(tagNumber)),
@@ -100,7 +100,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 			}
 
 			// Trace message creation
-			_, span := h.tracer.StartSpan(ctx, "CreateResultMessage", msg)
+			ctx, span := h.tracer.Start(ctx, "CreateResultMessage")
 			defer span.End()
 
 			// Create message to publish the UserCreationFailed event
@@ -110,12 +110,11 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 				return nil, fmt.Errorf("failed to create UserCreationFailed message: %w", err)
 			}
 
-			h.logger.Info("TagUnavailable event processed", attr.CorrelationIDFromMsg(msg))
+			h.logger.InfoContext(ctx, "TagUnavailable event processed", attr.CorrelationIDFromMsg(msg))
 			// Record the failure metric
-			h.metrics.RecordTagAvailabilityCheck(false, tagNumber)
+			h.metrics.RecordTagAvailabilityCheck(ctx, false, tagNumber)
 
 			// Record handler success metric
-			h.metrics.RecordHandlerSuccess("HandleTagUnavailable")
 
 			return []*message.Message{failedMsg}, nil
 		},

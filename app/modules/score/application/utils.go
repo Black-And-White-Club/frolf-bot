@@ -20,7 +20,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 	// Quick validation
 	if len(scores) == 0 {
 		err := fmt.Errorf("cannot process empty score list")
-		s.logger.Error("Empty score list provided",
+		s.logger.ErrorContext(ctx, "Empty score list provided",
 			attr.RoundID("round_id", roundID),
 			attr.Error(err),
 		)
@@ -74,7 +74,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 	// Log completion and record metrics
 	s.metrics.RecordOperationDuration("ProcessScoresForStorage", time.Since(startTime).Seconds())
 
-	s.logger.Info("Scores processed and sorted",
+	s.logger.InfoContext(ctx, "Scores processed and sorted",
 		attr.RoundID("round_id", roundID),
 		attr.Int("num_scores", len(scores)),
 		attr.Int("tagged_count", taggedCount),
@@ -95,7 +95,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 // ) ([]byte, error) {
 // 	operationName := "ExtractTagInformation"
 
-// 	s.logger.Info("Starting "+operationName,
+// 	s.logger.InfoContext(ctx,"Starting "+operationName,
 // 		attr.RoundID("round_id", roundID),
 // 		attr.Int("num_scores", len(processedScores)),
 // 	)
@@ -120,7 +120,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 // 		s.metrics.RecordPlayerTag(roundID, scoreInfo.UserID, scoreInfo.TagNumber)
 // 	}
 
-// 	s.logger.Info("Tag information extracted",
+// 	s.logger.InfoContext(ctx,"Tag information extracted",
 // 		attr.RoundID("round_id", roundID),
 // 		attr.Int("num_participant_tags", len(participantTags)),
 // 	)
@@ -128,7 +128,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 // 	// Marshal the participantTags slice to JSON
 // 	jsonData, err := json.Marshal(participantTags)
 // 	if err != nil {
-// 		s.logger.Error("Failed to marshal tag information to JSON",
+// 		s.logger.ErrorContext(ctx,"Failed to marshal tag information to JSON",
 // 			attr.RoundID("round_id", roundID),
 // 			attr.Error(err),
 // 		)
