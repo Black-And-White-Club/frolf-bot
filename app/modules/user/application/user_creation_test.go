@@ -10,7 +10,6 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -20,7 +19,6 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testTag := sharedtypes.TagNumber(42)
 
@@ -150,44 +148,44 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
-			gotSuccess, gotFailure, err := s.CreateUser(ctx, testMsg, tt.userID, tt.tag)
+			gotSuccess, gotFailure, err := s.CreateUser(ctx, tt.userID, tt.tag)
 
 			// Validate success case
 			if tt.expectedResult != nil {
 				if gotSuccess == nil {
-					t.Errorf("❌ Expected success payload, got nil")
+					t.Errorf("Expected success payload, got nil")
 				} else if gotSuccess.UserID != tt.expectedResult.UserID {
-					t.Errorf("❌ Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, tt.expectedResult.UserID)
+					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, tt.expectedResult.UserID)
 				}
 			} else if gotSuccess != nil {
-				t.Errorf("❌ Unexpected success payload: %v", gotSuccess)
+				t.Errorf("Unexpected success payload: %v", gotSuccess)
 			}
 
 			// Validate failure case
 			if tt.expectedFail != nil {
 				if gotFailure == nil {
-					t.Errorf("❌ Expected failure payload, got nil")
+					t.Errorf("Expected failure payload, got nil")
 				} else if gotFailure.Reason != tt.expectedFail.Reason {
-					t.Errorf("❌ Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, tt.expectedFail.Reason)
+					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, tt.expectedFail.Reason)
 				}
 			} else if gotFailure != nil {
-				t.Errorf("❌ Unexpected failure payload: %v", gotFailure)
+				t.Errorf("Unexpected failure payload: %v", gotFailure)
 			}
 
 			// Validate error presence
 			if tt.expectedFail != nil {
 				if err == nil {
-					t.Errorf("❌ Expected an error but got nil")
+					t.Errorf("Expected an error but got nil")
 				} else if err.Error() != tt.expectedFail.Reason {
-					t.Errorf("❌ Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedFail.Reason)
+					t.Errorf("Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedFail.Reason)
 				}
 			} else if err != nil {
-				t.Errorf("❌ Unexpected error: %v", err)
+				t.Errorf("Unexpected error: %v", err)
 			}
 		})
 	}

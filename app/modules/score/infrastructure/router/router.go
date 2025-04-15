@@ -3,13 +3,13 @@ package scorerouter
 import (
 	"context"
 	"fmt"
+	"log/slog" // Import slog
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
@@ -18,29 +18,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace" // Import otel trace
 )
 
 // ScoreRouter handles routing for score module events.
 type ScoreRouter struct {
-	logger           lokifrolfbot.Logger
+	logger           *slog.Logger // Change to slog
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           tempofrolfbot.Tracer
+	tracer           trace.Tracer // Change to otel trace
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewScoreRouter creates a new ScoreRouter.
 func NewScoreRouter(
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger, // Change to slog
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer, // Change to otel trace
 ) *ScoreRouter {
 	return &ScoreRouter{
 		logger:           logger,
@@ -72,7 +73,7 @@ func (r *ScoreRouter) Configure(scoreService scoreservice.Service, eventbus even
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
-		r.tracer.TraceHandler,
+		tracingfrolfbot.TraceHandler(r.tracer), // Change to use the shared tracing middleware
 	)
 
 	if err := r.RegisterHandlers(context.Background(), scoreHandlers); err != nil {

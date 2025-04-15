@@ -66,22 +66,10 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 				)
 
 				// Expect GetUser (not GetUserRole)
-				mockUserService.EXPECT().GetUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(
-					&userevents.GetUserResponsePayload{User: testUserData},
-					nil,
-					nil,
-				)
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(&userevents.GetUserResponsePayload{User: testUserData}, nil, nil)
 
 				// Expect CreateResultMessage for user response
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserResponsePayload{User: testUserData},
-					userevents.GetUserResponse,
-				).Return(testMsg, nil)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.GetUserResponsePayload{User: testUserData}, userevents.GetUserResponse).Return(testMsg, nil)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -107,14 +95,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(nil, &userevents.GetUserFailedPayload{
-					UserID: testUserID,
-					Reason: "internal service error",
-				}, nil)
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(nil, &userevents.GetUserFailedPayload{UserID: testUserID, Reason: "internal service error"}, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
@@ -141,17 +122,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 				)
 
 				// Expect the GetUser  method to be called with the correct parameters
-				mockUserService.EXPECT().GetUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(
-					&userevents.GetUserResponsePayload{
-						User: testUserData, // Correctly return the user data
-					},
-					nil, // No error
-					nil, // No additional error
-				)
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(&userevents.GetUserResponsePayload{User: testUserData}, nil, nil)
 
 				// Expect the CreateResultMessage method to be called with the correct parameters
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -239,15 +210,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(
-					&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
-					nil,
-					nil,
-				)
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"}, nil, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
@@ -279,12 +242,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(nil, nil, fmt.Errorf("internal service error"))
-
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(nil, nil, fmt.Errorf("internal service error"))
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					&userevents.GetUserRoleFailedPayload{
@@ -308,15 +266,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-				).Return(
-					&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
-					nil,
-					nil,
-				)
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"}, nil, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),

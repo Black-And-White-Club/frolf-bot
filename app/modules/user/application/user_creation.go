@@ -9,17 +9,16 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// CreateUser creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
-	//  Handle nil context
+// CreateUser  creates a user and returns a success or failure payload.
+func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
+	// Handle nil context
 	if ctx == nil {
 		return nil, nil, errors.New("context cannot be nil")
 	}
 
-	//  Handle empty Discord ID
+	// Handle empty Discord ID
 	if userID == "" {
 		err := errors.New("invalid Discord ID")
 		return nil, &userevents.UserCreationFailedPayload{
@@ -29,7 +28,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		}, err
 	}
 
-	//  Handle negative tag numbers
+	// Handle negative tag numbers
 	if tag != nil && *tag < 0 {
 		err := errors.New("tag number cannot be negative")
 		return nil, &userevents.UserCreationFailedPayload{
@@ -41,24 +40,17 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 
 	startTime := time.Now()
 
-	// Record user creation attempt
+	// Record usercreation attempt
 	if tag != nil {
 		s.metrics.RecordUserCreationByTag(ctx, *tag)
 	}
 
 	userType := "base"
-	standardRole := sharedtypes.UserRoleRattler
-	source := msg.Metadata.Get("source")
-	if source == "" {
-		source = "user"
-	}
+	source := "user"
 
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
-	result, err := s.serviceWrapper(msg, "CreateUser", userID, func() (UserOperationResult, error) {
-		ctx, span := s.tracer.Start(ctx, "CreateUser.DatabaseOperation")
-		defer span.End()
-
+	result, err := s.serviceWrapper(ctx, "CreateUser ", userID, func(ctx context.Context) (UserOperationResult, error) {
 		user := userdb.User{UserID: userID}
 
 		// Time the database operation
@@ -70,10 +62,8 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Database error during user creation",
-				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.Error(err),
-				attr.String("db_operation", "insert"),
 			)
 
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
@@ -88,11 +78,6 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		}
 
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
-		s.metrics.RecordRoleUpdateSuccess(ctx, userID, "no_role", standardRole)
-
-		if tag != nil {
-			s.metrics.RecordTagAvailabilityCheck(ctx, true, *tag)
-		}
 
 		return UserOperationResult{
 			Success: &userevents.UserCreatedPayload{
@@ -102,7 +87,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		}, nil
 	})
 
-	// Record total user creation duration
+	// Record total usercreation duration
 	s.metrics.RecordUserCreationDuration(ctx, userType, source, time.Duration(time.Since(startTime).Seconds()))
 
 	if err != nil {
@@ -116,8 +101,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, msg *message.Message, 
 		}, err
 	}
 
-	s.logger.InfoContext(ctx, "User successfully created",
-		attr.CorrelationIDFromMsg(msg),
+	s.logger.InfoContext(ctx, "User  successfully created",
 		attr.String("user_id", string(userID)),
 		attr.Float64("creation_duration_seconds", time.Since(startTime).Seconds()),
 		attr.String("user_type", userType),

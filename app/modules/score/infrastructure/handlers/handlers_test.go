@@ -3,17 +3,18 @@ package scorehandlers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -32,13 +33,13 @@ func TestNewScoreHandlers(t *testing.T) {
 
 				// Create mock dependencies
 				mockScoreService := scoreservice.NewMockService(ctrl)
-				mockLogger := mocks.NewMockLogger(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
+				tracer := noop.NewTracerProvider().Tracer("test")
 				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
 
 				// Call the function being tested
-				handlers := NewScoreHandlers(mockScoreService, mockLogger, mockTracer, mockHelpers, mockMetrics)
+				handlers := NewScoreHandlers(mockScoreService, logger, tracer, mockHelpers, mockMetrics)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -60,10 +61,10 @@ func TestNewScoreHandlers(t *testing.T) {
 				if scoreHandlers.scoreService != mockScoreService {
 					t.Errorf("scoreService not correctly assigned")
 				}
-				if scoreHandlers.logger != mockLogger {
+				if scoreHandlers.logger != logger {
 					t.Errorf("logger not correctly assigned")
 				}
-				if scoreHandlers.tracer != mockTracer {
+				if scoreHandlers.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
 				if scoreHandlers.helpers != mockHelpers {
@@ -133,23 +134,23 @@ func TestHandlerWrapper(t *testing.T) {
 		handlerName string
 		unmarshalTo interface{}
 		handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)
-		logger      lokifrolfbot.Logger
+		logger      *slog.Logger
 		metrics     scoremetrics.ScoreMetrics
-		tracer      tempofrolfbot.Tracer
+		tracer      trace.Tracer
 		helpers     utils.Helpers
 	}
 	tests := []struct {
 		name    string
 		args    func(ctrl *gomock.Controller) args
 		wantErr bool
-		setup   func(a *args) // Setup expectations per test
+		setup   func(a *args, ctx context.Context) // Setup expectations per test
 	}{
 		{
 			name: "Successful handler execution",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
+				tracer := noop.NewTracerProvider().Tracer("test")
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
 				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
 
 				return args{
@@ -158,39 +159,28 @@ func TestHandlerWrapper(t *testing.T) {
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 					helpers: mockHelpers,
 				}
 			},
-			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			wantErr: false,
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"testHandler",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
-				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Error("No payload instance provided", gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
+				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "testHandler")
+				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "testHandler", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerSuccess(gomock.Any(), "testHandler")
 			},
 		},
 		{
 			name: "Handler returns error",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
+				tracer := noop.NewTracerProvider().Tracer("test")
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
 				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
 
 				return args{
@@ -199,39 +189,28 @@ func TestHandlerWrapper(t *testing.T) {
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return nil, errors.New("handler error")
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 					helpers: mockHelpers,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"testHandler",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
-				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Error("No payload instance provided", gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
+				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "testHandler")
+				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "testHandler", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "testHandler")
 			},
 		},
 		{
 			name: "Unmarshal payload fails",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
+				tracer := noop.NewTracerProvider().Tracer("test")
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
 				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
 
 				return args{
@@ -240,32 +219,21 @@ func TestHandlerWrapper(t *testing.T) {
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 					helpers: mockHelpers,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
 				mockHelpers := a.helpers.(*mockHelpers.MockHelpers)
 
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"testHandler",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
-				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Error("Failed to unmarshal payload", gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerFailure("testHandler")
+				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "testHandler")
+				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "testHandler", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "testHandler")
 
 				// Mock unmarshal payload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(errors.New("unmarshal error"))
@@ -274,9 +242,9 @@ func TestHandlerWrapper(t *testing.T) {
 		{
 			name: "Unmarshal payload succeeds",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
+				tracer := noop.NewTracerProvider().Tracer("test")
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
 				mockHelpers := mockHelpers.NewMockHelpers(ctrl)
 
 				return args{
@@ -285,32 +253,21 @@ func TestHandlerWrapper(t *testing.T) {
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 					helpers: mockHelpers,
 				}
 			},
 			wantErr: false,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
 				mockHelpers := a.helpers.(*mockHelpers.MockHelpers)
 
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"testHandler",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordHandlerAttempt("testHandler")
-				mockLogger.EXPECT().Info("testHandler triggered", gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerDuration("testHandler", gomock.Any())
-				mockLogger.EXPECT().Info("testHandler completed successfully", gomock.Any())
-				mockMetrics.EXPECT().RecordHandlerSuccess("testHandler")
+				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "testHandler")
+				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "testHandler", gomock.Any())
+				mockMetrics.EXPECT().RecordHandlerSuccess(gomock.Any(), "testHandler")
 
 				// Mock unmarshal payload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(nil)
@@ -326,9 +283,12 @@ func TestHandlerWrapper(t *testing.T) {
 			// Initialize args using fresh mock controller
 			testArgs := tt.args(ctrl)
 
+			// Create a context for the test
+			ctx := context.Background()
+
 			// Set up expectations
 			if tt.setup != nil {
-				tt.setup(&testArgs)
+				tt.setup(&testArgs, ctx)
 			}
 
 			// Run handlerWrapper

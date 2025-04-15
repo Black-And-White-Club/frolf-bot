@@ -26,7 +26,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 				attr.String("user_id", string(userID)),
 			)
 
-			successPayload, failedPayload, err := h.userService.GetUser(ctx, msg, userID)
+			successPayload, failedPayload, err := h.userService.GetUser(ctx, userID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to get user",
 					attr.CorrelationIDFromMsg(msg),
@@ -102,7 +102,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			defer span.End()
 
 			// Retrieve user role from service
-			successPayload, failedPayload, err := h.userService.GetUserRole(ctx, msg, userID)
+			successPayload, failedPayload, err := h.userService.GetUserRole(ctx, userID)
 			if err != nil {
 				span.RecordError(err)
 				h.logger.ErrorContext(ctx, "Failed to get user role",

@@ -12,7 +12,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -22,7 +21,6 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testRole := sharedtypes.UserRoleAdmin
 
@@ -45,7 +43,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name: "Successfully updates userrole",
+			name: "Successfully updates user role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testRole).
@@ -98,9 +96,9 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			expectedResult: nil,
 			expectedFail: &userevents.UserRoleUpdateFailedPayload{
 				UserID: testUserID,
-				Reason: "failed to update userrole",
+				Reason: "failed to update user role",
 			},
-			expectedError: errors.New("failed to update userrole: database connection failed"),
+			expectedError: errors.New("failed to update user role: database connection failed"),
 		},
 	}
 
@@ -115,12 +113,12 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
-			gotResult, gotFail, err := s.UpdateUserRoleInDatabase(ctx, testMsg, testUserID, tt.newRole)
+			gotResult, gotFail, err := s.UpdateUserRoleInDatabase(ctx, testUserID, tt.newRole)
 
 			// Validate result
 			if !reflect.DeepEqual(gotResult, tt.expectedResult) {

@@ -3,22 +3,24 @@ package scorehandlers
 import (
 	"context"
 	"fmt"
+	"log/slog" // Import slog
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace" // Import otel trace
 )
 
 // ScoreHandlers handles score-related events.
 type ScoreHandlers struct {
 	scoreService   scoreservice.Service
-	logger         lokifrolfbot.Logger
-	tracer         tempofrolfbot.Tracer
+	logger         *slog.Logger // Change to slog
+	tracer         trace.Tracer // Change to otel trace
 	metrics        scoremetrics.ScoreMetrics
 	helpers        utils.Helpers
 	handlerWrapper func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
@@ -27,8 +29,8 @@ type ScoreHandlers struct {
 // NewScoreHandlers creates a new ScoreHandlers.
 func NewScoreHandlers(
 	scoreService scoreservice.Service,
-	logger lokifrolfbot.Logger,
-	tracer tempofrolfbot.Tracer,
+	logger *slog.Logger, // Change to slog
+	tracer trace.Tracer, // Change to otel trace
 	helpers utils.Helpers,
 	metrics scoremetrics.ScoreMetrics,
 ) Handlers {
@@ -49,23 +51,26 @@ func handlerWrapper(
 	handlerName string,
 	unmarshalTo interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger, // Change to slog
 	metrics scoremetrics.ScoreMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer, // Change to otel trace
 	helpers utils.Helpers,
 ) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {
 		// Start a span for tracing
-		ctx, span := tracer.StartSpan(msg.Context(), handlerName, msg)
+		ctx, span := tracer.Start(msg.Context(), handlerName, trace.WithAttributes(
+			attribute.String("message.id", msg.UUID),
+			attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
+		))
 		defer span.End()
 
 		// Record metrics for handler attempt
-		metrics.RecordHandlerAttempt(handlerName)
+		metrics.RecordHandlerAttempt(ctx, handlerName)
 
 		startTime := time.Now()
 		defer func() {
-			duration := time.Since(startTime).Seconds()
-			metrics.RecordHandlerDuration(handlerName, duration)
+			duration := time.Duration(time.Since(startTime).Seconds())
+			metrics.RecordHandlerDuration(ctx, handlerName, duration)
 		}()
 
 		logger.InfoContext(ctx, handlerName+" triggered",
@@ -81,17 +86,10 @@ func handlerWrapper(
 			if err := helpers.UnmarshalPayload(msg, payloadInstance); err != nil {
 				logger.ErrorContext(ctx, "Failed to unmarshal payload",
 					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				metrics.RecordHandlerFailure(handlerName)
+					attr.Error(err))
+				metrics.RecordHandlerFailure(ctx, handlerName)
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
-		} else {
-			logger.ErrorContext(ctx, "No payload instance provided",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			metrics.RecordHandlerFailure(handlerName)
-			return nil, fmt.Errorf("no payload instance provided")
 		}
 
 		// Call the actual handler logic
@@ -101,12 +99,12 @@ func handlerWrapper(
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(err),
 			)
-			metrics.RecordHandlerFailure(handlerName)
+			metrics.RecordHandlerFailure(ctx, handlerName)
 			return nil, err
 		}
 
 		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
-		metrics.RecordHandlerSuccess(handlerName)
+		metrics.RecordHandlerSuccess(ctx, handlerName)
 		return result, nil
 	}
 }

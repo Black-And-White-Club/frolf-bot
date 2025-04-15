@@ -13,7 +13,6 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -35,8 +34,6 @@ func TestNewUserService(t *testing.T) {
 				mockDB := userdb.NewMockUserDB(ctrl)
 				mockEventBus := eventbus.NewMockEventBus(ctrl)
 				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-
-				// Use real no-op tracer (no in-memory exporter)
 				tracer := noop.NewTracerProvider().Tracer("test")
 
 				service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
@@ -51,8 +48,8 @@ func TestNewUserService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to avoid side effects during test
-				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				userServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				}
 
 				if userServiceImpl.UserDB != mockDB {
@@ -93,8 +90,8 @@ func TestNewUserService(t *testing.T) {
 					t.Fatalf("service is not of type *UserServiceImpl")
 				}
 
-				userServiceImpl.serviceWrapper = func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				userServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				}
 
 				if userServiceImpl.UserDB != nil {
@@ -117,8 +114,8 @@ func TestNewUserService(t *testing.T) {
 					t.Errorf("serviceWrapper should not be nil")
 				}
 
-				testMsg := message.NewMessage("test-id", []byte("test"))
-				_, err := userServiceImpl.serviceWrapper(testMsg, "TestOp", "123", func() (UserOperationResult, error) {
+				ctx := context.Background()
+				_, err := userServiceImpl.serviceWrapper(ctx, "TestOp", "123", func(ctx context.Context) (UserOperationResult, error) {
 					return UserOperationResult{Success: "test"}, nil
 				})
 				if err != nil {
@@ -135,10 +132,10 @@ func TestNewUserService(t *testing.T) {
 
 func Test_serviceWrapper(t *testing.T) {
 	type args struct {
-		msg           *message.Message
+		ctx           context.Context
 		operationName string
 		userID        sharedtypes.DiscordID
-		serviceFunc   func() (UserOperationResult, error)
+		serviceFunc   func(ctx context.Context) (UserOperationResult, error)
 		logger        *slog.Logger
 		metrics       usermetrics.UserMetrics
 		tracer        trace.Tracer
@@ -159,10 +156,10 @@ func Test_serviceWrapper(t *testing.T) {
 				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					userID:        sharedtypes.DiscordID("123"),
-					serviceFunc: func() (UserOperationResult, error) {
+					serviceFunc: func(ctx context.Context) (UserOperationResult, error) {
 						return UserOperationResult{Success: "test"}, nil
 					},
 					logger:  logger,
@@ -177,9 +174,9 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger := a.logger
 
 				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
 				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
-				mockLogger.Info("Operation succeeded", attr.CorrelationIDFromMsg(a.msg), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockLogger.Info("Operation succeeded", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
 				mockMetrics.EXPECT().RecordOperationSuccess(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
@@ -192,10 +189,10 @@ func Test_serviceWrapper(t *testing.T) {
 				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					userID:        sharedtypes.DiscordID("123"),
-					serviceFunc: func() (UserOperationResult, error) {
+					serviceFunc: func(ctx context.Context) (UserOperationResult, error) {
 						panic("test panic")
 					},
 					logger:  logger,
@@ -209,9 +206,9 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger := a.logger
 
 				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
 				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
-				mockLogger.Error("Panic in TestOperation: test panic", attr.CorrelationIDFromMsg(a.msg), attr.String("user_id", "123"), attr.Any("panic", "test panic"))
+				mockLogger.Error("Panic in TestOperation: test panic", attr.String("user_id", "123"), attr.Any("panic", "test panic"))
 				mockMetrics.EXPECT().RecordOperationFailure(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
@@ -224,10 +221,10 @@ func Test_serviceWrapper(t *testing.T) {
 				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
-					msg:           message.NewMessage("test-id", []byte("test")),
+					ctx:           context.Background(),
 					operationName: "TestOperation",
 					userID:        sharedtypes.DiscordID("123"),
-					serviceFunc: func() (UserOperationResult, error) {
+					serviceFunc: func(ctx context.Context) (UserOperationResult, error) {
 						return UserOperationResult{}, fmt.Errorf("service error")
 					},
 					logger:  logger,
@@ -241,9 +238,9 @@ func Test_serviceWrapper(t *testing.T) {
 				mockLogger := a.logger
 
 				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.Info("Starting operation", attr.CorrelationIDFromMsg(a.msg), attr.String("message_id", a.msg.UUID), attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
 				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
-				mockLogger.Error("Error in TestOperation: service error", attr.CorrelationIDFromMsg(a.msg))
+				mockLogger.Error("Error in TestOperation: service error", attr.String("user_id", "123"))
 				mockMetrics.EXPECT().RecordOperationFailure(ctx, "TestOperation", sharedtypes.DiscordID("123"))
 			},
 		},
@@ -255,14 +252,14 @@ func Test_serviceWrapper(t *testing.T) {
 			defer ctrl.Finish()
 
 			testArgs := tt.args(ctrl)
-			ctx, span := testArgs.tracer.Start(context.Background(), testArgs.operationName)
+			ctx, span := testArgs.tracer.Start(testArgs.ctx, testArgs.operationName)
 			defer span.End()
 
 			if tt.setup != nil {
 				tt.setup(&testArgs, ctx)
 			}
 
-			got, err := serviceWrapper(testArgs.msg, testArgs.operationName, testArgs.userID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
+			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.userID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return

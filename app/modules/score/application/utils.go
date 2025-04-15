@@ -24,13 +24,13 @@ func (s *ScoreService) ProcessScoresForStorage(
 			attr.RoundID("round_id", roundID),
 			attr.Error(err),
 		)
-		s.metrics.RecordOperationFailure("ProcessScoresForStorage", roundID)
+		s.metrics.RecordOperationFailure(ctx, "ProcessScoresForStorage", roundID)
 		return nil, err
 	}
 
 	// Start timing and metrics
 	startTime := time.Now()
-	s.metrics.RecordOperationAttempt("ProcessScoresForStorage", roundID)
+	s.metrics.RecordOperationAttempt(ctx, "ProcessScoresForStorage", roundID)
 
 	// Process scores
 	taggedCount, untaggedCount := 0, 0
@@ -46,40 +46,40 @@ func (s *ScoreService) ProcessScoresForStorage(
 		scores[i].Score = sharedtypes.Score(intScore)
 
 		// Track metrics
-		s.metrics.RecordPlayerScore(roundID, scores[i].UserID, scores[i].Score)
+		s.metrics.RecordPlayerScore(ctx, roundID, scores[i].UserID, scores[i].Score)
 
 		// Count tagged vs untagged
 		if scores[i].TagNumber != nil {
-			s.metrics.RecordPlayerTag(roundID, scores[i].UserID, scores[i].TagNumber)
-			s.metrics.RecordTagPerformance(roundID, scores[i].TagNumber, scores[i].Score)
+			s.metrics.RecordPlayerTag(ctx, roundID, scores[i].UserID, scores[i].TagNumber)
+			s.metrics.RecordTagPerformance(ctx, roundID, scores[i].TagNumber, scores[i].Score)
 			taggedCount++
 		} else {
-			s.metrics.RecordUntaggedPlayer(roundID, scores[i].UserID)
+			s.metrics.RecordUntaggedPlayer(ctx, roundID, scores[i].UserID)
 			untaggedCount++
 		}
 	}
 
 	// Record tagged vs untagged counts
-	s.metrics.RecordTaggedPlayersProcessed(roundID, taggedCount)
-	s.metrics.RecordUntaggedPlayersProcessed(roundID, untaggedCount)
+	s.metrics.RecordTaggedPlayersProcessed(ctx, roundID, taggedCount)
+	s.metrics.RecordUntaggedPlayersProcessed(ctx, roundID, untaggedCount)
 
 	// Sort scores
 	sortStartTime := time.Now()
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].Score < scores[j].Score
 	})
-	sortDuration := time.Since(sortStartTime).Seconds()
-	s.metrics.RecordScoreSortingDuration(roundID, sortDuration)
+	sortDuration := time.Since(sortStartTime)
+	s.metrics.RecordScoreSortingDuration(ctx, roundID, sortDuration)
 
 	// Log completion and record metrics
-	s.metrics.RecordOperationDuration("ProcessScoresForStorage", time.Since(startTime).Seconds())
+	s.metrics.RecordOperationDuration(ctx, "ProcessScoresForStorage", time.Since(startTime))
 
 	s.logger.InfoContext(ctx, "Scores processed and sorted",
 		attr.RoundID("round_id", roundID),
 		attr.Int("num_scores", len(scores)),
 		attr.Int("tagged_count", taggedCount),
 		attr.Int("untagged_count", untaggedCount),
-		attr.Float64("sort_duration_seconds", sortDuration),
+		attr.Float64("sort_duration_seconds", time.Since(sortStartTime).Seconds()),
 		attr.Float64("total_duration_seconds", time.Since(startTime).Seconds()),
 	)
 

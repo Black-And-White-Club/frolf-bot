@@ -59,12 +59,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					gomock.Eq(&testTagNumber),
-				).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
 					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
 					nil,
 					nil,
@@ -94,12 +89,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					gomock.Eq(&testTagNumber),
-				).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
 					nil,
 					&userevents.UserCreationFailedPayload{
 						UserID:    testUserID,
@@ -146,12 +136,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					gomock.Eq(&testTagNumber),
-				).Return(nil, nil, fmt.Errorf("internal service error"))
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(nil, nil, fmt.Errorf("internal service error"))
 				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
 				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagAvailable").Times(1)
 				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
@@ -170,22 +155,13 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					gomock.Eq(&testTagNumber),
-				).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
 					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
 					nil,
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
-					userevents.UserCreated,
-				).Return(nil, fmt.Errorf("failed to create success message"))
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreated).Return(nil, fmt.Errorf("failed to create success message"))
 				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
 				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagAvailable").Times(1)
 				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)

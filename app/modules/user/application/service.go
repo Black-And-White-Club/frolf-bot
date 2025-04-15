@@ -1,6 +1,7 @@
 package userservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,8 +12,6 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -24,10 +23,10 @@ type UserServiceImpl struct {
 	logger         *slog.Logger
 	metrics        usermetrics.UserMetrics
 	tracer         trace.Tracer
-	serviceWrapper func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error)
+	serviceWrapper func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error)
 }
 
-// NewUser Service creates a new UserService.
+// NewUserService creates a new UserService.
 func NewUserService(
 	db userdb.UserDB,
 	eventBus eventbus.EventBus,
@@ -41,24 +40,30 @@ func NewUserService(
 		logger:   logger,
 		metrics:  metrics,
 		tracer:   tracer,
-		// Assign the serviceWrapper method
-		serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-			return serviceWrapper(msg, operationName, userID, serviceFunc, logger, metrics, tracer)
+		serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+			return serviceWrapper(ctx, operationName, userID, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
-// serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error), logger *slog.Logger, metrics usermetrics.UserMetrics, tracer trace.Tracer) (result UserOperationResult, err error) {
-	ctx, span := tracer.Start(msg.Context(), operationName, trace.WithAttributes(
-		attribute.String("message.id", msg.UUID),
-		attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
-	))
-	// Ensure the span ends when the function returns
-	defer span.End()
+func serviceWrapper(
+	ctx context.Context,
+	operationName string,
+	userID sharedtypes.DiscordID,
+	serviceFunc func(ctx context.Context) (UserOperationResult, error),
+	logger *slog.Logger,
+	metrics usermetrics.UserMetrics,
+	tracer trace.Tracer,
+) (result UserOperationResult, err error) {
+	if serviceFunc == nil {
+		return UserOperationResult{}, errors.New("service function is nil")
+	}
 
-	msg = msg.Copy()
-	msg.SetContext(ctx)
+	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
+		attribute.String("operation", operationName),
+		attribute.String("user_id", string(userID)),
+	))
+	defer span.End()
 
 	metrics.RecordOperationAttempt(ctx, operationName, userID)
 
@@ -69,39 +74,34 @@ func serviceWrapper(msg *message.Message, operationName string, userID sharedtyp
 	}()
 
 	logger.InfoContext(ctx, operationName+" triggered",
-		attr.CorrelationIDFromMsg(msg),
-		attr.String("message_id", msg.UUID),
 		attr.String("operation", operationName),
 		attr.String("user_id", string(userID)),
+		attr.ExtractCorrelationID(ctx),
 	)
 
-	// Modify `err` directly inside the defer so it propagates correctly
 	defer func() {
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
+			err = fmt.Errorf("%s", errorMsg)
+			result = UserOperationResult{}
+
 			logger.ErrorContext(ctx, errorMsg,
-				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 				attr.Any("panic", r),
+				attr.ExtractCorrelationID(ctx),
 			)
 			metrics.RecordOperationFailure(ctx, operationName, userID)
-			span.RecordError(errors.New(errorMsg))
-
-			// Since result and err are named return values, modifying them here affects the function return
-			result = UserOperationResult{}
-			err = fmt.Errorf("%s", errorMsg)
+			span.RecordError(err)
 		}
 	}()
 
-	// Now, if `serviceFunc()` panics, `defer` will catch it and modify `err`
-	result, err = serviceFunc()
+	result, err = serviceFunc(ctx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-
 		logger.ErrorContext(ctx, "Error in "+operationName,
-			attr.CorrelationIDFromMsg(msg),
 			attr.String("user_id", string(userID)),
 			attr.Error(wrappedErr),
+			attr.ExtractCorrelationID(ctx),
 		)
 		metrics.RecordOperationFailure(ctx, operationName, userID)
 		span.RecordError(wrappedErr)
@@ -109,9 +109,9 @@ func serviceWrapper(msg *message.Message, operationName string, userID sharedtyp
 	}
 
 	logger.InfoContext(ctx, operationName+" completed successfully",
-		attr.CorrelationIDFromMsg(msg),
-		attr.String("user_id", string(userID)),
 		attr.String("operation", operationName),
+		attr.String("user_id", string(userID)),
+		attr.ExtractCorrelationID(ctx),
 	)
 	metrics.RecordOperationSuccess(ctx, operationName, userID)
 

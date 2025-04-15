@@ -3,16 +3,18 @@ package scoreservice
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -30,14 +32,14 @@ func TestNewScoreService(t *testing.T) {
 				defer ctrl.Finish()
 
 				// Create mock dependencies
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockDB := scoredb.NewMockScoreDB(ctrl)
 				mockEventBus := eventbus.NewMockEventBus(ctrl)
-				mockLogger := &lokifrolfbot.NoOpLogger{}
 				mockMetrics := &scoremetrics.NoOpMetrics{}
-				mockTracer := &tempofrolfbot.NoOpTracer{}
-
+				tracer := noop.NewTracerProvider().Tracer("test")
 				// Call the function being tested
-				service := NewScoreService(mockDB, mockEventBus, mockLogger, mockMetrics, mockTracer)
+				service := NewScoreService(mockDB, mockEventBus, logger, mockMetrics, tracer)
 
 				// Ensure service is correctly created
 				if service == nil {
@@ -62,13 +64,13 @@ func TestNewScoreService(t *testing.T) {
 				if scoreServiceImpl.EventBus != mockEventBus {
 					t.Errorf("eventBus not correctly assigned")
 				}
-				if scoreServiceImpl.logger != mockLogger {
+				if scoreServiceImpl.logger != logger {
 					t.Errorf("logger not correctly assigned")
 				}
 				if scoreServiceImpl.metrics != mockMetrics {
 					t.Errorf("metrics not correctly assigned")
 				}
-				if scoreServiceImpl.tracer != mockTracer {
+				if scoreServiceImpl.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
 
@@ -151,23 +153,24 @@ func Test_serviceWrapper(t *testing.T) {
 		operationName string
 		roundID       sharedtypes.RoundID
 		serviceFunc   func(ctx context.Context) (ScoreOperationResult, error)
-		logger        lokifrolfbot.Logger
+		logger        *slog.Logger
 		metrics       scoremetrics.ScoreMetrics
-		tracer        tempofrolfbot.Tracer
+		tracer        trace.Tracer
 	}
 	tests := []struct {
 		name    string
 		args    func(ctrl *gomock.Controller) args
 		want    ScoreOperationResult
 		wantErr bool
-		setup   func(a *args)
+		setup   func(a *args, ctx context.Context)
 	}{
 		{
 			name: "Successful operation",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					ctx:           context.Background(),
@@ -176,39 +179,32 @@ func Test_serviceWrapper(t *testing.T) {
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{Success: "test"}, nil
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			want:    ScoreOperationResult{Success: "test"},
 			wantErr: false,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.Any(),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
+				mockLogger := a.logger
 
 				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", testRoundID)
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Info("Operation succeeded", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 		{
 			name: "Handles panic in service function",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					ctx:           context.Background(),
@@ -217,42 +213,29 @@ func Test_serviceWrapper(t *testing.T) {
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						panic("test panic") // Simulate a panic
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Expect initial method calls before panic occurs
-				mockTracer.EXPECT().StartSpan(gomock.AssignableToTypeOf(context.Background()), "TestOperation", gomock.Any()).Return(context.Background(), noop.Span{})
-
-				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
-
-				// Expect `logger.Info` for operation start (happens before panic)
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-
-				// Expect `RecordOperationDuration` since the function starts measuring time before panic
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-
-				// Expect panic error logging
-				mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-
-				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", testRoundID)
+				mockLogger := a.logger
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 		{
 			name: "Handles service function returning an error",
 			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				return args{
 					ctx:           context.Background(),
@@ -261,34 +244,20 @@ func Test_serviceWrapper(t *testing.T) {
 					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
 						return ScoreOperationResult{}, fmt.Errorf("service error")
 					},
-					logger:  mockLogger,
+					logger:  logger,
 					metrics: mockMetrics,
-					tracer:  mockTracer,
+					tracer:  tracer,
 				}
 			},
 			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
+			setup: func(a *args, ctx context.Context) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", testRoundID)
-
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", gomock.Any())
-
-				// Expect error logging
-				mockLogger.EXPECT().Error("Error in TestOperation", gomock.Any(), gomock.Any(), gomock.Any())
-
-				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", testRoundID)
+				mockLogger := a.logger
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 	}
@@ -303,7 +272,7 @@ func Test_serviceWrapper(t *testing.T) {
 
 			// Set up expectations
 			if tt.setup != nil {
-				tt.setup(&testArgs)
+				tt.setup(&testArgs, testArgs.ctx)
 			}
 
 			// Run serviceWrapper

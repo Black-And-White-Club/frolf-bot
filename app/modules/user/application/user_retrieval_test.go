@@ -12,7 +12,6 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -22,7 +21,6 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	// Mock dependencies
@@ -63,7 +61,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			expectedFail: nil,
 		},
 		{
-			name: "User not found",
+			name: "User  not found",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserByUserID(gomock.Any(), testUserID).
@@ -102,12 +100,12 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
-			gotSuccess, gotFailure, err := s.GetUser(ctx, testMsg, testUserID)
+			gotSuccess, gotFailure, err := s.GetUser(ctx, testUserID)
 
 			// Validate success
 			if tt.expectedResult != nil {
@@ -140,7 +138,6 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	testMsg := message.NewMessage("test-id", nil)
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	// Mock dependencies
@@ -161,7 +158,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name: "Successfully retrieves userrole",
+			name: "Successfully retrieves user role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID).
@@ -174,7 +171,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			expectedFail: nil,
 		},
 		{
-			name: "User role not found",
+			name: "User  role not found",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID).
@@ -214,12 +211,12 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(msg *message.Message, operationName string, userID sharedtypes.DiscordID, serviceFunc func() (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
-			gotSuccess, gotFailure, err := s.GetUserRole(ctx, testMsg, testUserID)
+			gotSuccess, gotFailure, err := s.GetUserRole(ctx, testUserID)
 
 			// Validate success
 			if tt.expectedResult != nil {

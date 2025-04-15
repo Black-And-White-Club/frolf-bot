@@ -22,7 +22,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			// Call the service function
 			result, err := h.scoreService.ProcessRoundScores(ctx, processRoundScoresRequestPayload.RoundID, processRoundScoresRequestPayload.Scores)
 			if err != nil {
-				h.metrics.RecordRoundScoresProcessingAttempt(false, processRoundScoresRequestPayload.RoundID)
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
 
 				// Create failure event
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
@@ -44,13 +44,13 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			}
 
 			if result.Success == nil {
-				h.metrics.RecordRoundScoresProcessingAttempt(false, processRoundScoresRequestPayload.RoundID)
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
 				return nil, fmt.Errorf("unknown result from ProcessRoundScores")
 			}
 
 			successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
 			if !ok {
-				h.metrics.RecordRoundScoresProcessingAttempt(false, processRoundScoresRequestPayload.RoundID)
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
 				return nil, fmt.Errorf("unexpected result type: %T", result.Success)
 			}
 
@@ -61,11 +61,11 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 				scoreevents.ProcessRoundScoresSuccess,
 			)
 			if err != nil {
-				h.metrics.RecordRoundScoresProcessingAttempt(false, processRoundScoresRequestPayload.RoundID)
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
 				return nil, fmt.Errorf("failed to create success message: %w", err)
 			}
 
-			h.metrics.RecordRoundScoresProcessingAttempt(true, processRoundScoresRequestPayload.RoundID)
+			h.metrics.RecordRoundScoresProcessingAttempt(ctx, true, processRoundScoresRequestPayload.RoundID)
 			return []*message.Message{successMsg}, nil
 		},
 	)(msg)

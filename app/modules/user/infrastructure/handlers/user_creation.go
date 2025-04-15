@@ -67,7 +67,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			ctx, span := h.tracer.Start(ctx, "CreateUser")
 			defer span.End()
 
-			successPayload, failedPayload, err := h.userService.CreateUser(ctx, msg, userID, nil)
+			successPayload, failedPayload, err := h.userService.CreateUser(ctx, userID, nil)
 			if err != nil {
 				span.RecordError(err)
 				h.logger.ErrorContext(ctx, "Failed to create user",

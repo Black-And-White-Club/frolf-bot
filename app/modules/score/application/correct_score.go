@@ -12,13 +12,6 @@ import (
 // CorrectScore updates a player's score and returns the appropriate payload.
 func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error) {
 	return s.serviceWrapper(ctx, "CorrectScore", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
-		// Extract correlation ID for logging
-		correlationID := attr.ExtractCorrelationID(ctx)
-
-		// Start tracing span
-		ctx, span := s.tracer.StartSpan(ctx, "CorrectScore.DatabaseOperation", nil)
-		defer span.End()
-
 		// Prepare the score info
 		scoreInfo := sharedtypes.ScoreInfo{
 			UserID:    userID,
@@ -29,12 +22,12 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 		// Attempt to update score in the database
 		dbStart := time.Now()
 		err := s.ScoreDB.UpdateOrAddScore(ctx, roundID, scoreInfo)
-		s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
+		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 
 		if err != nil {
 			// Log error
 			s.logger.ErrorContext(ctx, "Failed to update/add score",
-				attr.LogAttr(correlationID),
+				attr.ExtractCorrelationID(ctx),
 				attr.RoundID("round_id", roundID),
 				attr.String("user_id", string(userID)),
 				attr.Error(err),
@@ -52,11 +45,11 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 		}
 
 		// Record successful score correction
-		s.metrics.RecordScoreCorrectionSuccess(roundID)
+		s.metrics.RecordScoreCorrectionSuccess(ctx, roundID)
 
 		// Log success
 		s.logger.InfoContext(ctx, "Score corrected successfully",
-			attr.LogAttr(correlationID),
+			attr.ExtractCorrelationID(ctx),
 			attr.RoundID("round_id", roundID),
 			attr.String("user_id", string(userID)),
 		)

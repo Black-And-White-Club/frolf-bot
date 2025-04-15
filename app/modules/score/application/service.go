@@ -4,24 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ScoreService handles score processing logic.
 type ScoreService struct {
 	ScoreDB        scoredb.ScoreDB
 	EventBus       eventbus.EventBus
-	logger         lokifrolfbot.Logger
+	logger         *slog.Logger
 	metrics        scoremetrics.ScoreMetrics
-	tracer         tempofrolfbot.Tracer
+	tracer         trace.Tracer
 	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error)
 }
 
@@ -29,9 +30,9 @@ type ScoreService struct {
 func NewScoreService(
 	db scoredb.ScoreDB,
 	eventBus eventbus.EventBus,
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics scoremetrics.ScoreMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) Service {
 	return &ScoreService{
 		ScoreDB:  db,
@@ -51,35 +52,35 @@ func serviceWrapper(
 	operationName string,
 	roundID sharedtypes.RoundID,
 	serviceFunc func(ctx context.Context) (ScoreOperationResult, error),
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics scoremetrics.ScoreMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) (result ScoreOperationResult, err error) {
 	if serviceFunc == nil {
 		return ScoreOperationResult{}, errors.New("service function is nil")
 	}
 
 	// Start a new tracing span while preserving existing context
-	newCtx, span := tracer.StartSpan(ctx, operationName, nil)
+	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
+		attribute.String("operation", operationName),
+		attribute.String("round_id", roundID.String()),
+	))
 	defer span.End()
 
-	// Extract correlation ID (if available)
-	correlationID := attr.ExtractCorrelationID(ctx)
-
 	// Record the operation attempt
-	metrics.RecordOperationAttempt(operationName, roundID)
+	metrics.RecordOperationAttempt(ctx, operationName, roundID)
 
 	startTime := time.Now()
 	defer func() {
-		duration := time.Since(startTime).Seconds()
-		metrics.RecordOperationDuration(operationName, duration)
+		duration := time.Duration(time.Since(startTime).Seconds())
+		metrics.RecordOperationDuration(ctx, operationName, duration)
 	}()
 
 	// Log the operation start
 	logger.InfoContext(ctx, operationName+" triggered",
 		attr.String("operation", operationName),
 		attr.RoundID("round_id", roundID),
-		attr.LogAttr(correlationID),
+		attr.ExtractCorrelationID(ctx),
 	)
 
 	// Recover from panic and log the error
@@ -88,10 +89,10 @@ func serviceWrapper(
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
 			logger.ErrorContext(ctx, errorMsg,
 				attr.RoundID("round_id", roundID),
-				attr.LogAttr(correlationID),
+				attr.ExtractCorrelationID(ctx),
 				attr.Any("panic", r),
 			)
-			metrics.RecordOperationFailure(operationName, roundID)
+			metrics.RecordOperationFailure(ctx, operationName, roundID)
 
 			// Create error with panic information
 			err = fmt.Errorf("panic in %s: %v", operationName, r)
@@ -102,15 +103,15 @@ func serviceWrapper(
 	}()
 
 	// Call the service function **with new context**
-	result, err = serviceFunc(newCtx)
+	result, err = serviceFunc(ctx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
 		logger.ErrorContext(ctx, "Error in "+operationName,
 			attr.RoundID("round_id", roundID),
-			attr.LogAttr(correlationID),
+			attr.ExtractCorrelationID(ctx),
 			attr.Error(wrappedErr),
 		)
-		metrics.RecordOperationFailure(operationName, roundID)
+		metrics.RecordOperationFailure(ctx, operationName, roundID)
 		span.RecordError(wrappedErr)
 		return ScoreOperationResult{}, wrappedErr
 	}
@@ -119,9 +120,9 @@ func serviceWrapper(
 	logger.InfoContext(ctx, operationName+" completed successfully",
 		attr.String("operation", operationName),
 		attr.RoundID("round_id", roundID),
-		attr.LogAttr(correlationID),
+		attr.ExtractCorrelationID(ctx),
 	)
-	metrics.RecordOperationSuccess(operationName, roundID)
+	metrics.RecordOperationSuccess(ctx, operationName, roundID)
 
 	return result, nil
 }

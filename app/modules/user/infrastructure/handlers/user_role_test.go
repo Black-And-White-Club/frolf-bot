@@ -67,23 +67,9 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					Role:   testNewRole,
 				}
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					testNewRole,
-				).Return(
-					updateResultPayload,
-					nil,
-					nil,
-				)
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(updateResultPayload, nil, nil)
 
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					updateResultPayload,
-					userevents.UserRoleUpdated,
-				).Return(testMsg, nil)
-				// No metrics expectations needed with NoOp
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), updateResultPayload, userevents.UserRoleUpdated).Return(testMsg, nil)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -93,7 +79,6 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			name: "Fail to unmarshal payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-				// No metrics expectations needed with NoOp
 			},
 			msg:            invalidMsg,
 			want:           nil,
@@ -110,12 +95,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					testNewRole,
-				).Return(nil, &userevents.UserRoleUpdateFailedPayload{
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(nil, &userevents.UserRoleUpdateFailedPayload{
 					UserID: testUserID,
 					Reason: "internal service error",
 				}, nil)
@@ -128,7 +108,6 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 					userevents.UserRoleUpdateFailed,
 				).Return(testMsg, nil)
-				// No metrics expectations needed with NoOp
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -149,13 +128,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					Role:   testNewRole,
 				}
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					testNewRole,
-				).Return(
-					successPayload,
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(successPayload,
 					nil,
 					nil,
 				)
@@ -181,13 +154,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(
-					gomock.Any(),
-					gomock.Any(),
-					testUserID,
-					testNewRole,
-				).Return(
-					nil,
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(nil,
 					&userevents.UserRoleUpdateFailedPayload{
 						UserID: testUserID,
 						Reason: "internal service error",

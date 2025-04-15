@@ -11,26 +11,22 @@ import (
 
 // ProcessRoundScores processes scores received from the round module.
 func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (ScoreOperationResult, error) {
-	s.metrics.RecordScoreProcessingAttempt(roundID)
-	correlationID := attr.ExtractCorrelationID(ctx)
+	s.metrics.RecordScoreProcessingAttempt(ctx, roundID)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
 	s.logger.InfoContext(ctx, "Starting to process round scores",
-		attr.LogAttr(correlationID),
+		attr.ExtractCorrelationID(ctx),
 		roundIDAttr,
 		attr.Int("num_scores", len(scores)),
 	)
 
 	// Call the serviceWrapper
 	return s.serviceWrapper(ctx, "ProcessRoundScores", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
-		ctx, span := s.tracer.StartSpan(ctx, "ProcessRoundScores.DatabaseOperation", nil)
-		defer span.End()
-
 		// Process scores for storage
 		processedScores, err := s.ProcessScoresForStorage(ctx, roundID, scores)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to process scores for storage",
-				attr.LogAttr(correlationID),
+				attr.ExtractCorrelationID(ctx),
 				roundIDAttr,
 				attr.Error(err),
 			)
@@ -45,27 +41,27 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		for _, scoreInfo := range processedScores {
 			if scoreInfo.TagNumber != nil {
 				tagMappings[scoreInfo.UserID] = *scoreInfo.TagNumber
-				s.metrics.RecordPlayerTag(roundID, scoreInfo.UserID, scoreInfo.TagNumber)
+				s.metrics.RecordPlayerTag(ctx, roundID, scoreInfo.UserID, scoreInfo.TagNumber)
 			}
 		}
 
 		// Record metrics for operation
-		s.metrics.RecordOperationAttempt("ExtractTagInformation", roundID)
-		s.metrics.RecordOperationDuration("ExtractTagInformation", time.Since(extractStartTime).Seconds())
+		s.metrics.RecordOperationAttempt(ctx, "ExtractTagInformation", roundID)
+		s.metrics.RecordOperationDuration(ctx, "ExtractTagInformation", time.Duration(time.Since(extractStartTime).Seconds()))
 
 		// Log to database with timing
 		dbStart := time.Now()
 		if err := s.ScoreDB.LogScores(ctx, roundID, processedScores, "auto"); err != nil {
-			s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
+			s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 			s.logger.ErrorContext(ctx, "Failed to log scores to database",
-				attr.LogAttr(correlationID),
+				attr.ExtractCorrelationID(ctx),
 				roundIDAttr,
 				attr.Error(err),
 			)
 			return ScoreOperationResult{Error: err}, err
 		}
-		s.metrics.RecordDBQueryDuration(time.Since(dbStart).Seconds())
-		s.metrics.RecordScoreProcessingSuccess(roundID)
+		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
+		s.metrics.RecordScoreProcessingSuccess(ctx, roundID)
 
 		// Pre-allocate the result slice with exact capacity
 		tagMappingPayload := make([]sharedtypes.TagMapping, 0, len(tagMappings))

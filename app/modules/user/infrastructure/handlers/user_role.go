@@ -32,7 +32,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			h.metrics.RecordHandlerAttempt(ctx, "HandleUpdateUserRole")
 
 			// Call service function to update user role
-			successPayload, failedPayload, err := h.userService.UpdateUserRoleInDatabase(ctx, msg, userID, newRole)
+			successPayload, failedPayload, err := h.userService.UpdateUserRoleInDatabase(ctx, userID, newRole)
 
 			// Determine appropriate payload
 			var resultPayload interface{}

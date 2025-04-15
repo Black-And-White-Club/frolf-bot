@@ -7,20 +7,21 @@ import (
 	"testing"
 	"time"
 
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 // setupBenchmarkService creates a service with mocked dependencies for benchmarking
 func setupBenchmarkService(t *testing.B, mockDB *scoredb.MockScoreDB) *ScoreService {
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
 	metrics := &scoremetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 
 	return &ScoreService{
 		ScoreDB: mockDB,

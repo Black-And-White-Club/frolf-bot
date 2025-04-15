@@ -37,9 +37,9 @@ func NewScoreModule(
 	helpers utils.Helpers,
 ) (*Module, error) {
 	// Extract observability components
-	logger := obs.GetLogger()
-	metrics := obs.GetMetrics().ScoreMetrics()
-	tracer := obs.GetTracer()
+	logger := obs.Provider.Logger
+	metrics := obs.Registry.ScoreMetrics
+	tracer := obs.Registry.Tracer
 
 	logger.InfoContext(ctx, "score.NewScoreModule called")
 
@@ -67,7 +67,7 @@ func NewScoreModule(
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.GetLogger()
+	logger := m.observability.Provider.Logger
 	logger.InfoContext(ctx, "Starting score module")
 
 	// Create a context that can be canceled
@@ -86,14 +86,14 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (m *Module) Close() error {
-	logger := m.observability.GetLogger()
-	logger.InfoContext(ctx, "Stopping score module")
+	logger := m.observability.Provider.Logger
+	logger.Info("Stopping score module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.InfoContext(ctx, "Score module stopped")
+	logger.Info("Score module stopped")
 	return nil
 }

@@ -28,7 +28,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			)
 
 			// Call the service function to create the user
-			userCreatedPayload, userCreationFailedPayload, err := h.userService.CreateUser(ctx, msg, userID, &tagNumber)
+			userCreatedPayload, userCreationFailedPayload, err := h.userService.CreateUser(ctx, userID, &tagNumber)
 			if err != nil {
 				h.logger.Error("Failed to create user",
 					attr.CorrelationIDFromMsg(msg),

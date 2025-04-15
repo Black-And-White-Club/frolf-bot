@@ -86,7 +86,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					},
 				)
 				// CreateUser
-				mockUserService.EXPECT().CreateUser(gomock.Any(), gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
 					Return(&userevents.UserCreatedPayload{UserID: testUserID}, nil, nil)
 
 				// CreateResultMessage for UserCreated
@@ -111,7 +111,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					},
 				)
 				// CreateUser
-				mockUserService.EXPECT().CreateUser(gomock.Any(), gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
 					Return(nil, &userevents.UserCreationFailedPayload{UserID: testUserID, Reason: "failed"}, nil)
 
 				// CreateResultMessage for UserCreationFailed
@@ -136,7 +136,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					},
 				)
 				// CreateUser
-				mockUserService.EXPECT().CreateUser(gomock.Any(), gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
 					Return(nil, nil, fmt.Errorf("service error"))
 			},
 			wantErr:        true,
@@ -157,7 +157,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					},
 				)
 				// CreateUser
-				mockUserService.EXPECT().CreateUser(gomock.Any(), gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
 					Return(&userevents.UserCreatedPayload{UserID: testUserID}, nil, nil)
 
 				// CreateResultMessage  error
