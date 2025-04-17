@@ -10,8 +10,9 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LeaderboardService handles leaderboard-related logic.
@@ -20,8 +21,8 @@ type LeaderboardService struct {
 	eventBus       eventbus.EventBus
 	logger         *slog.Logger
 	metrics        leaderboardmetrics.LeaderboardMetrics
-	tracer         tempofrolfbot.Tracer
-	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	tracer         trace.Tracer
+	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -30,7 +31,7 @@ func NewLeaderboardService(
 	eventBus eventbus.EventBus,
 	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) Service {
 	return &LeaderboardService{
 		LeaderboardDB: db,
@@ -39,32 +40,34 @@ func NewLeaderboardService(
 		metrics:       metrics,
 		tracer:        tracer,
 		// Assign the serviceWrapper method
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
 			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
-func serviceWrapper(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error), logger *slog.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer tempofrolfbot.Tracer) (result LeaderboardOperationResult, err error) {
+func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error), logger *slog.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer trace.Tracer) (result LeaderboardOperationResult, err error) {
 	if serviceFunc == nil {
 		return LeaderboardOperationResult{}, errors.New("service function is nil")
 	}
 
-	ctx, span := tracer.StartSpan(ctx, operationName, nil)
+	// Start a new tracing span while preserving existing context
+	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
+		attribute.String("operation", operationName),
+	))
 	defer span.End()
 
-	metrics.RecordOperationAttempt(operationName, "LeaderboardService")
+	metrics.RecordOperationAttempt(ctx, operationName, "LeaderboardService")
 
 	startTime := time.Now()
 	defer func() {
-		duration := time.Since(startTime).Seconds()
-		metrics.RecordOperationDuration(operationName, "LeaderboardService", duration)
+		duration := time.Duration(time.Since(startTime).Seconds())
+		metrics.RecordOperationDuration(ctx, operationName, "LeaderboardService", duration)
 	}()
 
-	correlationID := attr.ExtractCorrelationID(ctx)
 	logger.InfoContext(ctx, "Operation triggered",
-		attr.LogAttr(correlationID),
+		attr.ExtractCorrelationID(ctx),
 		attr.String("operation", operationName),
 	)
 
@@ -73,10 +76,10 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 		if r := recover(); r != nil {
 			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
 			logger.ErrorContext(ctx, errorMsg,
-				attr.LogAttr(correlationID),
+				attr.ExtractCorrelationID(ctx),
 				attr.Any("panic", r),
 			)
-			metrics.RecordOperationFailure(operationName, "LeaderboardService")
+			metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
 			span.RecordError(errors.New(errorMsg))
 
 			// Set the return values explicitly for panic cases
@@ -85,23 +88,23 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 		}
 	}()
 
-	result, err = serviceFunc()
+	result, err = serviceFunc(ctx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
 		logger.ErrorContext(ctx, "Error in "+operationName,
-			attr.LogAttr(correlationID),
+			attr.ExtractCorrelationID(ctx),
 			attr.Error(wrappedErr),
 		)
-		metrics.RecordOperationFailure(operationName, "LeaderboardService")
+		metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
 		span.RecordError(wrappedErr)
 		return result, wrappedErr
 	}
 
 	logger.InfoContext(ctx, operationName+" completed successfully",
-		attr.LogAttr(correlationID),
+		attr.ExtractCorrelationID(ctx),
 		attr.String("operation", operationName),
 	)
-	metrics.RecordOperationSuccess(operationName, "LeaderboardService")
+	metrics.RecordOperationSuccess(ctx, operationName, "LeaderboardService")
 
 	return result, nil
 }

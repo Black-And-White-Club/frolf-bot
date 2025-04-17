@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -113,9 +113,10 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
 			// No-Op implementations for logging, metrics, and tracing
-			logger := &lokifrolfbot.NoOpLogger{}
+			logger := loggerfrolfbot.NoOpLogger
+			tracerProvider := noop.NewTracerProvider()
+			tracer := tracerProvider.Tracer("test")
 			metrics := &leaderboardmetrics.NoOpMetrics{}
-			tracer := tempofrolfbot.NewNoOpTracer()
 
 			// Initialize service with No-Op implementations
 			s := &LeaderboardService{
@@ -123,8 +124,8 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 

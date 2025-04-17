@@ -1,6 +1,7 @@
 package leaderboardservice
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -73,24 +74,21 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *lead
 }
 
 // FindTagByUserID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
-func (s *LeaderboardService) FindTagByUserID(leaderboard *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID) (int, bool) {
+func (s *LeaderboardService) FindTagByUserID(ctx context.Context, leaderboard *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID) (int, bool) {
 	operationName := "FindTagByUserID"
 	s.logger.InfoContext(ctx, "Starting "+operationName,
 		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)
 
-	// Record the operation attempt
-	s.metrics.RecordOperationAttempt(operationName, "leaderboard")
+	s.metrics.RecordOperationAttempt(ctx, operationName, "leaderboard")
 
-	// Measure the duration of the operation
 	startTime := time.Now()
 	defer func() {
 		duration := time.Since(startTime).Seconds()
-		s.metrics.RecordOperationDuration(operationName, "leaderboard", duration)
+		s.metrics.RecordOperationDuration(ctx, operationName, "leaderboard", time.Duration(duration))
 	}()
 
-	// Iterate over the leaderboard data to find the user's tag
 	for _, entry := range leaderboard.LeaderboardData {
 		if entry.UserID == userID {
 			s.logger.InfoContext(ctx, "Tag found",
@@ -105,9 +103,7 @@ func (s *LeaderboardService) FindTagByUserID(leaderboard *leaderboarddb.Leaderbo
 		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)
-
-	// Record the operation failure in metrics
-	s.metrics.RecordOperationFailure(operationName, "leaderboard")
+	s.metrics.RecordOperationFailure(ctx, operationName, "leaderboard")
 
 	return 0, false
 }

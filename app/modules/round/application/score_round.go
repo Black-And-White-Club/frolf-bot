@@ -13,7 +13,7 @@ import (
 
 // ValidateScoreUpdateRequest validates the score update request.
 func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ValidateScoreUpdateRequest", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ValidateScoreUpdateRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		var errs []string
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) { // Check if RoundID is zero
 			errs = append(errs, "round ID cannot be zero")
@@ -54,7 +54,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 
 // UpdateParticipantScore updates the participant's score in the database.
 func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "UpdateParticipantScore", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "UpdateParticipantScore", payload.ScoreUpdateRequestPayload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.Participant, *payload.ScoreUpdateRequestPayload.Score)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update participant score",
@@ -103,7 +103,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
 func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		allScoresSubmitted, err := s.checkIfAllScoresSubmitted(ctx, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to check if all scores have been submitted",

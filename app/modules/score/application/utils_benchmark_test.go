@@ -15,9 +15,11 @@ package scoreservice
 
 // // setupBenchmarkService creates a test score service with no-op dependencies
 // func setupBenchmarkService() *ScoreService {
-// 	logger := &lokifrolfbot.NoOpLogger{}
+// 	logger := loggerfrolfbot.NoOpLogger
+// tracerProvider := noop.NewTracerProvider()
+// tracer := tracerProvider.Tracer("test")
 // 	metrics := &scoremetrics.NoOpMetrics{}
-// 	tracer := tempofrolfbot.NewNoOpTracer()
+//
 
 // 	return &ScoreService{
 // 		logger:  logger,

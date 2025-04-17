@@ -7,15 +7,15 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -36,9 +36,10 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
 	// No-Op implementations for logging, metrics, and tracing
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name                    string
@@ -181,8 +182,8 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				metrics:        metrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
@@ -224,9 +225,10 @@ func TestRoundService_StoreRound(t *testing.T) {
 	mockDB := rounddb.NewMockRoundDB(ctrl)
 
 	// No-Op implementations for logging, metrics, and tracing
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string
@@ -358,8 +360,8 @@ func TestRoundService_StoreRound(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 

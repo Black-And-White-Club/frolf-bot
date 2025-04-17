@@ -15,7 +15,7 @@ import (
 // UpdateLeaderboard updates the leaderboard based on the provided round ID and sorted participant tags.
 func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID sharedtypes.RoundID, sortedParticipantTags []string) (LeaderboardOperationResult, error) {
 	// Record attempt once
-	s.metrics.RecordLeaderboardUpdateAttempt(roundID, "LeaderboardService")
+	s.metrics.RecordLeaderboardUpdateAttempt(ctx, roundID, "LeaderboardService")
 	correlationID := attr.ExtractCorrelationID(ctx)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
@@ -29,7 +29,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 		}
 
 		s.logger.ErrorContext(ctx, reason, correlationID, roundIDAttr, attr.Error(err))
-		s.metrics.RecordLeaderboardUpdateFailure(roundID, "LeaderboardService")
+		s.metrics.RecordLeaderboardUpdateFailure(ctx, roundID, "LeaderboardService")
 
 		return LeaderboardOperationResult{
 			Failure: &leaderboardevents.LeaderboardUpdateFailedPayload{
@@ -45,11 +45,11 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 		return handleError("invalid input: empty sorted participant tags", nil)
 	}
 
-	return s.serviceWrapper(ctx, "UpdateLeaderboard", func() (LeaderboardOperationResult, error) {
+	return s.serviceWrapper(ctx, "UpdateLeaderboard", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// 1. Get the current active leaderboard
 		dbStartTime := time.Now()
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
 		if err != nil {
 			return handleError("database connection error", err)
@@ -72,7 +72,7 @@ func (s *LeaderboardService) UpdateLeaderboard(ctx context.Context, roundID shar
 		// 3. Update the leaderboard in the database
 		dbStartTime = time.Now()
 		err = s.LeaderboardDB.UpdateLeaderboard(ctx, updatedLeaderboard.LeaderboardData, roundID)
-		s.metrics.RecordOperationDuration("UpdateLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "UpdateLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
 		if err != nil {
 			return handleError("failed to update leaderboard", err)

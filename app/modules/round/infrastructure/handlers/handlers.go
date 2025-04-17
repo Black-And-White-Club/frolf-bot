@@ -3,22 +3,24 @@ package roundhandlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RoundHandlers handles round-related events.
 type RoundHandlers struct {
 	roundService   roundservice.Service
-	logger         lokifrolfbot.Logger
-	tracer         tempofrolfbot.Tracer
+	logger         *slog.Logger
+	tracer         trace.Tracer
 	metrics        roundmetrics.RoundMetrics
 	helpers        utils.Helpers
 	handlerWrapper func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
@@ -27,8 +29,8 @@ type RoundHandlers struct {
 // NewRoundHandlers creates a new instance of RoundHandlers.
 func NewRoundHandlers(
 	roundService roundservice.Service,
-	logger lokifrolfbot.Logger,
-	tracer tempofrolfbot.Tracer,
+	logger *slog.Logger,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 	metrics roundmetrics.RoundMetrics,
 ) Handlers {
@@ -50,23 +52,26 @@ func handlerWrapper(
 	handlerName string,
 	unmarshalTo interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	metrics roundmetrics.RoundMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 ) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {
 		// Start a span for tracing
-		ctx, span := tracer.StartSpan(msg.Context(), handlerName, msg)
+		ctx, span := tracer.Start(msg.Context(), handlerName, trace.WithAttributes(
+			attribute.String("message.id", msg.UUID),
+			attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
+		))
 		defer span.End()
 
 		// Record metrics for handler attempt
-		metrics.RecordHandlerAttempt(handlerName)
+		metrics.RecordHandlerAttempt(ctx, handlerName)
 
 		startTime := time.Now()
 		defer func() {
-			duration := time.Since(startTime).Seconds()
-			metrics.RecordHandlerDuration(handlerName, duration)
+			duration := time.Duration(time.Since(startTime).Seconds())
+			metrics.RecordHandlerDuration(ctx, handlerName, duration)
 		}()
 
 		logger.InfoContext(ctx, handlerName+" triggered",
@@ -83,7 +88,7 @@ func handlerWrapper(
 				logger.ErrorContext(ctx, "Failed to unmarshal payload",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err))
-				metrics.RecordHandlerFailure(handlerName)
+				metrics.RecordHandlerFailure(ctx, handlerName)
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
 		}
@@ -95,12 +100,12 @@ func handlerWrapper(
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(err),
 			)
-			metrics.RecordHandlerFailure(handlerName)
+			metrics.RecordHandlerFailure(ctx, handlerName)
 			return nil, err
 		}
 
 		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
-		metrics.RecordHandlerSuccess(handlerName)
+		metrics.RecordHandlerSuccess(ctx, handlerName)
 		return result, nil
 	}
 }

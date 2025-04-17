@@ -7,13 +7,13 @@ import (
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -25,9 +25,10 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 
 	// Mock dependencies
 	mockDB := rounddb.NewMockRoundDB(ctrl)
-	mockLogger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockTracer := tempofrolfbot.NewNoOpTracer()
 	mockRoundValidator := &roundutil.MockRoundValidator{}
 	mockEventBus := &eventbus.MockEventBus{}
 
@@ -118,13 +119,13 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 
 			s := &RoundService{
 				RoundDB:        mockDB,
-				logger:         mockLogger,
+				logger:         logger,
 				metrics:        mockMetrics,
-				tracer:         mockTracer,
+				tracer:         tracer,
 				roundValidator: mockRoundValidator,
 				EventBus:       mockEventBus,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
@@ -164,9 +165,10 @@ func TestRoundService_DeleteRound(t *testing.T) {
 
 	// Mock dependencies
 	mockDB := rounddb.NewMockRoundDB(ctrl)
-	mockLogger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockTracer := tempofrolfbot.NewNoOpTracer()
 	mockRoundValidator := &roundutil.MockRoundValidator{}
 	mockEventBus := eventbus.NewMockEventBus(ctrl)
 
@@ -285,13 +287,13 @@ func TestRoundService_DeleteRound(t *testing.T) {
 
 			s := &RoundService{
 				RoundDB:        mockDB,
-				logger:         mockLogger,
+				logger:         logger,
 				metrics:        mockMetrics,
-				tracer:         mockTracer,
+				tracer:         tracer,
 				roundValidator: mockRoundValidator,
 				EventBus:       mockEventBus,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 

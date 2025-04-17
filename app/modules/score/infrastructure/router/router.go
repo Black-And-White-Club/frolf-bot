@@ -73,7 +73,7 @@ func (r *ScoreRouter) Configure(scoreService scoreservice.Service, eventbus even
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
-		tracingfrolfbot.TraceHandler(r.tracer), // Change to use the shared tracing middleware
+		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
 	if err := r.RegisterHandlers(context.Background(), scoreHandlers); err != nil {

@@ -13,23 +13,23 @@ import (
 // GetLeaderboard returns the active leaderboard.
 func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOperationResult, error) {
 	// Record leaderboard retrieval attempt
-	s.metrics.RecordLeaderboardGetAttempt("LeaderboardService")
+	s.metrics.RecordLeaderboardGetAttempt(ctx, "LeaderboardService")
 
 	s.logger.InfoContext(ctx, "Leaderboard retrieval triggered",
 		attr.ExtractCorrelationID(ctx))
 
-	return s.serviceWrapper(ctx, "GetLeaderboard", func() (LeaderboardOperationResult, error) {
+	return s.serviceWrapper(ctx, "GetLeaderboard", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// 1. Get the active leaderboard from the database.
 		dbStartTime := time.Now()
 		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
-		s.metrics.RecordLeaderboardGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
+		s.metrics.RecordLeaderboardGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
-			s.metrics.RecordLeaderboardGetFailure("LeaderboardService")
+			s.metrics.RecordLeaderboardGetFailure(ctx, "LeaderboardService")
 
 			return LeaderboardOperationResult{
 				Failure: &leaderboardevents.GetLeaderboardFailedPayload{
@@ -53,7 +53,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 		s.logger.InfoContext(ctx, "Successfully retrieved leaderboard",
 			attr.ExtractCorrelationID(ctx))
 
-		s.metrics.RecordLeaderboardGetSuccess("LeaderboardService")
+		s.metrics.RecordLeaderboardGetSuccess(ctx, "LeaderboardService")
 
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.GetLeaderboardResponsePayload{
@@ -66,24 +66,24 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 // GetTagByUserID returns the tag number for a given user ID.
 func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (LeaderboardOperationResult, error) {
 	// Record tag retrieval attempt
-	s.metrics.RecordTagGetAttempt("LeaderboardService")
+	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
 	s.logger.InfoContext(ctx, "Tag retrieval triggered for user",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("user_id", string(userID)))
 
-	return s.serviceWrapper(ctx, "GetTagByUserID", func() (LeaderboardOperationResult, error) {
+	return s.serviceWrapper(ctx, "GetTagByUserID", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// Fetch tag number from DB
 		dbStartTime := time.Now()
 		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, userID)
-		s.metrics.RecordOperationDuration("GetTagByUserID", "LeaderboardService", time.Since(dbStartTime).Seconds())
-		s.metrics.RecordTagGetDuration("LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
+		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get tag by UserID",
 				attr.ExtractCorrelationID(ctx),
 				attr.Error(err))
 
-			s.metrics.RecordTagGetFailure("LeaderboardService")
+			s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
 
 			return LeaderboardOperationResult{
 				Failure: &leaderboardevents.GetTagNumberFailedPayload{
@@ -105,7 +105,7 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedty
 			attr.String("tag_number", fmt.Sprintf("%v", tagPtr)))
 
 		// Return response with correct tag number handling
-		s.metrics.RecordTagGetSuccess("LeaderboardService")
+		s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
 
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.GetTagNumberResponsePayload{

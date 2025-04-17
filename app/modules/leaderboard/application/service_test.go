@@ -2,14 +2,15 @@ package leaderboardservice
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -30,12 +31,13 @@ func TestNewLeaderboardService(t *testing.T) {
 				// Create mock dependencies
 				mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
 				mockEventBus := eventbus.NewMockEventBus(ctrl)
-				mockLogger := mocks.NewMockLogger(ctrl)
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
 				// Call the function being tested
-				service := NewLeaderboardService(mockDB, mockEventBus, mockLogger, mockMetrics, mockTracer)
+				service := NewLeaderboardService(mockDB, mockEventBus, logger, mockMetrics, tracer)
 
 				// Ensure service is correctly created
 				if service == nil {
@@ -49,8 +51,8 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check that all dependencies were correctly assigned
@@ -60,13 +62,13 @@ func TestNewLeaderboardService(t *testing.T) {
 				if leaderboardServiceImpl.eventBus != mockEventBus {
 					t.Errorf("eventBus not correctly assigned")
 				}
-				if leaderboardServiceImpl.logger != mockLogger {
+				if leaderboardServiceImpl.logger != logger {
 					t.Errorf("logger not correctly assigned")
 				}
 				if leaderboardServiceImpl.metrics != mockMetrics {
 					t.Errorf("metrics not correctly assigned")
 				}
-				if leaderboardServiceImpl.tracer != mockTracer {
+				if leaderboardServiceImpl.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
 
@@ -97,8 +99,8 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Override serviceWrapper to avoid nil tracing/logger issues
-				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-					return serviceFunc() // Just execute serviceFunc directly
+				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check nil fields
@@ -124,7 +126,7 @@ func TestNewLeaderboardService(t *testing.T) {
 				}
 
 				// Test serviceWrapper runs correctly with nil dependencies
-				_, err := leaderboardServiceImpl.serviceWrapper(context.Background(), "TestOp", func() (LeaderboardOperationResult, error) {
+				_, err := leaderboardServiceImpl.serviceWrapper(context.Background(), "TestOp", func(ctx context.Context) (LeaderboardOperationResult, error) {
 					return LeaderboardOperationResult{Success: "test"}, nil
 				})
 				if err != nil {
@@ -141,195 +143,98 @@ func TestNewLeaderboardService(t *testing.T) {
 }
 
 func Test_serviceWrapper(t *testing.T) {
-	type args struct {
-		ctx           context.Context
-		operationName string
-		serviceFunc   func() (LeaderboardOperationResult, error)
-		logger        lokifrolfbot.Logger
-		metrics       leaderboardmetrics.LeaderboardMetrics
-		tracer        tempofrolfbot.Tracer
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testHandler := loggerfrolfbot.NewTestHandler()
+	logger := slog.New(testHandler)
+	mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
+	tracer := noop.NewTracerProvider().Tracer("test")
+
 	tests := []struct {
-		name    string
-		args    func(ctrl *gomock.Controller) args
-		want    LeaderboardOperationResult
-		wantErr bool
-		setup   func(a *args) // Setup expectations per test
+		name        string
+		ctx         context.Context
+		operation   string
+		serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)
+		wantResult  LeaderboardOperationResult
+		wantErr     error
 	}{
 		{
-			name: "Successful operation",
-			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
-				mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					serviceFunc: func() (LeaderboardOperationResult, error) {
-						return LeaderboardOperationResult{Success: "test"}, nil
-					},
-					logger:  mockLogger,
-					metrics: mockMetrics,
-					tracer:  mockTracer,
-				}
+			name:      "successful operation",
+			ctx:       context.Background(),
+			operation: "test_operation",
+			serviceFunc: func(ctx context.Context) (LeaderboardOperationResult, error) {
+				return LeaderboardOperationResult{
+					Success: "test_success",
+				}, nil
 			},
-			want:    LeaderboardOperationResult{Success: "test"},
-			wantErr: false,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
-				mockMetrics := a.metrics.(*mocks.MockLeaderboardMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.Any(),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", "LeaderboardService")
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", "LeaderboardService", gomock.Any())
-				mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any())
-				mockMetrics.EXPECT().RecordOperationSuccess("TestOperation", "LeaderboardService")
+			wantResult: LeaderboardOperationResult{
+				Success: "test_success",
 			},
+			wantErr: nil,
 		},
 		{
-			name: "Handles panic in service function",
-			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
-				mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					serviceFunc: func() (LeaderboardOperationResult, error) {
-						panic("test panic") // Simulate a panic
-					},
-					logger:  mockLogger,
-					metrics: mockMetrics,
-					tracer:  mockTracer,
-				}
+			name:      "failed operation",
+			ctx:       context.Background(),
+			operation: "test_operation",
+			serviceFunc: func(ctx context.Context) (LeaderboardOperationResult, error) {
+				return LeaderboardOperationResult{}, errors.New("test_error")
 			},
-			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
-				mockMetrics := a.metrics.(*mocks.MockLeaderboardMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Expect initial method calls before panic occurs
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				// Expect `RecordOperationAttempt` to be called BEFORE the panic
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", "LeaderboardService")
-
-				// Expect `logger.Info` for operation start (happens before panic)
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				)
-
-				// Expect `RecordOperationDuration` since the function starts measuring time before panic
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", "LeaderboardService", gomock.Any())
-
-				// Expect panic error logging
-				mockLogger.EXPECT().Error(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				)
-
-				// Expect metrics to record failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", "LeaderboardService")
-			},
+			wantResult: LeaderboardOperationResult{},
+			wantErr:    errors.New("test_operation operation failed: test_error"),
 		},
 		{
-			name: "Handles service function returning an error",
-			args: func(ctrl *gomock.Controller) args {
-				mockLogger := mocks.NewMockLogger(ctrl)
-				mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
-				mockTracer := mocks.NewMockTracer(ctrl)
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					serviceFunc: func() (LeaderboardOperationResult, error) {
-						return LeaderboardOperationResult{}, fmt.Errorf("service error")
-					},
-					logger:  mockLogger,
-					metrics: mockMetrics,
-					tracer:  mockTracer,
-				}
+			name:      "panic recovery",
+			ctx:       context.Background(),
+			operation: "test_operation",
+			serviceFunc: func(ctx context.Context) (LeaderboardOperationResult, error) {
+				panic("test_panic")
 			},
-			wantErr: true,
-			setup: func(a *args) {
-				mockTracer := a.tracer.(*mocks.MockTracer)
-				mockMetrics := a.metrics.(*mocks.MockLeaderboardMetrics)
-				mockLogger := a.logger.(*mocks.MockLogger)
-
-				// Mock tracer.StartSpan
-				mockTracer.EXPECT().StartSpan(
-					gomock.AssignableToTypeOf(context.Background()),
-					"TestOperation",
-					gomock.Any(),
-				).Return(context.Background(), noop.Span{})
-
-				mockMetrics.EXPECT().RecordOperationAttempt("TestOperation", "LeaderboardService")
-
-				mockLogger.EXPECT().Info(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				)
-				mockMetrics.EXPECT().RecordOperationDuration("TestOperation", "LeaderboardService", gomock.Any())
-
-				// Expect error logging
-				mockLogger.EXPECT().Error(
-					"Error in TestOperation",
-					gomock.Any(),
-					gomock.Any(),
-				)
-
-				// Expect metrics to record operation failure
-				mockMetrics.EXPECT().RecordOperationFailure("TestOperation", "LeaderboardService")
-			},
+			wantResult: LeaderboardOperationResult{},
+			wantErr:    errors.New("Panic in test_operation: test_panic"),
+		},
+		{
+			name:        "nil service function",
+			ctx:         context.Background(),
+			operation:   "test_operation",
+			serviceFunc: nil,
+			wantResult:  LeaderboardOperationResult{},
+			wantErr:     errors.New("service function is nil"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			// Initialize args using fresh mock controller
-			testArgs := tt.args(ctrl)
-
-			// Set up expectations
-			if tt.setup != nil {
-				tt.setup(&testArgs)
+			// Set up expected calls for the mockMetrics
+			if tt.name == "successful operation" {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), tt.operation, "LeaderboardService", gomock.Any()).Times(1)
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
+			} else if tt.name == "failed operation" {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), tt.operation, "LeaderboardService", gomock.Any()).Times(1)
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
+			} else if tt.name == "panic recovery" {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), tt.operation, "LeaderboardService", gomock.Any()).Times(1)
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
 			}
 
-			// Run serviceWrapper
-			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
-
-			if (err != nil) != tt.wantErr {
+			gotResult, err := serviceWrapper(tt.ctx, tt.operation, tt.serviceFunc, logger, mockMetrics, tracer)
+			if (err != nil) != (tt.wantErr != nil) {
 				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
-			if got.Success != tt.want.Success {
-				t.Errorf("serviceWrapper() Success = %v, want %v", got.Success, tt.want.Success)
+			if err != nil && tt.wantErr != nil {
+				if !strings.Contains(err.Error(), tt.wantErr.Error()) {
+					t.Errorf("serviceWrapper() error message = %q, want to contain %q", err.Error(), tt.wantErr.Error())
+				}
 			}
-			if got.Failure != tt.want.Failure {
-				t.Errorf("serviceWrapper() Failure = %v, want %v", got.Failure, tt.want.Failure)
+			if !reflect.DeepEqual(gotResult.Success, tt.wantResult.Success) {
+				t.Errorf("serviceWrapper() Success = %v, want %v", gotResult.Success, tt.wantResult.Success)
+			}
+			if !reflect.DeepEqual(gotResult.Failure, tt.wantResult.Failure) {
+				t.Errorf("serviceWrapper() Failure = %v, want %v", gotResult.Failure, tt.wantResult.Failure)
 			}
 		})
 	}

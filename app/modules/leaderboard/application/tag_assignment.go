@@ -22,11 +22,11 @@ func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload
 		attr.String("tag_number", fmt.Sprintf("%v", *payload.TagNumber)),
 	)
 
-	return s.serviceWrapper(ctx, "TagAssignmentRequested", func() (LeaderboardOperationResult, error) {
+	return s.serviceWrapper(ctx, "TagAssignmentRequested", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// 1. Get the current active leaderboard for validation
 		dbStartTime := time.Now()
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-		s.metrics.RecordOperationDuration("GetActiveLeaderboard", "LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		if err != nil {
 			return LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagAssignmentFailedPayload{
@@ -75,7 +75,7 @@ func (s *LeaderboardService) TagAssignmentRequested(ctx context.Context, payload
 			leaderboarddb.ServiceUpdateSourceCreateUser, // Default source for new users
 			updateID,
 		)
-		s.metrics.RecordOperationDuration("AssignTag", "LeaderboardService", time.Since(dbStartTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "AssignTag", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
 		if err != nil {
 			return LeaderboardOperationResult{

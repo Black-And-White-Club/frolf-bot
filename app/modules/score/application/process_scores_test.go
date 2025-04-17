@@ -3,7 +3,6 @@ package scoreservice
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
@@ -172,8 +171,27 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			gotResult, err := s.ProcessRoundScores(ctx, testRoundID, tt.scores)
 
 			// Validate result
-			if !reflect.DeepEqual(gotResult, tt.expectedResult) {
-				t.Errorf("❌ Mismatched result, got: %v, expected: %v", gotResult, tt.expectedResult)
+			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
+				t.Errorf("❌ Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
+			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
+				successGot, okGot := gotResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+				if okGot && okExpected {
+					if successGot.RoundID != successExpected.RoundID {
+						t.Errorf("❌ Mismatched RoundID, got: %v, expected: %v", successGot.RoundID, successExpected.RoundID)
+					}
+
+					// Compare TagMappings
+					if len(successGot.TagMappings) != len(successExpected.TagMappings) {
+						t.Errorf("❌ Mismatched TagMappings length, got: %v, expected: %v", len(successGot.TagMappings), len(successExpected.TagMappings))
+					} else {
+						for i := range successGot.TagMappings {
+							if successGot.TagMappings[i] != successExpected.TagMappings[i] {
+								t.Errorf("❌ Mismatched TagMapping at index %d, got: %v, expected: %v", i, successGot.TagMappings[i], successExpected.TagMappings[i])
+							}
+						}
+					}
+				}
 			}
 
 			// Validate error

@@ -13,7 +13,7 @@ import (
 
 // ValidateRoundDeleteRequest validates the round delete request.
 func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ValidateRoundDeleteRequest", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ValidateRoundDeleteRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) { // Check if RoundID is zero
 			return RoundOperationResult{
 				Failure: &roundevents.RoundDeleteErrorPayload{

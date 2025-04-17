@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func BenchmarkGenerateUpdatedLeaderboardSmall(b *testing.B) {
@@ -31,12 +31,16 @@ func BenchmarkGenerateUpdatedLeaderboardSmall(b *testing.B) {
 		sortedParticipantTags[i] = fmt.Sprintf("user%d:%d", i, i)
 	}
 
+	// Initialize tracer properly
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+
 	service := &LeaderboardService{
-		logger:  &lokifrolfbot.NoOpLogger{},
+		logger:  loggerfrolfbot.NoOpLogger,
+		tracer:  tracer,
 		metrics: &leaderboardmetrics.NoOpMetrics{},
-		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-			return serviceFunc()
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc(ctx)
 		},
 	}
 
@@ -64,12 +68,16 @@ func BenchmarkGenerateUpdatedLeaderboardMedium(b *testing.B) {
 	for i := range sortedParticipantTags {
 		sortedParticipantTags[i] = fmt.Sprintf("user%d:%d", i, i)
 	}
+	// Initialize tracer properly
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+
 	service := &LeaderboardService{
-		logger:  &lokifrolfbot.NoOpLogger{},
+		logger:  loggerfrolfbot.NoOpLogger,
+		tracer:  tracer,
 		metrics: &leaderboardmetrics.NoOpMetrics{},
-		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-			return serviceFunc()
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc(ctx)
 		},
 	}
 
@@ -98,12 +106,16 @@ func BenchmarkGenerateUpdatedLeaderboardLarge(b *testing.B) {
 		sortedParticipantTags[i] = fmt.Sprintf("user%d:%d", i, i)
 	}
 
+	// Initialize tracer properly
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+
 	service := &LeaderboardService{
-		logger:  &lokifrolfbot.NoOpLogger{},
+		logger:  loggerfrolfbot.NoOpLogger,
+		tracer:  tracer,
 		metrics: &leaderboardmetrics.NoOpMetrics{},
-		tracer:  tempofrolfbot.NewNoOpTracer(),
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-			return serviceFunc()
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+			return serviceFunc(ctx)
 		},
 	}
 

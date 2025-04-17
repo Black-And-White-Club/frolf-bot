@@ -8,6 +8,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 )
 
 // GetRoundsAndParticipantsToUpdate returns the rounds and participants that need to be updated.
@@ -48,7 +49,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdate(ctx context.Context, cha
 
 // UpdateScheduledRoundsWithNewTags updates the scheduled rounds with the new participant tags.
 func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
 		// Get the rounds and participants that need to be updated
 		updates, err := s.getRoundsAndParticipantsToUpdate(ctx, payload.ChangedTags)
 		if err != nil {

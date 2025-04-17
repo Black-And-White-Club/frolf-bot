@@ -14,7 +14,7 @@ import (
 
 // ValidateRoundUpdateRequest validates the round update request.
 func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ValidateRoundUpdateRequest", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ValidateRoundUpdateRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		var errs []string
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 			errs = append(errs, "round ID cannot be zero")
@@ -52,7 +52,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 
 // UpdateRoundEntity updates the round entity with the new values.
 func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "UpdateRoundEntity", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "UpdateRoundEntity", payload.RoundUpdateRequestPayload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Updating round entity",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 		)
@@ -126,7 +126,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
 func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "UpdateScheduledRoundEvents", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "UpdateScheduledRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing scheduled round update",
 			attr.RoundID("round_id", payload.RoundID),
 		)

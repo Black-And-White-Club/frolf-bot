@@ -12,14 +12,14 @@ import (
 
 // FinalizeRound handles the round finalization process by updating the round state.
 func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "FinalizeRound", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "FinalizeRound", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Update the round state to finalized in the database
 		rounddbState := roundtypes.RoundStateFinalized
 		s.logger.InfoContext(ctx, "Attempting to update round state to finalized",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
 		if err := s.RoundDB.UpdateRoundState(ctx, payload.RoundID, rounddbState); err != nil {
-			s.metrics.RecordDBOperationError("update_round_state")
+			s.metrics.RecordDBOperationError(ctx, "update_round_state")
 			failurePayload := roundevents.RoundFinalizationErrorPayload{
 				RoundID: payload.RoundID,
 				Error:   fmt.Sprintf("failed to update round state to finalized: %v", err),
@@ -34,7 +34,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 		// Fetch the finalized round data
 		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if err != nil {
-			s.metrics.RecordDBOperationError("get_round")
+			s.metrics.RecordDBOperationError(ctx, "get_round")
 			failurePayload := roundevents.RoundFinalizationErrorPayload{
 				RoundID: payload.RoundID,
 				Error:   fmt.Sprintf("failed to fetch round data: %v", err),
@@ -64,7 +64,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 
 // NotifyScoreModule prepares the data needed by the Score Module after a round is finalized.
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "NotifyScoreModule", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Use the round data directly from the payload
 		round := payload.RoundData // Access the round data here
 

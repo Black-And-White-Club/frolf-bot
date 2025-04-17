@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,9 +26,10 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
 	// No-Op implementations for logging, metrics, and tracing
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	metrics := &leaderboardmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string
@@ -149,8 +150,8 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 
@@ -217,9 +218,10 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("user1")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
 	metrics := &leaderboardmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string
@@ -294,8 +296,8 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 				logger:        logger,
 				metrics:       metrics,
 				tracer:        tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func() (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-					return serviceFunc()
+				serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+					return serviceFunc(ctx)
 				},
 			}
 

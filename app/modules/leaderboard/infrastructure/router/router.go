@@ -3,13 +3,13 @@ package leaderboardrouter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
@@ -18,29 +18,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LeaderboardRouter handles routing for leaderboard module events.
 type LeaderboardRouter struct {
-	logger           lokifrolfbot.Logger
+	logger           *slog.Logger
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           tempofrolfbot.Tracer
+	tracer           trace.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewLeaderboardRouter creates a new LeaderboardRouter.
 func NewLeaderboardRouter(
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) *LeaderboardRouter {
 	return &LeaderboardRouter{
 		logger:           logger,
@@ -72,7 +73,7 @@ func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Serv
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
-		r.tracer.TraceHandler,
+		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
 	if err := r.RegisterHandlers(context.Background(), leaderboardHandlers); err != nil {

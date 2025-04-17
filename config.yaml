@@ -5,9 +5,8 @@ nats:
   url: "nats://my-nats.nats:4222"
 
 observability:
-  loki_url: "http://loki.observability:3100/loki/api/v1/push"
-  metrics_address: "http://prometheus-kube-prometheus-prometheus.observability:9090"
-  tempo_endpoint: "http://my-tempo.observability:3100"
+  metrics_address: "alloy.observability.svc.cluster.local:4317"
+  tempo_endpoint: "alloy.observability.svc.cluster.local:4317"
   tempo_insecure: true
   tempo_sample_rate: 0.1
   environment: "local"

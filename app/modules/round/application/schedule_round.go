@@ -14,7 +14,7 @@ import (
 
 // ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
 func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ScheduleRoundEvents", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ScheduleRoundEvents", payload.Round.ID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Scheduling round events",
 			attr.RoundID("round_id", payload.Round.ID),
 		)

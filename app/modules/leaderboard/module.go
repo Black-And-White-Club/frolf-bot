@@ -37,9 +37,9 @@ func NewLeaderboardModule(
 	helpers utils.Helpers,
 ) (*Module, error) {
 	// Extract observability components
-	logger := obs.GetLogger()
-	metrics := obs.GetMetrics().LeaderboardMetrics() // Ensure to get the correct metrics for leaderboard
-	tracer := obs.GetTracer()
+	logger := obs.Provider.Logger
+	metrics := obs.Registry.LeaderboardMetrics
+	tracer := obs.Registry.Tracer
 
 	logger.InfoContext(ctx, "leaderboard.NewLeaderboardModule called")
 
@@ -68,7 +68,7 @@ func NewLeaderboardModule(
 
 // Run starts the leaderboard module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.GetLogger()
+	logger := m.observability.Provider.Logger
 	logger.InfoContext(ctx, "Starting leaderboard module")
 
 	// Create a context that can be canceled
@@ -88,14 +88,14 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Close stops the leaderboard module and cleans up resources.
 func (m *Module) Close() error {
-	logger := m.observability.GetLogger()
-	logger.InfoContext(ctx, "Stopping leaderboard module")
+	logger := m.observability.Provider.Logger
+	logger.Info("Stopping leaderboard module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.InfoContext(ctx, "Leaderboard module stopped")
+	logger.Info("Leaderboard module stopped")
 	return nil
 }

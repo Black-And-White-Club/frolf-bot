@@ -9,15 +9,15 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -43,9 +43,9 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string
@@ -341,9 +341,9 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string
@@ -655,9 +655,9 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
-	logger := &lokifrolfbot.NoOpLogger{}
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
-	tracer := tempofrolfbot.NewNoOpTracer()
 
 	tests := []struct {
 		name           string

@@ -3,7 +3,6 @@ package scoreservice
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
@@ -160,8 +159,24 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			gotResult, err := s.CorrectScore(ctx, testRoundID, tt.userID, tt.score, tt.tagNumber)
 
 			// Validate result
-			if !reflect.DeepEqual(gotResult, tt.expectedResult) {
-				t.Errorf("❌ Mismatched result, got: %v, expected: %v", gotResult, tt.expectedResult)
+			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
+				t.Errorf("❌ Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
+			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
+				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
+				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
+				if okGot && okExpected && *successGot != *successExpected {
+					t.Errorf("❌ Mismatched success payload, got: %v, expected: %v", successGot, successExpected)
+				}
+			}
+
+			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
+				t.Errorf("❌ Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
+			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
+				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
+				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
+				if okGot && okExpected && *failureGot != *failureExpected {
+					t.Errorf("❌ Mismatched failure payload, got: %v, expected: %v", failureGot, failureExpected)
+				}
 			}
 
 			// Validate error

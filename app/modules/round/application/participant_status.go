@@ -13,7 +13,7 @@ import (
 
 // CheckParticipantStatus checks if a join request is a toggle or requires validation.
 func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "CheckParticipantStatus", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "CheckParticipantStatus", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Checking participant status",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
@@ -81,7 +81,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 
 // ValidateParticipantJoinRequest validates the basic details and determines if the join is late.
 func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "ValidateParticipantJoinRequest", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "ValidateParticipantJoinRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Validating participant join request",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
@@ -172,7 +172,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 
 // ParticipantRemoval handles removing a participant from a round if they select the same RSVP response
 func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "ParticipantRemoval", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "ParticipantRemoval", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Attempting to remove participant",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.String("user_id", string(payload.UserID)),
@@ -257,7 +257,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 // UpdateParticipantStatus handles participant status updates after validation
 // Handles all response types (Accept, Decline, Tentative) with appropriate branching
 func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "UpdateParticipantStatus", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "UpdateParticipantStatus", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Safe handling of JoinedLate - provide a default value if nil
 		isLateJoin := false
 		if payload.JoinedLate != nil {

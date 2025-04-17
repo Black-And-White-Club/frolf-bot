@@ -9,7 +9,7 @@ import (
 
 // CheckTagAvailability checks the availability of a tag in the database.
 func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
-	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func() (LeaderboardOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		s.logger.InfoContext(ctx, "Checking tag availability",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("user_id", string(payload.UserID)),

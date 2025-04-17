@@ -80,7 +80,7 @@ func (s *ScoreService) ProcessScoresForStorage(
 		attr.Int("tagged_count", taggedCount),
 		attr.Int("untagged_count", untaggedCount),
 		attr.Float64("sort_duration_seconds", time.Since(sortStartTime).Seconds()),
-		attr.Float64("total_duration_seconds", time.Since(startTime).Seconds()),
+		attr.Float64("total_duration_seconds", (time.Since(startTime).Seconds())),
 	)
 
 	return scores, nil

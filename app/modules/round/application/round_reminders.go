@@ -12,7 +12,7 @@ import (
 
 // ProcessRoundReminder handles the reminder event when it's triggered from the delayed queue
 func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ProcessRoundReminder", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ProcessRoundReminder", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round reminder",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.String("reminder_type", payload.ReminderType),
@@ -27,7 +27,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			s.metrics.RecordDBOperationError("GetRound")
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
 				Failure: roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,

@@ -3,13 +3,13 @@ package roundrouter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
@@ -18,29 +18,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RoundRouter handles routing for round module events.
 type RoundRouter struct {
-	logger           lokifrolfbot.Logger
+	logger           *slog.Logger
 	Router           *message.Router
 	subscriber       eventbus.EventBus
 	publisher        eventbus.EventBus
 	config           *config.Config
 	helper           utils.Helpers
-	tracer           tempofrolfbot.Tracer
+	tracer           trace.Tracer
 	middlewareHelper utils.MiddlewareHelpers
 }
 
 // NewRoundRouter creates a new RoundRouter.
 func NewRoundRouter(
-	logger lokifrolfbot.Logger,
+	logger *slog.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
 	config *config.Config,
 	helper utils.Helpers,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 ) *RoundRouter {
 	return &RoundRouter{
 		logger:           logger,
@@ -72,7 +73,7 @@ func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus even
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
 		middleware.Retry{MaxRetries: 3}.Middleware,
-		r.tracer.TraceHandler,
+		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
 	if err := r.RegisterHandlers(context.Background(), roundHandlers); err != nil {

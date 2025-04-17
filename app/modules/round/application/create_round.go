@@ -11,11 +11,12 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	"github.com/google/uuid"
 )
 
 // ValidateAndProcessRound transforms validated round data to an entity
 func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "ValidateAndProcessRound", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "ValidateAndProcessRound", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate the round
 		input := roundtypes.CreateRoundInput{
 			Title:       payload.Title,
@@ -27,7 +28,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 
 		errs := s.roundValidator.ValidateRoundInput(input)
 		if len(errs) > 0 {
-			s.metrics.RecordValidationError()
+			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
 				Failure: roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
@@ -35,7 +36,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 				},
 			}, fmt.Errorf("validation failed: %v", errs)
 		} else {
-			s.metrics.RecordValidationSuccess()
+			s.metrics.RecordValidationSuccess(ctx)
 		}
 
 		// Parse StartTime
@@ -45,7 +46,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 			roundutil.RealClock{},
 		)
 		if err != nil {
-			s.metrics.RecordTimeParsingError()
+			s.metrics.RecordTimeParsingError(ctx)
 			return RoundOperationResult{
 				Failure: roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
@@ -53,13 +54,13 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 				},
 			}, fmt.Errorf("time parsing failed: %w", err)
 		} else {
-			s.metrics.RecordTimeParsingSuccess()
+			s.metrics.RecordTimeParsingSuccess(ctx)
 		}
 
 		// Check if start time is in the past
 		parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
 		if parsedTime.Before(time.Now().UTC()) {
-			s.metrics.RecordValidationError()
+			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
 				Failure: roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
@@ -98,17 +99,15 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		return RoundOperationResult{Success: createdPayload}, nil
 	})
 
-	// We'll just return the result as is along with the error
-	// This allows the caller to handle both the result and error appropriately
 	return result, err
 }
 
 // StoreRound stores a round in the database
 func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "StoreRound", func() (RoundOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "StoreRound", payload.Round.ID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate round data
 		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
-			s.metrics.RecordValidationError()
+			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
 				Failure: roundevents.RoundCreationFailedPayload{
 					UserID:       payload.Round.CreatedBy,
@@ -146,7 +145,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 		// Store the round in the database
 		if err := s.RoundDB.CreateRound(ctx, &roundDB); err != nil {
-			s.metrics.RecordDBOperationError("create_round")
+			s.metrics.RecordDBOperationError(ctx, "create_round")
 			return RoundOperationResult{
 				Failure: roundevents.RoundCreationFailedPayload{
 					UserID:       roundTypes.CreatedBy,
@@ -154,11 +153,11 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 				},
 			}, fmt.Errorf("failed to store round: %w", err)
 		} else {
-			s.metrics.RecordDBOperationSuccess("create_round")
+			s.metrics.RecordDBOperationSuccess(ctx, "create_round")
 		}
 
 		// Record successful round creation
-		s.metrics.RecordRoundCreated(location)
+		s.metrics.RecordRoundCreated(ctx, location)
 
 		// Log after storing
 		s.logger.InfoContext(ctx, "Round created successfully",

@@ -12,7 +12,7 @@ import (
 
 // GetRound retrieves the round from the database.
 func (s *RoundService) GetRound(ctx context.Context, roundID sharedtypes.RoundID) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "GetRound", func() (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "GetRound", roundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Getting round from database",
 			attr.RoundID("round_id", roundID),
 		)
@@ -23,7 +23,7 @@ func (s *RoundService) GetRound(ctx context.Context, roundID sharedtypes.RoundID
 				attr.RoundID("round_id", roundID),
 				attr.Error(err),
 			)
-			s.metrics.RecordDBOperationError("GetRound")
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
 				Failure: roundevents.RoundErrorPayload{
 					RoundID: roundID,

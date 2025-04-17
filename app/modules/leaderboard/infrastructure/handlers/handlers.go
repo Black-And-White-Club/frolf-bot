@@ -8,17 +8,19 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LeaderboardHandlers handles leaderboard-related events.
 type LeaderboardHandlers struct {
 	leaderboardService leaderboardservice.Service
 	logger             *slog.Logger
-	tracer             tempofrolfbot.Tracer
+	tracer             trace.Tracer
 	metrics            leaderboardmetrics.LeaderboardMetrics
 	helpers            utils.Helpers
 	handlerWrapper     func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
@@ -28,7 +30,7 @@ type LeaderboardHandlers struct {
 func NewLeaderboardHandlers(
 	leaderboardService leaderboardservice.Service,
 	logger *slog.Logger,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 	metrics leaderboardmetrics.LeaderboardMetrics,
 ) Handlers {
@@ -52,12 +54,15 @@ func handlerWrapper(
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
 	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
-	tracer tempofrolfbot.Tracer,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 ) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {
 		// Start a span for tracing
-		ctx, span := tracer.StartSpan(msg.Context(), handlerName, msg)
+		ctx, span := tracer.Start(msg.Context(), handlerName, trace.WithAttributes(
+			attribute.String("message.id", msg.UUID),
+			attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
+		))
 		defer span.End()
 
 		// Record metrics for handler attempt
@@ -66,7 +71,7 @@ func handlerWrapper(
 		startTime := time.Now()
 		defer func() {
 			duration := time.Since(startTime).Seconds()
-			metrics.RecordHandlerDuration(ctx, handlerName, duration)
+			metrics.RecordHandlerDuration(ctx, handlerName, time.Duration(duration))
 		}()
 
 		logger.InfoContext(ctx, handlerName+" triggered",
@@ -83,7 +88,7 @@ func handlerWrapper(
 				logger.ErrorContext(ctx, "Failed to unmarshal payload",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err))
-				metrics.RecordHandlerFailure(handlerName)
+				metrics.RecordHandlerFailure(ctx, handlerName)
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
 		}
@@ -95,12 +100,12 @@ func handlerWrapper(
 				attr.CorrelationIDFromMsg(msg),
 				attr.Error(err),
 			)
-			metrics.RecordHandlerFailure(handlerName)
+			metrics.RecordHandlerFailure(ctx, handlerName)
 			return nil, err
 		}
 
 		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
-		metrics.RecordHandlerSuccess(handlerName)
+		metrics.RecordHandlerSuccess(ctx, handlerName)
 		return result, nil
 	}
 }

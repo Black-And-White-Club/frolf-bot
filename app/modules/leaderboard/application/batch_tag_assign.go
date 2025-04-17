@@ -39,11 +39,11 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, pa
 		})
 	}
 
-	return s.serviceWrapper(ctx, "BatchTagAssignmentRequested", func() (LeaderboardOperationResult, error) {
+	return s.serviceWrapper(ctx, "BatchTagAssignmentRequested", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// Execute batch assignment in a single database operation
 		startTime := time.Now()
 		err := s.LeaderboardDB.BatchAssignTags(ctx, dbAssignments, leaderboarddb.ServiceUpdateSourceAdminBatch, sharedtypes.RoundID(uuid.Nil), payload.RequestingUserID)
-		s.metrics.RecordOperationDuration(ctx, "BatchAssignTags", "BatchTagAssignmentRequested", time.Since(startTime).Seconds())
+		s.metrics.RecordOperationDuration(ctx, "BatchAssignTags", "BatchTagAssignmentRequested", time.Duration(time.Since(startTime).Seconds()))
 
 		if err != nil {
 			return LeaderboardOperationResult{

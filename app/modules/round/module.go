@@ -37,9 +37,9 @@ func NewRoundModule(
 	helpers utils.Helpers,
 ) (*Module, error) {
 	// Extract observability components
-	logger := obs.GetLogger()
-	metrics := obs.GetMetrics().RoundMetrics() // Ensure to get the correct metrics for round
-	tracer := obs.GetTracer()
+	logger := obs.Provider.Logger
+	metrics := obs.Registry.RoundMetrics
+	tracer := obs.Registry.Tracer
 
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
@@ -68,7 +68,7 @@ func NewRoundModule(
 
 // Run starts the round module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.GetLogger()
+	logger := m.observability.Provider.Logger
 	logger.InfoContext(ctx, "Starting round module")
 
 	// Create a context that can be canceled
@@ -88,14 +88,14 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Close stops the round module and cleans up resources.
 func (m *Module) Close() error {
-	logger := m.observability.GetLogger()
-	logger.InfoContext(ctx, "Stopping round module")
+	logger := m.observability.Provider.Logger
+	logger.Info("Stopping round module")
 
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.InfoContext(ctx, "Round module stopped")
+	logger.Info("Round module stopped")
 	return nil
 }
