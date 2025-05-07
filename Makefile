@@ -14,6 +14,26 @@ rollback-all:
 run:
 	go run cmd/app/main.go
 
+.PHONY: test-all test-integration integration-user-service integration-user-handlers
+
+# Run all tests from the root
+test-all:
+	@echo "Running all tests from root..."
+	go test ./... -v
+
+# Run only integration tests from the root
+test-integration:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/... -v
+
+integration-user-service:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/user/application_tests -v
+
+integration-user-handlers:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/user/handler_tests -v
+
 # Directories
 MOCKGEN := mockgen
 USER_DIR := ./app/modules/user

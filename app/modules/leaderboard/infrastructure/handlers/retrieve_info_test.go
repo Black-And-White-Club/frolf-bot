@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
@@ -58,14 +59,14 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.GetLeaderboardResponsePayload{
-							Leaderboard: []leaderboardevents.LeaderboardEntry{},
+							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
 					},
 					nil,
 				)
 
 				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayload{
-					Leaderboard: []leaderboardevents.LeaderboardEntry{},
+					Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -125,14 +126,14 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.GetLeaderboardResponsePayload{
-							Leaderboard: []leaderboardevents.LeaderboardEntry{},
+							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
 					},
 					nil,
 				)
 
 				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayload{
-					Leaderboard: []leaderboardevents.LeaderboardEntry{},
+					Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(

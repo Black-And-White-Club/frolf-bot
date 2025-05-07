@@ -40,6 +40,21 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 	return m.recorder
 }
 
+// HandleBatchTagAssignmentRequested mocks base method.
+func (m *MockHandlers) HandleBatchTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleBatchTagAssignmentRequested", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleBatchTagAssignmentRequested indicates an expected call of HandleBatchTagAssignmentRequested.
+func (mr *MockHandlersMockRecorder) HandleBatchTagAssignmentRequested(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBatchTagAssignmentRequested", reflect.TypeOf((*MockHandlers)(nil).HandleBatchTagAssignmentRequested), msg)
+}
+
 // HandleGetLeaderboardRequest mocks base method.
 func (m *MockHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
@@ -83,6 +98,21 @@ func (m *MockHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([
 func (mr *MockHandlersMockRecorder) HandleLeaderboardUpdateRequested(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleLeaderboardUpdateRequested", reflect.TypeOf((*MockHandlers)(nil).HandleLeaderboardUpdateRequested), msg)
+}
+
+// HandleRoundGetTagRequest mocks base method.
+func (m *MockHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleRoundGetTagRequest", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleRoundGetTagRequest indicates an expected call of HandleRoundGetTagRequest.
+func (mr *MockHandlersMockRecorder) HandleRoundGetTagRequest(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundGetTagRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundGetTagRequest), msg)
 }
 
 // HandleTagAssignment mocks base method.

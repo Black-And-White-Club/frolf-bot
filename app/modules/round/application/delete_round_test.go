@@ -199,8 +199,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundDeletedPayload{
-					RoundID:        id,
-					EventMessageID: id,
+					RoundID: id,
 				},
 			},
 			expectedError: nil,

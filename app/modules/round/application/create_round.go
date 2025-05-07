@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -122,24 +123,78 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 			location = string(*roundTypes.Location)
 		}
 
+		defaultType := roundtypes.DefaultEventType
+		roundTypes.EventType = &defaultType
+
 		// Map round data to the database model
 		roundDB := roundtypes.Round{
-			Title:       roundTypes.Title,
-			Description: roundTypes.Description,
-			Location:    roundTypes.Location,
-			EventType:   roundTypes.EventType,
-			StartTime:   payload.Round.StartTime,
-			Finalized:   roundTypes.Finalized,
-			CreatedBy:   roundTypes.CreatedBy,
-			State:       roundTypes.State,
+			Title:        roundTypes.Title,
+			Description:  roundTypes.Description,
+			Location:     roundTypes.Location,
+			EventType:    roundTypes.EventType,
+			StartTime:    payload.Round.StartTime,
+			Finalized:    roundTypes.Finalized,
+			CreatedBy:    roundTypes.CreatedBy,
+			State:        roundTypes.State,
+			Participants: []roundtypes.Participant{},
 		}
 
-		// Log before storing
+		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {
+			return RoundOperationResult{
+				Failure: roundevents.RoundCreationFailedPayload{
+					UserID:       roundDB.CreatedBy,
+					ErrorMessage: "one or more required fields are nil",
+				},
+			}, fmt.Errorf("nil field: desc=%v, loc=%v, start=%v", roundDB.Description, roundDB.Location, roundDB.StartTime)
+		}
+
+		// Safely dereference optional fields for logging
+		desc := ""
+		if roundDB.Description != nil {
+			desc = string(*roundDB.Description)
+		}
+
+		loc := ""
+		if roundDB.Location != nil {
+			loc = string(*roundDB.Location)
+		}
+
+		startTime := time.Time{}
+		if roundDB.StartTime != nil {
+			startTime = time.Time(*roundDB.StartTime)
+		}
+
+		s.logger.Debug("🔍 roundDB.Title", attr.String("title", string(roundDB.Title)))
+
+		if roundDB.Description == nil {
+			s.logger.Debug("⚠️ Description is nil")
+		} else {
+			s.logger.Debug("✅ Description exists", attr.String("description", string(*roundDB.Description)))
+		}
+
+		if roundDB.Location == nil {
+			s.logger.Debug("⚠️ Location is nil")
+		} else {
+			s.logger.Debug("✅ Location exists", attr.String("location", string(*roundDB.Location)))
+		}
+
+		if roundDB.StartTime == nil {
+			s.logger.Debug("⚠️ StartTime is nil")
+		} else {
+			s.logger.Debug("✅ StartTime exists", attr.Time("start_time", time.Time(*roundDB.StartTime)))
+		}
+
+		if roundDB.EventType == nil {
+			s.logger.Debug("⚠️ EventType is nil")
+		} else {
+			s.logger.Debug("✅ EventType exists", attr.String("event_type", string(*roundDB.EventType)))
+		}
+
 		s.logger.InfoContext(ctx, "About to create round in DB",
 			attr.String("title", string(roundDB.Title)),
-			attr.String("description", string(*roundDB.Description)),
-			attr.String("location", string(*roundDB.Location)),
-			attr.Time("start_time", time.Time(*roundDB.StartTime)),
+			attr.String("description", desc),
+			attr.String("location", loc),
+			attr.Time("start_time", startTime),
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)
 
@@ -184,4 +239,67 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 	// Return the result and error as-is
 	return result, err
+}
+
+// UpdateRoundMessageID updates the Discord event message ID for a round in the database
+// and returns the updated Round object.
+func (s *RoundService) UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+	result, err := s.serviceWrapper(ctx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
+		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_message_id", discordMessageID),
+		)
+
+		round, dbErr := s.RoundDB.UpdateEventMessageID(ctx, roundID, discordMessageID)
+		if dbErr != nil {
+			s.metrics.RecordDBOperationError(ctx, "update_round_message_id")
+			s.logger.ErrorContext(ctx, "Failed to update Discord event message ID in DB",
+				attr.RoundID("round_id", roundID),
+				attr.String("discord_message_id", discordMessageID),
+				attr.Error(dbErr),
+			)
+			return RoundOperationResult{
+				Failure: roundevents.RoundErrorPayload{
+					RoundID: roundID,
+					Error:   fmt.Sprintf("database update failed: %v", dbErr),
+				},
+			}, fmt.Errorf("failed to update Discord event message ID in DB: %w", dbErr)
+		}
+
+		s.metrics.RecordDBOperationSuccess(ctx, "update_round_message_id")
+		s.logger.InfoContext(ctx, "Successfully updated Discord message ID in DB",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_message_id", discordMessageID),
+		)
+
+		return RoundOperationResult{Success: round}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Success != nil {
+		updatedRound, ok := result.Success.(*roundtypes.Round)
+		if !ok {
+			s.logger.ErrorContext(ctx, "Unexpected success result type from serviceWrapper",
+				attr.RoundID("round_id", roundID),
+				attr.Any("result_type", fmt.Sprintf("%T", result.Success)),
+			)
+			return nil, errors.New("internal service error: unexpected result type")
+		}
+		return updatedRound, nil
+	}
+
+	if result.Failure == nil {
+		s.logger.ErrorContext(ctx, "Service wrapper returned no error, success, or failure result",
+			attr.RoundID("round_id", roundID),
+		)
+		return nil, errors.New("internal service error: no result received")
+	}
+
+	failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload)
+	if ok {
+		return nil, fmt.Errorf("operation failed: %s", failurePayload.Error)
+	}
+	return nil, errors.New("operation failed with unknown error")
 }

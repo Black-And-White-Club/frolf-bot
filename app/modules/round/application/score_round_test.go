@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	testScoreRoundID = sharedtypes.RoundID(uuid.New())
-	testParticipant  = sharedtypes.DiscordID("user1")
-	testScore        = sharedtypes.Score(10)
+	testScoreRoundID     = sharedtypes.RoundID(uuid.New())
+	testParticipant      = sharedtypes.DiscordID("user1")
+	testScore            = sharedtypes.Score(10)
+	testDiscordMessageID = "12345"
 )
 
 func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
@@ -188,7 +189,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				mockDB.EXPECT().UpdateParticipantScore(ctx, testScoreRoundID, testParticipant, testScore).Return(nil)
 				mockDB.EXPECT().GetRound(ctx, testScoreRoundID).Return(&roundtypes.Round{
-					EventMessageID: testScoreRoundID,
+					EventMessageID: testDiscordMessageID,
 				}, nil)
 			},
 			payload: roundevents.ScoreUpdateValidatedPayload{
@@ -203,7 +204,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 					RoundID:        testScoreRoundID,
 					Participant:    testParticipant,
 					Score:          testScore,
-					EventMessageID: &testScoreRoundID,
+					EventMessageID: testDiscordMessageID,
 				},
 			},
 			expectedError: nil,
@@ -315,12 +316,12 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				RoundID:        testScoreRoundID,
 				Participant:    testParticipant,
 				Score:          testScore,
-				EventMessageID: &testScoreRoundID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Success: roundevents.AllScoresSubmittedPayload{
 					RoundID:        testScoreRoundID,
-					EventMessageID: &testScoreRoundID,
+					EventMessageID: testDiscordMessageID,
 				},
 			},
 			expectedError: nil,
@@ -343,14 +344,13 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				RoundID:        testScoreRoundID,
 				Participant:    testParticipant,
 				Score:          testScore,
-				EventMessageID: &testScoreRoundID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Success: roundevents.NotAllScoresSubmittedPayload{
-					RoundID:        testScoreRoundID,
-					Participant:    testParticipant,
-					Score:          testScore,
-					EventMessageID: testScoreRoundID,
+					RoundID:     testScoreRoundID,
+					Participant: testParticipant,
+					Score:       testScore,
 				},
 			},
 			expectedError: nil,
@@ -373,7 +373,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				RoundID:        testScoreRoundID,
 				Participant:    testParticipant,
 				Score:          testScore,
-				EventMessageID: &testScoreRoundID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: roundevents.RoundErrorPayload{
@@ -392,7 +392,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				RoundID:        testScoreRoundID,
 				Participant:    testParticipant,
 				Score:          testScore,
-				EventMessageID: &testScoreRoundID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: roundevents.RoundErrorPayload{

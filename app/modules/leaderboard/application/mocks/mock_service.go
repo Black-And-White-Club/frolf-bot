@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	gomock "go.uber.org/mock/gomock"
@@ -102,6 +103,21 @@ func (m *MockService) GetTagByUserID(ctx context.Context, userID sharedtypes.Dis
 func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, userID, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, userID, roundID)
+}
+
+// RoundGetTagByUserID mocks base method.
+func (m *MockService) RoundGetTagByUserID(ctx context.Context, payload sharedevents.RoundTagLookupRequestPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RoundGetTagByUserID", ctx, payload)
+	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RoundGetTagByUserID indicates an expected call of RoundGetTagByUserID.
+func (mr *MockServiceMockRecorder) RoundGetTagByUserID(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundGetTagByUserID", reflect.TypeOf((*MockService)(nil).RoundGetTagByUserID), ctx, payload)
 }
 
 // TagAssignmentRequested mocks base method.

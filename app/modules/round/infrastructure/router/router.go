@@ -7,6 +7,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
@@ -88,7 +89,6 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 
 	eventsToHandlers := map[string]message.HandlerFunc{
 		roundevents.RoundCreateRequest:                    handlers.HandleCreateRoundRequest,
-		roundevents.RoundStored:                           handlers.HandleRoundStored,
 		roundevents.RoundUpdateRequest:                    handlers.HandleRoundUpdateRequest,
 		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
 		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
@@ -102,8 +102,14 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundAllScoresSubmitted:               handlers.HandleAllScoresSubmitted,
 		roundevents.RoundReminder:                         handlers.HandleRoundReminder,
 		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
-		roundevents.RoundTagNumberFound:                   handlers.HandleTagNumberFound,
-		roundevents.RoundTagNumberNotFound:                handlers.HandleTagNumberNotFound,
+		sharedevents.RoundTagLookupFound:                  handlers.HandleTagNumberFound,
+		sharedevents.RoundTagLookupNotFound:               handlers.HandleTagNumberNotFound,
+		roundevents.RoundEntityCreated:                    handlers.HandleRoundEntityCreated,
+		roundevents.RoundParticipantStatusUpdateRequest:   handlers.HandleParticipantStatusUpdateRequest,
+		roundevents.RoundParticipantDeclined:              handlers.HandleParticipantDeclined,
+		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
+		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
+		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

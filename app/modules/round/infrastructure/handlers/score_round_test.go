@@ -528,13 +528,13 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testParticipant := sharedtypes.DiscordID("1234567890")
 	testScore := sharedtypes.Score(42)
-	testEventMessageID := sharedtypes.RoundID(uuid.New())
+	testEventMessageID := "12345"
 
 	testPayload := &roundevents.ParticipantScoreUpdatedPayload{
 		RoundID:        testRoundID,
 		Participant:    testParticipant,
 		Score:          testScore,
-		EventMessageID: &testEventMessageID,
+		EventMessageID: testEventMessageID,
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -570,7 +570,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
-						EventMessageID: &testEventMessageID,
+						EventMessageID: testEventMessageID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
@@ -617,7 +617,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
-						EventMessageID: &testEventMessageID,
+						EventMessageID: testEventMessageID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -645,7 +645,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
-						EventMessageID: &testEventMessageID,
+						EventMessageID: testEventMessageID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
@@ -683,7 +683,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
-						EventMessageID: &testEventMessageID,
+						EventMessageID: testEventMessageID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{}, // Return empty result
@@ -711,7 +711,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
-						EventMessageID: &testEventMessageID,
+						EventMessageID: testEventMessageID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{

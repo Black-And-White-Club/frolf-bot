@@ -25,6 +25,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testTagNumber := sharedtypes.TagNumber(42)
+	testDiscordMessageID := "12345"
 
 	testPayload := &roundevents.RoundTagNumberFoundPayload{
 		RoundID:   testRoundID,
@@ -74,7 +75,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber, Score: nil}},
 							DeclinedParticipants:  []roundtypes.Participant{},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},
@@ -154,7 +155,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber, Score: nil}},
 							DeclinedParticipants:  []roundtypes.Participant{},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},
@@ -252,6 +253,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testDiscordMessageID := "12345"
 
 	testPayload := &roundevents.RoundTagNumberNotFoundPayload{
 		RoundID: testRoundID,
@@ -299,7 +301,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: nil, Score: nil}},
 							DeclinedParticipants:  []roundtypes.Participant{},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},
@@ -377,7 +379,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: nil, Score: nil}},
 							DeclinedParticipants:  []roundtypes.Participant{},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},
@@ -474,6 +476,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testDiscordMessageID := "12345"
 
 	testPayload := &roundevents.ParticipantDeclinedPayload{
 		RoundID: testRoundID,
@@ -521,7 +524,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{},
 							DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},
@@ -599,7 +602,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 							AcceptedParticipants:  []roundtypes.Participant{},
 							DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
 							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testRoundID,
+							EventMessageID:        testDiscordMessageID,
 							JoinedLate:            nil,
 						},
 					},

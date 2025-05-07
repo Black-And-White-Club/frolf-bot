@@ -21,7 +21,7 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *lead
 	// Create a map for quick lookups of current leaderboard entries
 	tagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(currentLeaderboard.LeaderboardData))
 	for _, entry := range currentLeaderboard.LeaderboardData {
-		tagMap[entry.UserID] = entry.TagNumber
+		tagMap[entry.UserID] = *entry.TagNumber
 	}
 
 	// Parse participant tags and extract user IDs in performance order
@@ -61,7 +61,7 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *lead
 	// Apply the new tag assignments
 	for i, entry := range newLeaderboardData {
 		if newTag, exists := newTagAssignments[entry.UserID]; exists {
-			newLeaderboardData[i].TagNumber = newTag
+			newLeaderboardData[i].TagNumber = &newTag
 		}
 	}
 
@@ -92,10 +92,10 @@ func (s *LeaderboardService) FindTagByUserID(ctx context.Context, leaderboard *l
 	for _, entry := range leaderboard.LeaderboardData {
 		if entry.UserID == userID {
 			s.logger.InfoContext(ctx, "Tag found",
-				attr.Int("tag", int(entry.TagNumber)),
+				attr.Int("tag", int(*entry.TagNumber)),
 				attr.String("user_id", string(userID)),
 			)
-			return int(entry.TagNumber), true
+			return int(*entry.TagNumber), true
 		}
 	}
 
@@ -121,31 +121,31 @@ func (s *LeaderboardService) PrepareTagAssignment(
 	}
 
 	// Convert LeaderboardData to a map for easy tag lookup
-	tagMap := make(map[int]string)
+	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range currentLeaderboard.LeaderboardData {
-		tagMap[int(entry.TagNumber)] = string(entry.UserID)
+		tagMap[*entry.TagNumber] = entry.UserID
 	}
 
 	// Check if the tag is already assigned
-	if existingUser, exists := tagMap[int(tagNumber)]; exists {
+	if existingUser, exists := tagMap[tagNumber]; exists {
 		return nil, fmt.Errorf("tag %d is already assigned to user %s", tagNumber, existingUser)
 	}
 
 	// Add the new assignment to the map
-	tagMap[int(tagNumber)] = string(userID)
+	tagMap[tagNumber] = userID
 
 	// Convert the map back to LeaderboardData
 	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
 	for tag, uid := range tagMap {
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: sharedtypes.TagNumber(tag),
+			TagNumber: &tag,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
 
 	// Use slices.Sort for more efficient and ergonomic sorting
 	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		return int(a.TagNumber - b.TagNumber)
+		return int(*a.TagNumber - *b.TagNumber)
 	})
 
 	return updatedLeaderboardData, nil

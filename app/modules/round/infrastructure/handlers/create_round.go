@@ -2,10 +2,12 @@ package roundhandlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -157,4 +159,108 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 
 	// Execute the wrapped handler with the message
 	return wrappedHandler(msg)
+}
+
+func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([]*message.Message, error) {
+	// Use the handlerWrapper for consistent logging, tracing, and error handling
+	return h.handlerWrapper(
+		"HandleRoundEventMessageIDUpdate",          // Operation name for logging/tracing
+		&roundevents.RoundMessageIDUpdatePayload{}, // Expected payload type for unmarshalling
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			// Assert the unmarshalled payload to the correct type
+			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Received unexpected payload type for RoundEventMessageIDUpdate",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("payload_type", fmt.Sprintf("%T", payload)),
+				)
+				return nil, errors.New("unexpected payload type")
+			}
+
+			roundID := updatePayload.RoundID
+
+			h.logger.InfoContext(ctx, "Received RoundEventMessageIDUpdate event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+			)
+
+			// Extract the Discord message ID from the message metadata
+			discordMessageID, ok := msg.Metadata["discord_message_id"]
+			if !ok || discordMessageID == "" {
+				h.logger.ErrorContext(ctx, "Discord message ID not found or empty in metadata",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+				)
+				return nil, errors.New("discord message ID not found in metadata")
+			}
+
+			// 1. Update the round in the database with the Discord message ID
+			// Call the service method which now returns the updated round object
+			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, roundID, discordMessageID)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to update round with Discord message ID via service",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+					attr.String("discord_message_id", discordMessageID),
+					attr.Error(err),
+				)
+				// Return the error so Watermill retries the message
+				return nil, fmt.Errorf("failed to update round message ID: %w", err)
+			}
+
+			// Check if the updatedRound is nil (e.g., if UpdateRoundMessageID didn't find the round)
+			if updatedRound == nil {
+				h.logger.ErrorContext(ctx, "Updated round object is nil after UpdateRoundMessageID service call",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+				)
+				// This might indicate a deeper issue or a race condition, handle appropriately
+				return nil, errors.New("updated round object is nil")
+			}
+
+			h.logger.InfoContext(ctx, "Successfully updated round with Discord message ID in DB",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+				attr.String("discord_message_id", discordMessageID),
+			)
+
+			// 2. Construct the RoundScheduledPayload using the updated round object
+			scheduledPayload := roundevents.RoundScheduledPayload{
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:     updatedRound.ID,
+					Title:       updatedRound.Title,
+					Description: updatedRound.Description,
+					Location:    updatedRound.Location,
+					StartTime:   updatedRound.StartTime,
+					UserID:      updatedRound.CreatedBy,
+				},
+				EventMessageID: discordMessageID, // Use the Discord message ID from metadata
+			}
+
+			// 3. Publish the RoundScheduled event
+			// This event will be consumed by the (now refactored) ScheduleRoundEvents function
+			scheduledMsg, err := h.helpers.CreateResultMessage(
+				msg, // Use the original message for metadata propagation (like correlation ID)
+				scheduledPayload,
+				roundevents.RoundEventMessageIDUpdated,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to create RoundScheduled message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+					attr.Error(err),
+				)
+				// Return the error so Watermill retries the message
+				return nil, fmt.Errorf("failed to create RoundScheduled message: %w", err)
+			}
+
+			h.logger.InfoContext(ctx, "Successfully published RoundScheduled event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+			)
+
+			// Return the message to be published
+			return []*message.Message{scheduledMsg}, nil
+		},
+	)(msg) // Execute the wrapped handler with the incoming message
 }

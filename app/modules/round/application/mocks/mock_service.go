@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
@@ -180,18 +181,18 @@ func (mr *MockServiceMockRecorder) ProcessRoundStart(ctx, payload any) *gomock.C
 }
 
 // ScheduleRoundEvents mocks base method.
-func (m *MockService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundScheduledPayload, discordMessageID string) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScheduleRoundEvents", ctx, payload, startTime)
+	ret := m.ctrl.Call(m, "ScheduleRoundEvents", ctx, payload, discordMessageID)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ScheduleRoundEvents indicates an expected call of ScheduleRoundEvents.
-func (mr *MockServiceMockRecorder) ScheduleRoundEvents(ctx, payload, startTime any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ScheduleRoundEvents(ctx, payload, discordMessageID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundEvents", reflect.TypeOf((*MockService)(nil).ScheduleRoundEvents), ctx, payload, startTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundEvents", reflect.TypeOf((*MockService)(nil).ScheduleRoundEvents), ctx, payload, discordMessageID)
 }
 
 // StoreRound mocks base method.
@@ -252,6 +253,21 @@ func (m *MockService) UpdateRoundEntity(ctx context.Context, payload roundevents
 func (mr *MockServiceMockRecorder) UpdateRoundEntity(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundEntity", reflect.TypeOf((*MockService)(nil).UpdateRoundEntity), ctx, payload)
+}
+
+// UpdateRoundMessageID mocks base method.
+func (m *MockService) UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRoundMessageID", ctx, roundID, discordMessageID)
+	ret0, _ := ret[0].(*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRoundMessageID indicates an expected call of UpdateRoundMessageID.
+func (mr *MockServiceMockRecorder) UpdateRoundMessageID(ctx, roundID, discordMessageID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRoundMessageID", reflect.TypeOf((*MockService)(nil).UpdateRoundMessageID), ctx, roundID, discordMessageID)
 }
 
 // UpdateScheduledRoundEvents mocks base method.

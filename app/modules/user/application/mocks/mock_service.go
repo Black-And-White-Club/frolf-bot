@@ -13,8 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,13 +43,12 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockService) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
+func (m *MockService) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, userID, tag)
-	ret0, _ := ret[0].(*userevents.UserCreatedPayload)
-	ret1, _ := ret[1].(*userevents.UserCreationFailedPayload)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateUser indicates an expected call of CreateUser.
@@ -59,13 +58,12 @@ func (mr *MockServiceMockRecorder) CreateUser(ctx, userID, tag any) *gomock.Call
 }
 
 // GetUser mocks base method.
-func (m *MockService) GetUser(ctx context.Context, userID sharedtypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
+func (m *MockService) GetUser(ctx context.Context, userID sharedtypes.DiscordID) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUser", ctx, userID)
-	ret0, _ := ret[0].(*userevents.GetUserResponsePayload)
-	ret1, _ := ret[1].(*userevents.GetUserFailedPayload)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUser indicates an expected call of GetUser.
@@ -75,13 +73,12 @@ func (mr *MockServiceMockRecorder) GetUser(ctx, userID any) *gomock.Call {
 }
 
 // GetUserRole mocks base method.
-func (m *MockService) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
+func (m *MockService) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserRole", ctx, userID)
-	ret0, _ := ret[0].(*userevents.GetUserRoleResponsePayload)
-	ret1, _ := ret[1].(*userevents.GetUserRoleFailedPayload)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUserRole indicates an expected call of GetUserRole.
@@ -91,13 +88,12 @@ func (mr *MockServiceMockRecorder) GetUserRole(ctx, userID any) *gomock.Call {
 }
 
 // UpdateUserRoleInDatabase mocks base method.
-func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (*userevents.UserRoleUpdateResultPayload, *userevents.UserRoleUpdateFailedPayload, error) {
+func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserRoleInDatabase", ctx, userID, newRole)
-	ret0, _ := ret[0].(*userevents.UserRoleUpdateResultPayload)
-	ret1, _ := ret[1].(*userevents.UserRoleUpdateFailedPayload)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateUserRoleInDatabase indicates an expected call of UpdateUserRoleInDatabase.

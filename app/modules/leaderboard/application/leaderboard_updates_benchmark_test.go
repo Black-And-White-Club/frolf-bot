@@ -18,6 +18,9 @@ import (
 
 func BenchmarkUpdateLeaderboardSmallInput(b *testing.B) {
 	sortedParticipantTags := []string{"1:user1", "2:user2", "3:user3"}
+	tag1 := sharedtypes.TagNumber(1)
+	tag2 := sharedtypes.TagNumber(2)
+	tag3 := sharedtypes.TagNumber(13)
 
 	ctrl := gomock.NewController(b)
 	defer ctrl.Finish()
@@ -25,9 +28,9 @@ func BenchmarkUpdateLeaderboardSmallInput(b *testing.B) {
 	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
 	mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 		LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-			{TagNumber: 1, UserID: "user1"},
-			{TagNumber: 2, UserID: "user2"},
-			{TagNumber: 3, UserID: "user3"},
+			{TagNumber: &tag1, UserID: "user1"},
+			{TagNumber: &tag2, UserID: "user2"},
+			{TagNumber: &tag3, UserID: "user3"},
 		},
 	}, nil).AnyTimes()
 	mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -61,9 +64,10 @@ func BenchmarkUpdateLeaderboardMediumInput(b *testing.B) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 100),
 	}
 	for i := range leaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i + 1)
 		leaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			TagNumber: sharedtypes.TagNumber(i + 1),
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i+1)),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
+			TagNumber: &tag,
 		}
 	}
 	sortedParticipantTags := make([]string, 100)
@@ -108,9 +112,10 @@ func BenchmarkUpdateLeaderboardLargeInput(b *testing.B) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 1000),
 	}
 	for i := range leaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i + 1)
 		leaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			TagNumber: sharedtypes.TagNumber(i + 1),
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i+1)),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
+			TagNumber: &tag,
 		}
 	}
 	sortedParticipantTags := make([]string, 1000)

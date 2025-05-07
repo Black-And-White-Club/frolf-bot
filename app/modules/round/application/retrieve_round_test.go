@@ -26,7 +26,7 @@ var (
 	testLoc       = roundtypes.Location("Test Location")
 	testEventType = roundtypes.EventType("Test Event Type")
 	testStartTime = sharedtypes.StartTime(time.Now())
-	testCreatedBy = sharedtypes.DiscordID("Test User")
+	testCreatorID = sharedtypes.DiscordID("Test User")
 	testState     = roundtypes.RoundState("Test State")
 )
 
@@ -38,7 +38,7 @@ var testRound = roundtypes.Round{
 	EventType:    &testEventType,
 	StartTime:    &testStartTime,
 	Finalized:    false,
-	CreatedBy:    testCreatedBy,
+	CreatedBy:    testCreatorID,
 	State:        testState,
 	Participants: []roundtypes.Participant{},
 }

@@ -17,7 +17,7 @@ func init() {
 		}
 
 		// Insert initial leaderboard data
-		if _, err := db.Exec(`INSERT INTO leaderboards (leaderboard_data, is_active, update_id) VALUES ('{}', true, uuid_generate_v4())`); err != nil {
+		if _, err := db.Exec(`INSERT INTO leaderboards (leaderboard_data, is_active, update_id) VALUES ('[]', true, uuid_generate_v4())`); err != nil {
 			return err
 		}
 

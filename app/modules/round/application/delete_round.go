@@ -2,7 +2,6 @@ package roundservice
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -46,52 +45,66 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 }
 
 func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (RoundOperationResult, error) {
-	// Get the event message ID
-	eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, payload.RoundID)
-	if err != nil {
+	// Add explicit nil UUID check
+	if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+		s.logger.ErrorContext(ctx, "Cannot delete round with nil UUID")
 		return RoundOperationResult{
 			Failure: &roundevents.RoundDeleteErrorPayload{
 				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
-					RoundID:              payload.RoundID,
-					RequestingUserUserID: "",
+					RoundID: payload.RoundID,
 				},
-				Error: "failed to retrieve EventMessageID for round",
+				Error: "round ID cannot be nil",
 			},
-		}, errors.New("failed to retrieve EventMessageID for round")
+		}, fmt.Errorf("cannot delete round: nil UUID provided")
 	}
 
-	// Delete the round
+	s.logger.InfoContext(ctx, "DeleteRound service called",
+		attr.RoundID("round_id", payload.RoundID),
+	)
+
+	// Log the actual UUID value for debugging
+	s.logger.DebugContext(ctx, "Round ID details",
+		attr.String("round_id_string", payload.RoundID.String()),
+		attr.String("round_id_bytes", fmt.Sprintf("%v", payload.RoundID)),
+	)
+
+	// Delete the round from the database
 	if err := s.RoundDB.DeleteRound(ctx, payload.RoundID); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to delete round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
+		s.logger.ErrorContext(ctx, "Failed to delete round from DB",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Error(err),
+		)
 		return RoundOperationResult{
 			Failure: &roundevents.RoundDeleteErrorPayload{
 				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
-					RoundID:              payload.RoundID,
-					RequestingUserUserID: "",
+					RoundID: payload.RoundID,
 				},
-				Error: "failed to delete round",
+				Error: fmt.Sprintf("failed to delete round from database: %v", err),
 			},
-		}, errors.New("failed to delete round")
+		}, fmt.Errorf("failed to delete round %s from DB: %w", payload.RoundID.String(), err)
+	}
+	s.logger.InfoContext(ctx, "Round deleted from DB", attr.RoundID("round_id", payload.RoundID))
+
+	// Attempt to cancel any scheduled messages
+	if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
+		// Just log the error but don't fail the operation, as the round is already deleted
+		s.logger.WarnContext(ctx, "Failed to cancel scheduled message",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Error(err),
+		)
+	} else {
+		s.logger.InfoContext(ctx, "Scheduled message cancellation attempted", attr.RoundID("round_id", payload.RoundID))
 	}
 
-	// Cancel the scheduled message
-	if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to cancel scheduled message for round %s: %v", attr.RoundID("round_id", payload.RoundID), attr.Error(err))
-		return RoundOperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayload{
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
-					RoundID:              payload.RoundID,
-					RequestingUserUserID: "",
-				},
-				Error: "failed to cancel scheduled messages",
-			},
-		}, errors.New("failed to cancel scheduled messages")
+	s.logger.InfoContext(ctx, "Round deletion service process successful (Discord message ID expected in metadata)",
+		attr.RoundID("round_id", payload.RoundID),
+	)
+
+	successPayload := &roundevents.RoundDeletedPayload{
+		RoundID: payload.RoundID,
 	}
 
 	return RoundOperationResult{
-		Success: &roundevents.RoundDeletedPayload{
-			RoundID:        payload.RoundID,
-			EventMessageID: *eventMessageID,
-		},
+		Success: successPayload,
 	}, nil
 }

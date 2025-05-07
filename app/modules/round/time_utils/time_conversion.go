@@ -42,16 +42,22 @@ func NewTimeParser() *TimeParser {
 
 // GetTimezoneFromInput extracts a US timezone abbreviation from user input.
 func (tp *TimeParser) GetTimezoneFromInput(input string) (string, bool) {
-	inputUpper := strings.ToUpper(input)
+	// First try as a valid full timezone
+	if _, err := time.LoadLocation(input); err == nil {
+		return input, true
+	}
 
-	// Match against abbreviations
+	// Then try abbreviation map
+	inputUpper := strings.ToUpper(input)
 	for abbreviation, fullName := range tp.TimezoneMap {
 		if strings.Contains(inputUpper, abbreviation) {
 			return fullName, true
 		}
 	}
 
-	return "", false
+	// Optional: fallback default
+	slog.Warn("Unknown timezone, falling back to default", slog.String("input", input))
+	return "America/Chicago", false
 }
 
 // ParseUserTimeInput parses user-provided time and converts it to a UTC timestamp.

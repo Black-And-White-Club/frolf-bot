@@ -77,7 +77,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 						Success: &leaderboardevents.LeaderboardUpdatedPayload{
 							LeaderboardID:   1,
 							RoundID:         testRoundID,
-							LeaderboardData: map[int]string{},
+							LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
 						},
 					},
 					nil,
@@ -86,7 +86,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
 					LeaderboardID:   1,
 					RoundID:         testRoundID,
-					LeaderboardData: map[int]string{},
+					LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -152,7 +152,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 						Success: &leaderboardevents.LeaderboardUpdatedPayload{
 							LeaderboardID:   1,
 							RoundID:         testRoundID,
-							LeaderboardData: map[int]string{},
+							LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
 						},
 					},
 					nil,
@@ -161,7 +161,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
 					LeaderboardID:   1,
 					RoundID:         testRoundID,
-					LeaderboardData: map[int]string{},
+					LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(

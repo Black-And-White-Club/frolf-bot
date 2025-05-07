@@ -4,6 +4,7 @@ import (
 	"context"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 )
@@ -13,6 +14,7 @@ type Service interface {
 	// Create Round
 	ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
 	StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error)
+	UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 
 	// Update Round
 	ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (RoundOperationResult, error)
@@ -48,7 +50,7 @@ type Service interface {
 	GetRound(ctx context.Context, roundID sharedtypes.RoundID) (RoundOperationResult, error)
 
 	// Schedule Round Events
-	ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundStoredPayload, startTime sharedtypes.StartTime) (RoundOperationResult, error)
+	ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error)
 
 	// Update Participant Tags
 	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error)

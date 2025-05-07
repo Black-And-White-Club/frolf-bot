@@ -86,7 +86,7 @@ func TestRoundHandlers_HandleRoundStored(t *testing.T) {
 								StartTime:   &testStartTime,
 								UserID:      testUserID,
 							},
-							EventMessageID: nil,
+							EventMessageID: "",
 						},
 					},
 					nil,
@@ -175,7 +175,7 @@ func TestRoundHandlers_HandleRoundStored(t *testing.T) {
 								StartTime:   &testStartTime,
 								UserID:      testUserID,
 							},
-							EventMessageID: nil,
+							EventMessageID: "",
 						},
 					},
 					nil,
@@ -286,7 +286,7 @@ func TestRoundHandlers_HandleRoundStored(t *testing.T) {
 				},
 			}
 
-			got, err := h.HandleRoundStored(tt.msg)
+			got, err := h.HandleDiscordMessageIDUpdated(tt.msg)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleRoundStored() error = %v, wantErr %v", err, tt.wantErr)

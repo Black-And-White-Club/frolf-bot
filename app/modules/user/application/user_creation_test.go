@@ -21,23 +21,22 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testTag := sharedtypes.TagNumber(42)
+	negativeTag := sharedtypes.TagNumber(-1)
 
-	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
 
-	// Use No-Op implementations
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 
 	tests := []struct {
-		name           string
-		mockDBSetup    func(*userdb.MockUserDB)
-		userID         sharedtypes.DiscordID
-		tag            *sharedtypes.TagNumber
-		expectedResult *userevents.UserCreatedPayload
-		expectedFail   *userevents.UserCreationFailedPayload
+		name             string
+		mockDBSetup      func(*userdb.MockUserDB)
+		userID           sharedtypes.DiscordID
+		tag              *sharedtypes.TagNumber
+		expectedOpResult UserOperationResult
+		expectedErr      error
 	}{
 		{
 			name: "Successfully creates a user",
@@ -48,27 +47,35 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			},
 			userID: testUserID,
 			tag:    &testTag,
-			expectedResult: &userevents.UserCreatedPayload{
-				UserID:    testUserID,
-				TagNumber: &testTag,
+			expectedOpResult: UserOperationResult{
+				Success: &userevents.UserCreatedPayload{
+					UserID:    testUserID,
+					TagNumber: &testTag,
+				},
+				Failure: nil,
+				Error:   nil,
 			},
-			expectedFail: nil,
+			expectedErr: nil,
 		},
 		{
-			name: "Fails to create a user",
+			name: "Fails to create a user due to DB error",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					CreateUser(gomock.Any(), gomock.Any()).
 					Return(errors.New("user already exists"))
 			},
-			userID:         testUserID,
-			tag:            &testTag,
-			expectedResult: nil,
-			expectedFail: &userevents.UserCreationFailedPayload{
-				UserID:    testUserID,
-				TagNumber: &testTag,
-				Reason:    "user already exists",
+			userID: testUserID,
+			tag:    &testTag,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserCreationFailedPayload{
+					UserID:    testUserID,
+					TagNumber: &testTag,
+					Reason:    "user already exists",
+				},
+				Error: errors.New("user already exists"),
 			},
+			expectedErr: errors.New("CreateUser operation failed: user already exists"),
 		},
 		{
 			name: "With nil tag pointer",
@@ -79,11 +86,15 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			},
 			userID: testUserID,
 			tag:    nil,
-			expectedResult: &userevents.UserCreatedPayload{
-				UserID:    testUserID,
-				TagNumber: nil,
+			expectedOpResult: UserOperationResult{
+				Success: &userevents.UserCreatedPayload{
+					UserID:    testUserID,
+					TagNumber: nil,
+				},
+				Failure: nil,
+				Error:   nil,
 			},
-			expectedFail: nil,
+			expectedErr: nil,
 		},
 		{
 			name: "Fails due to unexpected database error",
@@ -92,28 +103,36 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					CreateUser(gomock.Any(), gomock.Any()).
 					Return(errors.New("database connection lost"))
 			},
-			userID:         testUserID,
-			tag:            &testTag,
-			expectedResult: nil,
-			expectedFail: &userevents.UserCreationFailedPayload{
-				UserID:    testUserID,
-				TagNumber: &testTag,
-				Reason:    "database connection lost",
+			userID: testUserID,
+			tag:    &testTag,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserCreationFailedPayload{
+					UserID:    testUserID,
+					TagNumber: &testTag,
+					Reason:    "database connection lost",
+				},
+				Error: errors.New("database connection lost"),
 			},
+			expectedErr: errors.New("CreateUser operation failed: database connection lost"),
 		},
 		{
 			name: "Fails due to empty Discord ID",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				// No expectations since the function should return early
 			},
-			userID:         "",
-			tag:            &testTag,
-			expectedResult: nil,
-			expectedFail: &userevents.UserCreationFailedPayload{
-				UserID:    "",
-				TagNumber: &testTag,
-				Reason:    "invalid Discord ID",
+			userID: "",
+			tag:    &testTag,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserCreationFailedPayload{
+					UserID:    "",
+					TagNumber: &testTag,
+					Reason:    "invalid Discord ID",
+				},
+				Error: errors.New("invalid Discord ID"),
 			},
+			expectedErr: errors.New("invalid Discord ID"),
 		},
 		{
 			name: "Fails due to negative tag number",
@@ -121,71 +140,121 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				// No expectations since the function should return early
 			},
 			userID: testUserID,
-			tag: func() *sharedtypes.TagNumber {
-				tagNumber := sharedtypes.TagNumber(-1)
-				return &tagNumber
-			}(),
-			expectedResult: nil,
-			expectedFail: &userevents.UserCreationFailedPayload{
-				UserID: testUserID,
-				TagNumber: func() *sharedtypes.TagNumber {
-					tagNumber := sharedtypes.TagNumber(-1)
-					return &tagNumber
-				}(),
-				Reason: "tag number cannot be negative",
+			tag:    &negativeTag,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserCreationFailedPayload{
+					UserID:    testUserID,
+					TagNumber: &negativeTag,
+					Reason:    "tag number cannot be negative",
+				},
+				Error: errors.New("tag number cannot be negative"),
 			},
+			expectedErr: errors.New("tag number cannot be negative"),
+		},
+		// Add a test case for nil context
+		{
+			name: "Fails due to nil context",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// No expectations since the function should return early
+			},
+			userID: testUserID,
+			tag:    &testTag,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: nil,
+				Error:   errors.New("context cannot be nil"),
+			},
+			expectedErr: errors.New("context cannot be nil"),
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			// Initialize service with No-Op implementations
 			s := &UserServiceImpl{
 				UserDB:  mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
+				// Mock the serviceWrapper to call the provided function directly in tests
 				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					// In the test wrapper, just call the actual service function and return its result
+					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
+					// as these are concerns of the wrapper itself, not the service method logic being tested.
 					return serviceFunc(ctx)
 				},
 			}
 
-			gotSuccess, gotFailure, err := s.CreateUser(ctx, tt.userID, tt.tag)
-
-			// Validate success case
-			if tt.expectedResult != nil {
-				if gotSuccess == nil {
-					t.Errorf("Expected success payload, got nil")
-				} else if gotSuccess.UserID != tt.expectedResult.UserID {
-					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, tt.expectedResult.UserID)
-				}
-			} else if gotSuccess != nil {
-				t.Errorf("Unexpected success payload: %v", gotSuccess)
+			// For the nil context test case, explicitly pass nil
+			ctxArg := ctx
+			if tt.name == "Fails due to nil context" {
+				ctxArg = nil
 			}
 
-			// Validate failure case
-			if tt.expectedFail != nil {
-				if gotFailure == nil {
-					t.Errorf("Expected failure payload, got nil")
-				} else if gotFailure.Reason != tt.expectedFail.Reason {
-					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, tt.expectedFail.Reason)
+			gotResult, gotErr := s.CreateUser(ctxArg, tt.userID, tt.tag)
+
+			// Validate the returned UserOperationResult
+			if tt.expectedOpResult.Success != nil {
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserCreatedPayload)
+				gotSuccess, ok := gotResult.Success.(*userevents.UserCreatedPayload)
+				if !ok {
+					t.Errorf("Expected success payload of type *userevents.UserCreatedPayload, got %T", gotResult.Success)
+				} else if gotSuccess.UserID != expectedSuccess.UserID {
+					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, expectedSuccess.UserID)
 				}
-			} else if gotFailure != nil {
-				t.Errorf("Unexpected failure payload: %v", gotFailure)
+				// Compare tag numbers carefully due to pointers
+				if (gotSuccess.TagNumber == nil && expectedSuccess.TagNumber != nil) ||
+					(gotSuccess.TagNumber != nil && expectedSuccess.TagNumber == nil) ||
+					(gotSuccess.TagNumber != nil && expectedSuccess.TagNumber != nil && *gotSuccess.TagNumber != *expectedSuccess.TagNumber) {
+					t.Errorf("Mismatched TagNumber, got: %v, expected: %v", gotSuccess.TagNumber, expectedSuccess.TagNumber)
+				}
+			} else if gotResult.Success != nil {
+				t.Errorf("Unexpected success payload: %v", gotResult.Success)
 			}
 
-			// Validate error presence
-			if tt.expectedFail != nil {
-				if err == nil {
-					t.Errorf("Expected an error but got nil")
-				} else if err.Error() != tt.expectedFail.Reason {
-					t.Errorf("Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedFail.Reason)
+			if tt.expectedOpResult.Failure != nil {
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserCreationFailedPayload)
+				gotFailure, ok := gotResult.Failure.(*userevents.UserCreationFailedPayload)
+				if !ok {
+					t.Errorf("Expected failure payload of type *userevents.UserCreationFailedPayload, got %T", gotResult.Failure)
+				} else if gotFailure.Reason != expectedFailure.Reason {
+					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, expectedFailure.Reason)
 				}
-			} else if err != nil {
-				t.Errorf("Unexpected error: %v", err)
+				if gotFailure.UserID != expectedFailure.UserID {
+					t.Errorf("Mismatched failure UserID, got: %v, expected: %v", gotFailure.UserID, expectedFailure.UserID)
+				}
+				// Compare tag numbers carefully due to pointers
+				if (gotFailure.TagNumber == nil && expectedFailure.TagNumber != nil) ||
+					(gotFailure.TagNumber != nil && expectedFailure.TagNumber == nil) ||
+					(gotFailure.TagNumber != nil && expectedFailure.TagNumber != nil && *gotFailure.TagNumber != *expectedFailure.TagNumber) {
+					t.Errorf("Mismatched failure TagNumber, got: %v, expected: %v", gotFailure.TagNumber, expectedFailure.TagNumber)
+				}
+			} else if gotResult.Failure != nil {
+				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
+			}
+
+			// Validate the Error field within the UserOperationResult
+			if tt.expectedOpResult.Error != nil {
+				if gotResult.Error == nil {
+					t.Errorf("Expected error in result, got nil")
+				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
+					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
+				}
+			} else if gotResult.Error != nil {
+				t.Errorf("Unexpected error in result: %v", gotResult.Error)
+			}
+
+			// Validate the top-level returned error
+			if tt.expectedErr != nil {
+				if gotErr == nil {
+					t.Errorf("Expected a top-level error but got nil")
+				} else if gotErr.Error() != tt.expectedErr.Error() {
+					t.Errorf("Mismatched top-level error reason, got: %v, expected: %v", gotErr.Error(), tt.expectedErr.Error())
+				}
+			} else if gotErr != nil {
+				t.Errorf("Unexpected top-level error: %v", gotErr)
 			}
 		})
 	}

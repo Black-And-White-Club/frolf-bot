@@ -3,6 +3,7 @@ package userservice
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -11,70 +12,83 @@ import (
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 )
 
-// CreateUser  creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (*userevents.UserCreatedPayload, *userevents.UserCreationFailedPayload, error) {
-	// Handle nil context
+// Common domain errors
+var (
+	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrInvalidDiscordID  = errors.New("invalid Discord ID")
+	ErrNegativeTagNumber = errors.New("tag number cannot be negative")
+	ErrNilContext        = errors.New("context cannot be nil")
+)
+
+// CreateUser creates a user and returns a success or failure payload.
+func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error) {
 	if ctx == nil {
-		return nil, nil, errors.New("context cannot be nil")
+		return UserOperationResult{
+			Error: ErrNilContext,
+		}, ErrNilContext
 	}
 
 	// Handle empty Discord ID
 	if userID == "" {
-		err := errors.New("invalid Discord ID")
-		return nil, &userevents.UserCreationFailedPayload{
-			UserID:    userID,
-			TagNumber: tag,
-			Reason:    err.Error(),
-		}, err
+		return createFailureResult(userID, tag, ErrInvalidDiscordID), ErrInvalidDiscordID
 	}
 
 	// Handle negative tag numbers
 	if tag != nil && *tag < 0 {
-		err := errors.New("tag number cannot be negative")
-		return nil, &userevents.UserCreationFailedPayload{
-			UserID:    userID,
-			TagNumber: tag,
-			Reason:    err.Error(),
-		}, err
+		return createFailureResult(userID, tag, ErrNegativeTagNumber), ErrNegativeTagNumber
 	}
 
 	startTime := time.Now()
-
-	// Record usercreation attempt
-	if tag != nil {
-		s.metrics.RecordUserCreationByTag(ctx, *tag)
-	}
-
 	userType := "base"
 	source := "user"
 
+	if tag != nil {
+		s.metrics.RecordUserCreationByTag(ctx, *tag)
+	}
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
-	result, err := s.serviceWrapper(ctx, "CreateUser ", userID, func(ctx context.Context) (UserOperationResult, error) {
+	result, err := s.serviceWrapper(ctx, "CreateUser", userID, func(ctx context.Context) (UserOperationResult, error) {
 		user := userdb.User{UserID: userID}
 
-		// Time the database operation
 		dbStart := time.Now()
-
 		err := s.UserDB.CreateUser(ctx, &user)
-		dbDuration := time.Duration(time.Since(dbStart).Seconds())
+		dbDuration := time.Since(dbStart)
 		s.metrics.RecordDBQueryDuration(ctx, dbDuration)
 
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Database error during user creation",
-				attr.String("user_id", string(userID)),
-				attr.Error(err),
-			)
+			// Standardize common database errors
+			domainErr := translateDBError(err)
+			logLevel := "error"
+
+			// For expected errors like duplicate users, log as info or warn
+			if errors.Is(domainErr, ErrUserAlreadyExists) {
+				logLevel = "warn"
+			}
+
+			// Log with appropriate level
+			if logLevel == "error" {
+				s.logger.ErrorContext(ctx, "Failed to create user",
+					attr.String("user_id", string(userID)),
+					attr.Error(domainErr),
+				)
+			} else {
+				s.logger.WarnContext(ctx, domainErr.Error(),
+					attr.String("user_id", string(userID)),
+					attr.String("original_error", err.Error()),
+				)
+			}
 
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
 
+			// Return UserOperationResult with standardized failure
 			return UserOperationResult{
 				Failure: &userevents.UserCreationFailedPayload{
 					UserID:    userID,
 					TagNumber: tag,
-					Reason:    err.Error(),
+					Reason:    domainErr.Error(),
 				},
-			}, err
+				Error: domainErr,
+			}, domainErr
 		}
 
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
@@ -87,26 +101,40 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.Dis
 		}, nil
 	})
 
-	// Record total usercreation duration
-	s.metrics.RecordUserCreationDuration(ctx, userType, source, time.Duration(time.Since(startTime).Seconds()))
+	s.metrics.RecordUserCreationDuration(ctx, userType, source, time.Since(startTime))
 
-	if err != nil {
-		if result.Failure != nil {
-			return nil, result.Failure.(*userevents.UserCreationFailedPayload), err
-		}
-		return nil, &userevents.UserCreationFailedPayload{
+	return result, err
+}
+
+// translateDBError converts database-specific errors to domain errors
+func translateDBError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	errMsg := err.Error()
+
+	// Detect PostgreSQL unique constraint violations
+	if strings.Contains(errMsg, "SQLSTATE 23505") ||
+		strings.Contains(errMsg, "duplicate key value") {
+		return ErrUserAlreadyExists
+	}
+
+	// Add more error translations as needed
+
+	// Default case: return the original error
+	return err
+}
+
+// createFailureResult is a helper to create standardized failure results
+func createFailureResult(userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) UserOperationResult {
+	return UserOperationResult{
+		Success: nil,
+		Failure: &userevents.UserCreationFailedPayload{
 			UserID:    userID,
 			TagNumber: tag,
 			Reason:    err.Error(),
-		}, err
+		},
+		Error: err,
 	}
-
-	s.logger.InfoContext(ctx, "User  successfully created",
-		attr.String("user_id", string(userID)),
-		attr.Float64("creation_duration_seconds", time.Since(startTime).Seconds()),
-		attr.String("user_type", userType),
-		attr.String("source", source),
-	)
-
-	return result.Success.(*userevents.UserCreatedPayload), nil, nil
 }

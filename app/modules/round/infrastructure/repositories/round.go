@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -127,53 +130,207 @@ func (db *RoundDBImpl) UpdateRound(ctx context.Context, roundID sharedtypes.Roun
 
 // DeleteRound "soft deletes" a round by setting its state to DELETED.
 func (db *RoundDBImpl) DeleteRound(ctx context.Context, roundID sharedtypes.RoundID) error {
-	return db.UpdateRoundState(ctx, roundID, roundtypes.RoundState(roundtypes.RoundStateDeleted))
-}
+	// Validate the round ID isn't nil/zero
+	if roundID == sharedtypes.RoundID(uuid.Nil) {
+		slog.Error("attempted to delete round with nil UUID")
+		return fmt.Errorf("cannot delete round: nil UUID provided")
+	}
 
-// UpdateParticipant updates a participant's response or tag number in a round and returns the updated participant lists.
-func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
-	var round roundtypes.Round
-	err := db.DB.NewSelect().
-		Model(&round).
+	// Check if the round exists first
+	exists, err := db.DB.NewSelect().
+		Model(&roundtypes.Round{}).
 		Where("id = ?", roundID).
-		Scan(ctx)
+		Exists(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch round: %w", err)
+		slog.Error("failed to check if round exists", "error", err)
+		return fmt.Errorf("failed to check if round exists: %w", err)
 	}
 
-	// Find the participant and update their response or tag number
-	found := false
-	for i, p := range round.Participants {
-		if p.UserID == participant.UserID {
-			if participant.Response != "" {
-				round.Participants[i].Response = participant.Response
-			}
-
-			if participant.TagNumber != nil {
-				round.Participants[i].TagNumber = participant.TagNumber
-			}
-			if participant.Score != nil {
-				round.Participants[i].Score = participant.Score
-			}
-			found = true
-			break
-		}
+	if !exists {
+		slog.Warn("attempted to delete non-existent round")
+		return fmt.Errorf("round with ID %s does not exist", roundID.String())
 	}
 
-	if !found {
-		round.Participants = append(round.Participants, participant)
-	}
-
-	_, err = db.DB.NewUpdate().
-		Model(&round).
-		Set("participants = ?", round.Participants).
+	// Update the round state
+	res, err := db.DB.NewUpdate().
+		Model(&roundtypes.Round{}).
+		Set("state = ?", roundtypes.RoundState(roundtypes.RoundStateDeleted)).
+		Set("updated_at = ?", time.Now()).
 		Where("id = ?", roundID).
 		Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update participant response: %w", err)
+		slog.Error("failed to update round state", "error", err)
+		return fmt.Errorf("failed to update round state: %w", err)
 	}
 
-	return round.Participants, nil
+	// Check if any rows were affected
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		slog.Error("failed to get rows affected", "error", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		slog.Warn("no rows affected when deleting round")
+		return fmt.Errorf("no rows affected when deleting round %s", roundID.String())
+	}
+
+	slog.Info("round deleted from DB")
+	return nil
+}
+
+// UpdateParticipant updates a participant's response or tag number in a round and returns updated domain participants.
+func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
+	fmt.Println(">>> 🌈 Starting UpdateParticipant") // Replaced slog.Info
+
+	// Log incoming participant data
+	tagNumberStr := "<nil>"
+	if participant.TagNumber != nil {
+		tagNumberStr = fmt.Sprintf("%d", *participant.TagNumber)
+	}
+	// Replaced slog.Info with attributes
+	fmt.Printf(">>> 🌈 Incoming participant data: UserID=%s, Response=%s, TagNumber=%s, Score=%v\n",
+		string(participant.UserID),
+		string(participant.Response),
+		tagNumberStr,
+		fmt.Sprintf("%v", participant.Score), // Use %v for pointers/nil checks
+	)
+
+	// Start a transaction
+	tx, err := db.DB.BeginTx(ctx, nil)
+	if err != nil {
+		// Replaced slog.Error with attribute
+		fmt.Printf(">>> 🌈 ERROR: Failed to begin transaction: %v\n", err)
+		return nil, fmt.Errorf("🌈 begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var dbRound Round
+	err = tx.NewSelect().
+		Model(&dbRound).
+		Where("id = ?", roundID).
+		For("UPDATE").
+		Scan(ctx)
+	if err != nil {
+		// Replaced slog.Error with attribute
+		fmt.Printf(">>> 🌈 ERROR: Failed to fetch round %v: %v\n", roundID, err)
+		return nil, fmt.Errorf("🌈 fetch round: %w", err)
+	}
+
+	// Replaced slog.Info with attributes
+	fmt.Printf(">>> 🌈 Round found: ID=%v, Title=%s, ParticipantsCount=%d, ParticipantsNil=%t\n",
+		roundID,
+		string(dbRound.Title),
+		len(dbRound.Participants),
+		dbRound.Participants == nil,
+	)
+
+	// Initialize participants if null
+	if dbRound.Participants == nil {
+		fmt.Println(">>> 🌈 Participants was nil, initializing empty array") // Replaced slog.Info
+		dbRound.Participants = []roundtypes.Participant{}
+	}
+
+	// Modify participants
+	updated := false
+	for i := range dbRound.Participants { // Iterate by index to modify in place
+		p := &dbRound.Participants[i] // Use pointer to modify the slice element
+
+		if p.UserID == participant.UserID {
+			// Replaced slog.Info with attributes
+			fmt.Printf(">>> 🌈 Found existing participant %s at index %d, updating...\n",
+				string(p.UserID),
+				i,
+			)
+
+			if participant.Response != "" {
+				// Handle nil pointer gracefully for old value logging
+				oldResponse := string(p.Response)
+				fmt.Printf(">>> 🌈 Updating response for user %s: Old=%s, New=%s\n",
+					string(p.UserID),
+					oldResponse,
+					string(participant.Response),
+				)
+				p.Response = participant.Response
+			}
+
+			if participant.TagNumber != nil {
+				// Handle nil pointer gracefully for old value logging
+				oldTag := "<nil>"
+				if p.TagNumber != nil {
+					oldTag = fmt.Sprintf("🌈 %d", *p.TagNumber)
+				}
+				fmt.Printf(">>> 🌈 Updating tag number for user %s: Old=%s, New=%s\n",
+					string(p.UserID),
+					oldTag,
+					tagNumberStr, // Use the already formatted new value
+				)
+				p.TagNumber = participant.TagNumber
+			}
+
+			if participant.Score != nil {
+				// Handle nil pointer gracefully for old value logging
+				oldScore := "<nil>"
+				if p.Score != nil {
+					oldScore = fmt.Sprintf("🌈 %v", *p.Score)
+				}
+				newScore := "<nil>"
+				if participant.Score != nil {
+					newScore = fmt.Sprintf("🌈 %v", *participant.Score)
+				}
+				fmt.Printf(">>> 🌈 Updating score for user %s: Old=%s, New=%s\n",
+					string(p.UserID),
+					oldScore,
+					newScore,
+				)
+				p.Score = participant.Score
+			}
+
+			updated = true
+			break // Found the participant, exit the loop
+		}
+	}
+
+	if !updated {
+		// Replaced slog.Info with attributes
+		fmt.Printf(">>> 🌈 Adding new participant: UserID=%s, Response=%s, TagNumber=%s, Score=%v\n",
+			string(participant.UserID),
+			string(participant.Response),
+			tagNumberStr,
+			fmt.Sprintf("🌈 %v", participant.Score),
+		)
+		dbRound.Participants = append(dbRound.Participants, participant)
+	}
+
+	// Replaced slog.Info with attributes - Note: Printing the whole slice (%v) can be verbose
+	fmt.Printf(">>> 🌈 After update: ParticipantsCount=%d, Participants=%v\n",
+		len(dbRound.Participants),
+		dbRound.Participants,
+	)
+
+	// Update the record
+	_, err = tx.NewUpdate().
+		Model(&dbRound).
+		Set("participants = ?", dbRound.Participants). // Assuming participants are stored as JSONB or similar
+		Where("id = ?", roundID).
+		Exec(ctx)
+	if err != nil {
+		// Replaced slog.Error with attribute
+		fmt.Printf(">>> 🌈 ERROR: Failed to update round %v: %v\n", roundID, err)
+		return nil, fmt.Errorf("🌈 update round: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		// Replaced slog.Error with attribute
+		fmt.Printf(">>> 🌈 ERROR: Failed to commit transaction: %v\n", err)
+		return nil, fmt.Errorf("🌈 commit tx: %w", err)
+	}
+
+	// Replaced slog.Info with attribute
+	fmt.Printf(">>> 🌈 Update successful. Final participants count: %d\n", len(dbRound.Participants))
+
+	return dbRound.Participants, nil
 }
 
 // UpdateRoundState updates the state of a round.
@@ -304,16 +461,35 @@ func (db *RoundDBImpl) GetParticipants(ctx context.Context, roundID sharedtypes.
 }
 
 // UpdateEventMessageID updates the EventMessageID(messageID) for an existing round.
-func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) error {
+func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error) {
+	var dbRound Round
+
 	_, err := db.DB.NewUpdate().
-		Model(&roundtypes.Round{}).
-		Set("event_message_id =?", eventMessageID).
-		Where("id =?", roundID).
-		Exec(ctx)
+		Model(&dbRound).
+		Set("event_message_id = ?", eventMessageID).
+		Where("id = ?", roundID).
+		Returning("*").
+		Exec(ctx, &dbRound)
 	if err != nil {
-		return fmt.Errorf("failed to update discord event ID: %w", err)
+		return nil, fmt.Errorf("failed to update discord event ID and return row: %w", err)
 	}
-	return nil
+
+	// Convert from DB model to domain model
+	round := &roundtypes.Round{
+		ID:             dbRound.ID,
+		Title:          dbRound.Title,
+		Description:    &dbRound.Description,
+		Location:       &dbRound.Location,
+		EventType:      dbRound.EventType,
+		StartTime:      &dbRound.StartTime,
+		Finalized:      dbRound.Finalized,
+		CreatedBy:      dbRound.CreatedBy,
+		State:          dbRound.State,
+		Participants:   dbRound.Participants,
+		EventMessageID: dbRound.EventMessageID,
+	}
+
+	return round, nil
 }
 
 // GetEventMessageID retrieves the EventMessageID for a given round.

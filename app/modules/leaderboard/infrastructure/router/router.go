@@ -85,7 +85,6 @@ func (r *LeaderboardRouter) Configure(leaderboardService leaderboardservice.Serv
 // RegisterHandlers registers event handlers.
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
-
 	eventsToHandlers := map[string]message.HandlerFunc{
 		leaderboardevents.LeaderboardUpdateRequested:             handlers.HandleLeaderboardUpdateRequested,
 		leaderboardevents.LeaderboardTagAssignmentRequested:      handlers.HandleTagAssignment,
@@ -94,6 +93,7 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 		leaderboardevents.GetTagByUserIDRequest:                  handlers.HandleGetTagByUserIDRequest,
 		leaderboardevents.TagAvailabilityCheckRequest:            handlers.HandleTagAvailabilityCheckRequested,
 		leaderboardevents.LeaderboardBatchTagAssignmentRequested: handlers.HandleBatchTagAssignmentRequested,
+		leaderboardevents.RoundGetTagByUserIDRequest:             handlers.HandleRoundGetTagRequest,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

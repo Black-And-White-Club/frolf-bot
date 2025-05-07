@@ -224,11 +224,12 @@ func (mr *MockRoundDBMockRecorder) TagUpdates(ctx, bun, round any) *gomock.Call 
 }
 
 // UpdateEventMessageID mocks base method.
-func (m *MockRoundDB) UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) error {
+func (m *MockRoundDB) UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateEventMessageID", ctx, roundID, eventMessageID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateEventMessageID indicates an expected call of UpdateEventMessageID.

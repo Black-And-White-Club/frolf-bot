@@ -5,8 +5,8 @@ nats:
   url: "nats://my-nats.nats:4222"
 
 observability:
-  metrics_address: "alloy.observability.svc.cluster.local:4317"
-  tempo_endpoint: "alloy.observability.svc.cluster.local:4317"
+  metrics_address: "localhost:4317"
+  tempo_endpoint: "localhost:4317"
   tempo_insecure: true
   tempo_sample_rate: 0.1
   environment: "local"

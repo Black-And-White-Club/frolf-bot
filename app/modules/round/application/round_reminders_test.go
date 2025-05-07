@@ -26,7 +26,6 @@ var (
 	testReminderLocation   = roundtypes.Location("Test Location")
 	testReminderStartTime  = sharedtypes.StartTime(time.Now())
 	testReminderType       = "Test Reminder Type"
-	testEventMessageID     = testReminderRoundID
 )
 
 var (
@@ -59,6 +58,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 	mockMetrics := &roundmetrics.NoOpMetrics{}
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 	mockEventBus := eventbus.NewMockEventBus(ctrl)
+	testDiscordMessageID := "12345"
 
 	tests := []struct {
 		name           string
@@ -78,7 +78,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,
 				ReminderType:   testReminderType,
-				EventMessageID: testEventMessageID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Success: roundevents.DiscordReminderPayload{
@@ -88,7 +88,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 					Location:       &testReminderLocation,
 					UserIDs:        []sharedtypes.DiscordID{testParticipant1.UserID, testParticipant2.UserID},
 					ReminderType:   testReminderType,
-					EventMessageID: testEventMessageID,
+					EventMessageID: testDiscordMessageID,
 				},
 			},
 			expectedError: nil,
@@ -104,7 +104,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,
 				ReminderType:   testReminderType,
-				EventMessageID: testEventMessageID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Success: roundevents.RoundReminderProcessedPayload{
@@ -124,7 +124,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,
 				ReminderType:   testReminderType,
-				EventMessageID: testEventMessageID,
+				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: roundevents.RoundErrorPayload{

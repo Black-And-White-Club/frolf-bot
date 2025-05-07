@@ -12,8 +12,8 @@ import (
 )
 
 // GetUser  retrieves user data and returns a response payload.
-func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.DiscordID) (*userevents.GetUserResponsePayload, *userevents.GetUserFailedPayload, error) {
-	operationName := "GetUser "
+func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error) {
+	operationName := "GetUser"
 	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
 		user, err := s.UserDB.GetUserByUserID(ctx, userID)
 		if err != nil {
@@ -24,11 +24,13 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.Discor
 				s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 				return UserOperationResult{
+					Success: nil,
 					Failure: &userevents.GetUserFailedPayload{
 						UserID: userID,
 						Reason: "user not found",
 					},
-				}, errors.New("user not found") // Return an error message
+					Error: errors.New("user not found"),
+				}, errors.New("user not found")
 			}
 
 			s.logger.ErrorContext(ctx, "Failed to get user",
@@ -38,6 +40,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.Discor
 			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 			return UserOperationResult{
+				Success: nil,
 				Failure: &userevents.GetUserFailedPayload{
 					UserID: userID,
 					Reason: "failed to retrieve user from database",
@@ -56,27 +59,16 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.Discor
 					Role:   user.Role,
 				},
 			},
+			Failure: nil,
+			Error:   nil,
 		}, nil
 	})
-	if err != nil {
-		// Return failure payload if present
-		if result.Failure != nil {
-			return nil, result.Failure.(*userevents.GetUserFailedPayload), err
-		}
 
-		// Otherwise, return a generic failure response
-		return nil, &userevents.GetUserFailedPayload{
-			UserID: userID,
-			Reason: err.Error(),
-		}, err
-	}
-
-	// Return success payload
-	return result.Success.(*userevents.GetUserResponsePayload), nil, nil
+	return result, err
 }
 
 // GetUserRole retrieves a user's role and returns a response payload.
-func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (*userevents.GetUserRoleResponsePayload, *userevents.GetUserRoleFailedPayload, error) {
+func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error) {
 	operationName := "GetUserRole"
 
 	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
@@ -89,15 +81,15 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.Di
 			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 			return UserOperationResult{
+				Success: nil,
 				Failure: &userevents.GetUserRoleFailedPayload{
 					UserID: userID,
 					Reason: "failed to retrieve user role",
 				},
-				Error: err,
+				Error: errors.New("failed to retrieve user role"),
 			}, errors.New("failed to retrieve user role")
 		}
 
-		// Ensure role is valid before returning
 		if !role.IsValid() {
 			s.logger.ErrorContext(ctx, "Retrieved invalid role for user",
 				attr.String("userID", string(userID)),
@@ -105,6 +97,7 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.Di
 			)
 
 			return UserOperationResult{
+				Success: nil,
 				Failure: &userevents.GetUserRoleFailedPayload{
 					UserID: userID,
 					Reason: "retrieved invalid user role",
@@ -120,21 +113,11 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.Di
 				UserID: userID,
 				Role:   role,
 			},
+			Failure: nil,
+			Error:   nil,
 		}, nil
 	})
-	if err != nil {
-		// Return failure payload if present
-		if result.Failure != nil {
-			return nil, result.Failure.(*userevents.GetUserRoleFailedPayload), err
-		}
 
-		// Otherwise, return a generic failure response
-		return nil, &userevents.GetUserRoleFailedPayload{
-			UserID: userID,
-			Reason: err.Error(),
-		}, err
-	}
-
-	// Return success payload
-	return result.Success.(*userevents.GetUserRoleResponsePayload), nil, nil
+	// Return the result and the wrapped error from the wrapper.
+	return result, err
 }

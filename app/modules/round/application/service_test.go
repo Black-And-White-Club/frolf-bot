@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -117,9 +118,10 @@ func TestNewRoundService(t *testing.T) {
 				mockDB := rounddb.NewMockRoundDB(ctrl)
 				mockMetrics := &roundmetrics.NoOpMetrics{}
 				tracer := noop.NewTracerProvider().Tracer("test")
+				mockEventbus := mocks.NewMockEventBus(ctrl)
 
 				// Call the function being tested
-				service := NewRoundService(mockDB, logger, mockMetrics, tracer)
+				service := NewRoundService(mockDB, logger, mockMetrics, tracer, mockEventbus)
 
 				// Ensure service is correctly created
 				if service == nil {
@@ -164,7 +166,7 @@ func TestNewRoundService(t *testing.T) {
 				defer ctrl.Finish()
 
 				// Call with nil dependencies
-				service := NewRoundService(nil, nil, nil, nil)
+				service := NewRoundService(nil, nil, nil, nil, nil)
 
 				// Ensure service is correctly created
 				if service == nil {

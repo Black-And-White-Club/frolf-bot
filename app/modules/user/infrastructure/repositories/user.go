@@ -10,9 +10,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-var (
-	ErrUserNotFound = errors.New("user not found")
-)
+var ErrUserNotFound = errors.New("user not found")
 
 // UserDB is a repository for user data operations.
 type UserDBImpl struct {
@@ -25,7 +23,7 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback() // Rollback is safe to call even if tx is committed
+	defer tx.Rollback()
 
 	_, err = tx.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
@@ -51,13 +49,27 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.Dis
 		return fmt.Errorf("invalid user role: %s", role)
 	}
 
-	_, err = tx.NewUpdate().
+	// Execute the update query and get the result
+	result, err := tx.NewUpdate().
 		Model((*User)(nil)).
 		Set("role = ?", role).
 		Where("user_id = ?", userID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update user role: %w", err)
+		// Handle errors during query execution
+		return fmt.Errorf("failed to execute update user role query: %w", err)
+	}
+
+	// Check the number of rows affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		// Handle error getting rows affected
+		return fmt.Errorf("failed to get rows affected after update: %w", err)
+	}
+
+	// If no rows were affected, the user was not found
+	if rowsAffected == 0 {
+		return ErrUserNotFound
 	}
 
 	if err := tx.Commit(); err != nil {

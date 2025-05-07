@@ -26,7 +26,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdate(ctx context.Context, cha
 	for _, round := range rounds {
 		update := roundtypes.RoundUpdate{
 			RoundID:        round.ID,
-			EventMessageID: round.ID,
+			EventMessageID: round.EventMessageID,
 			Participants:   make([]roundtypes.Participant, 0),
 		}
 		for _, participant := range round.Participants {
@@ -81,7 +81,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		discordUpdatePayload := roundevents.DiscordRoundUpdatePayload{
 			Participants:    make([]roundtypes.Participant, 0),
 			RoundIDs:        make([]sharedtypes.RoundID, 0),
-			EventMessageIDs: make([]sharedtypes.RoundID, 0),
+			EventMessageIDs: make([]string, 0),
 		}
 
 		// Iterate over the updates and add the updated participants to the payload

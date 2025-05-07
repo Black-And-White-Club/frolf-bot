@@ -34,6 +34,7 @@ func NewRoundService(
 	logger *slog.Logger,
 	metrics roundmetrics.RoundMetrics,
 	tracer trace.Tracer,
+	eventBus eventbus.EventBus,
 ) Service {
 	return &RoundService{
 		RoundDB:        db,
@@ -41,7 +42,7 @@ func NewRoundService(
 		metrics:        metrics,
 		tracer:         tracer,
 		roundValidator: roundutil.NewRoundValidator(),
-		// Assign the serviceWrapper method
+		EventBus:       eventBus, // <--- Assign the passed-in EventBus here
 		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (result RoundOperationResult, err error) {
 			return serviceWrapper(ctx, operationName, roundID, serviceFunc, logger, metrics, tracer)
 		},

@@ -14,7 +14,7 @@ import (
 
 	// Import the updated observability package
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr" // Keep using attr for structured logging if desired
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 )
 
 func main() {
@@ -57,7 +57,6 @@ func main() {
 
 	// --- Application Initialization ---
 	// Initialize application, passing the new observability struct
-	// Ensure app.Initialize signature matches (accepts *observability.Observability)
 	application := &app.App{}
 	if err := application.Initialize(ctx, cfg, *obs); err != nil { // Pass the new obs struct
 		logger.Error("Failed to initialize application", attr.Error(err))
@@ -68,7 +67,7 @@ func main() {
 	// --- Graceful Shutdown Setup ---
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-	cleanShutdown := make(chan struct{}) // Channel to signal clean shutdown completion
+	cleanShutdown := make(chan struct{})
 
 	// Goroutine to handle signals and initiate shutdown
 	go func() {
@@ -83,12 +82,12 @@ func main() {
 		cancel() // Cancel the main context to signal all components
 
 		// Create a timeout for the entire shutdown process
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second) // Increased timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer shutdownCancel()
 
 		// Shutdown application first
 		go func() {
-			defer close(cleanShutdown) // Signal that cleanup is done
+			defer close(cleanShutdown)
 			logger.Info("Closing application...")
 			if err := application.Close(); err != nil {
 				logger.Error("Error during application shutdown", attr.Error(err))
@@ -100,7 +99,7 @@ func main() {
 			logger.Info("Shutting down observability components...")
 			obsShutdownCtx, obsShutdownCancel := context.WithTimeout(shutdownCtx, 10*time.Second)
 			defer obsShutdownCancel()
-			if err := obs.Provider.Shutdown(obsShutdownCtx); err != nil { // Use Provider.Shutdown
+			if err := obs.Provider.Shutdown(obsShutdownCtx); err != nil {
 				logger.Error("Error shutting down observability", attr.Error(err))
 			} else {
 				logger.Info("Observability shutdown successful")
@@ -145,5 +144,5 @@ func main() {
 	}
 
 	logger.Info("Exiting main.")
-	os.Exit(0) // Optional: Explicitly exit with code 0
+	os.Exit(0)
 }

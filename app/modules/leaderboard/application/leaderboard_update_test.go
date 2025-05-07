@@ -21,6 +21,9 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	tag1 := sharedtypes.TagNumber(1)
+	tag2 := sharedtypes.TagNumber(2)
+
 	ctx := context.Background()
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testSortedParticipants := []string{"0:player1", "1:player2", "2:player3"}
@@ -48,7 +51,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: 0, UserID: "old_player1"}, {TagNumber: 1, UserID: "old_player2"}},
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
@@ -75,11 +78,11 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("database connection error"),
 		},
 		{
-			name: "Fails to create new leaderboard", // This test was incorrect
+			name: "Fails to create new leaderboard",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: 0, UserID: "old_player1"}, {TagNumber: 1, UserID: "old_player2"}},
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
@@ -92,16 +95,16 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.LeaderboardUpdateFailedPayload{
 				RoundID: testRoundID,
-				Reason:  "failed to update leaderboard", // Corrected expected reason.
+				Reason:  "failed to update leaderboard",
 			},
-			expectedError: errors.New("update failure"), // Corrected expected error
+			expectedError: errors.New("update failure"),
 		},
 		{
-			name: "Fails to deactivate old leaderboard", // This test was incorrect
+			name: "Fails to deactivate old leaderboard",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: 0, UserID: "old_player1"}, {TagNumber: 1, UserID: "old_player2"}},
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
@@ -110,8 +113,8 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			},
 			roundID:        testRoundID,
 			sortedTags:     testSortedParticipants,
-			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID}, // Corrected expected result
-			expectedFail:   nil,                                                                // Corrected expected failure
+			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID},
+			expectedFail:   nil,
 			expectedError:  nil,
 		},
 		{
@@ -147,7 +150,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: 0, UserID: "old_player1"}, {TagNumber: 1, UserID: "old_player2"}},
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,

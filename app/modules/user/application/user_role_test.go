@@ -3,7 +3,6 @@ package userservice
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -23,24 +22,22 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testRole := sharedtypes.UserRoleAdmin
+	invalidRole := sharedtypes.UserRoleEnum("InvalidRole")
+	dbErr := errors.New("database connection failed")
 
-	// Mock dependencies
 	mockDB := userdb.NewMockUserDB(ctrl)
 
-	// Use No-Op implementations
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 
-	// Define test cases
 	tests := []struct {
-		name           string
-		mockDBSetup    func(*userdb.MockUserDB)
-		newRole        sharedtypes.UserRoleEnum
-		expectedResult *userevents.UserRoleUpdateResultPayload
-		expectedFail   *userevents.UserRoleUpdateFailedPayload
-		expectedError  error
+		name             string
+		mockDBSetup      func(*userdb.MockUserDB)
+		newRole          sharedtypes.UserRoleEnum
+		expectedOpResult UserOperationResult
+		expectedErr      error
 	}{
 		{
 			name: "Successfully updates user role",
@@ -50,25 +47,31 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 					Return(nil)
 			},
 			newRole: testRole,
-			expectedResult: &userevents.UserRoleUpdateResultPayload{
-				UserID: testUserID,
-				Role:   testRole,
+			expectedOpResult: UserOperationResult{
+				Success: &userevents.UserRoleUpdateResultPayload{
+					UserID: testUserID,
+					Role:   testRole,
+				},
+				Failure: nil,
+				Error:   nil,
 			},
-			expectedFail:  nil,
-			expectedError: nil,
+			expectedErr: nil,
 		},
 		{
 			name: "Fails due to invalid role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				// No database call expected for invalid role
 			},
-			newRole:        sharedtypes.UserRoleEnum("InvalidRole"),
-			expectedResult: nil,
-			expectedFail: &userevents.UserRoleUpdateFailedPayload{
-				UserID: testUserID,
-				Reason: "invalid role",
+			newRole: invalidRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateFailedPayload{
+					UserID: testUserID,
+					Reason: "invalid role",
+				},
+				Error: errors.New("invalid role"), // Error within the result
 			},
-			expectedError: errors.New("invalid role"),
+			expectedErr: errors.New("invalid role"), // Top-level error from wrapper
 		},
 		{
 			name: "Fails due to user not found",
@@ -77,37 +80,41 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 					UpdateUserRole(gomock.Any(), testUserID, testRole).
 					Return(userdbtypes.ErrUserNotFound)
 			},
-			newRole:        testRole,
-			expectedResult: nil,
-			expectedFail: &userevents.UserRoleUpdateFailedPayload{
-				UserID: testUserID,
-				Reason: "user not found",
+			newRole: testRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateFailedPayload{
+					UserID: testUserID,
+					Reason: "user not found",
+				},
+				Error: userdbtypes.ErrUserNotFound, // Error within the result
 			},
-			expectedError: errors.New("user not found"),
+			expectedErr: errors.New("failed to update user role: user not found"), // Wrapper wraps ErrUserNotFound
 		},
 		{
 			name: "Fails due to database error",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testRole).
-					Return(errors.New("database connection failed"))
+					Return(dbErr)
 			},
-			newRole:        testRole,
-			expectedResult: nil,
-			expectedFail: &userevents.UserRoleUpdateFailedPayload{
-				UserID: testUserID,
-				Reason: "failed to update user role",
+			newRole: testRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateFailedPayload{
+					UserID: testUserID,
+					Reason: "failed to update user role",
+				},
+				Error: dbErr, // Error within the result
 			},
-			expectedError: errors.New("failed to update user role: database connection failed"),
+			expectedErr: errors.New("failed to update user role: database connection failed"), // Wrapper wraps dbErr
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			// Initialize service with No-Op implementations
 			s := &UserServiceImpl{
 				UserDB:  mockDB,
 				logger:  logger,
@@ -118,23 +125,58 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				},
 			}
 
-			gotResult, gotFail, err := s.UpdateUserRoleInDatabase(ctx, testUserID, tt.newRole)
+			gotResult, gotErr := s.UpdateUserRoleInDatabase(ctx, testUserID, tt.newRole)
 
-			// Validate result
-			if !reflect.DeepEqual(gotResult, tt.expectedResult) {
-				t.Errorf("❌ Mismatched result, got: %v, expected: %v", gotResult, tt.expectedResult)
+			if tt.expectedOpResult.Success != nil {
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserRoleUpdateResultPayload)
+				gotSuccess, ok := gotResult.Success.(*userevents.UserRoleUpdateResultPayload)
+				if !ok {
+					t.Errorf("Expected success payload of type *userevents.UserRoleUpdateResultPayload, got %T", gotResult.Success)
+				} else if gotSuccess == nil {
+					t.Errorf("Expected non-nil success payload, got nil")
+				} else if gotSuccess.UserID != expectedSuccess.UserID {
+					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, expectedSuccess.UserID)
+				} else if gotSuccess.Role != expectedSuccess.Role {
+					t.Errorf("Mismatched Role, got: %v, expected: %v", gotSuccess.Role, expectedSuccess.Role)
+				}
+			} else if gotResult.Success != nil {
+				t.Errorf("Unexpected success payload: %v", gotResult.Success)
 			}
 
-			// Validate failure
-			if !reflect.DeepEqual(gotFail, tt.expectedFail) {
-				t.Errorf("❌ Mismatched failure, got: %v, expected: %v", gotFail, tt.expectedFail)
+			if tt.expectedOpResult.Failure != nil {
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserRoleUpdateFailedPayload)
+				gotFailure, ok := gotResult.Failure.(*userevents.UserRoleUpdateFailedPayload)
+				if !ok {
+					t.Errorf("Expected failure payload of type *userevents.UserRoleUpdateFailedPayload, got %T", gotResult.Failure)
+				} else if gotFailure == nil {
+					t.Errorf("Expected non-nil failure payload, got nil")
+				} else if gotFailure.Reason != expectedFailure.Reason {
+					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, expectedFailure.Reason)
+				} else if gotFailure.UserID != expectedFailure.UserID {
+					t.Errorf("Mismatched failure UserID, got: %v, expected: %v", gotFailure.UserID, expectedFailure.UserID)
+				}
+			} else if gotResult.Failure != nil {
+				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
 			}
 
-			// Validate error
-			if (err != nil) != (tt.expectedError != nil) {
-				t.Errorf("❌ Unexpected error: %v", err)
-			} else if err != nil && err.Error() != tt.expectedError.Error() {
-				t.Errorf("❌ Mismatched error message, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
+			if tt.expectedOpResult.Error != nil {
+				if gotResult.Error == nil {
+					t.Errorf("Expected error in result, got nil")
+				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
+					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
+				}
+			} else if gotResult.Error != nil {
+				t.Errorf("Unexpected error in result: %v", gotResult.Error)
+			}
+
+			if tt.expectedErr != nil {
+				if gotErr == nil {
+					t.Errorf("Expected a top-level error but got nil")
+				} else if gotErr.Error() != tt.expectedErr.Error() {
+					t.Errorf("Mismatched top-level error reason, got: %v, expected: %v", gotErr.Error(), tt.expectedErr.Error())
+				}
+			} else if gotErr != nil {
+				t.Errorf("Unexpected top-level error: %v", gotErr)
 			}
 		})
 	}

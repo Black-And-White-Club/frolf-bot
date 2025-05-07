@@ -12,21 +12,25 @@ import (
 )
 
 func TestGenerateUpdatedLeaderboard(t *testing.T) {
+	tag1 := sharedtypes.TagNumber(1)
+	tag2 := sharedtypes.TagNumber(5)
+	tag3 := sharedtypes.TagNumber(18)
+	tag4 := sharedtypes.TagNumber(20)
 	tests := []struct {
 		name                   string
 		currentLeaderboard     *leaderboarddb.Leaderboard
 		sortedParticipantTags  []string
-		expectedTagAssignments map[string]int
+		expectedTagAssignments map[sharedtypes.DiscordID]sharedtypes.TagNumber
 		expectedRemainingUsers int
 	}{
 		{
 			name: "Basic redistribution with existing users",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: 1},
-					{UserID: "user2", TagNumber: 5},
-					{UserID: "user3", TagNumber: 18},
-					{UserID: "user4", TagNumber: 20},
+					{UserID: "user1", TagNumber: &tag1},
+					{UserID: "user2", TagNumber: &tag2},
+					{UserID: "user3", TagNumber: &tag3},
+					{UserID: "user4", TagNumber: &tag4},
 				},
 			},
 			sortedParticipantTags: []string{
@@ -34,7 +38,7 @@ func TestGenerateUpdatedLeaderboard(t *testing.T) {
 				"5:user2",  // second
 				"1:user1",  // worst performer
 			},
-			expectedTagAssignments: map[string]int{
+			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 				"user3": 1,  // best performer gets lowest tag
 				"user2": 5,  // keeps original tag
 				"user1": 18, // worst performer gets highest tag
@@ -45,16 +49,16 @@ func TestGenerateUpdatedLeaderboard(t *testing.T) {
 			name: "Scenario with gaps in tag numbers",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: 1},
-					{UserID: "user2", TagNumber: 3},
-					{UserID: "user3", TagNumber: 10},
+					{UserID: "user1", TagNumber: &tag1},
+					{UserID: "user2", TagNumber: &tag2},
+					{UserID: "user3", TagNumber: &tag3},
 				},
 			},
 			sortedParticipantTags: []string{
 				"10:user3",
 				"1:user1",
 			},
-			expectedTagAssignments: map[string]int{
+			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 				"user3": 1,  // best performer gets lowest tag
 				"user1": 10, // worst performer gets highest tag
 			},
@@ -64,12 +68,12 @@ func TestGenerateUpdatedLeaderboard(t *testing.T) {
 			name: "Empty participant tags",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: 1},
-					{UserID: "user2", TagNumber: 5},
+					{UserID: "user1", TagNumber: &tag1},
+					{UserID: "user2", TagNumber: &tag2},
 				},
 			},
 			sortedParticipantTags:  []string{},
-			expectedTagAssignments: map[string]int{},
+			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{},
 			expectedRemainingUsers: 2,
 		},
 	}
@@ -88,7 +92,6 @@ func TestGenerateUpdatedLeaderboard(t *testing.T) {
 			}
 
 			updatedLeaderboard, err := service.GenerateUpdatedLeaderboard(tt.currentLeaderboard, tt.sortedParticipantTags)
-
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -106,8 +109,8 @@ func TestGenerateUpdatedLeaderboard(t *testing.T) {
 				found := false
 				for _, entry := range updatedLeaderboard.LeaderboardData {
 					if string(entry.UserID) == userID {
-						expectedTag := tt.expectedTagAssignments[userID]
-						if int(entry.TagNumber) != expectedTag {
+						expectedTag := tt.expectedTagAssignments[sharedtypes.DiscordID(userID)]
+						if entry.TagNumber != &expectedTag {
 							t.Errorf("For user %s, expected tag %d, got %d",
 								userID, expectedTag, entry.TagNumber)
 						}
@@ -149,9 +152,10 @@ func TestGenerateUpdatedLeaderboard_LargeNumberOfParticipants(t *testing.T) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 50),
 	}
 	for i := range currentLeaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i + 1)
 		currentLeaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
 			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
-			TagNumber: sharedtypes.TagNumber(i + 1),
+			TagNumber: &tag,
 		}
 	}
 
@@ -164,7 +168,6 @@ func TestGenerateUpdatedLeaderboard_LargeNumberOfParticipants(t *testing.T) {
 	// Run the function
 	service := &LeaderboardService{}
 	updatedLeaderboard, err := service.GenerateUpdatedLeaderboard(currentLeaderboard, sortedParticipantTags)
-
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -174,10 +177,10 @@ func TestGenerateUpdatedLeaderboard_LargeNumberOfParticipants(t *testing.T) {
 	}
 
 	// Verify participants got new tags in order
-	participantTags := make(map[string]sharedtypes.TagNumber)
+	participantTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 	for _, entry := range updatedLeaderboard.LeaderboardData {
 		if strings.HasPrefix(string(entry.UserID), "existinguser") {
-			participantTags[string(entry.UserID)] = entry.TagNumber
+			participantTags[entry.UserID] = *entry.TagNumber
 		}
 	}
 

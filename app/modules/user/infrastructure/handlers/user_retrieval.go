@@ -2,6 +2,7 @@ package userhandlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,7 +19,6 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			getUserPayload := payload.(*userevents.GetUserRequestPayload)
 
-			// Create convenient variables for frequently used fields
 			userID := getUserPayload.UserID
 
 			h.logger.InfoContext(ctx, "Received GetUserRequest event",
@@ -26,23 +26,26 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 				attr.String("user_id", string(userID)),
 			)
 
-			successPayload, failedPayload, err := h.userService.GetUser(ctx, userID)
+			result, err := h.userService.GetUser(ctx, userID)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to get user",
+				h.logger.ErrorContext(ctx, "Failed to call GetUser service",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
-				return nil, fmt.Errorf("failed to process GetUserRequest: %w", err)
+				return nil, fmt.Errorf("failed to process GetUserRequest service call: %w", err)
 			}
 
-			if failedPayload != nil {
-				// Log user retrieval failure
+			if result.Failure != nil {
+				failedPayload, ok := result.Failure.(*userevents.GetUserFailedPayload)
+				if !ok {
+					return nil, errors.New("unexpected type for failure payload from GetUser")
+				}
+
 				h.logger.InfoContext(ctx, "User retrieval failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("reason", failedPayload.Reason),
 				)
 
-				// Create failure message to publish
 				failureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
@@ -55,27 +58,37 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 				return []*message.Message{failureMsg}, nil
 			}
 
-			// Log user retrieval success
-			h.logger.InfoContext(ctx, "User retrieval succeeded",
+			if result.Success != nil {
+				successPayload, ok := result.Success.(*userevents.GetUserResponsePayload)
+				if !ok {
+					return nil, errors.New("unexpected type for success payload from GetUser")
+				}
+
+				h.logger.InfoContext(ctx, "User retrieval succeeded",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+				)
+
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					successPayload,
+					userevents.GetUserResponse,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			h.logger.WarnContext(ctx, "GetUser returned no success or failure payload when error was nil",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
-
-			// Create success message to publish
-			successMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				successPayload,
-				userevents.GetUserResponse,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create success message: %w", err)
-			}
-
-			return []*message.Message{successMsg}, nil
+			return nil, errors.New("get user service returned unexpected result")
 		},
 	)
 
-	// Execute the wrapped handler with the message
 	return wrappedHandler(msg)
 }
 
@@ -85,7 +98,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 		"HandleGetUserRoleRequest",
 		&userevents.GetUserRoleRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			startTime := time.Now()
+			startTime := time.Now() // Keep for handler duration metric
 			requestPayload := payload.(*userevents.GetUserRoleRequestPayload)
 			userID := requestPayload.UserID
 
@@ -94,64 +107,70 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 				attr.String("user_id", string(userID)),
 			)
 
-			// Track operation attempt
-			h.metrics.RecordOperationAttempt(ctx, "GetUserRole", userID)
-
-			// Trace user role retrieval
-			ctx, span := h.tracer.Start(ctx, "GetUserRole")
-			defer span.End()
-
-			// Retrieve user role from service
-			successPayload, failedPayload, err := h.userService.GetUserRole(ctx, userID)
+			result, err := h.userService.GetUserRole(ctx, userID)
 			if err != nil {
-				span.RecordError(err)
-				h.logger.ErrorContext(ctx, "Failed to get user role",
+				h.logger.ErrorContext(ctx, "Failed to call GetUserRole service",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
 					attr.Error(err),
 				)
-
-				// Track failure
-				h.metrics.RecordOperationFailure(ctx, "GetUserRole", userID)
-				h.metrics.RecordUserRoleRetrievalFailure(ctx, userID)
-
-				// If failedPayload is not nil, use it
-				var failurePayload *userevents.GetUserRoleFailedPayload
-				if failedPayload != nil {
-					failurePayload = failedPayload
-				} else {
-					// Otherwise, create a new failure payload
-					failurePayload = &userevents.GetUserRoleFailedPayload{
-						UserID: userID,
-						Reason: err.Error(),
-					}
-				}
-
-				// Return failure message
-				failureMsg, err := h.helpers.CreateResultMessage(msg, failurePayload, userevents.GetUserRoleFailed)
-				if err != nil {
-					span.RecordError(err)
-					return nil, fmt.Errorf("failed to create GetUserRoleFailed message: %w", err)
-				}
-
-				return []*message.Message{failureMsg}, nil
+				// The service wrapper handles span.RecordError for the service call
+				return nil, fmt.Errorf("failed to process GetUserRoleRequest service call: %w", err)
 			}
 
-			// Return success message
-			successMsg, err := h.helpers.CreateResultMessage(msg, successPayload, userevents.GetUserRoleResponse)
-			if err != nil {
-				span.RecordError(err)
-				return nil, fmt.Errorf("failed to create GetUserRoleResponse message: %w", err)
+			var resultMsg *message.Message
+			var createErr error
+
+			if result.Failure != nil {
+				failedPayload, ok := result.Failure.(*userevents.GetUserRoleFailedPayload)
+				if !ok {
+					return nil, errors.New("unexpected type for failure payload from GetUserRole")
+				}
+
+				h.logger.InfoContext(ctx, "User role retrieval failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("reason", failedPayload.Reason),
+				)
+
+				resultMsg, createErr = h.helpers.CreateResultMessage(msg, failedPayload, userevents.GetUserRoleFailed)
+
+				// The service method handles UserRoleRetrievalFailure metric
+			} else if result.Success != nil {
+				successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayload)
+				if !ok {
+					return nil, errors.New("unexpected type for success payload from GetUserRole")
+				}
+
+				h.logger.InfoContext(ctx, "User role retrieval succeeded",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+				)
+
+				resultMsg, createErr = h.helpers.CreateResultMessage(msg, successPayload, userevents.GetUserRoleResponse)
+
+				// The service method handles UserRetrievalSuccess metric
+			} else {
+				// Should not happen if service returns either Success or Failure when err is nil
+				h.logger.WarnContext(ctx, "GetUserRole returned no success or failure payload when error was nil",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+				)
+				return nil, errors.New("get user role service returned unexpected result")
 			}
 
-			// Track success
-			h.metrics.RecordOperationSuccess(ctx, "GetUserRole", userID)
-			h.metrics.RecordUserRetrievalSuccess(ctx, userID)
+			if createErr != nil {
+				h.logger.ErrorContext(ctx, "Failed to create result message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(createErr),
+				)
+				// The handler wrapper can handle the handler-level metric for this failure
+				return nil, fmt.Errorf("failed to create result message for GetUserRole: %w", createErr)
+			}
 
-			// Track duration
-			h.metrics.RecordUserRetrievalDuration(ctx, userID, time.Duration(time.Since(startTime).Seconds()))
+			// Track handler duration
+			h.metrics.RecordUserRetrievalDuration(ctx, userID, time.Since(startTime)) // Use time.Since directly
 
-			return []*message.Message{successMsg}, nil
+			return []*message.Message{resultMsg}, nil
 		},
 	)
 

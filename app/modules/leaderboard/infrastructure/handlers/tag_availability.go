@@ -6,7 +6,9 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 // HandleTagAvailabilityCheckRequested handles the TagAvailabilityCheckRequested event.
@@ -62,8 +64,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 					attr.Int("tag_number", int(*result.TagNumber)),
 				)
 
-				// Create success message
-				successMsg, err := h.helpers.CreateResultMessage(
+				// Create message for User module to create User
+				createUser, err := h.helpers.CreateResultMessage(
 					msg,
 					result,
 					leaderboardevents.TagAvailable,
@@ -72,7 +74,23 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
 
-				return []*message.Message{successMsg}, nil
+				// Create message for Leaderboard module to assign tag
+				assignTag, err := h.helpers.CreateResultMessage(
+					msg,
+					&leaderboardevents.TagAssignmentRequestedPayload{
+						UserID:     result.UserID,
+						TagNumber:  result.TagNumber,
+						UpdateID:   uuid.NewString(),
+						Source:     string(leaderboarddb.ServiceUpdateSourceCreateUser),
+						UpdateType: "automatic",
+					},
+					leaderboardevents.LeaderboardTagAssignmentRequested,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{createUser, assignTag}, nil
 			} else {
 				h.logger.InfoContext(ctx, "Tag is not available",
 					attr.CorrelationIDFromMsg(msg),

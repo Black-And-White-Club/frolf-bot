@@ -85,6 +85,8 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	}
 
 	// Initialize modules
+	app.Helpers = utils.NewHelper(app.Observability.Provider.Logger)
+
 	if err := app.initializeModules(ctx); err != nil {
 		return fmt.Errorf("failed to initialize modules: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -78,7 +79,96 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 	return wrappedHandler(msg)
 }
 
-// HandleGetTagByUserIDRequest handles the GetTagByUserIDRequest event.
+// HandleRoundGetTagRequest handles the RoundTagLookupRequest event.
+func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleRoundGetTagRequest",
+		&sharedevents.RoundTagLookupRequestPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagLookupRequestPayload := payload.(*sharedevents.RoundTagLookupRequestPayload)
+
+			h.logger.InfoContext(ctx, "Received RoundTagLookupRequest event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(tagLookupRequestPayload.UserID)),
+				attr.RoundID("round_id", tagLookupRequestPayload.RoundID),
+				attr.String("response", string(tagLookupRequestPayload.Response)),
+				attr.Any("joined_late", tagLookupRequestPayload.JoinedLate),
+			)
+
+			// Call the service function to get the tag by userID.
+			result, err := h.leaderboardService.RoundGetTagByUserID(ctx, *tagLookupRequestPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed during GetTagByUserID service call",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed during GetTagByUserID service call: %w", err)
+			}
+
+			// Assert the service result to the shared result payload.
+			responsePayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayload)
+			if !ok {
+				err := fmt.Errorf("unexpected success payload type from GetTagByUserID: expected *roundevents.RoundTagLookupResultPayload, got %T", result.Success)
+				h.logger.ErrorContext(ctx, "Unexpected success payload type from service",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
+				)
+				return nil, err
+			}
+
+			// Determine the event type based on the result.
+			var eventType string
+			var eventName string
+
+			if responsePayload.Found && responsePayload.Error == "" {
+				eventType = sharedevents.RoundTagLookupFound
+				eventName = "RoundTagLookupFound"
+				h.logger.InfoContext(ctx, "Tag lookup successful: Tag found",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(responsePayload.UserID)),
+					attr.Int("tag_number", int(*responsePayload.TagNumber)),
+					attr.String("original_response", string(responsePayload.OriginalResponse)),
+				)
+			} else {
+				eventType = sharedevents.RoundTagLookupNotFound
+				eventName = "RoundTagLookupNotFound"
+				h.logger.InfoContext(ctx, "Tag lookup completed: Tag not found or lookup error",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(responsePayload.UserID)),
+					attr.Bool("found_in_payload", responsePayload.Found),
+					attr.String("error_in_payload", responsePayload.Error),
+					attr.String("original_response", string(responsePayload.OriginalResponse)),
+				)
+			}
+
+			// Create message using the result payload and determined topic.
+			successMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				responsePayload,
+				eventType,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, fmt.Sprintf("Failed to create %s message", eventName),
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to create success message: %w", err)
+			}
+
+			// Log the published message details.
+			h.logger.InfoContext(ctx, fmt.Sprintf("Publishing %s message", eventName),
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("message_id", successMsg.UUID),
+				attr.String("topic", eventType),
+			)
+			return []*message.Message{successMsg}, nil
+		},
+	)
+
+	// Execute the wrapped handler.
+	return wrappedHandler(msg)
+}
+
 func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetTagByUserIDRequest",
@@ -122,15 +212,29 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Get tag by userID successful",
-					attr.CorrelationIDFromMsg(msg),
-				)
+				responsePayload := result.Success.(*leaderboardevents.GetTagNumberResponsePayload)
 
-				// Create success message to publish
+				// Determine if tag was found or not
+				var eventType string
+				if responsePayload.Found {
+					h.logger.InfoContext(ctx, "Tag found for user",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("user_id", string(responsePayload.UserID)),
+					)
+					eventType = leaderboardevents.GetTagNumberResponse
+				} else {
+					h.logger.InfoContext(ctx, "No tag found for user",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("user_id", string(responsePayload.UserID)),
+					)
+					eventType = leaderboardevents.GetTagByUserIDNotFound
+				}
+
+				// Create appropriate response message
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
-					result.Success,
-					leaderboardevents.GetTagNumberResponse,
+					responsePayload,
+					eventType,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

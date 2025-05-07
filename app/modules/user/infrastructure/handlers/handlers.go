@@ -34,6 +34,10 @@ func NewUserHandlers(
 	helpers utils.Helpers,
 	metrics usermetrics.UserMetrics,
 ) Handlers {
+	if helpers == nil {
+		logger.Error("Helpers is nil")
+		return nil
+	}
 	return &UserHandlers{
 		userService: userService,
 		logger:      logger,

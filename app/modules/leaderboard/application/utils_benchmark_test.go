@@ -19,9 +19,10 @@ func BenchmarkGenerateUpdatedLeaderboardSmall(b *testing.B) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 10),
 	}
 	for i := range currentLeaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i)
 		currentLeaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i)),
-			TagNumber: sharedtypes.TagNumber(i),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
+			TagNumber: &tag,
 		}
 	}
 
@@ -57,9 +58,10 @@ func BenchmarkGenerateUpdatedLeaderboardMedium(b *testing.B) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 100),
 	}
 	for i := range currentLeaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i)
 		currentLeaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i)),
-			TagNumber: sharedtypes.TagNumber(i),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
+			TagNumber: &tag,
 		}
 	}
 
@@ -94,9 +96,10 @@ func BenchmarkGenerateUpdatedLeaderboardLarge(b *testing.B) {
 		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 1000),
 	}
 	for i := range currentLeaderboard.LeaderboardData {
+		tag := sharedtypes.TagNumber(i)
 		currentLeaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("user%d", i)),
-			TagNumber: sharedtypes.TagNumber(i),
+			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
+			TagNumber: &tag,
 		}
 	}
 

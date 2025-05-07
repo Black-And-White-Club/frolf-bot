@@ -40,7 +40,6 @@ func NewRoundHandlers(
 		tracer:       tracer,
 		helpers:      helpers,
 		metrics:      metrics,
-		// Assign the standalone handlerWrapper function
 		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
 			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
 		},

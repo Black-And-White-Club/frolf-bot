@@ -25,7 +25,7 @@ var (
 	testRoundTitle          = roundtypes.Title("Test Round")
 	testStartLocation       = roundtypes.Location("Test Location")
 	testStartRoundTime      = sharedtypes.StartTime(time.Now())
-	testStartEventMessageID = testStartRoundID
+	testStartEventMessageID = "12345"
 )
 
 var (

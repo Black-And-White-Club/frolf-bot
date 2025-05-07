@@ -44,7 +44,7 @@ func NewRoundModule(
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
 	// Initialize round service with observability components
-	roundService := roundservice.NewRoundService(roundDB, logger, metrics, tracer)
+	roundService := roundservice.NewRoundService(roundDB, logger, metrics, tracer, eventBus)
 
 	// Initialize round router with observability
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)

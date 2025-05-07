@@ -14,17 +14,17 @@ type Round struct {
 	bun.BaseModel  `bun:"table:rounds,alias:r"`
 	ID             sharedtypes.RoundID      `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
 	Title          roundtypes.Title         `bun:"title,notnull"`
-	Description    roundtypes.Description   `bun:"description"`
-	Location       roundtypes.Location      `bun:"location"`
+	Description    roundtypes.Description   `bun:"description,nullzero"`
+	Location       roundtypes.Location      `bun:"location,nullzero"`
 	EventType      *roundtypes.EventType    `bun:"event_type"`
 	StartTime      sharedtypes.StartTime    `bun:"start_time,notnull"`
 	Finalized      roundtypes.Finalized     `bun:"finalized,notnull"`
-	CreatorID      sharedtypes.DiscordID    `bun:"created_by,notnull"`
+	CreatedBy      sharedtypes.DiscordID    `bun:"created_by,notnull"`
 	State          roundtypes.RoundState    `bun:"state,notnull"`
 	Participants   []roundtypes.Participant `bun:"participants,type:jsonb"`
-	EventMessageID sharedtypes.RoundID      `bun:"event_message_id"`
-	CreatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
-	UpdatedAt      time.Time                `bun:",notnull,default:current_timestamp"`
+	EventMessageID string                   `bun:"event_message_id,nullzero"`
+	CreatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
+	UpdatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
 }
 
 // Response represents the possible responses for a participant.
