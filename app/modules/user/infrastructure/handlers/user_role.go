@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -17,7 +16,6 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 		"HandleUserRoleUpdateRequest",
 		&userevents.UserRoleUpdateRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			startTime := time.Now() // Keep for handler duration metric
 			requestPayload := payload.(*userevents.UserRoleUpdateRequestPayload)
 			userID := requestPayload.UserID
 			newRole := requestPayload.Role
@@ -29,81 +27,204 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 				attr.String("requester_id", string(requestPayload.RequesterID)),
 			)
 
-			// Handler attempt metric handled by the handlerWrapper
-
+			// Call service method
 			result, err := h.userService.UpdateUserRoleInDatabase(ctx, userID, newRole)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to call UpdateUserRoleInDatabase service",
+
+			// Handle each outcome with a separate CreateResultMessage call
+			if result.Failure != nil {
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload)
+
+				if !ok {
+					// Unexpected payload type - create detailed log about the actual type
+					h.logger.ErrorContext(ctx, "UNEXPECTED FAILURE PAYLOAD TYPE",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("actual_type", fmt.Sprintf("%T", result.Failure)),
+						attr.String("actual_value", fmt.Sprintf("%+v", result.Failure)),
+					)
+
+					// Try to directly convert/extract the error
+					var errorStr string
+					switch actual := result.Failure.(type) {
+					case string:
+						errorStr = actual
+					case error:
+						errorStr = actual.Error()
+					case fmt.Stringer:
+						errorStr = actual.String()
+					default:
+						errorStr = fmt.Sprintf("%v", actual)
+					}
+
+					// Create a new payload manually
+					errorPayload := userevents.UserRoleUpdateResultPayload{
+						Success: false,
+						UserID:  userID,
+						Role:    newRole, // Always include the requested role
+						Error:   fmt.Sprintf("validation error: %s", errorStr),
+					}
+
+					resultMsg, createErr := h.helpers.CreateResultMessage(
+						msg,
+						errorPayload,
+						userevents.DiscordUserRoleUpdateFailed,
+					)
+
+					if createErr != nil {
+						h.logger.ErrorContext(ctx, "FAILED TO CREATE ERROR MESSAGE",
+							attr.CorrelationIDFromMsg(msg),
+							attr.Error(createErr),
+						)
+						return nil, fmt.Errorf("failed to create error message: %w", createErr)
+					}
+
+					h.logger.InfoContext(ctx, "Created failure message (unexpected type)",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+						attr.String("msg_uuid", resultMsg.UUID),
+					)
+
+					return []*message.Message{resultMsg}, nil
+				}
+
+				// Known failure payload - ensure role is set
+				if failurePayload.Role == "" {
+					failurePayload.Role = newRole // Always return the requested role in failure responses
+				}
+
+				// Create specific failure message
+				resultMsg, createErr := h.helpers.CreateResultMessage(
+					msg,
+					failurePayload,
+					userevents.DiscordUserRoleUpdateFailed,
+				)
+
+				if createErr != nil {
+					h.logger.ErrorContext(ctx, "FAILED TO CREATE FAILURE MESSAGE",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(createErr),
+					)
+					return nil, fmt.Errorf("failed to create failure message: %w", createErr)
+				}
+
+				h.logger.InfoContext(ctx, "Created failure message",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("user_id", string(userID)),
+					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("msg_uuid", resultMsg.UUID),
+				)
+
+				return []*message.Message{resultMsg}, nil
+
+			} else if err != nil {
+				// Technical error from service - create specific error message
+				h.logger.ErrorContext(ctx, "Technical error calling service",
+					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
-				// The service wrapper handles span.RecordError for the service call
-				return nil, fmt.Errorf("failed to process UserRoleUpdateRequest service call: %w", err)
-			}
 
-			var resultPayload interface{}
-			var eventType string
-
-			if result.Failure != nil {
-				failedPayload, ok := result.Failure.(*userevents.UserRoleUpdateFailedPayload)
-				if !ok {
-					return nil, errors.New("unexpected type for failure payload from UpdateUserRoleInDatabase")
+				technicalErrorPayload := userevents.UserRoleUpdateResultPayload{
+					Success: false,
+					UserID:  userID,
+					Role:    newRole, // Always include the requested role
+					Error:   fmt.Sprintf("internal service error: %v", err),
 				}
 
-				h.logger.InfoContext(ctx, "User role update failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("reason", failedPayload.Reason),
+				resultMsg, createErr := h.helpers.CreateResultMessage(
+					msg,
+					technicalErrorPayload,
+					userevents.DiscordUserRoleUpdateFailed,
 				)
 
-				resultPayload = failedPayload
-				eventType = userevents.UserRoleUpdateFailed
+				if createErr != nil {
+					h.logger.ErrorContext(ctx, "FAILED TO CREATE TECHNICAL ERROR MESSAGE",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(createErr),
+					)
+					return nil, fmt.Errorf("failed to create technical error message: %w", createErr)
+				}
 
-				// The service method handles RoleUpdateFailure metric
+				h.logger.InfoContext(ctx, "Created technical error message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("msg_uuid", resultMsg.UUID),
+				)
+
+				return []*message.Message{resultMsg}, nil
+
 			} else if result.Success != nil {
+				// Success case - create success message
 				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayload)
 				if !ok {
-					return nil, errors.New("unexpected type for success payload from UpdateUserRoleInDatabase")
+					h.logger.ErrorContext(ctx, "UNEXPECTED SUCCESS PAYLOAD TYPE",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("actual_type", fmt.Sprintf("%T", result.Success)),
+						attr.String("actual_value", fmt.Sprintf("%+v", result.Success)),
+					)
+					return nil, errors.New("unexpected success payload type from service")
 				}
 
-				h.logger.InfoContext(ctx, "User role updated successfully",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("user_id", string(userID)),
-					attr.String("role", string(successPayload.Role)),
+				resultMsg, createErr := h.helpers.CreateResultMessage(
+					msg,
+					successPayload,
+					userevents.DiscordUserRoleUpdated, // Success topic is not environment dependent
 				)
 
-				resultPayload = successPayload
-				eventType = userevents.UserRoleUpdated
+				if createErr != nil {
+					h.logger.ErrorContext(ctx, "FAILED TO CREATE SUCCESS MESSAGE",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(createErr),
+					)
+					return nil, fmt.Errorf("failed to create success message: %w", createErr)
+				}
 
-				// The service method handles RoleUpdateSuccess metric
+				h.logger.InfoContext(ctx, "Created success message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("topic", userevents.DiscordUserRoleUpdated), // Success topic is not environment dependent
+					attr.String("msg_uuid", resultMsg.UUID),
+				)
+
+				return []*message.Message{resultMsg}, nil
+
 			} else {
-				// Should not happen if service returns either Success or Failure when err is nil
-				h.logger.WarnContext(ctx, "UpdateUserRoleInDatabase returned no success or failure payload when error was nil",
+				// Unexpected result structure - create specific error message
+				h.logger.ErrorContext(ctx, "Service returned unexpected result structure",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
 					attr.String("role", string(newRole)),
 				)
-				return nil, errors.New("update user role service returned unexpected result")
-			}
 
-			resultMsg, createErr := h.helpers.CreateResultMessage(msg, resultPayload, eventType)
-			if createErr != nil {
-				h.logger.ErrorContext(ctx, "Failed to create result message",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("event_type", eventType),
-					attr.Error(createErr),
+				unexpectedResultPayload := userevents.UserRoleUpdateResultPayload{
+					Success: false,
+					UserID:  userID,
+					Role:    newRole, // Always include the requested role
+					Error:   "service returned unexpected result structure",
+				}
+
+				resultMsg, createErr := h.helpers.CreateResultMessage(
+					msg,
+					unexpectedResultPayload,
+					userevents.DiscordUserRoleUpdateFailed,
 				)
-				// The handler wrapper can handle the handler-level metric for this failure
-				return nil, fmt.Errorf("failed to create result message for UserRoleUpdateRequest: %w", createErr)
+
+				if createErr != nil {
+					h.logger.ErrorContext(ctx, "FAILED TO CREATE MESSAGE FOR UNEXPECTED RESULT",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(createErr),
+					)
+					return nil, fmt.Errorf("failed to create message for unexpected result structure: %w", createErr)
+				}
+
+				h.logger.InfoContext(ctx, "Created message for unexpected result",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("msg_uuid", resultMsg.UUID),
+				)
+
+				return []*message.Message{resultMsg}, nil
 			}
-
-			// Handler success metric handled by the handlerWrapper
-			// Duration metric
-			h.metrics.RecordUserRetrievalDuration(ctx, userID, time.Since(startTime)) // Assuming this metric is appropriate for handler duration
-
-			return []*message.Message{resultMsg}, nil
 		},
 	)
 
-	return wrappedHandler(msg)
+	msgs, err := wrappedHandler(msg)
+
+	return msgs, err
 }

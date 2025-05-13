@@ -24,9 +24,6 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-// testEnv is the shared test environment managed by TestMain.
-var testEnv *testutils.TestEnvironment
-
 type HandlerTestDeps struct {
 	*testutils.TestEnvironment
 	UserModule *user.Module

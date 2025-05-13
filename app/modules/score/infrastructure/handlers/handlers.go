@@ -3,7 +3,7 @@ package scorehandlers
 import (
 	"context"
 	"fmt"
-	"log/slog" // Import slog
+	"log/slog"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -13,24 +13,24 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace" // Import otel trace
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ScoreHandlers handles score-related events.
 type ScoreHandlers struct {
 	scoreService   scoreservice.Service
-	logger         *slog.Logger // Change to slog
-	tracer         trace.Tracer // Change to otel trace
+	logger         *slog.Logger
+	tracer         trace.Tracer
 	metrics        scoremetrics.ScoreMetrics
-	helpers        utils.Helpers
+	Helpers        utils.Helpers
 	handlerWrapper func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
 }
 
 // NewScoreHandlers creates a new ScoreHandlers.
 func NewScoreHandlers(
 	scoreService scoreservice.Service,
-	logger *slog.Logger, // Change to slog
-	tracer trace.Tracer, // Change to otel trace
+	logger *slog.Logger,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 	metrics scoremetrics.ScoreMetrics,
 ) Handlers {
@@ -38,7 +38,7 @@ func NewScoreHandlers(
 		scoreService: scoreService,
 		logger:       logger,
 		tracer:       tracer,
-		helpers:      helpers,
+		Helpers:      helpers,
 		metrics:      metrics,
 		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
 			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
@@ -51,9 +51,9 @@ func handlerWrapper(
 	handlerName string,
 	unmarshalTo interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
-	logger *slog.Logger, // Change to slog
+	logger *slog.Logger,
 	metrics scoremetrics.ScoreMetrics,
-	tracer trace.Tracer, // Change to otel trace
+	tracer trace.Tracer,
 	helpers utils.Helpers,
 ) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {

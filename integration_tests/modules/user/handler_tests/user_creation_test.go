@@ -138,7 +138,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				tagNumber := sharedtypes.TagNumber(24)
 				payload := userevents.UserSignupRequestPayload{
 					UserID:    userID,
-					TagNumber: &tagNumber, // With tag number
+					TagNumber: &tagNumber,
 				}
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -156,20 +156,25 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
-				// 1. Verify user was NOT created in the database (handler should only publish tag check)
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
-				// Use the service from the user module to check the DB
+
 				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(deps.Ctx, userID)
-				if getUserErr == nil {
-					t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, getUserResult.Success)
-				}
-				// Check that the error is the expected "user not found"
-				if getUserResult.Error == nil || getUserResult.Error.Error() != "user not found" { // Assuming the service returns "user not found" error string
-					t.Errorf("Expected 'user not found' error when getting user, but got: %v", getUserResult.Error)
+
+				if getUserErr == nil && getUserResult.Success != nil {
+					foundUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
+					t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, foundUser)
 				}
 
-				// 2. Verify the TagAvailabilityCheckRequested event was published
-				expectedTopic := userevents.TagAvailabilityCheckRequested // Assuming the constant is the topic name
+				if getUserErr == nil && getUserResult.Failure != nil {
+					failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayload)
+					if !ok || failurePayload.Reason != "user not found" {
+						t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got unexpected failure payload: %+v (error: %v)", getUserResult.Failure, getUserErr)
+					}
+				} else if getUserErr == nil && getUserResult.Failure == nil {
+					t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got nil error and no payload")
+				}
+
+				expectedTopic := userevents.TagAvailabilityCheckRequested
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -192,12 +197,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Errorf("TagAvailabilityCheckRequestedPayload UserID mismatch: expected %q, got %q", userID, checkPayload.UserID)
 				}
 
-				// Verify correlation ID is propagated
 				if receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
 					t.Errorf("Correlation ID mismatch: expected %q, got %q", incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey), receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 				}
 
-				// 3. Verify no UserCreated event was published
 				unexpectedTopic := userevents.UserCreated
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))

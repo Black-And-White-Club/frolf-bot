@@ -3,8 +3,11 @@ package scorehandlers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -16,57 +19,75 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			processRoundScoresRequestPayload, ok := payload.(*scoreevents.ProcessRoundScoresRequestPayload)
 			if !ok {
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, sharedtypes.RoundID{})
 				return nil, fmt.Errorf("invalid payload type: expected ProcessRoundScoresRequestPayload")
 			}
 
-			// Call the service function
+			if processRoundScoresRequestPayload == nil {
+				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, sharedtypes.RoundID{})
+				return nil, fmt.Errorf("received nil ProcessRoundScoresRequestPayload after type assertion")
+			}
+
 			result, err := h.scoreService.ProcessRoundScores(ctx, processRoundScoresRequestPayload.RoundID, processRoundScoresRequestPayload.Scores)
 			if err != nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-
-				// Create failure event
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
 					RoundID: processRoundScoresRequestPayload.RoundID,
 					Error:   err.Error(),
 				}
-
-				// Create failure message
-				failureMsg, errCreateResult := h.helpers.CreateResultMessage(
-					msg,
-					failurePayload,
-					scoreevents.ProcessRoundScoresFailure,
-				)
+				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailure)
 				if errCreateResult != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errCreateResult)
 				}
-
 				return []*message.Message{failureMsg}, nil
 			}
 
-			if result.Success == nil {
+			if result.Error != nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				return nil, fmt.Errorf("unknown result from ProcessRoundScores")
+				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+					RoundID: processRoundScoresRequestPayload.RoundID,
+					Error:   result.Error.Error(),
+				}
+				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailure)
+				if errCreateResult != nil {
+					return nil, fmt.Errorf("failed to create failure message from result error: %w", errCreateResult)
+				}
+				return []*message.Message{failureMsg}, nil
 			}
 
-			successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+			tagMappings, ok := result.Success.([]sharedtypes.TagMapping)
 			if !ok {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				return nil, fmt.Errorf("unexpected result type: %T", result.Success)
+				return nil, fmt.Errorf("unexpected result type from service: expected []sharedtypes.TagMapping, got %T", result.Success)
 			}
 
-			// Create success message
-			successMsg, err := h.helpers.CreateResultMessage(
+			batchAssignments := make([]sharedevents.TagAssignmentInfo, 0, len(tagMappings))
+			for _, tm := range tagMappings {
+				batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfo{
+					UserID:    tm.DiscordID,
+					TagNumber: tm.TagNumber,
+				})
+			}
+
+			batchID := fmt.Sprintf("%s-%d", processRoundScoresRequestPayload.RoundID, time.Now().UnixNano())
+			batchPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
+				RequestingUserID: "score-service",
+				BatchID:          batchID,
+				Assignments:      batchAssignments,
+			}
+
+			batchAssignMsg, err := h.Helpers.CreateResultMessage(
 				msg,
-				successPayload,
-				scoreevents.ProcessRoundScoresSuccess,
+				batchPayload,
+				sharedevents.LeaderboardBatchTagAssignmentRequested,
 			)
 			if err != nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				return nil, fmt.Errorf("failed to create success message: %w", err)
+				return nil, fmt.Errorf("failed to create batch tag assignment message: %w", err)
 			}
 
 			h.metrics.RecordRoundScoresProcessingAttempt(ctx, true, processRoundScoresRequestPayload.RoundID)
-			return []*message.Message{successMsg}, nil
+			return []*message.Message{batchAssignMsg}, nil
 		},
 	)(msg)
 }

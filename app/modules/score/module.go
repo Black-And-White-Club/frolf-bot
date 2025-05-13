@@ -13,17 +13,18 @@ import (
 	scorerouter "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Module represents the score module.
 type Module struct {
-	EventBus      eventbus.EventBus
-	ScoreService  scoreservice.Service
-	config        *config.Config
-	ScoreRouter   *scorerouter.ScoreRouter
-	cancelFunc    context.CancelFunc
-	helper        utils.Helpers
-	observability observability.Observability
+	EventBus           eventbus.EventBus
+	ScoreService       scoreservice.Service
+	config             *config.Config
+	ScoreRouter        *scorerouter.ScoreRouter
+	cancelFunc         context.CancelFunc
+	Helper             utils.Helpers
+	observability      observability.Observability
+	prometheusRegistry *prometheus.Registry
 }
 
 // NewScoreModule creates a new instance of the Score module.
@@ -35,65 +36,64 @@ func NewScoreModule(
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
+	routerCtx context.Context,
 ) (*Module, error) {
-	// Extract observability components
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.ScoreMetrics
 	tracer := obs.Registry.Tracer
 
-	logger.InfoContext(ctx, "score.NewScoreModule called")
-
-	// Initialize score service with observability components
 	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer)
 
-	// Initialize score router with observability
-	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
+	// Prometheus registry can be created here or passed in if it's a shared registry
+	prometheusRegistry := prometheus.NewRegistry()
 
-	// Configure the router with the score service.
-	if err := scoreRouter.Configure(scoreService, eventBus, metrics); err != nil {
+	// Create the ScoreRouter instance, passing the externally created router
+	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
+
+	// Configure the ScoreRouter
+	if err := scoreRouter.Configure(routerCtx, scoreService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure score router: %w", err)
 	}
 
 	module := &Module{
-		EventBus:      eventBus,
-		ScoreService:  scoreService,
-		config:        cfg,
-		ScoreRouter:   scoreRouter,
-		helper:        helpers,
-		observability: obs,
+		EventBus:           eventBus,
+		ScoreService:       scoreService,
+		config:             cfg,
+		ScoreRouter:        scoreRouter,
+		Helper:             helpers,
+		observability:      obs,
+		prometheusRegistry: prometheusRegistry,
 	}
 
 	return module, nil
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.Provider.Logger
-	logger.InfoContext(ctx, "Starting score module")
-
-	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
 	defer cancel()
 
-	// If we have a wait group, mark as done when this method exits
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	logger.InfoContext(ctx, "Score module goroutine stopped")
 }
 
 func (m *Module) Close() error {
 	logger := m.observability.Provider.Logger
-	logger.Info("Stopping score module")
 
-	// Cancel any other running operations
+	// Closing the module should trigger the ScoreRouter's close
+	if m.ScoreRouter != nil {
+		if err := m.ScoreRouter.Close(); err != nil {
+			logger.Error("Error closing ScoreRouter from module", "error", err)
+			return fmt.Errorf("error closing ScoreRouter: %w", err)
+		}
+	}
+
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	logger.Info("Score module stopped")
 	return nil
 }

@@ -13,4 +13,5 @@ type Service interface {
 
 	// Corrects an individual score and triggers a leaderboard update.
 	CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error)
+	ProcessScoresForStorage(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error)
 }

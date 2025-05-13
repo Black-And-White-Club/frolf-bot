@@ -90,15 +90,14 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, sharedtypes.UserRoleEnum) {
 				userID := sharedtypes.DiscordID("123456789012345678")
 				newRole := sharedtypes.UserRoleEnum("invalid_role")
-
 				return deps.Ctx, userID, newRole
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UserOperationResult, err error) {
-				if err == nil {
-					t.Fatal("Expected error for invalid role, got nil")
+				if err != nil {
+					t.Fatalf("Expected nil standard error for invalid role, got: %v", err)
 				}
 				if result.Error == nil {
-					t.Fatalf("Result contained nil Error, expected non-nil: %v", err)
+					t.Fatal("Result contained nil Error, expected non-nil")
 				}
 				if result.Success != nil {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
@@ -106,27 +105,26 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateFailedPayload")
+					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayload, got %T", result.Failure)
 				}
-
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
 				}
-				expectedFailureReason := "invalid role"
-				if failurePayload.Reason != expectedFailureReason {
-					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedFailureReason, failurePayload.Reason)
+				if failurePayload.Role != newRole {
+					t.Errorf("Failure payload Role mismatch: expected %q, got %q", newRole, failurePayload.Role)
 				}
-
-				expectedWrappedErrMsg := "HandleUpdateUserRole operation failed: invalid role"
-				if err.Error() != expectedWrappedErrMsg {
-					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedWrappedErrMsg, err.Error())
+				if failurePayload.Success != false {
+					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
 				}
-				expectedOriginalErrMsg := "invalid role"
-				if result.Error.Error() != expectedOriginalErrMsg {
-					t.Errorf("Result error message mismatch: expected %q, got %q", expectedOriginalErrMsg, result.Error.Error())
+				expectedFailureReasonString := "invalid role"
+				if failurePayload.Error != expectedFailureReasonString {
+					t.Errorf("Failure payload Error string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Error)
+				}
+				expectedResultErrorString := "invalid role" // String comparison for result.Error
+				if result.Error.Error() != expectedResultErrorString {
+					t.Errorf("Result error string mismatch: expected %q, got %q", expectedResultErrorString, result.Error.Error())
 				}
 			},
 			expectedSuccess: false,
@@ -137,19 +135,17 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, sharedtypes.UserRoleEnum) {
 				userID := sharedtypes.DiscordID("99999999999999999")
 				newRole := sharedtypes.UserRoleAdmin
-
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database tables during setup: %v", err)
 				}
-
 				return deps.Ctx, userID, newRole
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UserOperationResult, err error) {
-				if err == nil {
+				if err == nil { // Service returns non-nil err for DB errors
 					t.Fatal("Expected error for user not found, got nil")
 				}
-				if result.Error == nil {
-					t.Fatalf("Result contained nil Error, expected non-nil: %v", err)
+				if result.Error == nil { // Service sets result.Error to the original DB error
+					t.Fatal("Result contained nil Error, expected non-nil")
 				}
 				if result.Success != nil {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
@@ -157,25 +153,28 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload) // Service returns this type for failures
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateFailedPayload")
+					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayload, got %T", result.Failure)
 				}
-
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
 				}
-				expectedFailureReason := "user not found"
-				if failurePayload.Reason != expectedFailureReason {
-					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedFailureReason, failurePayload.Reason)
+				if failurePayload.Role != newRole {
+					t.Errorf("Failure payload Role mismatch: expected %q, got %q", newRole, failurePayload.Role)
 				}
-
+				if failurePayload.Success != false {
+					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
+				}
+				expectedFailureReasonString := "user not found" // Service puts reason in string Error field
+				if failurePayload.Error != expectedFailureReasonString {
+					t.Errorf("Failure payload Error string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Error)
+				}
 				expectedWrappedErrMsg := "HandleUpdateUserRole operation failed: failed to update user role: user not found"
 				if err.Error() != expectedWrappedErrMsg {
 					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedWrappedErrMsg, err.Error())
 				}
-				expectedOriginalErr := userdb.ErrUserNotFound
+				expectedOriginalErr := userdb.ErrUserNotFound // Service sets result.Error to the original DB error
 				if !errors.Is(result.Error, expectedOriginalErr) {
 					t.Errorf("Result error mismatch: expected error wrapping %v, got %v", expectedOriginalErr, result.Error)
 				}
@@ -209,43 +208,30 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 			var result userservice.UserOperationResult
 			var err error
 
-			// Setup dependencies based on skipCleanup flag
 			if !tc.skipCleanup {
-				// Assuming SetupTestUserService initializes deps.Service, deps.Ctx, deps.BunDB etc.
 				currentDeps = SetupTestUserService(sharedCtx, sharedDB, t)
-
-				// Clean database tables before the test
 				if err := testutils.CleanUserIntegrationTables(currentDeps.Ctx, currentDeps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database before test %q: %v", tc.name, err)
 				}
-
-				// Run the test-specific setup function
 				ctx, userID, newRole = tc.setupFn(t, currentDeps)
 			} else {
-				// For tests that skip cleanup or need a specific service setup (like nil context)
-				// Initialize dependencies manually or with a specific helper
 				currentDeps = TestDeps{
-					Ctx: context.Background(), // Use a background context if test setup doesn't provide one
+					Ctx: context.Background(),
 					Service: userservice.NewUserService(
-						nil, // Replace with actual dependencies or mocks as needed
+						nil,
 						nil,
 						slog.New(slog.NewTextHandler(io.Discard, nil)),
 						&usermetrics.NoOpMetrics{},
 						noop.NewTracerProvider().Tracer("test"),
 					),
-					// Add other dependencies like BunDB if needed, potentially mocked
 				}
-				// Run the test-specific setup function with the manually created deps
 				ctx, userID, newRole = tc.setupFn(t, currentDeps)
 			}
 
-			// Execute the function under test
 			result, err = currentDeps.Service.UpdateUserRoleInDatabase(ctx, userID, newRole)
 
-			// Validate the results using the test case's validateFn
 			tc.validateFn(t, currentDeps, userID, newRole, result, err)
 
-			// Optional cleanup after each test (if not skipped)
 			if !tc.skipCleanup {
 				if cleanupErr := testutils.CleanUserIntegrationTables(currentDeps.Ctx, currentDeps.BunDB); cleanupErr != nil {
 					t.Errorf("Failed to clean database tables after test %q: %v", tc.name, cleanupErr)

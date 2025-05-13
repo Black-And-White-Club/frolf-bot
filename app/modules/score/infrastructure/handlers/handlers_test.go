@@ -67,7 +67,7 @@ func TestNewScoreHandlers(t *testing.T) {
 				if scoreHandlers.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
-				if scoreHandlers.helpers != mockHelpers {
+				if scoreHandlers.Helpers != mockHelpers {
 					t.Errorf("helpers not correctly assigned")
 				}
 				if scoreHandlers.metrics != mockMetrics {
@@ -105,7 +105,7 @@ func TestNewScoreHandlers(t *testing.T) {
 					if scoreHandlers.tracer != nil {
 						t.Errorf("tracer should be nil")
 					}
-					if scoreHandlers.helpers != nil {
+					if scoreHandlers.Helpers != nil {
 						t.Errorf("helpers should be nil")
 					}
 					if scoreHandlers.metrics != nil {

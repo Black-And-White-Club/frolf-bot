@@ -8,10 +8,9 @@ import (
 // User represents a user in the system.
 type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
-	ID            int64 `bun:"id,pk,autoincrement" json:"id"`
-	// Name          string                 `bun:"name" json:"name"`
-	UserID sharedtypes.DiscordID    `bun:"user_id,unique"`
-	Role   sharedtypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
+	ID            int64                    `bun:"id,pk,autoincrement" json:"id"`
+	UserID        sharedtypes.DiscordID    `bun:"user_id,unique"`
+	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
 }
 
 // Add these methods to your User struct

@@ -71,3 +71,18 @@ func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, roundID, scores any) 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, roundID, scores)
 }
+
+// ProcessScoresForStorage mocks base method.
+func (m *MockService) ProcessScoresForStorage(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessScoresForStorage", ctx, roundID, scores)
+	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProcessScoresForStorage indicates an expected call of ProcessScoresForStorage.
+func (mr *MockServiceMockRecorder) ProcessScoresForStorage(ctx, roundID, scores any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessScoresForStorage", reflect.TypeOf((*MockService)(nil).ProcessScoresForStorage), ctx, roundID, scores)
+}

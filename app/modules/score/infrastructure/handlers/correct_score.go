@@ -5,11 +5,9 @@ import (
 	"fmt"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleCorrectScoreRequest handles correct score requests.
 func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
 	return h.handlerWrapper(
 		"HandleCorrectScoreRequest",
@@ -20,51 +18,44 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*mess
 				return nil, fmt.Errorf("invalid payload type: expected ScoreUpdateRequestPayload")
 			}
 
-			// Log received event
-			h.logger.InfoContext(ctx, "Received CorrectScoreRequest event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", scoreUpdateRequestPayload.RoundID),
-				attr.String("user_id", string(scoreUpdateRequestPayload.UserID)),
-				attr.Int("score", int(scoreUpdateRequestPayload.Score)),
-				attr.Any("tag_number", scoreUpdateRequestPayload.TagNumber),
+			result, err := h.scoreService.CorrectScore(
+				ctx,
+				scoreUpdateRequestPayload.RoundID,
+				scoreUpdateRequestPayload.UserID,
+				scoreUpdateRequestPayload.Score,
+				scoreUpdateRequestPayload.TagNumber,
 			)
-
-			// Call the service
-			result, err := h.scoreService.CorrectScore(ctx, scoreUpdateRequestPayload.RoundID, scoreUpdateRequestPayload.UserID, scoreUpdateRequestPayload.Score, scoreUpdateRequestPayload.TagNumber)
-			// Check if an error occurred
 			if err != nil {
-				// Handle the error
-				h.logger.ErrorContext(ctx, "Error correcting score",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
 				return nil, err
 			}
 
-			// Determine if success or failure
-			var eventType string
-			var payloadToPublish interface{}
 			if result.Failure != nil {
-				eventType = scoreevents.ScoreUpdateFailure
-				payloadToPublish = result.Failure
-			} else if result.Success != nil {
-				eventType = scoreevents.ScoreUpdateSuccess
-				payloadToPublish = result.Success
-			} else {
-				return nil, fmt.Errorf("unexpected result from service")
+				failurePayload, ok := result.Failure.(*scoreevents.ScoreUpdateFailurePayload)
+				if !ok {
+					return nil, fmt.Errorf("unexpected failure payload type from service: expected ScoreUpdateFailurePayload, got %T", result.Failure)
+				}
+				failureMsg, err := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ScoreUpdateFailure)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create ScoreUpdateFailure message: %w", err)
+				}
+				return []*message.Message{failureMsg}, nil
 			}
 
-			// Create and return message
-			responseMsg, err := h.helpers.CreateResultMessage(msg, payloadToPublish, eventType)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create response message",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to create response message: %w", err)
+			if result.Success != nil {
+				successPayload, ok := result.Success.(*scoreevents.ScoreUpdateSuccessPayload)
+				if !ok {
+					return nil, fmt.Errorf("unexpected success payload type from service: expected *scoreevents.ScoreUpdateSuccessPayload, got %T", result.Success)
+				}
+
+				successMsg, err := h.Helpers.CreateResultMessage(msg, successPayload, scoreevents.ScoreUpdateSuccess)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create ScoreUpdateSuccess message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
 			}
 
-			return []*message.Message{responseMsg}, nil
+			return nil, fmt.Errorf("unexpected result from service: neither success nor failure")
 		},
 	)(msg)
 }

@@ -10,14 +10,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// ProcessScoresForStorage prepares score data for storage by converting and sorting.
-// It returns the processed score info sorted by score (lowest first).
-func (s *ScoreService) ProcessScoresForStorage(
-	ctx context.Context,
-	roundID sharedtypes.RoundID,
-	scores []sharedtypes.ScoreInfo,
-) ([]sharedtypes.ScoreInfo, error) {
-	// Quick validation
+func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
 	if len(scores) == 0 {
 		err := fmt.Errorf("cannot process empty score list")
 		s.logger.ErrorContext(ctx, "Empty score list provided",
@@ -28,27 +21,29 @@ func (s *ScoreService) ProcessScoresForStorage(
 		return nil, err
 	}
 
-	// Start timing and metrics
 	startTime := time.Now()
 	s.metrics.RecordOperationAttempt(ctx, "ProcessScoresForStorage", roundID)
 
-	// Process scores
 	taggedCount, untaggedCount := 0, 0
 	for i := 0; i < len(scores); i++ {
-		// Normalize score inline for better performance
 		intScore := int(scores[i].Score)
 
-		// Bounds checking only for extreme scores (moved inline from normalizeScore)
 		if intScore < -100 || intScore > 100 {
-			s.logger.Debug("Unusually extreme score detected", attr.Int("score", intScore))
+			err := fmt.Errorf("invalid score value: %d for user %s", intScore, scores[i].UserID)
+			s.logger.WarnContext(ctx, "Invalid score detected during processing",
+				attr.RoundID("round_id", roundID),
+				attr.String("user_id", string(scores[i].UserID)),
+				attr.Int("score", intScore),
+				attr.Error(err),
+			)
+			s.metrics.RecordOperationFailure(ctx, "ProcessScoresForStorage", roundID)
+			return nil, err
 		}
 
 		scores[i].Score = sharedtypes.Score(intScore)
 
-		// Track metrics
 		s.metrics.RecordPlayerScore(ctx, roundID, scores[i].UserID, scores[i].Score)
 
-		// Count tagged vs untagged
 		if scores[i].TagNumber != nil {
 			s.metrics.RecordPlayerTag(ctx, roundID, scores[i].UserID, scores[i].TagNumber)
 			s.metrics.RecordTagPerformance(ctx, roundID, scores[i].TagNumber, scores[i].Score)
@@ -59,11 +54,9 @@ func (s *ScoreService) ProcessScoresForStorage(
 		}
 	}
 
-	// Record tagged vs untagged counts
 	s.metrics.RecordTaggedPlayersProcessed(ctx, roundID, taggedCount)
 	s.metrics.RecordUntaggedPlayersProcessed(ctx, roundID, untaggedCount)
 
-	// Sort scores
 	sortStartTime := time.Now()
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].Score < scores[j].Score
@@ -71,7 +64,6 @@ func (s *ScoreService) ProcessScoresForStorage(
 	sortDuration := time.Since(sortStartTime)
 	s.metrics.RecordScoreSortingDuration(ctx, roundID, sortDuration)
 
-	// Log completion and record metrics
 	s.metrics.RecordOperationDuration(ctx, "ProcessScoresForStorage", time.Since(startTime))
 
 	s.logger.InfoContext(ctx, "Scores processed and sorted",
@@ -85,55 +77,3 @@ func (s *ScoreService) ProcessScoresForStorage(
 
 	return scores, nil
 }
-
-// ExtractTagInformation extracts only users with tags from the processed scores.
-// This creates a format suitable for the leaderboard update.
-// func (s *ScoreService) ExtractTagInformation(
-// 	ctx context.Context,
-// 	roundID sharedtypes.RoundID,
-// 	processedScores []sharedtypes.ScoreInfo,
-// ) ([]byte, error) {
-// 	operationName := "ExtractTagInformation"
-
-// 	s.logger.InfoContext(ctx,"Starting "+operationName,
-// 		attr.RoundID("round_id", roundID),
-// 		attr.Int("num_scores", len(processedScores)),
-// 	)
-
-// 	// Record metrics
-// 	s.metrics.RecordOperationAttempt(operationName, roundID)
-// 	startTime := time.Now()
-// 	defer func() {
-// 		duration := time.Since(startTime).Seconds()
-// 		s.metrics.RecordOperationDuration(operationName, duration)
-// 	}()
-
-// 	// Create a slice to hold participant tags
-// 	participantTags := make([]string, 0, len(processedScores))
-
-// 	for _, scoreInfo := range processedScores {
-// 		// Format the tag information as needed
-// 		tagInfo := fmt.Sprintf("User  :%s:Tag:%d", scoreInfo.UserID, scoreInfo.TagNumber)
-// 		participantTags = append(participantTags, tagInfo)
-
-// 		// Record individual player tag
-// 		s.metrics.RecordPlayerTag(roundID, scoreInfo.UserID, scoreInfo.TagNumber)
-// 	}
-
-// 	s.logger.InfoContext(ctx,"Tag information extracted",
-// 		attr.RoundID("round_id", roundID),
-// 		attr.Int("num_participant_tags", len(participantTags)),
-// 	)
-
-// 	// Marshal the participantTags slice to JSON
-// 	jsonData, err := json.Marshal(participantTags)
-// 	if err != nil {
-// 		s.logger.ErrorContext(ctx,"Failed to marshal tag information to JSON",
-// 			attr.RoundID("round_id", roundID),
-// 			attr.Error(err),
-// 		)
-// 		return nil, err
-// 	}
-
-// 	return jsonData, nil
-// }

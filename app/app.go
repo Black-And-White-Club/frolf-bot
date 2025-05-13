@@ -84,48 +84,36 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 		return fmt.Errorf("failed to create event bus: %w", err)
 	}
 
-	// Initialize modules
 	app.Helpers = utils.NewHelper(app.Observability.Provider.Logger)
 
-	if err := app.initializeModules(ctx); err != nil {
-		return fmt.Errorf("failed to initialize modules: %w", err)
-	}
-
-	logger.Info("All modules initialized successfully")
+	logger.Info("App Initialize finished")
 	return nil
 }
 
-func (app *App) initializeModules(ctx context.Context) error {
-	logger := app.Observability.Provider.Logger
-	logger.Info("Entering initializeModules")
-
+// initializeModules initializes the application modules.
+func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Context) error {
 	var err error
 
-	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers); err != nil {
-		logger.Error("Failed to initialize user module", attr.Error(err))
+	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize user module", attr.Error(err))
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
-	logger.Info("User module initialized successfully")
 
-	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers); err != nil {
-		logger.Error("Failed to initialize leaderboard module", attr.Error(err))
+	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize leaderboard module", attr.Error(err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}
-	logger.Info("Leaderboard module initialized successfully")
 
-	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.EventBus, app.Router, app.Helpers); err != nil {
-		logger.Error("❌ Failed to initialize round module", attr.Error(err))
+	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize round module", attr.Error(err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
-	logger.Info("✅ Round module initialized successfully")
 
-	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers); err != nil {
-		logger.Error("Failed to initialize score module", attr.Error(err))
+	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
-	logger.Info("Score module initialized successfully")
 
-	logger.Info("Exiting initializeModules")
 	return nil
 }
 
@@ -143,16 +131,22 @@ func (app *App) Run(ctx context.Context) error {
 		cancel()
 	}()
 
+	routerRunCtx, routerRunCancel := context.WithCancel(ctx)
+	defer routerRunCancel()
+
+	if err := app.initializeModules(ctx, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed during module initialization", attr.Error(err))
+		cancel()
+		return fmt.Errorf("failed during module initialization: %w", err)
+	}
+
 	go func() {
-		app.Observability.Provider.Logger.Info("Starting main Watermill router in goroutine")
-		if err := app.Router.Run(ctx); err != nil {
+		if err := app.Router.Run(routerRunCtx); err != nil && err != context.Canceled {
 			app.Observability.Provider.Logger.Error("Error running Watermill router", attr.Error(err))
 			cancel()
 		}
-		app.Observability.Provider.Logger.Info("Main Watermill router stopped")
 	}()
 
-	app.Observability.Provider.Logger.Info("Waiting for main router to start running")
 	select {
 	case <-app.Router.Running():
 		app.Observability.Provider.Logger.Info("Main router started and running")
@@ -161,11 +155,6 @@ func (app *App) Run(ctx context.Context) error {
 		cancel()
 		return fmt.Errorf("timeout waiting for main router to start")
 	}
-
-	app.UserModule.Run(ctx, nil)
-	app.LeaderboardModule.Run(ctx, nil)
-	app.RoundModule.Run(ctx, nil)
-	app.ScoreModule.Run(ctx, nil)
 
 	<-ctx.Done()
 
@@ -179,39 +168,25 @@ func (app *App) Run(ctx context.Context) error {
 }
 
 func (app *App) Close() error {
-	app.Observability.Provider.Logger.Info("Starting app.Close()")
-
+	// Modules' Close methods should handle closing their internal components,
 	if app.UserModule != nil {
-		app.Observability.Provider.Logger.Info("Closing user module")
 		app.UserModule.Close()
 	}
 	if app.LeaderboardModule != nil {
-		app.Observability.Provider.Logger.Info("Closing leaderboard module")
 		app.LeaderboardModule.Close()
 	}
 	if app.RoundModule != nil {
-		app.Observability.Provider.Logger.Info("Closing round module")
 		app.RoundModule.Close()
 	}
 	if app.ScoreModule != nil {
-		app.Observability.Provider.Logger.Info("Closing score module")
 		app.ScoreModule.Close()
 	}
 
-	if app.Router != nil {
-		app.Observability.Provider.Logger.Info("Closing Watermill router")
-		if err := app.Router.Close(); err != nil {
-			app.Observability.Provider.Logger.Error("Error closing Watermill router", attr.Error(err))
-		}
-	}
-
 	if app.EventBus != nil {
-		app.Observability.Provider.Logger.Info("Closing event bus")
 		if err := app.EventBus.Close(); err != nil {
 			app.Observability.Provider.Logger.Error("Error closing event bus", attr.Error(err))
 		}
 	}
 
-	app.Observability.Provider.Logger.Info("Finished app.Close()")
 	return nil
 }

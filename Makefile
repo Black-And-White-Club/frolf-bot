@@ -26,6 +26,15 @@ test-integration:
 	@echo "Running integration tests from root..."
 	go test ./integration_tests/... -v
 
+integration-leaderboard-service:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/leaderboard/application_tests -v
+
+integration-leaderboard-handlers:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/leaderboard/handler_tests -v
+
+
 integration-user-service:
 	@echo "Running integration tests from root..."
 	go test ./integration_tests/modules/user/application_tests -v
@@ -33,6 +42,15 @@ integration-user-service:
 integration-user-handlers:
 	@echo "Running integration tests from root..."
 	go test ./integration_tests/modules/user/handler_tests -v
+
+integration-score-service:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/score/application_tests -v
+
+integration-score-handlers:
+	@echo "Running integration tests from root..."
+	go test ./integration_tests/modules/score/handler_tests -v
+
 
 # Directories
 MOCKGEN := mockgen

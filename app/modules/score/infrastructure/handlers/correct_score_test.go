@@ -343,7 +343,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				logger:       logger,
 				tracer:       tracer,
 				metrics:      metrics,
-				helpers:      mockHelpers,
+				Helpers:      mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
 					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},

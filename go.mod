@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/Black-And-White-Club/frolf-bot-shared v0.40.0
 	github.com/ThreeDotsLabs/watermill v1.4.6
+	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/docker/go-connections v0.5.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0

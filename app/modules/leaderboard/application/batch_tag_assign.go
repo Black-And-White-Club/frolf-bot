@@ -13,7 +13,6 @@ import (
 
 // BatchTagAssignmentRequested handles multiple manual tag assignments in one operation
 func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error) {
-	// Log the batch operation - update to use UUID string representation
 	s.logger.InfoContext(ctx, "Batch tag assignment triggered",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("batch_id", payload.BatchID),
@@ -21,10 +20,10 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, pa
 		attr.Int("assignment_count", len(payload.Assignments)),
 	)
 
-	// Prepare assignments for the database
+	// Prepare assignments for the database, skipping invalid ones
 	dbAssignments := make([]leaderboarddb.TagAssignment, 0, len(payload.Assignments))
+	processedAssignmentsInfo := make([]leaderboardevents.TagAssignmentInfo, 0, len(payload.Assignments))
 	for _, assignment := range payload.Assignments {
-		// Validate each tag number (optional)
 		if assignment.TagNumber < 0 {
 			s.logger.Warn("Skipping invalid tag number",
 				attr.String("user_id", string(assignment.UserID)),
@@ -34,14 +33,32 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, pa
 		}
 
 		dbAssignments = append(dbAssignments, leaderboarddb.TagAssignment{
-			UserID:    sharedtypes.DiscordID(assignment.UserID),
-			TagNumber: sharedtypes.TagNumber(assignment.TagNumber),
+			UserID:    assignment.UserID,
+			TagNumber: assignment.TagNumber,
 		})
+		// Add to the list for the success payload
+		processedAssignmentsInfo = append(processedAssignmentsInfo, assignment)
+	}
+
+	// If no valid assignments, return success with count 0
+	if len(dbAssignments) == 0 {
+		s.logger.InfoContext(ctx, "No valid assignments in batch, completing with success",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("batch_id", payload.BatchID),
+		)
+		return LeaderboardOperationResult{
+			Success: &leaderboardevents.BatchTagAssignedPayload{
+				RequestingUserID: payload.RequestingUserID,
+				BatchID:          payload.BatchID,
+				AssignmentCount:  0,
+				Assignments:      []leaderboardevents.TagAssignmentInfo{}, // Empty slice
+			},
+		}, nil
 	}
 
 	return s.serviceWrapper(ctx, "BatchTagAssignmentRequested", func(ctx context.Context) (LeaderboardOperationResult, error) {
-		// Execute batch assignment in a single database operation
 		startTime := time.Now()
+		// Pass dbAssignments to the repository
 		err := s.LeaderboardDB.BatchAssignTags(ctx, dbAssignments, leaderboarddb.ServiceUpdateSourceAdminBatch, sharedtypes.RoundID(uuid.Nil), payload.RequestingUserID)
 		s.metrics.RecordOperationDuration(ctx, "BatchAssignTags", "BatchTagAssignmentRequested", time.Duration(time.Since(startTime).Seconds()))
 
@@ -55,13 +72,13 @@ func (s *LeaderboardService) BatchTagAssignmentRequested(ctx context.Context, pa
 			}, err
 		}
 
-		// Success case
+		// Success case - return the processed assignments
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.BatchTagAssignedPayload{
 				RequestingUserID: payload.RequestingUserID,
 				BatchID:          payload.BatchID,
-				AssignmentCount:  len(dbAssignments),
-				Assignments:      payload.Assignments,
+				AssignmentCount:  len(processedAssignmentsInfo),
+				Assignments:      processedAssignmentsInfo,
 			},
 		}, nil
 	})

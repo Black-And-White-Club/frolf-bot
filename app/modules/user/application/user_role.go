@@ -28,13 +28,14 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "validation_failed", newRole)
 
 			return UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserRoleUpdateFailedPayload{
-					UserID: userID,
-					Reason: "invalid role",
+				Failure: &userevents.UserRoleUpdateResultPayload{
+					UserID:  userID,
+					Role:    newRole, // Include the invalid role in the response
+					Success: false,
+					Error:   "invalid role",
 				},
-				Error: validationErr, // Error for result
-			}, validationErr // Top-level error
+				Error: validationErr,
+			}, nil
 		}
 
 		dbErr := s.UserDB.UpdateUserRole(ctx, userID, newRole)
@@ -53,13 +54,14 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "database_error", newRole)
 
 			return UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserRoleUpdateFailedPayload{
-					UserID: userID,
-					Reason: failureReason,
+				Failure: &userevents.UserRoleUpdateResultPayload{
+					UserID:  userID,
+					Role:    newRole,
+					Success: false,
+					Error:   failureReason,
 				},
-				Error: dbErr, // Error for result
-			}, fmt.Errorf("failed to update user role: %w", dbErr) // Top-level error
+				Error: dbErr,
+			}, fmt.Errorf("failed to update user role: %w", dbErr)
 		}
 
 		s.logger.InfoContext(ctx, "User role updated successfully",
@@ -71,11 +73,11 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 		return UserOperationResult{
 			Success: &userevents.UserRoleUpdateResultPayload{
-				UserID: userID,
-				Role:   newRole,
+				UserID:  userID,
+				Role:    newRole,
+				Success: true,
+				Error:   "",
 			},
-			Failure: nil,
-			Error:   nil,
 		}, nil
 	})
 

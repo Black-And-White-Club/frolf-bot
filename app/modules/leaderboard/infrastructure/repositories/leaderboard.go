@@ -18,10 +18,8 @@ type LeaderboardDBImpl struct {
 
 // GetActiveLeaderboard retrieves the currently active leaderboard.
 func (db *LeaderboardDBImpl) GetActiveLeaderboard(ctx context.Context) (*Leaderboard, error) {
-	// Pre-allocate leaderboard to avoid unnecessary allocations
 	leaderboard := new(Leaderboard)
 
-	// Select only needed columns instead of all columns
 	err := db.DB.NewSelect().
 		Model(leaderboard).
 		Column("id", "leaderboard_data", "is_active", "update_source", "update_id").
@@ -66,7 +64,8 @@ func (db *LeaderboardDBImpl) DeactivateLeaderboard(ctx context.Context, leaderbo
 func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber sharedtypes.TagNumber) (bool, error) {
 	leaderboard, err := db.GetActiveLeaderboard(ctx)
 	if err != nil {
-		return false, err
+		// Propagate the error from GetActiveLeaderboard
+		return false, fmt.Errorf("failed to get active leaderboard for tag availability check: %w", err)
 	}
 
 	return !leaderboard.HasTagNumber(tagNumber), nil
@@ -74,7 +73,8 @@ func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber
 
 func (l *Leaderboard) HasTagNumber(tagNumber sharedtypes.TagNumber) bool {
 	for _, entry := range l.LeaderboardData {
-		if *entry.TagNumber == tagNumber {
+		// Safely check if TagNumber is not nil before dereferencing
+		if entry.TagNumber != nil && *entry.TagNumber == tagNumber {
 			return true
 		}
 	}
@@ -93,13 +93,16 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 	leaderboard := new(Leaderboard)
 	err = tx.NewSelect().Model(leaderboard).Where("is_active = ?", true).Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
+		return fmt.Errorf("failed to get active leaderboard during AssignTag: %w", err)
 	}
 
 	// Convert LeaderboardData to a map for easy tag lookup
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
-		tagMap[*entry.TagNumber] = entry.UserID
+		// Safely handle nil TagNumber pointers
+		if entry.TagNumber != nil {
+			tagMap[*entry.TagNumber] = entry.UserID
+		}
 	}
 
 	// Check if the tag is already assigned
@@ -113,8 +116,10 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 	// Convert the map back to LeaderboardData
 	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
 	for tag, uid := range tagMap {
+		// Create a pointer to the tag value
+		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tag,
+			TagNumber: &tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -126,7 +131,7 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 		Where("id = ?", leaderboard.ID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return fmt.Errorf("failed to deactivate current leaderboard during AssignTag: %w", err)
 	}
 
 	// Create a new active leaderboard with the updated data
@@ -139,12 +144,12 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 	}
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create new leaderboard: %w", err)
+		return fmt.Errorf("failed to create new leaderboard during AssignTag: %w", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction during AssignTag: %w", err)
 	}
 
 	return nil
@@ -162,13 +167,16 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 	leaderboard := new(Leaderboard)
 	err = tx.NewSelect().Model(leaderboard).Where("is_active = ?", true).Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
+		return fmt.Errorf("failed to get active leaderboard during BatchAssignTags: %w", err)
 	}
 
 	// Convert LeaderboardData to a map for easy tag lookup and updates
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
-		tagMap[*entry.TagNumber] = entry.UserID
+		// Safely handle nil TagNumber pointers
+		if entry.TagNumber != nil {
+			tagMap[*entry.TagNumber] = entry.UserID
+		}
 	}
 
 	// Process all assignments
@@ -179,8 +187,10 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 	// Convert the map back to LeaderboardData
 	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
 	for tag, uid := range tagMap {
+		// Create a pointer to the tag value
+		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tag,
+			TagNumber: &tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -192,7 +202,7 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 		Where("id = ?", leaderboard.ID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return fmt.Errorf("failed to deactivate current leaderboard during BatchAssignTags: %w", err)
 	}
 
 	// Create a new active leaderboard with the updated data
@@ -205,12 +215,12 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 	}
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create new leaderboard: %w", err)
+		return fmt.Errorf("failed to create new leaderboard during BatchAssignTags: %w", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction during BatchAssignTags: %w", err)
 	}
 
 	return nil
@@ -218,7 +228,6 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 
 // UpdateLeaderboard updates the leaderboard with new data from the Score module.
 func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, UpdateID sharedtypes.RoundID) error {
-	// Start a new transaction
 	tx, err := db.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -234,7 +243,7 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 		Where("is_active = ?", true).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return fmt.Errorf("failed to deactivate current leaderboard during UpdateLeaderboard: %w", err)
 	}
 
 	// 2. Create a new leaderboard with the updated data
@@ -248,12 +257,12 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 	// Insert the new leaderboard
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to insert new leaderboard: %w", err)
+		return fmt.Errorf("failed to insert new leaderboard during UpdateLeaderboard: %w", err)
 	}
 
 	// 3. Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction during UpdateLeaderboard: %w", err)
 	}
 
 	return nil
@@ -271,13 +280,16 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	leaderboard := new(Leaderboard)
 	err = tx.NewSelect().Model(leaderboard).Where("is_active = ?", true).Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
+		return fmt.Errorf("failed to get active leaderboard during SwapTags: %w", err)
 	}
 
 	// Convert LeaderboardData to a map for easy tag lookup
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
-		tagMap[*entry.TagNumber] = entry.UserID
+		// Safely handle nil TagNumber pointers
+		if entry.TagNumber != nil {
+			tagMap[*entry.TagNumber] = entry.UserID
+		}
 	}
 
 	// Find the tag numbers for the requestor and target
@@ -306,8 +318,10 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	// Convert the map back to LeaderboardData
 	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
 	for tag, uid := range tagMap {
+		// Create a pointer to the tag value
+		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tag,
+			TagNumber: &tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -319,7 +333,7 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 		Where("id = ?", leaderboard.ID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return fmt.Errorf("failed to deactivate current leaderboard during SwapTags: %w", err)
 	}
 
 	// Create a new active leaderboard with the updated data
@@ -331,19 +345,19 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	}
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create new leaderboard: %w", err)
+		return fmt.Errorf("failed to create new leaderboard during SwapTags: %w", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction during SwapTags: %w", err)
 	}
 
 	return nil
 }
 
-// Returns nil if no tag is found.
 // GetTagByUserID retrieves the tag number for a given user ID from leaderboard_data.
+// Returns sql.ErrNoRows if no tag is found for the user.
 func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*int, error) {
 	var leaderboard Leaderboard
 	err := db.DB.NewSelect().
@@ -351,22 +365,30 @@ func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID sharedty
 		Where("is_active = ?", true).
 		Scan(ctx)
 	if err != nil {
-		slog.Error("❌ Failed to fetch leaderboard entry", slog.Any("error", err))
-		return nil, err
+		// Wrap any database error other than sql.ErrNoRows
+		if err != sql.ErrNoRows {
+			slog.Error("❌ Failed to fetch leaderboard entry", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to get active leaderboard for tag lookup: %w", err)
+		}
+		// If sql.ErrNoRows from GetActiveLeaderboard, it means no active leaderboard exists,
+		// which is a valid scenario to return sql.ErrNoRows to the service layer.
+		slog.Warn("⚠️ No active leaderboard found for tag lookup")
+		return nil, sql.ErrNoRows
 	}
 
 	slog.Info("📊 Retrieved leaderboard entry",
 		slog.Any("leaderboard_data", leaderboard.LeaderboardData))
 
 	for _, entry := range leaderboard.LeaderboardData {
-		if entry.UserID == userID {
+		// Safely check if TagNumber is not nil before dereferencing
+		if entry.UserID == userID && entry.TagNumber != nil {
 			tagNum := int(*entry.TagNumber)
 			slog.Info("✅ Tag found!", slog.Int("tag_number", tagNum))
 			return &tagNum, nil
 		}
 	}
 
-	// ❌ If no tag is found, log it and return nil
-	slog.Warn("⚠️ No tag found for user", slog.String("user_id", string(userID)))
-	return nil, nil
+	// If no tag is found for the user in the active leaderboard, return sql.ErrNoRows
+	slog.Warn("⚠️ No tag found for user in active leaderboard", slog.String("user_id", string(userID)))
+	return nil, sql.ErrNoRows
 }

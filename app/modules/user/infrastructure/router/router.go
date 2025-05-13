@@ -39,13 +39,12 @@ type UserRouter struct {
 	helper             utils.Helpers
 	tracer             trace.Tracer
 	middlewareHelper   utils.MiddlewareHelpers
-	metricsBuilder     *metrics.PrometheusMetricsBuilder // Store a pointer to metrics builder
-	prometheusRegistry *prometheus.Registry              // Store the registry pointer
-	metricsEnabled     bool                              // Flag to track if metrics are enabled
+	metricsBuilder     *metrics.PrometheusMetricsBuilder
+	prometheusRegistry *prometheus.Registry
+	metricsEnabled     bool
 }
 
 // NewUserRouter creates a new UserRouter.
-// It accepts a Prometheus Registry and creates its own metrics builder.
 func NewUserRouter(
 	logger *slog.Logger,
 	router *message.Router,
@@ -54,7 +53,7 @@ func NewUserRouter(
 	config *config.Config,
 	helper utils.Helpers,
 	tracer trace.Tracer,
-	prometheusRegistry *prometheus.Registry, // Accept Prometheus Registry pointer
+	prometheusRegistry *prometheus.Registry,
 ) *UserRouter {
 	// Check if we're in test environment - don't use metrics in tests
 	inTestEnv := os.Getenv(TestEnvironmentFlag) == TestEnvironmentValue
@@ -133,10 +132,10 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 		r.logger.InfoContext(ctx, "Setting up subscription",
 			attr.String("topic", topic),
 			attr.String("handler_name", fmt.Sprintf("user.%s", topic)))
-		handlerName := fmt.Sprintf("user.%s", topic) // Unique name for the handler in the router
+		handlerName := fmt.Sprintf("user.%s", topic)
 
 		r.Router.AddHandler(
-			handlerName,  // Unique name for the handler
+			handlerName,
 			topic,        // Topic to subscribe to
 			r.subscriber, // Subscriber to use for this topic
 			"",           // Output topic (empty string for no direct output)

@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 	"testing"
-	"time" // Import time for NATS connection options
+	"time"
 
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
@@ -27,8 +27,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// TestEnvironment holds the shared resources for integration tests.
 type TestEnvironment struct {
 	Ctx           context.Context
+	CancelContext context.CancelFunc // Add CancelFunc to manage the context
 	PgContainer   *postgres.PostgresContainer
 	NatsContainer testcontainers.Container
 	DB            *bun.DB
@@ -39,11 +41,14 @@ type TestEnvironment struct {
 	T             *testing.T
 }
 
+// NewTestEnvironment sets up the necessary containers and resources for integration tests.
 func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
-	ctx := context.Background()
+	// Create a context with cancellation for the test environment
+	ctx, cancel := context.WithCancel(context.Background())
 
 	pgContainer, pgConnStr, err := containers.SetupPostgresContainer(ctx)
 	if err != nil {
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to setup postgres container: %w", err)
 	}
 
@@ -53,6 +58,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if pgContainer != nil {
 			pgContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to setup nats container: %w", err)
 	}
 
@@ -64,6 +70,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if natsContainer != nil {
 			natsContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to open sql DB connection: %w", err)
 	}
 
@@ -77,6 +84,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if natsContainer != nil {
 			natsContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
@@ -89,6 +97,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if natsContainer != nil {
 			natsContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to create DB service: %w", err)
 	}
 
@@ -102,6 +111,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if natsContainer != nil {
 			natsContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
@@ -116,6 +126,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		if natsContainer != nil {
 			natsContainer.Terminate(ctx)
 		}
+		cancel() // Cancel context on error
 		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
 	}
 
@@ -130,6 +141,7 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 
 	return &TestEnvironment{
 		Ctx:           ctx,
+		CancelContext: cancel, // Store the cancel function
 		PgContainer:   pgContainer,
 		NatsContainer: natsContainer,
 		DB:            db,
@@ -143,22 +155,32 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 
 // CleanNatsStreams purges messages from the specified JetStream streams.
 // This is useful for cleaning up message state between test cases.
+// NOTE: This version only purges messages and does not delete/recreate streams.
 func (env *TestEnvironment) CleanNatsStreams(ctx context.Context, streamNames ...string) error {
 	if env.JetStream == nil {
 		return errors.New("JetStream context is not initialized in TestEnvironment")
 	}
 
 	for _, streamName := range streamNames {
-		log.Printf("Purging stream: %s", streamName)
-		// Use PurgeStream to remove all messages from the stream
-		_, err := env.JetStream.Stream(ctx, streamName)
+		log.Printf("Attempting to purge stream: %s", streamName)
+		// Get the stream instance first
+		stream, err := env.JetStream.Stream(ctx, streamName)
 		if err != nil {
 			// Check if the error is because the stream doesn't exist.
-			// If so, it's not a failure for cleanup purposes.
 			if !strings.Contains(err.Error(), "stream not found") {
-				return fmt.Errorf("failed to purge stream %q: %w", streamName, err)
+				// Log a warning for other errors, but don't necessarily fail cleanup
+				log.Printf("Warning: Failed to get stream %q for purging: %v", streamName, err)
+			} else {
+				log.Printf("Stream %q not found, skipping purge.", streamName)
 			}
-			log.Printf("Stream %q not found, skipping purge.", streamName)
+			continue // Skip purging if we couldn't get the stream
+		}
+
+		// Use Purge method on the stream instance
+		err = stream.Purge(ctx) // Purge without specific options
+		if err != nil {
+			// Log a warning for purge errors, but don't necessarily fail cleanup
+			log.Printf("Warning: Failed to purge stream %q: %v", streamName, err)
 		} else {
 			log.Printf("Stream %q purged successfully.", streamName)
 		}
@@ -166,30 +188,47 @@ func (env *TestEnvironment) CleanNatsStreams(ctx context.Context, streamNames ..
 	return nil
 }
 
+// Cleanup releases the resources used by the test environment.
 func (env *TestEnvironment) Cleanup() {
 	log.Println("Cleaning up test environment resources...")
-	// JetStream context does not need explicit closing, it uses the NATS connection
+	// Cancel the context first to signal goroutines to stop
+	if env.CancelContext != nil {
+		env.CancelContext()
+		log.Println("Test environment context canceled.")
+	}
+
+	// Close NATS connection
 	if env.NatsConn != nil {
 		env.NatsConn.Close()
+		log.Println("NATS connection closed.")
 	}
+
+	// Close DB connection
 	if env.DB != nil {
 		env.DB.Close()
+		log.Println("Database connection closed.")
 	}
+
+	// Terminate containers
+	// Use context.Background() for termination as the original context might be cancelled
 	if env.NatsContainer != nil {
-		// Use context.Background() for termination as the original context might be cancelled
 		if err := env.NatsContainer.Terminate(context.Background()); err != nil {
 			log.Printf("Error terminating NATS container: %v", err)
+		} else {
+			log.Println("NATS container terminated.")
 		}
 	}
 	if env.PgContainer != nil {
-		// Use context.Background() for termination as the original context might be cancelled
 		if err := env.PgContainer.Terminate(context.Background()); err != nil {
 			log.Printf("Error terminating Postgres container: %v", err)
+		} else {
+			log.Println("Postgres container terminated.")
 		}
 	}
 	log.Println("Test environment resources cleaned up.")
 }
 
+// TruncateTables truncates the specified tables in the database.
 func TruncateTables(ctx context.Context, db *bun.DB, tables ...string) error {
 	if len(tables) == 0 {
 		return nil
@@ -214,6 +253,7 @@ func TruncateTables(ctx context.Context, db *bun.DB, tables ...string) error {
 	return nil
 }
 
+// CleanUserIntegrationTables truncates tables specific to user integration tests.
 func CleanUserIntegrationTables(ctx context.Context, db *bun.DB) error {
 	tablesToTruncate := []string{
 		"users",
@@ -221,8 +261,22 @@ func CleanUserIntegrationTables(ctx context.Context, db *bun.DB) error {
 	return TruncateTables(ctx, db, tablesToTruncate...)
 }
 
-// Add other Clean...IntegrationTables functions here as needed
+// CleanScoreIntegrationTables truncates tables specific to score integration tests.
+func CleanScoreIntegrationTables(ctx context.Context, db *bun.DB) error {
+	tablesToTruncate := []string{
+		"scores",
+	}
+	return TruncateTables(ctx, db, tablesToTruncate...)
+}
 
+func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
+	tablesToTruncate := []string{
+		"leaderboards",
+	}
+	return TruncateTables(ctx, db, tablesToTruncate...)
+}
+
+// runMigrations runs database migrations using bun.
 func runMigrations(db *bun.DB) error {
 	ctx := context.Background()
 
@@ -250,6 +304,7 @@ func runMigrations(db *bun.DB) error {
 	return nil
 }
 
+// runModuleMigrations runs migrations for a specific module.
 func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Migrations, moduleName string) error {
 	migrator := migrate.NewMigrator(db, migrations)
 

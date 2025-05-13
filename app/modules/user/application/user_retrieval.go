@@ -11,45 +11,20 @@ import (
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 )
 
-// GetUser  retrieves user data and returns a response payload.
+// GetUser retrieves user data and returns a response payload.
 func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error) {
+	if userID == "" {
+		s.logger.WarnContext(ctx, "Attempted to get user with empty Discord ID")
+		return UserOperationResult{}, errors.New("GetUser: Discord ID cannot be empty")
+	}
+
 	operationName := "GetUser"
+
 	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
-		user, err := s.UserDB.GetUserByUserID(ctx, userID)
-		if err != nil {
-			if errors.Is(err, userdb.ErrUserNotFound) {
-				s.logger.InfoContext(ctx, "User not found",
-					attr.String("user_id", string(userID)),
-				)
-				s.metrics.RecordUserRetrievalFailure(ctx, userID)
-
-				return UserOperationResult{
-					Success: nil,
-					Failure: &userevents.GetUserFailedPayload{
-						UserID: userID,
-						Reason: "user not found",
-					},
-					Error: errors.New("user not found"),
-				}, errors.New("user not found")
-			}
-
-			s.logger.ErrorContext(ctx, "Failed to get user",
-				attr.Error(err),
-				attr.String("user_id", string(userID)),
-			)
-			s.metrics.RecordUserRetrievalFailure(ctx, userID)
-
-			return UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserFailedPayload{
-					UserID: userID,
-					Reason: "failed to retrieve user from database",
-				},
-				Error: err,
-			}, err
+		user, dbErr := s.UserDB.GetUserByUserID(ctx, userID)
+		if dbErr != nil {
+			return UserOperationResult{}, dbErr
 		}
-
-		s.metrics.RecordUserRetrievalSuccess(ctx, userID)
 
 		return UserOperationResult{
 			Success: &userevents.GetUserResponsePayload{
@@ -59,24 +34,72 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, userID sharedtypes.Discor
 					Role:   user.Role,
 				},
 			},
-			Failure: nil,
-			Error:   nil,
 		}, nil
 	})
+	if err != nil {
+		if errors.Is(err, userdb.ErrUserNotFound) {
+			s.logger.InfoContext(ctx, "User not found",
+				attr.String("user_id", string(userID)),
+			)
+			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
-	return result, err
+			return UserOperationResult{
+				Success: nil,
+				Failure: &userevents.GetUserFailedPayload{
+					UserID: userID,
+					Reason: "user not found",
+				},
+				Error: nil,
+			}, nil
+		}
+
+		s.logger.ErrorContext(ctx, "Failed to get user due to technical error",
+			attr.Error(err),
+			attr.String("user_id", string(userID)),
+		)
+		s.metrics.RecordUserRetrievalFailure(ctx, userID)
+
+		return UserOperationResult{
+			Success: nil,
+			Failure: &userevents.GetUserFailedPayload{
+				UserID: userID,
+				Reason: "failed to retrieve user from database",
+			},
+			Error: err,
+		}, err
+	}
+
+	s.metrics.RecordUserRetrievalSuccess(ctx, userID)
+
+	return result, nil
 }
 
-// GetUserRole retrieves a user's role and returns a response payload.
 func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error) {
 	operationName := "GetUserRole"
 
-	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
-		role, err := s.UserDB.GetUserRole(ctx, userID)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to get user role",
-				attr.Error(err),
+	innerOp := func(ctx context.Context) (UserOperationResult, error) {
+		role, dbErr := s.UserDB.GetUserRole(ctx, userID)
+		if dbErr != nil {
+			s.logger.ErrorContext(ctx, "Failed to get user role from DB",
+				attr.Error(dbErr),
 				attr.String("userID", string(userID)),
+			)
+			return UserOperationResult{}, dbErr
+		}
+
+		return UserOperationResult{
+			Success: &userevents.GetUserRoleResponsePayload{
+				UserID: userID,
+				Role:   role,
+			},
+		}, nil
+	}
+
+	result, err := s.serviceWrapper(ctx, operationName, userID, innerOp)
+	if err != nil {
+		if errors.Is(err, userdb.ErrUserNotFound) {
+			s.logger.InfoContext(ctx, "User not found for role lookup",
+				attr.String("user_id", string(userID)),
 			)
 			s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
@@ -84,40 +107,75 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, userID sharedtypes.Di
 				Success: nil,
 				Failure: &userevents.GetUserRoleFailedPayload{
 					UserID: userID,
-					Reason: "failed to retrieve user role",
+					Reason: "user not found",
 				},
-				Error: errors.New("failed to retrieve user role"),
-			}, errors.New("failed to retrieve user role")
+				Error: nil,
+			}, nil
 		}
 
-		if !role.IsValid() {
-			s.logger.ErrorContext(ctx, "Retrieved invalid role for user",
-				attr.String("userID", string(userID)),
-				attr.String("role", string(role)),
-			)
-
-			return UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserRoleFailedPayload{
-					UserID: userID,
-					Reason: "retrieved invalid user role",
-				},
-				Error: errors.New("invalid role in database"),
-			}, errors.New("invalid role in database")
-		}
-
-		s.metrics.RecordUserRetrievalSuccess(ctx, userID)
+		s.logger.ErrorContext(ctx, "Technical error during GetUserRole operation",
+			attr.Error(err),
+			attr.String("user_id", string(userID)),
+		)
+		s.metrics.RecordUserRetrievalFailure(ctx, userID)
 
 		return UserOperationResult{
-			Success: &userevents.GetUserRoleResponsePayload{
+			Success: nil,
+			Failure: &userevents.GetUserRoleFailedPayload{
 				UserID: userID,
-				Role:   role,
+				Reason: "failed to retrieve user role from database",
 			},
-			Failure: nil,
-			Error:   nil,
-		}, nil
-	})
+			Error: err,
+		}, err
+	}
 
-	// Return the result and the wrapped error from the wrapper.
-	return result, err
+	if result.Success == nil {
+		s.logger.ErrorContext(ctx, "serviceWrapper returned nil error but result.Success is nil for GetUserRole",
+			attr.String("user_id", string(userID)),
+		)
+		internalErr := errors.New("internal service error: unexpected nil success payload")
+		return UserOperationResult{
+			Failure: &userevents.GetUserRoleFailedPayload{
+				UserID: userID,
+				Reason: "internal service error",
+			},
+			Error: internalErr,
+		}, internalErr
+	}
+
+	successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayload)
+	if !ok {
+		s.logger.ErrorContext(ctx, "serviceWrapper returned nil error but result.Success has unexpected type for GetUserRole",
+			attr.String("user_id", string(userID)),
+		)
+		internalErr := errors.New("internal service error: unexpected success payload type")
+		return UserOperationResult{
+			Failure: &userevents.GetUserRoleFailedPayload{
+				UserID: userID,
+				Reason: "internal service error",
+			},
+			Error: internalErr,
+		}, internalErr
+	}
+
+	if !successPayload.Role.IsValid() {
+		s.logger.ErrorContext(ctx, "Retrieved invalid role for user",
+			attr.String("userID", string(userID)),
+			attr.String("role", string(successPayload.Role)),
+		)
+		s.metrics.RecordUserRetrievalFailure(ctx, userID)
+
+		return UserOperationResult{
+			Success: nil,
+			Failure: &userevents.GetUserRoleFailedPayload{
+				UserID: userID,
+				Reason: "user found but has invalid role",
+			},
+			Error: nil,
+		}, nil
+	}
+
+	s.metrics.RecordUserRetrievalSuccess(ctx, userID)
+
+	return result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,54 +19,54 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *lead
 		return nil, fmt.Errorf("cannot generate updated leaderboard with empty participant tags")
 	}
 
-	// Create a map for quick lookups of current leaderboard entries
-	tagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(currentLeaderboard.LeaderboardData))
-	for _, entry := range currentLeaderboard.LeaderboardData {
-		tagMap[entry.UserID] = *entry.TagNumber
+	leaderboardMap := make(map[sharedtypes.DiscordID]*leaderboardtypes.LeaderboardEntry)
+	for i := range currentLeaderboard.LeaderboardData {
+		entry := &currentLeaderboard.LeaderboardData[i]
+		leaderboardMap[entry.UserID] = entry
 	}
 
-	// Parse participant tags and extract user IDs in performance order
-	participants := make([]sharedtypes.DiscordID, 0, len(sortedParticipantTags))
-	availableTags := make([]sharedtypes.TagNumber, 0, len(sortedParticipantTags))
+	updatedLeaderboardMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 
-	for _, entry := range sortedParticipantTags {
-		parts := strings.Split(entry, ":")
+	for _, entryStr := range sortedParticipantTags {
+		parts := strings.Split(entryStr, ":")
 		if len(parts) != 2 {
+			s.logger.Warn("Invalid sorted participant tag format", attr.String("tag_user_string", entryStr))
 			continue
 		}
 
+		tagNumInt, err := strconv.Atoi(parts[0])
+		if err != nil {
+			s.logger.Warn("Invalid tag number format in sorted participant tag", attr.String("tag_string", parts[0]), attr.Error(err))
+			continue
+		}
+		tagNum := sharedtypes.TagNumber(tagNumInt)
 		userID := sharedtypes.DiscordID(parts[1])
 
-		// Only include participants that exist in the current leaderboard
-		if existingTag, exists := tagMap[userID]; exists {
-			participants = append(participants, userID)
-			availableTags = append(availableTags, existingTag)
+		updatedLeaderboardMap[userID] = tagNum
+	}
+
+	newLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(updatedLeaderboardMap))
+	for userID, tagNum := range updatedLeaderboardMap {
+		tag := tagNum
+		newLeaderboardData = append(newLeaderboardData, leaderboardtypes.LeaderboardEntry{
+			UserID:    userID,
+			TagNumber: &tag,
+		})
+	}
+
+	slices.SortFunc(newLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		if a.TagNumber == nil && b.TagNumber == nil {
+			return 0
 		}
-	}
-
-	// Sort the available tags in ascending order
-	slices.Sort(availableTags)
-
-	// Create a map to store new tag assignments
-	newTagAssignments := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(participants))
-
-	// Assign tags based on performance (best performer gets lowest tag)
-	for i, userID := range participants {
-		newTagAssignments[userID] = availableTags[i]
-	}
-
-	// Update the leaderboard data
-	newLeaderboardData := make([]leaderboardtypes.LeaderboardEntry, len(currentLeaderboard.LeaderboardData))
-	copy(newLeaderboardData, currentLeaderboard.LeaderboardData)
-
-	// Apply the new tag assignments
-	for i, entry := range newLeaderboardData {
-		if newTag, exists := newTagAssignments[entry.UserID]; exists {
-			newLeaderboardData[i].TagNumber = &newTag
+		if a.TagNumber == nil {
+			return -1
 		}
-	}
+		if b.TagNumber == nil {
+			return 1
+		}
+		return int(*a.TagNumber - *b.TagNumber)
+	})
 
-	// Return the updated leaderboard
 	return &leaderboarddb.Leaderboard{
 		LeaderboardData: newLeaderboardData,
 		IsActive:        true,
@@ -115,26 +116,21 @@ func (s *LeaderboardService) PrepareTagAssignment(
 	userID sharedtypes.DiscordID,
 	tagNumber sharedtypes.TagNumber,
 ) (leaderboardtypes.LeaderboardData, error) {
-	// Validate tag number (add this validation)
 	if tagNumber < 0 {
 		return nil, fmt.Errorf("invalid input: invalid tag number")
 	}
 
-	// Convert LeaderboardData to a map for easy tag lookup
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range currentLeaderboard.LeaderboardData {
 		tagMap[*entry.TagNumber] = entry.UserID
 	}
 
-	// Check if the tag is already assigned
 	if existingUser, exists := tagMap[tagNumber]; exists {
 		return nil, fmt.Errorf("tag %d is already assigned to user %s", tagNumber, existingUser)
 	}
 
-	// Add the new assignment to the map
 	tagMap[tagNumber] = userID
 
-	// Convert the map back to LeaderboardData
 	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
 	for tag, uid := range tagMap {
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
@@ -143,8 +139,16 @@ func (s *LeaderboardService) PrepareTagAssignment(
 		})
 	}
 
-	// Use slices.Sort for more efficient and ergonomic sorting
 	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		if a.TagNumber == nil && b.TagNumber == nil {
+			return 0
+		}
+		if a.TagNumber == nil {
+			return -1
+		}
+		if b.TagNumber == nil {
+			return 1
+		}
 		return int(*a.TagNumber - *b.TagNumber)
 	})
 
