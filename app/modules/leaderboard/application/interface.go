@@ -11,7 +11,7 @@ import (
 // Service handles leaderboard logic.
 type Service interface {
 	// Tag Assignment
-	BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error)
+	BatchTagAssignmentRequested(ctx context.Context, payload sharedevents.BatchTagAssignmentRequestedPayload) (LeaderboardOperationResult, error)
 	TagAssignmentRequested(ctx context.Context, payload leaderboardevents.TagAssignmentRequestedPayload) (LeaderboardOperationResult, error)
 
 	// Tag Swapping
@@ -19,7 +19,7 @@ type Service interface {
 
 	// Other Operations
 	GetLeaderboard(ctx context.Context) (LeaderboardOperationResult, error)
-	GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (LeaderboardOperationResult, error)
+	GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error)
 	RoundGetTagByUserID(ctx context.Context, payload sharedevents.RoundTagLookupRequestPayload) (LeaderboardOperationResult, error)
 	CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error)
 	UpdateLeaderboard(ctx context.Context, roundID sharedtypes.RoundID, sortedParticipantTags []string) (LeaderboardOperationResult, error)

@@ -58,7 +58,7 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				if leaderboardHandlers.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
-				if leaderboardHandlers.helpers != mockHelpers {
+				if leaderboardHandlers.Helpers != mockHelpers {
 					t.Errorf("helpers not correctly assigned")
 				}
 				if leaderboardHandlers.metrics != mockMetrics {
@@ -96,7 +96,7 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 					if leaderboardHandlers.tracer != nil {
 						t.Errorf("tracer should be nil")
 					}
-					if leaderboardHandlers.helpers != nil {
+					if leaderboardHandlers.Helpers != nil {
 						t.Errorf("helpers should be nil")
 					}
 					if leaderboardHandlers.metrics != nil {

@@ -56,10 +56,9 @@ func TestUpdateLeaderboard(t *testing.T) {
 						{UserID: "user_C", TagNumber: tagPtr(20)},
 						{UserID: "user_E", TagNumber: tagPtr(30)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -216,10 +215,9 @@ func TestUpdateLeaderboard(t *testing.T) {
 						{UserID: "user_X", TagNumber: tagPtr(5)},
 						{UserID: "user_Y", TagNumber: tagPtr(6)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -342,10 +340,9 @@ func TestUpdateLeaderboard(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_initial", TagNumber: tagPtr(99)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -454,11 +451,10 @@ func TestUpdateLeaderboard(t *testing.T) {
 			name: "Initial active leaderboard with empty data",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) ([]testutils.User, *leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData:     leaderboardtypes.LeaderboardData{},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					LeaderboardData: leaderboardtypes.LeaderboardData{},
+					IsActive:        true,
+					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -529,10 +525,9 @@ func TestUpdateLeaderboard(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_A", TagNumber: tagPtr(10)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {

@@ -23,7 +23,6 @@ import (
 
 // TestGetLeaderboard tests the GetLeaderboard service function.
 func TestGetLeaderboard(t *testing.T) {
-	// Use the shared test environment resources from TestMain
 	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
 	defer deps.Cleanup()
 
@@ -32,8 +31,9 @@ func TestGetLeaderboard(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) // Returns the initial active leaderboard
-		expectedError   bool
-		expectedSuccess bool
+		expectedError   bool                                                                                         // Direct error from serviceWrapper
+		expectedSuccess bool                                                                                         // Success result from service
+		expectedFailure bool                                                                                         // Failure result from service (business logic)
 		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, initialLeaderboard *leaderboarddb.Leaderboard)
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) // Validates DB state remains unchanged
 	}{
@@ -47,10 +47,9 @@ func TestGetLeaderboard(t *testing.T) {
 						{UserID: "user_B", TagNumber: tagPtr(2)},
 						{UserID: "user_C", TagNumber: tagPtr(3)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -61,10 +60,9 @@ func TestGetLeaderboard(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_Z", TagNumber: tagPtr(99)},
 					},
-					IsActive:            false,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					IsActive:     false,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(inactiveLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -74,6 +72,7 @@ func TestGetLeaderboard(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedSuccess: true,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, initialLeaderboard *leaderboarddb.Leaderboard) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
@@ -123,7 +122,8 @@ func TestGetLeaderboard(t *testing.T) {
 				for i := range actualData {
 					actual := actualData[i]
 					expected := expectedData[i]
-					if actual.UserID != expected.UserID || (actual.TagNumber == nil || expected.TagNumber == nil || *actual.TagNumber != *expected.TagNumber) {
+					// Compare UserID and TagNumber (handling nil pointers)
+					if actual.UserID != expected.UserID || !((actual.TagNumber == nil && expected.TagNumber == nil) || (actual.TagNumber != nil && expected.TagNumber != nil && *actual.TagNumber == *expected.TagNumber)) {
 						t.Errorf("Mismatch at index %d: Expected %+v, got %+v", i, expected, actual)
 					}
 				}
@@ -178,8 +178,9 @@ func TestGetLeaderboard(t *testing.T) {
 				}
 				return nil, nil // No initial active leaderboard
 			},
-			expectedError:   true, // Expecting an error from GetActiveLeaderboard
+			expectedError:   false, // Service returns nil error for this business case
 			expectedSuccess: false,
+			expectedFailure: true, // Expect failure result
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, initialLeaderboard *leaderboarddb.Leaderboard) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
@@ -190,12 +191,13 @@ func TestGetLeaderboard(t *testing.T) {
 					t.Errorf("Expected failure result of type *leaderboardevents.GetLeaderboardFailedPayload, but got %T", result.Failure)
 					return
 				}
-				if failurePayload.Reason == "" {
-					t.Error("Failure payload missing Reason")
+				expectedReason := leaderboarddb.ErrNoActiveLeaderboard.Error()
+				if failurePayload.Reason != expectedReason {
+					t.Errorf("Expected failure reason '%s', got '%s'", expectedReason, failurePayload.Reason)
 				}
-				// Check for the specific error message from the repository
-				if !errors.Is(result.Error, sql.ErrNoRows) && result.Error.Error() != "no active leaderboard found" {
-					t.Errorf("Expected error to be sql.ErrNoRows or 'no active leaderboard found', got %v", result.Error)
+				// In this scenario, the service returns nil for the direct error, so we don't check result.Error
+				if result.Error != nil {
+					t.Errorf("Expected nil error, but got: %v", result.Error)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -221,11 +223,10 @@ func TestGetLeaderboard(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				// Create an active leaderboard with empty data
 				initialLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData:     leaderboardtypes.LeaderboardData{}, // Empty data
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "initial_setup",
+					LeaderboardData: leaderboardtypes.LeaderboardData{}, // Empty data
+					IsActive:        true,
+					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -235,6 +236,7 @@ func TestGetLeaderboard(t *testing.T) {
 			},
 			expectedError:   false, // Service should return success with empty data
 			expectedSuccess: true,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, initialLeaderboard *leaderboarddb.Leaderboard) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
@@ -296,6 +298,7 @@ func TestGetLeaderboard(t *testing.T) {
 
 			result, err := deps.Service.GetLeaderboard(sharedCtx)
 
+			// Check for direct error returned by the serviceWrapper
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")
 			}
@@ -303,11 +306,20 @@ func TestGetLeaderboard(t *testing.T) {
 				t.Errorf("Expected no error, but got: %v", err)
 			}
 
+			// Check for success result
 			if tt.expectedSuccess && result.Success == nil {
 				t.Errorf("Expected a success result, but got nil")
 			}
 			if !tt.expectedSuccess && result.Success != nil {
 				t.Errorf("Expected no success result, but got: %+v", result.Success)
+			}
+
+			// Check for failure result
+			if tt.expectedFailure && result.Failure == nil {
+				t.Errorf("Expected a failure result, but got nil")
+			}
+			if !tt.expectedFailure && result.Failure != nil {
+				t.Errorf("Expected no failure result, but got: %+v", result.Failure)
 			}
 
 			if tt.validateResult != nil {
@@ -334,6 +346,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 		payload         sharedevents.RoundTagLookupRequestPayload
 		expectedError   bool
 		expectedSuccess bool
+		expectedFailure bool
 		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult)
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
@@ -345,10 +358,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 						{UserID: "user_123", TagNumber: tagPtr(42)},
 						{UserID: "user_456", TagNumber: tagPtr(10)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -364,6 +376,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedSuccess: true,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
@@ -384,7 +397,6 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				if successPayload.OriginalResponse != "Test Response" {
 					t.Errorf("Expected OriginalResponse 'Test Response', got '%s'", successPayload.OriginalResponse)
 				}
-				// Corrected comparison for *bool
 				if (successPayload.OriginalJoinedLate == nil && boolPtr(false) != nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(false) == nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(false) != nil && *successPayload.OriginalJoinedLate != *boolPtr(false)) {
 					t.Errorf("Expected OriginalJoinedLate false, got %v", successPayload.OriginalJoinedLate)
 				}
@@ -426,10 +438,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 						{UserID: "user_no_tag", TagNumber: nil},
 						{UserID: "user_with_tag", TagNumber: tagPtr(5)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -445,6 +456,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedSuccess: true,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
@@ -465,7 +477,6 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				if successPayload.OriginalResponse != "Another Response" {
 					t.Errorf("Expected OriginalResponse 'Another Response', got '%s'", successPayload.OriginalResponse)
 				}
-				// Corrected comparison for *bool
 				if (successPayload.OriginalJoinedLate == nil && boolPtr(true) != nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(true) == nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(true) != nil && *successPayload.OriginalJoinedLate != *boolPtr(true)) {
 					t.Errorf("Expected OriginalJoinedLate true, got %v", successPayload.OriginalJoinedLate)
 				}
@@ -476,8 +487,10 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				if successPayload.TagNumber != nil {
 					t.Errorf("Expected TagNumber to be nil, but got %v", successPayload.TagNumber)
 				}
-				if successPayload.Error != "" {
-					t.Errorf("Expected empty Error, got '%s'", successPayload.Error)
+				// Updated check to expect the specific error message
+				expectedErrorMsg := sql.ErrNoRows.Error()
+				if successPayload.Error != expectedErrorMsg {
+					t.Errorf("Expected Error '%s', got '%s'", expectedErrorMsg, successPayload.Error)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -502,10 +515,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_abc", TagNumber: tagPtr(11)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -521,6 +533,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedSuccess: true,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
@@ -541,7 +554,6 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				if successPayload.OriginalResponse != "Yet Another Response" {
 					t.Errorf("Expected OriginalResponse 'Yet Another Response', got '%s'", successPayload.OriginalResponse)
 				}
-				// Corrected comparison for *bool
 				if (successPayload.OriginalJoinedLate == nil && boolPtr(false) != nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(false) == nil) || (successPayload.OriginalJoinedLate != nil && boolPtr(false) != nil && *successPayload.OriginalJoinedLate != *boolPtr(false)) {
 					t.Errorf("Expected OriginalJoinedLate false, got %v", successPayload.OriginalJoinedLate)
 				}
@@ -552,8 +564,10 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				if successPayload.TagNumber != nil {
 					t.Errorf("Expected TagNumber to be nil, but got %v", successPayload.TagNumber)
 				}
-				if successPayload.Error != "" {
-					t.Errorf("Expected empty Error, got '%s'", successPayload.Error)
+				// Updated check to expect the specific error message
+				expectedErrorMsg := sql.ErrNoRows.Error()
+				if successPayload.Error != expectedErrorMsg {
+					t.Errorf("Expected Error '%s', got '%s'", expectedErrorMsg, successPayload.Error)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -604,6 +618,13 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				t.Errorf("Expected no success result, but got: %+v", result.Success)
 			}
 
+			if tt.expectedFailure && result.Failure == nil {
+				t.Errorf("Expected a failure result, but got nil")
+			}
+			if !tt.expectedFailure && result.Failure != nil {
+				t.Errorf("Expected no failure result, but got: %+v", result.Failure)
+			}
+
 			if tt.validateResult != nil {
 				tt.validateResult(t, deps, result)
 			}
@@ -624,11 +645,10 @@ func TestGetTagByUserID(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error)
-		userID          sharedtypes.DiscordID
-		roundID         sharedtypes.RoundID
+		payload         struct{ UserID sharedtypes.DiscordID } // Updated payload struct in test
 		expectedError   bool
 		expectedSuccess bool
-		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult)
+		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) // Use the correct type
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
 		{
@@ -639,10 +659,9 @@ func TestGetTagByUserID(t *testing.T) {
 						{UserID: "user_A", TagNumber: tagPtr(99)},
 						{UserID: "user_B", TagNumber: tagPtr(88)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -650,8 +669,9 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			userID:          "user_A",
-			roundID:         sharedtypes.RoundID(uuid.New()),
+			payload: struct{ UserID sharedtypes.DiscordID }{ // Updated payload in test case
+				UserID: "user_A",
+			},
 			expectedError:   false,
 			expectedSuccess: true,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
@@ -659,18 +679,16 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.GetTagNumberResponsePayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.GetTagNumberResponsePayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
 					return
 				}
 
 				if successPayload.UserID != "user_A" {
 					t.Errorf("Expected UserID 'user_A', got '%s'", successPayload.UserID)
 				}
-				if successPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-					t.Error("RoundID not echoed correctly")
-				}
+				// RoundID validation removed
 
 				if !successPayload.Found {
 					t.Error("Expected Found to be true, but got false")
@@ -703,13 +721,12 @@ func TestGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_C", TagNumber: nil},
+						{UserID: "user_C", TagNumber: nil}, // User exists with nil tag
 						{UserID: "user_D", TagNumber: tagPtr(77)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -717,8 +734,9 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			userID:          "user_C",
-			roundID:         sharedtypes.RoundID(uuid.New()),
+			payload: struct{ UserID sharedtypes.DiscordID }{ // Updated payload in test case
+				UserID: "user_C",
+			},
 			expectedError:   false,
 			expectedSuccess: true,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
@@ -726,18 +744,16 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.GetTagNumberResponsePayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.GetTagNumberResponsePayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
 					return
 				}
 
 				if successPayload.UserID != "user_C" {
 					t.Errorf("Expected UserID 'user_C', got '%s'", successPayload.UserID)
 				}
-				if successPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-					t.Error("RoundID not echoed correctly")
-				}
+				// RoundID validation removed
 
 				if successPayload.Found {
 					t.Error("Expected Found to be false, but got true")
@@ -766,12 +782,11 @@ func TestGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_E", TagNumber: tagPtr(66)},
+						{UserID: "user_E", TagNumber: tagPtr(66)}, // User E exists, but not the target user
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -779,8 +794,9 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			userID:          "non_existent_user_2",
-			roundID:         sharedtypes.RoundID(uuid.New()),
+			payload: struct{ UserID sharedtypes.DiscordID }{ // Updated payload in test case
+				UserID: "non_existent_user_2",
+			},
 			expectedError:   false,
 			expectedSuccess: true,
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
@@ -788,18 +804,16 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.GetTagNumberResponsePayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.GetTagNumberResponsePayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
 					return
 				}
 
 				if successPayload.UserID != "non_existent_user_2" {
 					t.Errorf("Expected UserID 'non_existent_user_2', got '%s'", successPayload.UserID)
 				}
-				if successPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-					t.Error("RoundID not echoed correctly")
-				}
+				// RoundID validation removed
 
 				if successPayload.Found {
 					t.Error("Expected Found to be false, but got true")
@@ -823,6 +837,8 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 			},
 		},
+		// Add more test cases for other scenarios handled by the service method
+		// e.g., No active leaderboard, database errors, etc.
 	}
 
 	for _, tt := range tests {
@@ -840,7 +856,8 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 			}
 
-			result, err := deps.Service.GetTagByUserID(sharedCtx, tt.userID, tt.roundID)
+			// Call the service method with the UserID directly
+			result, err := deps.Service.GetTagByUserID(sharedCtx, tt.payload.UserID)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

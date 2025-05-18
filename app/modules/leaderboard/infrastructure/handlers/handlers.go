@@ -2,8 +2,10 @@ package leaderboardhandlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -22,7 +24,7 @@ type LeaderboardHandlers struct {
 	logger             *slog.Logger
 	tracer             trace.Tracer
 	metrics            leaderboardmetrics.LeaderboardMetrics
-	helpers            utils.Helpers
+	Helpers            utils.Helpers
 	handlerWrapper     func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
 }
 
@@ -38,7 +40,7 @@ func NewLeaderboardHandlers(
 		leaderboardService: leaderboardService,
 		logger:             logger,
 		tracer:             tracer,
-		helpers:            helpers,
+		Helpers:            helpers,
 		metrics:            metrics,
 		// Assign the standalone handlerWrapper function
 		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
@@ -70,8 +72,8 @@ func handlerWrapper(
 
 		startTime := time.Now()
 		defer func() {
-			duration := time.Since(startTime).Seconds()
-			metrics.RecordHandlerDuration(ctx, handlerName, time.Duration(duration))
+			duration := time.Since(startTime) // Use time.Duration directly
+			metrics.RecordHandlerDuration(ctx, handlerName, duration)
 		}()
 
 		logger.InfoContext(ctx, handlerName+" triggered",
@@ -80,16 +82,37 @@ func handlerWrapper(
 		)
 
 		// Create a new instance of the payload type
-		payloadInstance := unmarshalTo
+		// Ensure payloadInstance is a pointer if unmarshalTo is a pointer to a struct
+		var payloadInstance interface{}
+		if unmarshalTo != nil {
+			// Use reflection to create a new instance of the type pointed to by unmarshalTo
+			// This assumes unmarshalTo is a pointer to a struct
+			payloadInstance = utils.NewInstance(unmarshalTo)
+		}
 
 		// Unmarshal payload if a target is provided
 		if payloadInstance != nil {
 			if err := helpers.UnmarshalPayload(msg, payloadInstance); err != nil {
-				logger.ErrorContext(ctx, "Failed to unmarshal payload",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err))
-				metrics.RecordHandlerFailure(ctx, handlerName)
-				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+				if _, ok := err.(*json.UnmarshalTypeError); ok || strings.Contains(err.Error(), "invalid character") || strings.Contains(err.Error(), "cannot unmarshal") {
+					logger.ErrorContext(ctx, "Permanent unmarshal error, terminating message",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(err),
+						attr.String("message_uuid", msg.UUID),
+					)
+					metrics.RecordHandlerFailure(ctx, handlerName)
+					// Return nil, nil to signal Watermill that this message is processed (failed permanently)
+					return nil, nil
+				} else {
+					// For other types of errors from UnmarshalPayload, treat as potentially temporary
+					logger.ErrorContext(ctx, "Transient error during unmarshal, retrying message",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(err),
+						attr.String("message_uuid", msg.UUID),
+					)
+					metrics.RecordHandlerFailure(ctx, handlerName)
+					// Return the error to Watermill for retries
+					return nil, fmt.Errorf("transient unmarshal error: %w", err)
+				}
 			}
 		}
 

@@ -31,7 +31,7 @@ func TestHandleGetUserRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS: %v", err)
 				}
 
@@ -85,7 +85,7 @@ func TestHandleGetUserRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS: %v", err)
 				}
 				// No user created
@@ -174,7 +174,7 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS: %v", err)
 				}
 
@@ -240,7 +240,7 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS: %v", err)
 				}
 			},

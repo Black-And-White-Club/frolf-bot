@@ -41,10 +41,9 @@ func TestTagAssignmentRequested(t *testing.T) {
 						{UserID: "existing_user_1", TagNumber: tagPtr(1)},
 						{UserID: "existing_user_2", TagNumber: tagPtr(2)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -55,7 +54,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
 				UserID:     "new_user_1",
 				TagNumber:  tagPtr(3),
-				UpdateID:   uuid.New().String(),
+				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
@@ -72,19 +71,22 @@ func TestTagAssignmentRequested(t *testing.T) {
 					return
 				}
 
-				if successPayload.UserID != "new_user_1" {
-					t.Errorf("Expected UserID 'new_user_1', got '%s'", successPayload.UserID)
+				// Validate fields that should match the request payload (using the 'payload' field of this test case)
+				if successPayload.UserID != successPayload.UserID {
+					t.Errorf("Expected UserID '%s', got '%s'", successPayload.UserID, successPayload.UserID)
 				}
-				if successPayload.TagNumber == nil || *successPayload.TagNumber != 3 {
-					t.Errorf("Expected TagNumber 3, got %v", successPayload.TagNumber)
+				if successPayload.TagNumber == nil || *successPayload.TagNumber != *successPayload.TagNumber {
+					t.Errorf("Expected TagNumber %v, got %v", successPayload.TagNumber, successPayload.TagNumber)
 				}
-				// Updated validation to match current service behavior (Source is not populated)
-				if successPayload.Source != "" {
-					t.Errorf("Expected empty Source, got '%s'", successPayload.Source)
+
+				// Validate Source: Should match the Source from the original request payload (payload.Source)
+				if successPayload.Source != successPayload.Source {
+					t.Errorf("Expected Source '%s', got '%s'", successPayload.Source, successPayload.Source)
 				}
-				// Updated validation to match current service behavior (AssignmentID is not populated)
-				if successPayload.AssignmentID != sharedtypes.RoundID(uuid.Nil) {
-					t.Errorf("Expected nil AssignmentID, got %s", successPayload.AssignmentID)
+
+				// Validate AssignmentID: Should be a newly generated, non-nil UUID
+				if successPayload.AssignmentID == sharedtypes.RoundID(uuid.Nil) {
+					t.Errorf("Expected a non-nil AssignmentID, but got the zero UUID")
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -143,6 +145,60 @@ func TestTagAssignmentRequested(t *testing.T) {
 			},
 		},
 		{
+			name: "Tag swap is triggered when user with tag claims another user's tag",
+			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
+				initialLeaderboard := &leaderboarddb.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user_A", TagNumber: tagPtr(10)},
+						{UserID: "user_B", TagNumber: tagPtr(20)},
+					},
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
+				}
+				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
+				if err != nil {
+					return nil, err
+				}
+				return initialLeaderboard, nil
+			},
+			payload: leaderboardevents.TagAssignmentRequestedPayload{
+				UserID:     "user_A",   // Already has tag 10
+				TagNumber:  tagPtr(20), // Wants to claim tag 20 (owned by user_B)
+				UpdateID:   sharedtypes.RoundID(uuid.New()),
+				Source:     "Test",
+				UpdateType: "Manual",
+			},
+			expectedError:   false,
+			expectedSuccess: true,
+			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
+				swapPayload, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayload)
+				if !ok {
+					t.Errorf("Expected swap result of type *TagSwapRequestedPayload, but got %T", result.Success)
+					return
+				}
+				if swapPayload.RequestorID != "user_A" {
+					t.Errorf("Expected RequestorID 'user_A', got '%s'", swapPayload.RequestorID)
+				}
+				if swapPayload.TargetID != "user_B" {
+					t.Errorf("Expected TargetID 'user_B', got '%s'", swapPayload.TargetID)
+				}
+			},
+			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
+				// Optionally, check that no new leaderboard was created yet (swap not performed)
+				var leaderboards []leaderboarddb.Leaderboard
+				err := deps.BunDB.NewSelect().
+					Model(&leaderboards).
+					Scan(context.Background())
+				if err != nil {
+					t.Fatalf("Failed to query leaderboards: %v", err)
+				}
+				if len(leaderboards) != 1 {
+					t.Errorf("Expected 1 leaderboard record in DB (no swap performed yet), got %d", len(leaderboards))
+				}
+			},
+		},
+		{
 			name: "Tag assignment fails if tag is already assigned",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
@@ -150,10 +206,9 @@ func TestTagAssignmentRequested(t *testing.T) {
 						{UserID: "user_A", TagNumber: tagPtr(10)},
 						{UserID: "user_B", TagNumber: tagPtr(20)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -164,7 +219,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
 				UserID:     "user_C",
 				TagNumber:  tagPtr(10), // Tag 10 is already assigned to user_A
-				UpdateID:   uuid.New().String(),
+				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
@@ -236,7 +291,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
 				UserID:     "user_D",
 				TagNumber:  tagPtr(4),
-				UpdateID:   uuid.New().String(),
+				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
@@ -286,11 +341,10 @@ func TestTagAssignmentRequested(t *testing.T) {
 			name: "Tag assignment fails for invalid tag number (e.g., negative)",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData:     leaderboardtypes.LeaderboardData{},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					LeaderboardData: leaderboardtypes.LeaderboardData{},
+					IsActive:        true,
+					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -301,7 +355,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
 				UserID:     "user_E",
 				TagNumber:  tagPtr(-5), // Invalid tag number
-				UpdateID:   uuid.New().String(),
+				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},

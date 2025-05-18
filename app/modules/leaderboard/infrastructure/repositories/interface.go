@@ -14,8 +14,8 @@ type LeaderboardDB interface {
 	DeactivateLeaderboard(ctx context.Context, leaderboardID int64) error
 	UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, scoreUpdateID sharedtypes.RoundID) error
 	SwapTags(ctx context.Context, requestorID, targetID sharedtypes.DiscordID) error
-	AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source ServiceUpdateSource, updateID sharedtypes.RoundID) error
-	GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*int, error)
+	AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source string, requestUpdateID sharedtypes.RoundID, requestingUserID sharedtypes.DiscordID) (sharedtypes.RoundID, error)
+	GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error)
 	CheckTagAvailability(ctx context.Context, tagNumber sharedtypes.TagNumber) (bool, error)
 	BatchAssignTags(ctx context.Context, assignments []TagAssignment, source ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error
 }

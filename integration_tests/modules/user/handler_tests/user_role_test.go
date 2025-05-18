@@ -31,7 +31,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 		ctx, cancel := context.WithTimeout(deps.Ctx, 5*time.Second)
 		defer cancel()
 
-		if err := deps.CleanNatsStreams(ctx, "user", "discord"); err != nil {
+		if err := deps.ResetJetStreamState(ctx, "user", "discord"); err != nil {
 			t.Logf("Warning: Failed to clean NATS streams after test: %v", err)
 		}
 
@@ -56,10 +56,10 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
 				// Clean NATS streams for topics relevant to this handler's output
-				if err := deps.CleanNatsStreams(deps.Ctx, "discord"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
 					t.Fatalf("Failed to clean NATS discord stream: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS user stream: %v", err)
 				}
 
@@ -136,10 +136,10 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "discord"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
 					t.Fatalf("Failed to clean NATS discord stream: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS user stream: %v", err)
 				}
 			},
@@ -206,10 +206,10 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 		// 		if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 		// 			t.Fatalf("Failed to clean DB: %v", err)
 		// 		}
-		// 		if err := deps.CleanNatsStreams(deps.Ctx, "discord"); err != nil {
+		// 		if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
 		// 			t.Fatalf("Failed to clean NATS discord stream: %v", err)
 		// 		}
-		// 		if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+		// 		if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 		// 			t.Fatalf("Failed to clean NATS user stream: %v", err)
 		// 		}
 		// 	},

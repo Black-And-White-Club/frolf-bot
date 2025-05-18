@@ -44,17 +44,18 @@ func (m *MockLeaderboardDB) EXPECT() *MockLeaderboardDBMockRecorder {
 }
 
 // AssignTag mocks base method.
-func (m *MockLeaderboardDB) AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source leaderboarddb.ServiceUpdateSource, updateID sharedtypes.RoundID) error {
+func (m *MockLeaderboardDB) AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source string, requestUpdateID sharedtypes.RoundID, requestingUserID sharedtypes.DiscordID) (sharedtypes.RoundID, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AssignTag", ctx, userID, tagNumber, source, updateID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "AssignTag", ctx, userID, tagNumber, source, requestUpdateID, requestingUserID)
+	ret0, _ := ret[0].(sharedtypes.RoundID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // AssignTag indicates an expected call of AssignTag.
-func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, userID, tagNumber, source, updateID any) *gomock.Call {
+func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, userID, tagNumber, source, requestUpdateID, requestingUserID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignTag", reflect.TypeOf((*MockLeaderboardDB)(nil).AssignTag), ctx, userID, tagNumber, source, updateID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignTag", reflect.TypeOf((*MockLeaderboardDB)(nil).AssignTag), ctx, userID, tagNumber, source, requestUpdateID, requestingUserID)
 }
 
 // BatchAssignTags mocks base method.
@@ -131,10 +132,10 @@ func (mr *MockLeaderboardDBMockRecorder) GetActiveLeaderboard(ctx any) *gomock.C
 }
 
 // GetTagByUserID mocks base method.
-func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*int, error) {
+func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID)
-	ret0, _ := ret[0].(*int)
+	ret0, _ := ret[0].(*sharedtypes.TagNumber)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

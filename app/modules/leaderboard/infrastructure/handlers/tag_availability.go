@@ -6,6 +6,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
@@ -42,7 +43,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				)
 
 				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
+				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					failure,
 					leaderboardevents.TagAvailableCheckFailure,
@@ -65,7 +66,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				)
 
 				// Create message for User module to create User
-				createUser, err := h.helpers.CreateResultMessage(
+				createUser, err := h.Helpers.CreateResultMessage(
 					msg,
 					result,
 					leaderboardevents.TagAvailable,
@@ -75,12 +76,12 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				}
 
 				// Create message for Leaderboard module to assign tag
-				assignTag, err := h.helpers.CreateResultMessage(
+				assignTag, err := h.Helpers.CreateResultMessage(
 					msg,
 					&leaderboardevents.TagAssignmentRequestedPayload{
 						UserID:     result.UserID,
 						TagNumber:  result.TagNumber,
-						UpdateID:   uuid.NewString(),
+						UpdateID:   sharedtypes.RoundID(uuid.New()),
 						Source:     string(leaderboarddb.ServiceUpdateSourceCreateUser),
 						UpdateType: "automatic",
 					},
@@ -99,7 +100,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				)
 
 				// Create tag not available message
-				tagNotAvailableMsg, err := h.helpers.CreateResultMessage(
+				tagNotAvailableMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					&leaderboardevents.TagUnavailablePayload{
 						UserID:    result.UserID,

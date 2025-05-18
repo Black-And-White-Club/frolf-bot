@@ -45,7 +45,7 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // BatchTagAssignmentRequested mocks base method.
-func (m *MockService) BatchTagAssignmentRequested(ctx context.Context, payload leaderboardevents.BatchTagAssignmentRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) BatchTagAssignmentRequested(ctx context.Context, payload sharedevents.BatchTagAssignmentRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchTagAssignmentRequested", ctx, payload)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
@@ -91,18 +91,18 @@ func (mr *MockServiceMockRecorder) GetLeaderboard(ctx any) *gomock.Call {
 }
 
 // GetTagByUserID mocks base method.
-func (m *MockService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID, roundID sharedtypes.RoundID) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID, roundID)
+	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTagByUserID indicates an expected call of GetTagByUserID.
-func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, userID, roundID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, userID, roundID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, userID)
 }
 
 // RoundGetTagByUserID mocks base method.

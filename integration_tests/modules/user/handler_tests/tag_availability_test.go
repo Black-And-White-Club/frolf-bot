@@ -30,7 +30,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean DB: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS: %v", err)
 				}
 			},
@@ -76,7 +76,7 @@ func TestHandleTagAvailable(t *testing.T) {
 			name: "Failure - user already exists",
 			setupFn: func(t *testing.T, deps HandlerTestDeps) {
 				testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB)
-				deps.CleanNatsStreams(deps.Ctx, "user")
+				deps.ResetJetStreamState(deps.Ctx, "user")
 				_, _ = deps.UserModule.UserService.CreateUser(deps.Ctx, "existing-tag-user", nil)
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
@@ -162,7 +162,7 @@ func TestHandleTagUnavailable(t *testing.T) {
 			name: "Always fails with 'tag not available'",
 			setupFn: func(t *testing.T, deps HandlerTestDeps) {
 				testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB)
-				deps.CleanNatsStreams(deps.Ctx, "user")
+				deps.ResetJetStreamState(deps.Ctx, "user")
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
 				payload := userevents.TagUnavailablePayload{

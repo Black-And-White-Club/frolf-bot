@@ -2,328 +2,15 @@ package testutils
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
-	"log"
-	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
-	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
-	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
-	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
-	"github.com/Black-And-White-Club/frolf-bot/config"
-	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
-	"github.com/Black-And-White-Club/frolf-bot/integration_tests/containers"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/migrate"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// TestEnvironment holds the shared resources for integration tests.
-type TestEnvironment struct {
-	Ctx           context.Context
-	CancelContext context.CancelFunc // Add CancelFunc to manage the context
-	PgContainer   *postgres.PostgresContainer
-	NatsContainer testcontainers.Container
-	DB            *bun.DB
-	DBService     *bundb.DBService
-	NatsConn      *nats.Conn
-	JetStream     jetstream.JetStream
-	Config        *config.Config
-	T             *testing.T
-}
-
-// NewTestEnvironment sets up the necessary containers and resources for integration tests.
-func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
-	// Create a context with cancellation for the test environment
-	ctx, cancel := context.WithCancel(context.Background())
-
-	pgContainer, pgConnStr, err := containers.SetupPostgresContainer(ctx)
-	if err != nil {
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to setup postgres container: %w", err)
-	}
-
-	natsContainer, natsURL, err := containers.SetupNatsContainer(ctx)
-	if err != nil {
-		// Terminate Postgres container if NATS setup fails
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to setup nats container: %w", err)
-	}
-
-	sqlDB, err := sql.Open("pgx", pgConnStr)
-	if err != nil {
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		if natsContainer != nil {
-			natsContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to open sql DB connection: %w", err)
-	}
-
-	db := bundb.BunDB(sqlDB)
-
-	if err := runMigrations(db); err != nil {
-		db.Close()
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		if natsContainer != nil {
-			natsContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	dbService, err := bundb.NewTestDBService(db)
-	if err != nil {
-		db.Close()
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		if natsContainer != nil {
-			natsContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to create DB service: %w", err)
-	}
-
-	// Connect to NATS
-	natsConn, err := nats.Connect(natsURL, nats.Timeout(10*time.Second))
-	if err != nil {
-		db.Close()
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		if natsContainer != nil {
-			natsContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-
-	// Create JetStream context
-	js, err := jetstream.New(natsConn)
-	if err != nil {
-		natsConn.Close()
-		db.Close()
-		if pgContainer != nil {
-			pgContainer.Terminate(ctx)
-		}
-		if natsContainer != nil {
-			natsContainer.Terminate(ctx)
-		}
-		cancel() // Cancel context on error
-		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
-	}
-
-	cfg := &config.Config{
-		Postgres: config.PostgresConfig{
-			DSN: pgConnStr,
-		},
-		NATS: config.NATSConfig{ // Assuming you have a NatsConfig struct
-			URL: natsURL,
-		},
-	}
-
-	return &TestEnvironment{
-		Ctx:           ctx,
-		CancelContext: cancel, // Store the cancel function
-		PgContainer:   pgContainer,
-		NatsContainer: natsContainer,
-		DB:            db,
-		DBService:     dbService,
-		NatsConn:      natsConn,
-		JetStream:     js,
-		Config:        cfg,
-		T:             t,
-	}, nil
-}
-
-// CleanNatsStreams purges messages from the specified JetStream streams.
-// This is useful for cleaning up message state between test cases.
-// NOTE: This version only purges messages and does not delete/recreate streams.
-func (env *TestEnvironment) CleanNatsStreams(ctx context.Context, streamNames ...string) error {
-	if env.JetStream == nil {
-		return errors.New("JetStream context is not initialized in TestEnvironment")
-	}
-
-	for _, streamName := range streamNames {
-		log.Printf("Attempting to purge stream: %s", streamName)
-		// Get the stream instance first
-		stream, err := env.JetStream.Stream(ctx, streamName)
-		if err != nil {
-			// Check if the error is because the stream doesn't exist.
-			if !strings.Contains(err.Error(), "stream not found") {
-				// Log a warning for other errors, but don't necessarily fail cleanup
-				log.Printf("Warning: Failed to get stream %q for purging: %v", streamName, err)
-			} else {
-				log.Printf("Stream %q not found, skipping purge.", streamName)
-			}
-			continue // Skip purging if we couldn't get the stream
-		}
-
-		// Use Purge method on the stream instance
-		err = stream.Purge(ctx) // Purge without specific options
-		if err != nil {
-			// Log a warning for purge errors, but don't necessarily fail cleanup
-			log.Printf("Warning: Failed to purge stream %q: %v", streamName, err)
-		} else {
-			log.Printf("Stream %q purged successfully.", streamName)
-		}
-	}
-	return nil
-}
-
-// Cleanup releases the resources used by the test environment.
-func (env *TestEnvironment) Cleanup() {
-	log.Println("Cleaning up test environment resources...")
-	// Cancel the context first to signal goroutines to stop
-	if env.CancelContext != nil {
-		env.CancelContext()
-		log.Println("Test environment context canceled.")
-	}
-
-	// Close NATS connection
-	if env.NatsConn != nil {
-		env.NatsConn.Close()
-		log.Println("NATS connection closed.")
-	}
-
-	// Close DB connection
-	if env.DB != nil {
-		env.DB.Close()
-		log.Println("Database connection closed.")
-	}
-
-	// Terminate containers
-	// Use context.Background() for termination as the original context might be cancelled
-	if env.NatsContainer != nil {
-		if err := env.NatsContainer.Terminate(context.Background()); err != nil {
-			log.Printf("Error terminating NATS container: %v", err)
-		} else {
-			log.Println("NATS container terminated.")
-		}
-	}
-	if env.PgContainer != nil {
-		if err := env.PgContainer.Terminate(context.Background()); err != nil {
-			log.Printf("Error terminating Postgres container: %v", err)
-		} else {
-			log.Println("Postgres container terminated.")
-		}
-	}
-	log.Println("Test environment resources cleaned up.")
-}
-
-// TruncateTables truncates the specified tables in the database.
-func TruncateTables(ctx context.Context, db *bun.DB, tables ...string) error {
-	if len(tables) == 0 {
-		return nil
-	}
-
-	query := "TRUNCATE TABLE "
-	for i, table := range tables {
-		query += fmt.Sprintf(`"%s"`, table)
-		if i < len(tables)-1 {
-			query += ", "
-		}
-	}
-	query += " CASCADE"
-
-	log.Printf("Truncating tables: %s", tables)
-	_, err := db.ExecContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to truncate tables %v: %w", tables, err)
-	}
-	log.Printf("Tables %s truncated successfully", tables)
-
-	return nil
-}
-
-// CleanUserIntegrationTables truncates tables specific to user integration tests.
-func CleanUserIntegrationTables(ctx context.Context, db *bun.DB) error {
-	tablesToTruncate := []string{
-		"users",
-	}
-	return TruncateTables(ctx, db, tablesToTruncate...)
-}
-
-// CleanScoreIntegrationTables truncates tables specific to score integration tests.
-func CleanScoreIntegrationTables(ctx context.Context, db *bun.DB) error {
-	tablesToTruncate := []string{
-		"scores",
-	}
-	return TruncateTables(ctx, db, tablesToTruncate...)
-}
-
-func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
-	tablesToTruncate := []string{
-		"leaderboards",
-	}
-	return TruncateTables(ctx, db, tablesToTruncate...)
-}
-
-// runMigrations runs database migrations using bun.
-func runMigrations(db *bun.DB) error {
-	ctx := context.Background()
-
-	// Initialize migrator with user migrations first (assuming it creates the migration table)
-	migrator := migrate.NewMigrator(db, usermigrations.Migrations)
-	if err := migrator.Init(ctx); err != nil {
-		return fmt.Errorf("failed to initialize migration tables: %w", err)
-	}
-
-	// Run migrations for each module
-	if err := runModuleMigrations(ctx, db, usermigrations.Migrations, "user"); err != nil {
-		return err
-	}
-	if err := runModuleMigrations(ctx, db, roundmigrations.Migrations, "round"); err != nil {
-		return err
-	}
-	if err := runModuleMigrations(ctx, db, scoremigrations.Migrations, "score"); err != nil {
-		return err
-	}
-	if err := runModuleMigrations(ctx, db, leaderboardmigrations.Migrations, "leaderboard"); err != nil {
-		return err
-	}
-
-	log.Println("All migrations completed successfully")
-	return nil
-}
-
-// runModuleMigrations runs migrations for a specific module.
-func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Migrations, moduleName string) error {
-	migrator := migrate.NewMigrator(db, migrations)
-
-	group, err := migrator.Migrate(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to run %s migrations: %w", moduleName, err)
-	}
-
-	if group.ID == 0 {
-		log.Printf("No %s migrations to run", moduleName)
-	} else {
-		log.Printf("Ran %s migrations group #%d", moduleName, group.ID)
-	}
-
-	return nil
-}
-
-// WaitFor repeatedly calls a check function until it returns nil or a timeout occurs.
-// This is useful for waiting for asynchronous operations to complete in integration tests.
 func WaitFor(timeout, interval time.Duration, check func() error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -334,16 +21,71 @@ func WaitFor(timeout, interval time.Duration, check func() error) error {
 	for {
 		select {
 		case <-ctx.Done():
-			// Check one last time before returning timeout error
 			if err := check(); err == nil {
-				return nil // Success on last check
+				return nil
 			}
 			return fmt.Errorf("timed out waiting: %w", ctx.Err())
 		case <-ticker.C:
 			if err := check(); err == nil {
-				return nil // Success
+				return nil
 			}
-			// Continue waiting if check returns an error
 		}
 	}
+}
+
+// WaitForMessages waits for a specific number of messages on a topic
+func (env *TestEnvironment) WaitForMessages(receivedMsgs map[string][]*message.Message, receivedMsgsMutex *sync.Mutex, topic string, expectedCount int, timeout time.Duration) []*message.Message {
+	env.T.Helper() // Marks this function as a test helper
+
+	// Create a context with timeout based on the environment's context
+	ctx, cancel := context.WithTimeout(env.Ctx, timeout)
+	defer cancel()
+
+	env.T.Logf("Waiting for %d messages on topic %q with timeout %v", expectedCount, topic, timeout)
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Context timeout or cancellation
+			receivedMsgsMutex.Lock()
+			finalMsgs, exists := receivedMsgs[topic]
+			finalCount := 0
+			if exists {
+				finalCount = len(finalMsgs)
+			}
+			receivedMsgsMutex.Unlock()
+
+			env.T.Fatalf("Timeout waiting for %d messages on topic %q. Received %d. Error: %v",
+				expectedCount, topic, finalCount, ctx.Err())
+			return nil // unreachable due to t.Fatalf
+
+		case <-ticker.C:
+			receivedMsgsMutex.Lock()
+			msgs, exists := receivedMsgs[topic]
+			currentCount := 0
+			if exists {
+				currentCount = len(msgs)
+			}
+
+			if currentCount >= expectedCount {
+				result := make([]*message.Message, len(msgs))
+				copy(result, msgs)
+				receivedMsgsMutex.Unlock()
+				env.T.Logf("Successfully received %d messages on topic %q", currentCount, topic)
+				return result
+			}
+
+			receivedMsgsMutex.Unlock()
+			env.T.Logf("Current count for topic %q: %d (expected: %d)", topic, currentCount, expectedCount)
+		}
+	}
+}
+
+// PublishMessage sends a message to the event bus
+func PublishMessage(t *testing.T, eventBus eventbus.EventBus, ctx context.Context, topic string, msg *message.Message) error {
+	t.Helper() // Mark this as a helper function
+	return eventBus.Publish(topic, msg)
 }

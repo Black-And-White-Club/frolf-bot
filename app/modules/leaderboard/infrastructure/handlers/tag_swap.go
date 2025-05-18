@@ -40,7 +40,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*m
 				)
 
 				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
+				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
 					leaderboardevents.TagSwapFailed,
@@ -54,7 +54,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*m
 				h.logger.InfoContext(ctx, "Tag swap successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				successMsg, err := h.helpers.CreateResultMessage(
+				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
 					leaderboardevents.TagSwapProcessed,

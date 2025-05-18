@@ -13,6 +13,7 @@ import (
 	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Module represents the leaderboard module.
@@ -22,8 +23,9 @@ type Module struct {
 	config             *config.Config
 	LeaderboardRouter  *leaderboardrouter.LeaderboardRouter
 	cancelFunc         context.CancelFunc
-	helper             utils.Helpers
+	Helper             utils.Helpers
 	observability      observability.Observability
+	prometheusRegistry *prometheus.Registry
 }
 
 // NewLeaderboardModule creates a new instance of the Leaderboard module.
@@ -35,6 +37,7 @@ func NewLeaderboardModule(
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
+	routerCtx context.Context,
 ) (*Module, error) {
 	// Extract observability components
 	logger := obs.Provider.Logger
@@ -46,11 +49,14 @@ func NewLeaderboardModule(
 	// Initialize leaderboard service with observability components
 	leaderboardService := leaderboardservice.NewLeaderboardService(leaderboardDB, eventBus, logger, metrics, tracer)
 
-	// Initialize leaderboard router with observability
-	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
+	// Create a Prometheus registry for this module (similar to score module)
+	prometheusRegistry := prometheus.NewRegistry()
 
-	// Configure the router with the leaderboard service
-	if err := leaderboardRouter.Configure(leaderboardService, eventBus, metrics); err != nil {
+	// Initialize leaderboard router with observability and prometheusRegistry
+	leaderboardRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
+
+	// Configure the router with the leaderboard service, passing routerCtx
+	if err := leaderboardRouter.Configure(routerCtx, leaderboardService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)
 	}
 
@@ -59,8 +65,9 @@ func NewLeaderboardModule(
 		LeaderboardService: leaderboardService,
 		config:             cfg,
 		LeaderboardRouter:  leaderboardRouter,
-		helper:             helpers,
+		Helper:             helpers,
 		observability:      obs,
+		prometheusRegistry: prometheusRegistry, // Assigned prometheusRegistry
 	}
 
 	return module, nil
@@ -94,6 +101,14 @@ func (m *Module) Close() error {
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
+	}
+
+	// Close the leaderboard router (similar to score module)
+	if m.LeaderboardRouter != nil {
+		if err := m.LeaderboardRouter.Close(); err != nil {
+			logger.Error("Error closing LeaderboardRouter from module", "error", err)
+			return fmt.Errorf("error closing LeaderboardRouter: %w", err)
+		}
 	}
 
 	logger.Info("Leaderboard module stopped")

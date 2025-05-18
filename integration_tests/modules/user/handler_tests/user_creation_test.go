@@ -41,7 +41,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
 				// Clean relevant NATS streams
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil { // Assuming user events go to "user" stream
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil { // Assuming user events go to "user" stream
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 			},
@@ -129,7 +129,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 			},
@@ -214,7 +214,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "user"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 

@@ -24,13 +24,12 @@ const (
 
 // Leaderboard represents a leaderboard with entries
 type Leaderboard struct {
-	bun.BaseModel       `bun:"table:leaderboards,alias:l"`
-	ID                  int64                            `bun:"id,pk,autoincrement"`
-	LeaderboardData     leaderboardtypes.LeaderboardData `bun:"leaderboard_data,type:jsonb,notnull"`
-	IsActive            bool                             `bun:"is_active,notnull"`
-	UpdateSource        ServiceUpdateSource              `bun:"update_source"`
-	UpdateID            sharedtypes.RoundID              `bun:"update_id,type:uuid"`
-	RequestingDiscordID sharedtypes.DiscordID            `bun:"requesting_discord_id,nullzero"`
+	bun.BaseModel   `bun:"table:leaderboards,alias:l"`
+	ID              int64                            `bun:"id,pk,autoincrement"`
+	LeaderboardData leaderboardtypes.LeaderboardData `bun:"leaderboard_data,type:jsonb,notnull"`
+	IsActive        bool                             `bun:"is_active,notnull"`
+	UpdateSource    ServiceUpdateSource              `bun:"update_source"`
+	UpdateID        sharedtypes.RoundID              `bun:"update_id,type:uuid"`
 }
 
 // BeforeInsert is a hook that generates a UUID for UpdateID before inserting a new record
@@ -45,4 +44,14 @@ func (l *Leaderboard) BeforeInsert(ctx context.Context) error {
 type TagAssignment struct {
 	UserID    sharedtypes.DiscordID
 	TagNumber sharedtypes.TagNumber
+}
+
+// FindEntryForUser returns a pointer to the entry for the given user, or nil if not found.
+func (l *Leaderboard) FindEntryForUser(userID sharedtypes.DiscordID) *leaderboardtypes.LeaderboardEntry {
+	for i := range l.LeaderboardData {
+		if l.LeaderboardData[i].UserID == userID {
+			return &l.LeaderboardData[i]
+		}
+	}
+	return nil
 }

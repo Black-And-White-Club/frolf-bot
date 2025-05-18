@@ -37,11 +37,11 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 				if err := testutils.CleanScoreIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "score"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "score"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 				// Also clean the leaderboard stream since the output goes there
-				if err := deps.CleanNatsStreams(deps.Ctx, "leaderboard"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "leaderboard"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 			},
@@ -170,7 +170,7 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 				if err := testutils.CleanScoreIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "score"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "score"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 			},
@@ -246,7 +246,7 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 				if err := testutils.CleanScoreIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
 					t.Fatalf("Failed to clean database before test case: %v", err)
 				}
-				if err := deps.CleanNatsStreams(deps.Ctx, "score"); err != nil {
+				if err := deps.ResetJetStreamState(deps.Ctx, "score"); err != nil {
 					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
 				}
 			},

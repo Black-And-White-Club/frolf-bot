@@ -8,6 +8,7 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
@@ -26,7 +27,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 		userID         sharedtypes.DiscordID
 		tagNumber      sharedtypes.TagNumber
 		updateID       sharedtypes.RoundID
-		expectedResult *leaderboardevents.TagAssignedPayload
+		expectedResult interface{}
 		expectedFail   *leaderboardevents.TagAssignmentFailedPayload
 		expectedError  error
 	}{
@@ -34,7 +35,7 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			name: "Successfully assigns tag to user",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{}, nil)
-				mockDB.EXPECT().AssignTag(gomock.Any(), gomock.Any(), gomock.Any(), leaderboarddbtypes.ServiceUpdateSourceCreateUser, gomock.Any()).Return(nil)
+				mockDB.EXPECT().AssignTag(gomock.Any(), gomock.Any(), gomock.Any(), leaderboarddbtypes.ServiceUpdateSourceCreateUser, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: sharedtypes.TagNumber(42),
@@ -47,10 +48,32 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			expectedError: nil,
 		},
 		{
+			name: "Triggers tag swap when user with tag claims another taken tag",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				// The active leaderboard contains both users with different tags
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
+						{UserID: "requestor", TagNumber: ptrTag(1)},
+						{UserID: "target", TagNumber: ptrTag(2)},
+					},
+				}, nil)
+				// AssignTag should NOT be called in swap scenario
+			},
+			userID:    sharedtypes.DiscordID("requestor"),
+			tagNumber: sharedtypes.TagNumber(2),
+			updateID:  testRoundID,
+			expectedResult: &leaderboardevents.TagSwapRequestedPayload{
+				RequestorID: "requestor",
+				TargetID:    "target",
+			},
+			expectedFail:  nil,
+			expectedError: nil,
+		},
+		{
 			name: "Fails to assign tag to user due to database error",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{}, nil)
-				mockDB.EXPECT().AssignTag(gomock.Any(), gomock.Any(), gomock.Any(), leaderboarddbtypes.ServiceUpdateSourceCreateUser, gomock.Any()).Return(errors.New("database error"))
+				mockDB.EXPECT().AssignTag(gomock.Any(), gomock.Any(), gomock.Any(), leaderboarddbtypes.ServiceUpdateSourceCreateUser, gomock.Any(), gomock.Any()).Return(errors.New("database error"))
 			},
 			userID:         sharedtypes.DiscordID("test_user_id"),
 			tagNumber:      sharedtypes.TagNumber(42),
@@ -138,18 +161,30 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 				UpdateType: "",
 			})
 
-			// Validate success case
+			// Validate success case (now supports TagAssignedPayload and TagSwapRequestedPayload)
 			if tt.expectedResult != nil {
 				if got.Success == nil {
 					t.Errorf("❌ Expected success payload, got nil")
 				} else {
-					successPayload, ok := got.Success.(*leaderboardevents.TagAssignedPayload)
-					if !ok {
-						t.Errorf("❌ Expected Success to be *TagAssignedPayload, but got %T", got.Success)
-					} else if successPayload.UserID != tt.expectedResult.UserID {
-						t.Errorf("❌ Mismatched User ID, got: %v, expected: %v", successPayload.UserID, tt.expectedResult.UserID)
-					} else if *successPayload.TagNumber != *tt.expectedResult.TagNumber {
-						t.Errorf("❌ Mismatched Tag Number, got: %v, expected: %v", *successPayload.TagNumber, *tt.expectedResult.TagNumber)
+					switch expected := tt.expectedResult.(type) {
+					case *leaderboardevents.TagAssignedPayload:
+						successPayload, ok := got.Success.(*leaderboardevents.TagAssignedPayload)
+						if !ok {
+							t.Errorf("❌ Expected Success to be *TagAssignedPayload, but got %T", got.Success)
+						} else if successPayload.UserID != expected.UserID {
+							t.Errorf("❌ Mismatched User ID, got: %v, expected: %v", successPayload.UserID, expected.UserID)
+						} else if *successPayload.TagNumber != *expected.TagNumber {
+							t.Errorf("❌ Mismatched Tag Number, got: %v, expected: %v", *successPayload.TagNumber, *expected.TagNumber)
+						}
+					case *leaderboardevents.TagSwapRequestedPayload:
+						swapPayload, ok := got.Success.(*leaderboardevents.TagSwapRequestedPayload)
+						if !ok {
+							t.Errorf("❌ Expected Success to be *TagSwapRequestedPayload, but got %T", got.Success)
+						} else if swapPayload.RequestorID != expected.RequestorID || swapPayload.TargetID != expected.TargetID {
+							t.Errorf("❌ Mismatched swap IDs, got: %v/%v, expected: %v/%v", swapPayload.RequestorID, swapPayload.TargetID, expected.RequestorID, expected.TargetID)
+						}
+					default:
+						t.Errorf("❌ Unexpected Success payload type: %T", got.Success)
 					}
 				}
 			} else if got.Success != nil {
@@ -194,4 +229,8 @@ func TestLeaderboardService_TagAssignmentRequested(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ptrTag(t sharedtypes.TagNumber) *sharedtypes.TagNumber {
+	return &t
 }

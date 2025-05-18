@@ -109,36 +109,134 @@ func (s *LeaderboardService) FindTagByUserID(ctx context.Context, leaderboard *l
 	return 0, false
 }
 
-// PrepareTagAssignment takes the current leaderboard and assigns a new tag,
-// returning the updated leaderboard data
+type TagSwapNeededError struct {
+	RequestorID sharedtypes.DiscordID
+	TargetID    sharedtypes.DiscordID
+	TagNumber   sharedtypes.TagNumber
+}
+
+func (e *TagSwapNeededError) Error() string {
+	return fmt.Sprintf("tag %d is already assigned to user %s, swap needed", e.TagNumber, e.TargetID)
+}
+
 func (s *LeaderboardService) PrepareTagAssignment(
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	userID sharedtypes.DiscordID,
 	tagNumber sharedtypes.TagNumber,
 ) (leaderboardtypes.LeaderboardData, error) {
 	if tagNumber < 0 {
-		return nil, fmt.Errorf("invalid input: invalid tag number")
+		return nil, fmt.Errorf("invalid input: tag number cannot be negative")
 	}
 
-	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
+	var userHasTag bool
 	for _, entry := range currentLeaderboard.LeaderboardData {
-		tagMap[*entry.TagNumber] = entry.UserID
+		if entry.UserID == userID {
+			userHasTag = true
+			break
+		}
 	}
 
-	if existingUser, exists := tagMap[tagNumber]; exists {
-		return nil, fmt.Errorf("tag %d is already assigned to user %s", tagNumber, existingUser)
+	for _, entry := range currentLeaderboard.LeaderboardData {
+		if entry.TagNumber != nil && *entry.TagNumber == tagNumber {
+			if entry.UserID == userID {
+				// User is re-claiming their own tag, allow as no-op or success
+				return nil, nil
+			}
+			if userHasTag {
+				// User has a different tag, swap needed
+				return nil, &TagSwapNeededError{
+					RequestorID: userID,
+					TargetID:    entry.UserID,
+					TagNumber:   tagNumber,
+				}
+			}
+			// User doesn't have a tag, fail
+			return nil, fmt.Errorf("tag %d is already assigned to user %s", tagNumber, entry.UserID)
+		}
 	}
 
-	tagMap[tagNumber] = userID
+	// Create a copy of the leaderboard data with the new assignment
+	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, len(currentLeaderboard.LeaderboardData)+1)
+	copy(updatedLeaderboardData, currentLeaderboard.LeaderboardData)
 
-	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
-	for tag, uid := range tagMap {
-		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tag,
-			UserID:    sharedtypes.DiscordID(uid),
-		})
+	// Add the new entry
+	updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
+		TagNumber: &tagNumber,
+		UserID:    userID,
+	})
+
+	// Sort by tag number
+	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		if a.TagNumber == nil && b.TagNumber == nil {
+			return 0
+		}
+		if a.TagNumber == nil {
+			return -1
+		}
+		if b.TagNumber == nil {
+			return 1
+		}
+		return int(*a.TagNumber - *b.TagNumber)
+	})
+
+	return updatedLeaderboardData, nil
+}
+
+// PrepareTagUpdateForExistingUser handles validation for updating a tag for a user
+// that already exists in the leaderboard
+func (s *LeaderboardService) PrepareTagUpdateForExistingUser(
+	currentLeaderboard *leaderboarddb.Leaderboard,
+	userID sharedtypes.DiscordID,
+	newTagNumber sharedtypes.TagNumber,
+) (leaderboardtypes.LeaderboardData, error) {
+	// Validate tag number
+	if newTagNumber < 0 {
+		return nil, fmt.Errorf("invalid input: tag number cannot be negative")
 	}
 
+	// Find the user's current entry
+	var userCurrentEntry *leaderboardtypes.LeaderboardEntry
+	for _, entry := range currentLeaderboard.LeaderboardData {
+		if entry.UserID == userID {
+			entryClone := entry // Create a copy to avoid modifying the original
+			userCurrentEntry = &entryClone
+			break
+		}
+	}
+
+	if userCurrentEntry == nil {
+		return nil, fmt.Errorf("user %s not found in leaderboard", userID)
+	}
+
+	// Check if the new tag is already assigned to another user
+	for _, entry := range currentLeaderboard.LeaderboardData {
+		if entry.UserID != userID && entry.TagNumber != nil && *entry.TagNumber == newTagNumber {
+			// Return TagSwapNeededError instead of generic error
+			return nil, &TagSwapNeededError{
+				RequestorID: userID,
+				TargetID:    entry.UserID,
+				TagNumber:   newTagNumber,
+			}
+		}
+	}
+
+	// Create a copy of the leaderboard data for the update
+	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(currentLeaderboard.LeaderboardData))
+
+	// Add all entries except the user's entry
+	for _, entry := range currentLeaderboard.LeaderboardData {
+		if entry.UserID != userID {
+			updatedLeaderboardData = append(updatedLeaderboardData, entry)
+		}
+	}
+
+	// Add the updated entry for the user
+	updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
+		TagNumber: &newTagNumber,
+		UserID:    userID,
+	})
+
+	// Sort by tag number
 	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
 		if a.TagNumber == nil && b.TagNumber == nil {
 			return 0

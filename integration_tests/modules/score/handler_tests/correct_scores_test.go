@@ -34,8 +34,8 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
 				ctx := deps.Ctx
 				_ = testutils.CleanScoreIntegrationTables(ctx, deps.DB)
-				_ = deps.CleanNatsStreams(ctx, "score")
-				_ = deps.CleanNatsStreams(ctx, "leaderboard")
+				_ = deps.ResetJetStreamState(ctx, "score")
+				_ = deps.ResetJetStreamState(ctx, "leaderboard")
 
 				users := generator.GenerateUsers(2)
 				roundID := sharedtypes.RoundID(uuid.New())
@@ -118,7 +118,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			name: "Failure - Score record not found",
 			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
 				_ = testutils.CleanScoreIntegrationTables(deps.Ctx, deps.DB)
-				_ = deps.CleanNatsStreams(deps.Ctx, "score")
+				_ = deps.ResetJetStreamState(deps.Ctx, "score")
 				return sharedtypes.RoundID(uuid.New()) // Return a RoundID that doesn't exist in the DB
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, roundID sharedtypes.RoundID, generator *testutils.TestDataGenerator) *message.Message {
@@ -154,7 +154,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
 				ctx := deps.Ctx
 				_ = testutils.CleanScoreIntegrationTables(ctx, deps.DB)
-				_ = deps.CleanNatsStreams(ctx, "score")
+				_ = deps.ResetJetStreamState(ctx, "score")
 
 				users := generator.GenerateUsers(1)
 				roundID := sharedtypes.RoundID(uuid.New())

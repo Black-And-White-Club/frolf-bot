@@ -34,7 +34,6 @@ integration-leaderboard-handlers:
 	@echo "Running integration tests from root..."
 	go test ./integration_tests/modules/leaderboard/handler_tests -v
 
-
 integration-user-service:
 	@echo "Running integration tests from root..."
 	go test ./integration_tests/modules/user/application_tests -v

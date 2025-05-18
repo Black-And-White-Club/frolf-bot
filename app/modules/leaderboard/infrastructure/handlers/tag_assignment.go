@@ -6,6 +6,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -21,58 +22,83 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
 				attr.Int("tag_number", int(*tagAssignmentRequestedPayload.TagNumber)),
+				attr.String("source", tagAssignmentRequestedPayload.Source),
 			)
 
-			// Call the service function to handle the event
 			result, err := h.leaderboardService.TagAssignmentRequested(ctx, *tagAssignmentRequestedPayload)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle TagAssignmentRequested event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
-				)
-				return nil, fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
+				h.logger.ErrorContext(ctx, "TagAssignmentRequested failed", attr.CorrelationIDFromMsg(msg), attr.Error(err))
+				return nil, err
 			}
 
-			// Handle the result
-			if result.Failure != nil {
-				h.logger.ErrorContext(ctx, "Tag assignment failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
+			if result == (leaderboardservice.LeaderboardOperationResult{}) {
+				h.logger.ErrorContext(ctx, "Service returned empty result", attr.CorrelationIDFromMsg(msg))
+				return nil, fmt.Errorf("empty result from service")
+			}
 
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
+			var outMsgs []*message.Message
+
+			if result.Failure != nil {
+				// Always publish failure to leaderboard stream
+				failureMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
 					leaderboardevents.LeaderboardTagAssignmentFailed,
 				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
-
-				return []*message.Message{failureMsg}, nil
+				outMsgs = append(outMsgs, failureMsg)
+				return outMsgs, nil
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Tag assignment successful", attr.CorrelationIDFromMsg(msg))
-
-				// Create success message to publish
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					result.Success,
-					leaderboardevents.LeaderboardTagAssignmentSuccess,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
+				// Handle tag swap flow
+				if swap, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayload); ok {
+					swapMsg, err := h.Helpers.CreateResultMessage(
+						msg,
+						swap,
+						leaderboardevents.TagSwapRequested,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create tag swap message: %w", err)
+					}
+					outMsgs = append(outMsgs, swapMsg)
+					return outMsgs, nil
 				}
-				return []*message.Message{successMsg}, nil
+
+				// Route success based on Source field
+				switch tagAssignmentRequestedPayload.Source {
+				case "user_creation":
+					userMsg, err := h.Helpers.CreateResultMessage(
+						msg,
+						result.Success,
+						leaderboardevents.LeaderboardTagAssignmentSuccess,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create user creation message: %w", err)
+					}
+					outMsgs = append(outMsgs, userMsg)
+				default:
+					successMsg, err := h.Helpers.CreateResultMessage(
+						msg,
+						result.Success,
+						leaderboardevents.LeaderboardTagAssignmentSuccess,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create success message: %w", err)
+					}
+					outMsgs = append(outMsgs, successMsg)
+				}
+				return outMsgs, nil
 			}
 
-			// If neither Success nor Failure is set, return an error
-			return nil, fmt.Errorf("unexpected result from service")
+			h.logger.ErrorContext(ctx, "Service returned result with neither Success nor Failure payload set, and no error",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected service result: neither success nor failure")
 		},
 	)
 
-	// Execute the wrapped handler with the message
 	return wrappedHandler(msg)
 }

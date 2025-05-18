@@ -43,10 +43,9 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "user_swap_B", TagNumber: tagPtr(20)},
 						{UserID: "other_user", TagNumber: tagPtr(30)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -141,10 +140,9 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "user_swap_B", TagNumber: tagPtr(20)},
 						{UserID: "other_user", TagNumber: tagPtr(30)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -211,10 +209,9 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "user_swap_A", TagNumber: tagPtr(10)},
 						{UserID: "other_user", TagNumber: tagPtr(30)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -280,10 +277,9 @@ func TestTagSwapRequested(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "other_user", TagNumber: tagPtr(30)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {

@@ -100,6 +100,71 @@ func TestLeaderboardHandlers_HandleTagAssignment(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Handles tag swap flow",
+			mockSetup: func() {
+				swapPayload := &leaderboardevents.TagSwapRequestedPayload{
+					RequestorID: testUserID,
+					TargetID:    "target-user",
+				}
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*leaderboardevents.TagAssignmentRequestedPayload) = *testPayload
+						return nil
+					},
+				)
+				mockLeaderboardService.EXPECT().TagAssignmentRequested(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: swapPayload,
+					},
+					nil,
+				)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					swapPayload,
+					leaderboardevents.TagSwapRequested,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "Handles tag swap flow but CreateResultMessage fails",
+			mockSetup: func() {
+				swapPayload := &leaderboardevents.TagSwapRequestedPayload{
+					RequestorID: testUserID,
+					TargetID:    "target-user",
+				}
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*leaderboardevents.TagAssignmentRequestedPayload) = *testPayload
+						return nil
+					},
+				)
+				mockLeaderboardService.EXPECT().TagAssignmentRequested(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: swapPayload,
+					},
+					nil,
+				)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					swapPayload,
+					leaderboardevents.TagSwapRequested,
+				).Return(nil, fmt.Errorf("failed to create swap message"))
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create tag swap message: failed to create swap message",
+		},
+		{
 			name: "Fail to unmarshal payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
@@ -298,7 +363,7 @@ func TestLeaderboardHandlers_HandleTagAssignment(t *testing.T) {
 				logger:             logger,
 				tracer:             tracer,
 				metrics:            metrics,
-				helpers:            mockHelpers,
+				Helpers:            mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
 					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},

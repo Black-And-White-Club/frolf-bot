@@ -42,7 +42,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 				)
 
 				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
+				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
 					leaderboardevents.LeaderboardUpdateFailed,
@@ -58,7 +58,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 				h.logger.InfoContext(ctx, "Leaderboard updated successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				successMsg, err := h.helpers.CreateResultMessage(
+				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
 					leaderboardevents.LeaderboardUpdated,

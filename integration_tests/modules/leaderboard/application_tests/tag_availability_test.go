@@ -97,10 +97,9 @@ func TestCheckTagAvailability(t *testing.T) {
 						{UserID: "user_A", TagNumber: tagPtr(1)},
 						{UserID: "user_B", TagNumber: tagPtr(2)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -159,10 +158,9 @@ func TestCheckTagAvailability(t *testing.T) {
 						{UserID: "user_X", TagNumber: tagPtr(50)},
 						{UserID: "user_Y", TagNumber: tagPtr(60)},
 					},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					IsActive:     true,
+					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -217,11 +215,10 @@ func TestCheckTagAvailability(t *testing.T) {
 			name: "Tag availability check succeeds for invalid tag number (e.g., negative)",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData:     leaderboardtypes.LeaderboardData{},
-					IsActive:            true,
-					UpdateSource:        leaderboarddb.ServiceUpdateSourceManual,
-					UpdateID:            sharedtypes.RoundID(uuid.New()),
-					RequestingDiscordID: "setup_user",
+					LeaderboardData: leaderboardtypes.LeaderboardData{},
+					IsActive:        true,
+					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
