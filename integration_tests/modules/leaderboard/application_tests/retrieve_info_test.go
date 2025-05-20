@@ -43,9 +43,9 @@ func TestGetLeaderboard(t *testing.T) {
 				// Create an active leaderboard with some data
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_A", TagNumber: tagPtr(1)},
-						{UserID: "user_B", TagNumber: tagPtr(2)},
-						{UserID: "user_C", TagNumber: tagPtr(3)},
+						{UserID: "user_A", TagNumber: 1},
+						{UserID: "user_B", TagNumber: 2},
+						{UserID: "user_C", TagNumber: 3},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -58,7 +58,7 @@ func TestGetLeaderboard(t *testing.T) {
 				// Create an inactive leaderboard to ensure only the active one is returned
 				inactiveLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_Z", TagNumber: tagPtr(99)},
+						{UserID: "user_Z", TagNumber: 99},
 					},
 					IsActive:     false,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -90,28 +90,28 @@ func TestGetLeaderboard(t *testing.T) {
 
 				// Sort both slices for consistent comparison
 				sort.SliceStable(expectedData, func(i, j int) bool {
-					if expectedData[i].TagNumber == nil && expectedData[j].TagNumber == nil {
+					if expectedData[i].TagNumber == 0 && expectedData[j].TagNumber == 0 {
 						return false
 					}
-					if expectedData[i].TagNumber == nil {
+					if expectedData[i].TagNumber == 0 {
 						return true
 					}
-					if expectedData[j].TagNumber == nil {
+					if expectedData[j].TagNumber == 0 {
 						return false
 					}
-					return *expectedData[i].TagNumber < *expectedData[j].TagNumber
+					return expectedData[i].TagNumber < expectedData[j].TagNumber
 				})
 				sort.SliceStable(actualData, func(i, j int) bool {
-					if actualData[i].TagNumber == nil && actualData[j].TagNumber == nil {
+					if actualData[i].TagNumber == 0 && actualData[j].TagNumber == 0 {
 						return false
 					}
-					if actualData[i].TagNumber == nil {
+					if actualData[i].TagNumber == 0 {
 						return true
 					}
-					if actualData[j].TagNumber == nil {
+					if actualData[j].TagNumber == 0 {
 						return false
 					}
-					return *actualData[i].TagNumber < *actualData[j].TagNumber
+					return actualData[i].TagNumber < actualData[j].TagNumber
 				})
 
 				if len(actualData) != len(expectedData) {
@@ -123,7 +123,7 @@ func TestGetLeaderboard(t *testing.T) {
 					actual := actualData[i]
 					expected := expectedData[i]
 					// Compare UserID and TagNumber (handling nil pointers)
-					if actual.UserID != expected.UserID || !((actual.TagNumber == nil && expected.TagNumber == nil) || (actual.TagNumber != nil && expected.TagNumber != nil && *actual.TagNumber == *expected.TagNumber)) {
+					if actual.UserID != expected.UserID || !((actual.TagNumber == 0 && expected.TagNumber == 0) || (actual.TagNumber != 0 && expected.TagNumber != 0 && actual.TagNumber == expected.TagNumber)) {
 						t.Errorf("Mismatch at index %d: Expected %+v, got %+v", i, expected, actual)
 					}
 				}
@@ -355,8 +355,8 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_123", TagNumber: tagPtr(42)},
-						{UserID: "user_456", TagNumber: tagPtr(10)},
+						{UserID: "user_123", TagNumber: 42},
+						{UserID: "user_456", TagNumber: 10},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -435,8 +435,8 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_no_tag", TagNumber: nil},
-						{UserID: "user_with_tag", TagNumber: tagPtr(5)},
+						{UserID: "user_no_tag", TagNumber: 0},
+						{UserID: "user_with_tag", TagNumber: 5},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -513,7 +513,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_abc", TagNumber: tagPtr(11)},
+						{UserID: "user_abc", TagNumber: 11},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -656,8 +656,8 @@ func TestGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_A", TagNumber: tagPtr(99)},
-						{UserID: "user_B", TagNumber: tagPtr(88)},
+						{UserID: "user_A", TagNumber: 99},
+						{UserID: "user_B", TagNumber: 88},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -721,8 +721,8 @@ func TestGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_C", TagNumber: nil}, // User exists with nil tag
-						{UserID: "user_D", TagNumber: tagPtr(77)},
+						{UserID: "user_C", TagNumber: 0}, // User exists with nil tag
+						{UserID: "user_D", TagNumber: 77},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -782,7 +782,7 @@ func TestGetTagByUserID(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_E", TagNumber: tagPtr(66)}, // User E exists, but not the target user
+						{UserID: "user_E", TagNumber: 66}, // User E exists, but not the target user
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,

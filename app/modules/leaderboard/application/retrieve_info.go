@@ -103,7 +103,9 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 			OriginalJoinedLate: payload.JoinedLate,
 		}
 
+		// Handle errors from the database call
 		if err != nil {
+			// Specific handling for no active leaderboard
 			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
 				s.logger.ErrorContext(ctx, "Failed to get tag by UserID: No active leaderboard found (System Error)",
 					attr.ExtractCorrelationID(ctx),
@@ -118,11 +120,12 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 						RoundID: payload.RoundID,
 						Reason:  "No active leaderboard found",
 					},
-				}, nil
+				}, nil // Return nil standard error as this is a handled business error
 			}
 
+			// Specific handling for user not found (sql.ErrNoRows)
 			if errors.Is(err, sql.ErrNoRows) {
-				s.logger.InfoContext(ctx, "No tag found for user in active leaderboard data (Business Outcome)",
+				s.logger.InfoContext(ctx, "No tag found for user in active leaderboard data (Business Outcome - sql.ErrNoRows)",
 					attr.ExtractCorrelationID(ctx),
 					attr.String("user_id", string(payload.UserID)),
 					attr.Error(err),
@@ -131,11 +134,12 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 
 				resultPayload.TagNumber = nil
 				resultPayload.Found = false
-				resultPayload.Error = err.Error()
+				resultPayload.Error = err.Error() // Set Error field with the actual error string
 
-				return LeaderboardOperationResult{Success: &resultPayload}, nil
+				return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error as this is a handled business outcome
 			}
 
+			// General handling for any other unexpected database errors
 			s.logger.ErrorContext(ctx, "Failed to get tag by UserID due to unexpected DB error (Round)",
 				attr.ExtractCorrelationID(ctx),
 				attr.String("user_id", string(payload.UserID)),
@@ -143,13 +147,30 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 			)
 			s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
 
+			// Return the error in the result struct and as a standard error
 			return LeaderboardOperationResult{Error: fmt.Errorf("failed to get tag by UserID (Round): %w", err)}, fmt.Errorf("failed to get tag by UserID (Round): %w", err)
 		}
 
+		// Handle the case where err is nil, but tagNumber is also nil (should be treated as not found)
+		if tagNumber == nil {
+			s.logger.InfoContext(ctx, "No tag found for user in active leaderboard data (Business Outcome - nil tagNumber and nil error)",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("user_id", string(payload.UserID)),
+			)
+			s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
+
+			resultPayload.TagNumber = nil
+			resultPayload.Found = false
+			resultPayload.Error = "" // Error is empty string if nil tagNumber and nil error from DB
+
+			return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error as this is a handled business outcome
+		}
+
+		// Success path: err is nil and tagNumber is non-nil
 		s.logger.InfoContext(ctx, "Retrieved tag number for user (Round)",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("user_id", string(payload.UserID)),
-			attr.Int("tag_number", int(*tagNumber)),
+			attr.Any("tag_number", *tagNumber), // Log the dereferenced tag number
 		)
 		s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
 
@@ -158,7 +179,7 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 		resultPayload.Found = true
 		resultPayload.Error = ""
 
-		return LeaderboardOperationResult{Success: &resultPayload}, nil
+		return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error on success
 	})
 }
 

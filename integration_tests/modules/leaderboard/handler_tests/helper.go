@@ -3,6 +3,7 @@ package leaderboardhandler_integration_tests
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -85,9 +86,9 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		t.Fatalf("Failed to truncate DB tables: %v", err)
 	}
 
-	discardLogger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	watermillLogger := watermill.NewStdLogger(false, false) // uncomment for watermill logs
-	// watermillLogger := watermill.NopLogger{} // comment out for watermill logs
+	discardLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// watermillLogger := watermill.NewStdLogger(false, false) // uncomment for watermill logs
+	watermillLogger := watermill.NopLogger{} // comment out for watermill logs
 
 	eventBusCtx, eventBusCancel := context.WithCancel(env.Ctx)
 
@@ -240,16 +241,16 @@ func sanitizeForNATS(s string) string {
 
 func sortLeaderboardData(data leaderboardtypes.LeaderboardData) {
 	slices.SortFunc(data, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber == nil && b.TagNumber == nil {
+		if a.TagNumber == 0 && b.TagNumber == 0 {
 			return 0
 		}
-		if a.TagNumber == nil {
+		if a.TagNumber == 0 {
 			return -1
 		}
-		if b.TagNumber == nil {
+		if b.TagNumber == 0 {
 			return 1
 		}
-		return int(*a.TagNumber - *b.TagNumber)
+		return int(a.TagNumber - b.TagNumber)
 	})
 }
 

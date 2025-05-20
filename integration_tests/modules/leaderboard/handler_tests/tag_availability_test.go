@@ -1,449 +1,334 @@
 package leaderboardhandler_integration_tests
 
-// import (
-// 	"context"
-// 	"encoding/json"
-// 	"fmt"
-// 	"log"
-// 	"sync"
-// 	"testing"
-// 	"time"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
 
-// 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-// 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
-// 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-// 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-// 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
-// 	"github.com/ThreeDotsLabs/watermill/message"
-// 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
-// 	"github.com/google/uuid"
-// )
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/google/uuid"
+)
 
-// // TestCase represents a test case for tag availability check handler
-// type tagAvailabilityTestCase struct {
-// 	name                   string
-// 	setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *leaderboarddb.Leaderboard
-// 	publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *message.Message
-// 	validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard)
-// 	expectedOutgoingTopics []string
-// 	expectedMessageCounts  map[string]int
-// 	expectHandlerError     bool
-// }
+// Helper function to create a tag availability check request message
+func createTagAvailabilityCheckRequestMessage(
+	t *testing.T,
+	userID sharedtypes.DiscordID,
+	tagNumber sharedtypes.TagNumber,
+) (*message.Message, error) {
+	t.Helper() // Mark this as a helper function
 
-// // Helper function to create and publish a tag availability check request message
-// func createTagAvailabilityCheckRequestMessage(
-// 	t *testing.T,
-// 	userID sharedtypes.DiscordID,
-// 	tagNumber sharedtypes.TagNumber,
-// ) *message.Message {
-// 	t.Helper()
+	tagPtr := tagPtr(tagNumber)
+	payload := leaderboardevents.TagAvailabilityCheckRequestedPayload{
+		UserID:    userID,
+		TagNumber: tagPtr,
+	}
 
-// 	tagPtr := tagPtr(tagNumber)
-// 	payload := leaderboardevents.TagAvailabilityCheckRequestedPayload{
-// 		UserID:    userID,
-// 		TagNumber: tagPtr,
-// 	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
 
-// 	payloadBytes, err := json.Marshal(payload)
-// 	if err != nil {
-// 		t.Fatalf("failed to marshal payload: %v", err)
-// 	}
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+	return msg, nil
+}
 
-// 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
-// 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-// 	return msg
-// }
+// Helper to validate response properties for tag available
+func validateTagAvailableResponse(
+	t *testing.T,
+	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayload,
+	availablePayload *leaderboardevents.TagAvailablePayload,
+) {
+	t.Helper() // Mark this as a helper function
 
-// // Main test runner for each test case
-// func (tc *tagAvailabilityTestCase) runTest(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) {
-// 	// Generate a unique ID for this test case to isolate subscriptions
-// 	testID := fmt.Sprintf("%s-%s", sanitizeForNATS(t.Name()), uuid.New().String()[:8])
+	if availablePayload.UserID != requestPayload.UserID {
+		t.Errorf("UserID mismatch in available payload: expected %q, got %q",
+			requestPayload.UserID, availablePayload.UserID)
+	}
 
-// 	// Setup initial leaderboard
-// 	initialLeaderboard := tc.setupFn(t, deps, generator)
+	if *availablePayload.TagNumber != *requestPayload.TagNumber {
+		t.Errorf("TagNumber mismatch in available payload: expected %d, got %d",
+			*requestPayload.TagNumber, *availablePayload.TagNumber)
+	}
+}
 
-// 	// Setup message tracking
-// 	receivedMsgs := make(map[string][]*message.Message)
-// 	mu := &sync.Mutex{}
-// 	subscriberWg := &sync.WaitGroup{}
+// Helper to validate response properties for tag unavailable
+func validateTagUnavailableResponse(
+	t *testing.T,
+	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayload,
+	unavailablePayload *leaderboardevents.TagUnavailablePayload,
+) {
+	t.Helper() // Mark this as a helper function
 
-// 	// Use a cancelable context for subscriptions
-// 	subCtx, cancelSub := context.WithCancel(deps.Ctx)
+	if unavailablePayload.UserID != requestPayload.UserID {
+		t.Errorf("UserID mismatch in unavailable payload: expected %q, got %q",
+			requestPayload.UserID, unavailablePayload.UserID)
+	}
 
-// 	// Ensure proper cleanup
-// 	t.Cleanup(func() {
-// 		log.Printf("Test Case %q: Canceling subscription context.", t.Name())
-// 		cancelSub()
+	if *unavailablePayload.TagNumber != *requestPayload.TagNumber {
+		t.Errorf("TagNumber mismatch in unavailable payload: expected %d, got %d",
+			*requestPayload.TagNumber, *unavailablePayload.TagNumber)
+	}
+}
 
-// 		log.Printf("Test Case %q: Waiting for subscriber goroutines to finish.", t.Name())
-// 		waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 		defer waitCancel()
+// TestHandleTagAvailabilityCheckRequested runs integration tests for the tag availability handler
+func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
+	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
+	testCases := []struct {
+		name                   string
+		users                  []testutils.User
+		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard
+		publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message
+		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard)
+		expectedOutgoingTopics []string
+		expectHandlerError     bool
+		timeout                time.Duration
+	}{
+		{
+			name:  "Success - Tag Available",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+				initialData := leaderboardtypes.LeaderboardData{
+					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 1},
+				}
 
-// 		waitCh := make(chan struct{})
-// 		go func() {
-// 			subscriberWg.Wait()
-// 			close(waitCh)
-// 		}()
+				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
+			},
+			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
+				newUser := generator.GenerateUsers(1)[0]
 
-// 		select {
-// 		case <-waitCh:
-// 			log.Printf("Test Case %q: Subscriber goroutines finished.", t.Name())
-// 		case <-waitCtx.Done():
-// 			log.Printf("Test Case %q: WARNING: Subscriber goroutines did not finish within timeout after context cancellation.", t.Name())
-// 		}
-// 	})
+				msg, err := createTagAvailabilityCheckRequestMessage(
+					t,
+					sharedtypes.DiscordID(newUser.UserID),
+					10, // Tag number that should be available
+				)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// 	// Setup subscribers for all expected topics
-// 	for _, topic := range tc.expectedOutgoingTopics {
-// 		msgCh, err := deps.EventBus.Subscribe(subCtx, topic)
-// 		if err != nil {
-// 			t.Fatalf("Failed to subscribe to topic %q: %v", topic, err)
-// 		}
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+				// Check TagAvailable response
+				availableTopic := leaderboardevents.TagAvailable
+				msgs := receivedMsgs[availableTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", availableTopic)
+				}
+				if len(msgs) > 1 {
+					t.Errorf("Expected exactly one message on topic %q, but received %d", availableTopic, len(msgs))
+				}
 
-// 		subscriberWg.Add(1)
-// 		go func(topic string, messages <-chan *message.Message) {
-// 			defer subscriberWg.Done()
-// 			for {
-// 				select {
-// 				case msg, ok := <-messages:
-// 					if !ok {
-// 						return
-// 					}
-// 					log.Printf("Test Received message %s on topic %q", msg.UUID, topic)
-// 					mu.Lock()
-// 					receivedMsgs[topic] = append(receivedMsgs[topic], msg)
-// 					mu.Unlock()
-// 					msg.Ack()
-// 				case <-subCtx.Done():
-// 					return
-// 				}
-// 			}
-// 		}(topic, msgCh)
-// 	}
+				// Parse payloads
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// 	// Wait a moment to ensure all subscribers are ready
-// 	time.Sleep(200 * time.Millisecond)
+				availablePayload, err := testutils.ParsePayload[leaderboardevents.TagAvailablePayload](msgs[0])
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// 	// Publish the message to start the flow
-// 	incomingMsg := tc.publishMsgFn(t, deps, generator)
+				// Validate available payload
+				validateTagAvailableResponse(t, requestPayload, availablePayload)
 
-// 	// Wait for expected messages on all topics
-// 	for _, topic := range tc.expectedOutgoingTopics {
-// 		success, err := waitForMessagess(subCtx, topic, receivedMsgs, 5*time.Second, mu)
-// 		if err != nil {
-// 			log.Printf("⏰ Timeout waiting for topic %q messages: %v", topic, err)
+				// Validate correlation ID
+				if msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+					t.Errorf("Correlation ID mismatch: expected %q, got %q",
+						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
+						msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey))
+				}
 
-// 			mu.Lock()
-// 			for k, msgs := range receivedMsgs {
-// 				log.Printf("DEBUG: receivedMsgs has topic %q with %d message(s)", k, len(msgs))
-// 			}
-// 			mu.Unlock()
+				// Check for unexpected messages
+				unexpectedTopic := leaderboardevents.TagUnavailable
+				if len(receivedMsgs[unexpectedTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
+				}
+				unexpectedFailureTopic := leaderboardevents.TagAvailableCheckFailure
+				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
+				}
+			},
+			expectedOutgoingTopics: []string{
+				leaderboardevents.TagAvailable,
+			},
+			expectHandlerError: false,
+		},
+		{
+			name:  "Success - Tag Unavailable (Already Taken)",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+				initialData := leaderboardtypes.LeaderboardData{
+					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 42},
+				}
 
-// 			if tc.expectHandlerError {
-// 				t.Logf("Expected error received: %v", err)
-// 			} else {
-// 				t.Fatalf("Timed out waiting for messages on topic %q: %v", topic, err)
-// 			}
-// 		}
+				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
+			},
+			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
+				newUser := generator.GenerateUsers(1)[0]
 
-// 		if !success && !tc.expectHandlerError {
-// 			t.Fatalf("Failed to receive message on topic %q within timeout", topic)
-// 		}
-// 	}
+				msg, err := createTagAvailabilityCheckRequestMessage(
+					t,
+					sharedtypes.DiscordID(newUser.UserID),
+					42, // Tag number that is already taken
+				)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// 	// Final validation using test case's validate function
-// 	tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialLeaderboard)
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+				unavailableTopic := leaderboardevents.TagUnavailable
+				msgs := receivedMsgs[unavailableTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", unavailableTopic)
+				}
+				if len(msgs) > 1 {
+					t.Errorf("Expected exactly one message on topic %q, but received %d", unavailableTopic, len(msgs))
+				}
 
-// 	// Additional cleanup - delete consumers for this test
-// 	for _, topic := range tc.expectedOutgoingTopics {
-// 		consumerName := fmt.Sprintf("test-%s-%s", sanitizeForNATS(topic), testID)
-// 		streamName := determineStreamName(topic)
+				// Parse payloads
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// 		if streamName != "" {
-// 			if err := deleteConsumer(deps.EventBus, streamName, consumerName); err != nil {
-// 				t.Logf("Warning: failed to delete consumer %s from stream %s: %v",
-// 					consumerName, streamName, err)
-// 			}
-// 		}
-// 	}
-// }
+				unavailablePayload, err := testutils.ParsePayload[leaderboardevents.TagUnavailablePayload](msgs[0])
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
 
-// // TestHandleTagAvailabilityCheckRequested runs integration tests for the tag availability handler
-// func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
-// 	tests := []tagAvailabilityTestCase{
-// 		{
-// 			name: "Success - Tag Available",
-// 			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *leaderboarddb.Leaderboard {
-// 				users := generator.GenerateUsers(1)
-// 				initialData := leaderboardtypes.LeaderboardData{
-// 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: tagPtr(1)},
-// 				}
+				// Validate payload
+				validateTagUnavailableResponse(t, requestPayload, unavailablePayload)
 
-// 				initialLeaderboard, err := testutils.InsertLeaderboard(t, testEnv.DB, initialData)
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-// 				return initialLeaderboard
-// 			},
-// 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *message.Message {
-// 				newUser := generator.GenerateUsers(1)[0]
+				// Validate correlation ID
+				if msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+					t.Errorf("Correlation ID mismatch: expected %q, got %q",
+						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
+						msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey))
+				}
 
-// 				msg := createTagAvailabilityCheckRequestMessage(
-// 					t,
-// 					sharedtypes.DiscordID(newUser.UserID),
-// 					10, // Tag number that should be available
-// 				)
+				// Check for unexpected messages
+				availableTopic := leaderboardevents.TagAvailable
+				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
+				failureTopic := leaderboardevents.TagAvailableCheckFailure
 
-// 				if err := testutils.PublishMessage(t, testEnv.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
-// 					t.Fatalf("Failed to publish message: %v", err)
-// 				}
-// 				return msg
-// 			},
-// 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-// 				// Check TagAvailable response
-// 				availableTopic := leaderboardevents.TagAvailable
-// 				availableMsgs := receivedMsgs[availableTopic]
-// 				if len(availableMsgs) == 0 {
-// 					t.Fatalf("Expected at least one message on topic %q, but received none", availableTopic)
-// 				}
+				if len(receivedMsgs[availableTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						availableTopic, len(receivedMsgs[availableTopic]))
+				}
+				if len(receivedMsgs[assignTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						assignTopic, len(receivedMsgs[assignTopic]))
+				}
+				if len(receivedMsgs[failureTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						failureTopic, len(receivedMsgs[failureTopic]))
+				}
+			},
+			expectedOutgoingTopics: []string{leaderboardevents.TagUnavailable},
+			expectHandlerError:     false,
+		},
+		{
+			name:  "Failure - Invalid Message Payload",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+				entries := []leaderboardtypes.LeaderboardEntry{
+					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 99},
+				}
+				return testutils.SetupLeaderboardWithEntries(t, deps.DB, entries, true, sharedtypes.RoundID(uuid.New()))
+			},
+			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
+				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+				// Check for unexpected messages
+				availableTopic := leaderboardevents.TagAvailable
+				unavailableTopic := leaderboardevents.TagUnavailable
+				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
+				failureTopic := leaderboardevents.TagAvailableCheckFailure
 
-// 				// Check LeaderboardTagAssignmentRequested message
-// 				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
-// 				assignMsgs := receivedMsgs[assignTopic]
-// 				if len(assignMsgs) == 0 {
-// 					t.Fatalf("Expected at least one message on topic %q, but received none", assignTopic)
-// 				}
+				if len(receivedMsgs[availableTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						availableTopic, len(receivedMsgs[availableTopic]))
+				}
+				if len(receivedMsgs[unavailableTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						unavailableTopic, len(receivedMsgs[unavailableTopic]))
+				}
+				if len(receivedMsgs[assignTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						assignTopic, len(receivedMsgs[assignTopic]))
+				}
+				if len(receivedMsgs[failureTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d",
+						failureTopic, len(receivedMsgs[failureTopic]))
+				}
 
-// 				// Parse payloads
-// 				requestPayload, err := parsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
+				// Validate leaderboard state in database
+				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+				if len(leaderboards) != 1 {
+					t.Fatalf("Expected 1 leaderboard record in DB, got %d", len(leaderboards))
+				}
+				leaderboard := leaderboards[0]
+				if leaderboard.ID != initialLeaderboard.ID {
+					t.Errorf("Expected leaderboard ID %d, got %d", initialLeaderboard.ID, leaderboard.ID)
+				}
+				if !leaderboard.IsActive {
+					t.Error("Expected leaderboard to remain active")
+				}
+			},
+			expectedOutgoingTopics: []string{},
+			expectHandlerError:     true,
+		},
+	}
 
-// 				availablePayload, err := parsePayload[leaderboardevents.TagAvailablePayload](availableMsgs[0])
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		t.Run(tc.name, func(t *testing.T) {
+			deps := SetupTestLeaderboardHandler(t)
+			users := tc.users
 
-// 				assignPayload, err := parsePayload[leaderboardevents.TagAssignmentRequestedPayload](assignMsgs[0])
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, users)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, users)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialState.(*leaderboarddb.Leaderboard))
+				},
+				ExpectError: tc.expectHandlerError,
+			}
 
-// 				// Validate available payload
-// 				if availablePayload.UserID != requestPayload.UserID {
-// 					t.Errorf("UserID mismatch in available payload: expected %q, got %q",
-// 						requestPayload.UserID, availablePayload.UserID)
-// 				}
-// 				if *availablePayload.TagNumber != *requestPayload.TagNumber {
-// 					t.Errorf("TagNumber mismatch in available payload: expected %d, got %d",
-// 						*requestPayload.TagNumber, *availablePayload.TagNumber)
-// 				}
-
-// 				// Validate assignment payload
-// 				if assignPayload.UserID != requestPayload.UserID {
-// 					t.Errorf("UserID mismatch in assign payload: expected %q, got %q",
-// 						requestPayload.UserID, assignPayload.UserID)
-// 				}
-// 				if *assignPayload.TagNumber != *requestPayload.TagNumber {
-// 					t.Errorf("TagNumber mismatch in assign payload: expected %d, got %d",
-// 						*requestPayload.TagNumber, *assignPayload.TagNumber)
-// 				}
-// 				if assignPayload.Source != string(leaderboarddb.ServiceUpdateSourceCreateUser) {
-// 					t.Errorf("Source mismatch: expected %q, got %q",
-// 						leaderboarddb.ServiceUpdateSourceCreateUser, assignPayload.Source)
-// 				}
-// 				if assignPayload.UpdateType != "automatic" {
-// 					t.Errorf("UpdateType mismatch: expected %q, got %q",
-// 						"automatic", assignPayload.UpdateType)
-// 				}
-
-// 				// Validate correlation ID
-// 				if availableMsgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) !=
-// 					incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-// 					t.Errorf("Correlation ID mismatch: expected %q, got %q",
-// 						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-// 						availableMsgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey))
-// 				}
-
-// 				// Check for unexpected error messages
-// 				unavailableTopic := leaderboardevents.TagUnavailable
-// 				failureTopic := leaderboardevents.TagAvailableCheckFailure
-// 				if len(receivedMsgs[unavailableTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						unavailableTopic, len(receivedMsgs[unavailableTopic]))
-// 				}
-// 				if len(receivedMsgs[failureTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						failureTopic, len(receivedMsgs[failureTopic]))
-// 				}
-// 			},
-// 			expectedOutgoingTopics: []string{
-// 				leaderboardevents.TagAvailable,
-// 				leaderboardevents.LeaderboardTagAssignmentRequested,
-// 			},
-// 			expectedMessageCounts: map[string]int{
-// 				leaderboardevents.TagAvailable:                      1,
-// 				leaderboardevents.LeaderboardTagAssignmentRequested: 1,
-// 			},
-// 			expectHandlerError: false,
-// 		},
-// 		{
-// 			name: "Success - Tag Unavailable (Already Taken)",
-// 			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *leaderboarddb.Leaderboard {
-// 				users := generator.GenerateUsers(1)
-// 				initialData := leaderboardtypes.LeaderboardData{
-// 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: tagPtr(42)},
-// 				}
-
-// 				initialLeaderboard, err := testutils.InsertLeaderboard(t, testEnv.DB, initialData)
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-// 				return initialLeaderboard
-// 			},
-// 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *message.Message {
-// 				newUser := generator.GenerateUsers(1)[0]
-
-// 				msg := createTagAvailabilityCheckRequestMessage(
-// 					t,
-// 					sharedtypes.DiscordID(newUser.UserID),
-// 					42, // Tag number that is already taken
-// 				)
-
-// 				if err := testutils.PublishMessage(t, testEnv.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
-// 					t.Fatalf("Failed to publish message: %v", err)
-// 				}
-// 				return msg
-// 			},
-// 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-// 				unavailableTopic := leaderboardevents.TagUnavailable
-// 				unavailableMsgs := receivedMsgs[unavailableTopic]
-
-// 				if len(unavailableMsgs) == 0 {
-// 					t.Fatalf("Expected at least one message on topic %q, but received none", unavailableTopic)
-// 				}
-
-// 				// Parse payloads
-// 				requestPayload, err := parsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-
-// 				unavailablePayload, err := parsePayload[leaderboardevents.TagUnavailablePayload](unavailableMsgs[0])
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-
-// 				// Validate payload
-// 				if unavailablePayload.UserID != requestPayload.UserID {
-// 					t.Errorf("UserID mismatch: expected %q, got %q",
-// 						requestPayload.UserID, unavailablePayload.UserID)
-// 				}
-// 				if *unavailablePayload.TagNumber != *requestPayload.TagNumber {
-// 					t.Errorf("TagNumber mismatch: expected %d, got %d",
-// 						*requestPayload.TagNumber, *unavailablePayload.TagNumber)
-// 				}
-
-// 				// Validate correlation ID
-// 				if unavailableMsgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) !=
-// 					incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-// 					t.Errorf("Correlation ID mismatch: expected %q, got %q",
-// 						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-// 						unavailableMsgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey))
-// 				}
-
-// 				// Check for unexpected messages
-// 				availableTopic := leaderboardevents.TagAvailable
-// 				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
-// 				failureTopic := leaderboardevents.TagAvailableCheckFailure
-
-// 				if len(receivedMsgs[availableTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						availableTopic, len(receivedMsgs[availableTopic]))
-// 				}
-// 				if len(receivedMsgs[assignTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						assignTopic, len(receivedMsgs[assignTopic]))
-// 				}
-// 				if len(receivedMsgs[failureTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						failureTopic, len(receivedMsgs[failureTopic]))
-// 				}
-// 			},
-// 			expectedOutgoingTopics: []string{leaderboardevents.TagUnavailable},
-// 			expectHandlerError:     false,
-// 		},
-// 		{
-// 			name: "Failure - Invalid Message Payload",
-// 			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *leaderboarddb.Leaderboard {
-// 				initialLeaderboard, err := testutils.InsertLeaderboard(t, testEnv.DB, leaderboardtypes.LeaderboardData{})
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-// 				return initialLeaderboard
-// 			},
-// 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, generator *testutils.TestDataGenerator) *message.Message {
-// 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
-// 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-// 				if err := testutils.PublishMessage(t, testEnv.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
-// 					t.Fatalf("Failed to publish message: %v", err)
-// 				}
-// 				return msg
-// 			},
-// 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-// 				// Check for unexpected messages
-// 				availableTopic := leaderboardevents.TagAvailable
-// 				unavailableTopic := leaderboardevents.TagUnavailable
-// 				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
-// 				failureTopic := leaderboardevents.TagAvailableCheckFailure
-
-// 				if len(receivedMsgs[availableTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						availableTopic, len(receivedMsgs[availableTopic]))
-// 				}
-// 				if len(receivedMsgs[unavailableTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						unavailableTopic, len(receivedMsgs[unavailableTopic]))
-// 				}
-// 				if len(receivedMsgs[assignTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						assignTopic, len(receivedMsgs[assignTopic]))
-// 				}
-// 				if len(receivedMsgs[failureTopic]) > 0 {
-// 					t.Errorf("Expected no messages on topic %q, but received %d",
-// 						failureTopic, len(receivedMsgs[failureTopic]))
-// 				}
-
-// 				// Validate leaderboard state in database
-// 				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), testEnv.DB)
-// 				if err != nil {
-// 					t.Fatalf("%v", err)
-// 				}
-// 				if len(leaderboards) != 1 {
-// 					t.Fatalf("Expected 1 leaderboard record in DB, got %d", len(leaderboards))
-// 				}
-// 				leaderboard := leaderboards[0]
-// 				if leaderboard.ID != initialLeaderboard.ID {
-// 					t.Errorf("Expected leaderboard ID %d, got %d", initialLeaderboard.ID, leaderboard.ID)
-// 				}
-// 				if !leaderboard.IsActive {
-// 					t.Error("Expected leaderboard to remain active")
-// 				}
-// 			},
-// 			expectedOutgoingTopics: []string{},
-// 			expectHandlerError:     true,
-// 		},
-// 	}
-
-// 	// Run all test cases
-// 	for _, tc := range tests {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			// Create a fresh, isolated setup for each test case
-// 			testDeps := SetupTestLeaderboardHandler(t)
-// 			testGenerator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-
-// 			tc.runTest(t, testDeps, testGenerator)
-// 		})
-// 	}
-// }
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
+		})
+	}
+}

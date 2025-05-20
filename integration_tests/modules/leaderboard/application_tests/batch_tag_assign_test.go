@@ -150,7 +150,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 						t.Errorf("Unexpected user_id found in database: %s", entry.UserID)
 						continue
 					}
-					if entry.TagNumber == nil || *entry.TagNumber != expectedTag {
+					if entry.TagNumber == 0 || entry.TagNumber != expectedTag {
 						t.Errorf("Expected tag %d for user %s in DB, got %v", expectedTag, entry.UserID, entry.TagNumber)
 					}
 					foundEntries[entry.UserID] = true
@@ -194,7 +194,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 				// Insert an initial active leaderboard with some existing data.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_initial", TagNumber: tagPtr(99)},
+						{UserID: "user_initial", TagNumber: 99},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -293,7 +293,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 						t.Errorf("Unexpected user_id found in database: %s", entry.UserID)
 						continue
 					}
-					if entry.TagNumber == nil || *entry.TagNumber != expectedTag {
+					if entry.TagNumber == 0 || entry.TagNumber != expectedTag {
 						t.Errorf("Expected tag %d for user %s in DB, got %v", expectedTag, entry.UserID, entry.TagNumber)
 					}
 					foundEntries[entry.UserID] = true
@@ -335,7 +335,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "existing_user", TagNumber: tagPtr(42)},
+						{UserID: "existing_user", TagNumber: 42},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -405,7 +405,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 
 				// Optionally, verify the content of the single active leaderboard is unchanged
 				leaderboardEntries := activeLeaderboard.LeaderboardData
-				if len(leaderboardEntries) != 1 || *leaderboardEntries[0].TagNumber != 42 || leaderboardEntries[0].UserID != "existing_user" {
+				if len(leaderboardEntries) != 1 || leaderboardEntries[0].TagNumber != 42 || leaderboardEntries[0].UserID != "existing_user" {
 					t.Errorf("Expected 1 leaderboard entry for existing_user with tag 42, got %d entries or wrong data %v", len(leaderboardEntries), leaderboardEntries)
 				}
 			},
@@ -424,7 +424,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 				// Insert an initial active leaderboard.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_initial", TagNumber: tagPtr(99)},
+						{UserID: "user_initial", TagNumber: 99},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -533,8 +533,8 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 				}
 				actualNewLeaderboardEntries := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 				for _, entry := range newLeaderboard.LeaderboardData {
-					if entry.TagNumber != nil {
-						actualNewLeaderboardEntries[entry.UserID] = *entry.TagNumber
+					if entry.TagNumber != 0 {
+						actualNewLeaderboardEntries[entry.UserID] = entry.TagNumber
 					}
 				}
 

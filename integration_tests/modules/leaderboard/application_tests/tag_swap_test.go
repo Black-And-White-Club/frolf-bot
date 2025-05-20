@@ -39,9 +39,9 @@ func TestTagSwapRequested(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_swap_A", TagNumber: tagPtr(10)},
-						{UserID: "user_swap_B", TagNumber: tagPtr(20)},
-						{UserID: "other_user", TagNumber: tagPtr(30)},
+						{UserID: "user_swap_A", TagNumber: 10},
+						{UserID: "user_swap_B", TagNumber: 20},
+						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -111,13 +111,13 @@ func TestTagSwapRequested(t *testing.T) {
 				foundSwapB := false
 				foundOtherUser := false
 				for _, entry := range newLeaderboard.LeaderboardData {
-					if entry.UserID == "user_swap_A" && entry.TagNumber != nil && *entry.TagNumber == 20 {
+					if entry.UserID == "user_swap_A" && entry.TagNumber != 0 && entry.TagNumber == 20 {
 						foundSwapA = true
 					}
-					if entry.UserID == "user_swap_B" && entry.TagNumber != nil && *entry.TagNumber == 10 {
+					if entry.UserID == "user_swap_B" && entry.TagNumber != 0 && entry.TagNumber == 10 {
 						foundSwapB = true
 					}
-					if entry.UserID == "other_user" && entry.TagNumber != nil && *entry.TagNumber == 30 {
+					if entry.UserID == "other_user" && entry.TagNumber != 0 && entry.TagNumber == 30 {
 						foundOtherUser = true
 					}
 				}
@@ -137,8 +137,8 @@ func TestTagSwapRequested(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_swap_B", TagNumber: tagPtr(20)},
-						{UserID: "other_user", TagNumber: tagPtr(30)},
+						{UserID: "user_swap_B", TagNumber: 20},
+						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -206,8 +206,8 @@ func TestTagSwapRequested(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_swap_A", TagNumber: tagPtr(10)},
-						{UserID: "other_user", TagNumber: tagPtr(30)},
+						{UserID: "user_swap_A", TagNumber: 10},
+						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -275,7 +275,7 @@ func TestTagSwapRequested(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "other_user", TagNumber: tagPtr(30)},
+						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,

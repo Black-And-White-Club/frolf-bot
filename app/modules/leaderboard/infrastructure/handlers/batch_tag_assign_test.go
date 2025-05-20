@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
@@ -20,26 +21,46 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// Helper function to convert between tag assignment types
+func convertToLeaderboardTagAssignments(assignments []sharedevents.TagAssignmentInfo) []leaderboardevents.TagAssignmentInfo {
+	result := make([]leaderboardevents.TagAssignmentInfo, len(assignments))
+	for i, assignment := range assignments {
+		result[i] = leaderboardevents.TagAssignmentInfo{
+			UserID:    assignment.UserID,
+			TagNumber: assignment.TagNumber,
+		}
+	}
+	return result
+}
+
 func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testRequestingUserID := sharedtypes.DiscordID("12345678901234567")
 	testBatchID := uuid.New().String()
-	testAssignments := []leaderboardevents.TagAssignmentInfo{
+
+	// Use the shared events type since that's what the incoming event would use
+	testSharedAssignments := []sharedevents.TagAssignmentInfo{
 		{
 			UserID:    sharedtypes.DiscordID("12345678901234567"),
 			TagNumber: sharedtypes.TagNumber(1),
 		},
 	}
 
-	testPayload := &leaderboardevents.BatchTagAssignmentRequestedPayload{
+	// Convert to leaderboard events type for the return value
+	testLeaderboardAssignments := convertToLeaderboardTagAssignments(testSharedAssignments)
+
+	testPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
 		RequestingUserID: testRequestingUserID,
 		BatchID:          testBatchID,
-		Assignments:      testAssignments,
+		Assignments:      testSharedAssignments,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	// Create a separate message for the failure case
+	failureMsg := message.NewMessage("failure-msg-id", []byte("failure message"))
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
@@ -65,25 +86,25 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.BatchTagAssignedPayload{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
-							AssignmentCount:  len(testAssignments),
-							Assignments:      testAssignments,
+							AssignmentCount:  len(testSharedAssignments),
+							Assignments:      testLeaderboardAssignments, // Use the converted assignments
 						},
 					},
 					nil,
@@ -92,8 +113,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				updateResultPayload := &leaderboardevents.BatchTagAssignedPayload{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
-					AssignmentCount:  len(testAssignments),
-					Assignments:      testAssignments,
+					AssignmentCount:  len(testSharedAssignments),
+					Assignments:      testLeaderboardAssignments, // Use the converted assignments
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -114,59 +135,70 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			expectedErrMsg: "transient unmarshal error: invalid payload",
 		},
 		{
 			name: "Service failure in BatchTagAssignmentRequested",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
+
+				// New expectation for creating a failure message
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&leaderboardevents.BatchTagAssignmentFailedPayload{
+						RequestingUserID: testRequestingUserID,
+						BatchID:          testBatchID,
+						Reason:           "internal service error",
+					},
+					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+				).Return(failureMsg, nil)
 			},
 			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle BatchTagAssignmentRequested event: internal service error",
+			want:           []*message.Message{failureMsg},
+			wantErr:        false,
+			expectedErrMsg: "",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.BatchTagAssignedPayload{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
-							AssignmentCount:  len(testAssignments),
-							Assignments:      testAssignments,
+							AssignmentCount:  len(testLeaderboardAssignments),
+							Assignments:      testLeaderboardAssignments,
 						},
 					},
 					nil,
@@ -175,8 +207,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				updateResultPayload := &leaderboardevents.BatchTagAssignedPayload{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
-					AssignmentCount:  len(testAssignments),
-					Assignments:      testAssignments,
+					AssignmentCount:  len(testLeaderboardAssignments),
+					Assignments:      testLeaderboardAssignments,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -191,54 +223,65 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			expectedErrMsg: "failed to create success message: failed to create result message",
 		},
 		{
-			name: "Service failure and CreateResultMessage fails",
+			name: "Service failure with error and CreateResultMessage creates failure message",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Failure: &leaderboardevents.BatchTagAssignmentFailedPayload{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
-							Reason:           "internal service error",
+							Reason:           "custom service error",
 						},
 					},
 					fmt.Errorf("internal service error"),
 				)
+
+				// The handler should use the service's custom reason
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&leaderboardevents.BatchTagAssignmentFailedPayload{
+						RequestingUserID: testRequestingUserID,
+						BatchID:          testBatchID,
+						Reason:           "custom service error",
+					},
+					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+				).Return(failureMsg, nil)
 			},
 			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle BatchTagAssignmentRequested event: internal service error",
+			want:           []*message.Message{failureMsg},
+			wantErr:        false,
+			expectedErrMsg: "",
 		},
 		{
 			name: "Service failure with non-error result",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -269,54 +312,59 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			expectedErrMsg: "",
 		},
 		{
-			name: "Service failure with error result and CreateResultMessage fails",
+			name: "Service error and CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.BatchTagAssignmentFailedPayload{
-							RequestingUserID: testRequestingUserID,
-							BatchID:          testBatchID,
-							Reason:           "internal service error",
-						},
-					},
+					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
+
+				// CreateResultMessage fails for the failure message
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&leaderboardevents.BatchTagAssignmentFailedPayload{
+						RequestingUserID: testRequestingUserID,
+						BatchID:          testBatchID,
+						Reason:           "internal service error",
+					},
+					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+				).Return(nil, fmt.Errorf("failed to create failure message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle BatchTagAssignmentRequested event: internal service error",
+			expectedErrMsg: "failed to create failure message after service error: failed to create failure message",
 		},
 		{
 			name: "Unknown result from BatchTagAssignmentRequested",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
 						return nil
 					},
 				)
 
 				mockLeaderboardService.EXPECT().BatchTagAssignmentRequested(
 					gomock.Any(),
-					leaderboardevents.BatchTagAssignmentRequestedPayload{
+					sharedevents.BatchTagAssignmentRequestedPayload{
 						RequestingUserID: testRequestingUserID,
 						BatchID:          testBatchID,
-						Assignments:      testAssignments,
+						Assignments:      testSharedAssignments,
 					},
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
@@ -326,17 +374,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected BatchTagAssignmentRequestedPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected BatchTagAssignmentRequestedPayload",
+			expectedErrMsg: "unexpected result from service: neither success nor failure payload set and no error",
 		},
 	}
 

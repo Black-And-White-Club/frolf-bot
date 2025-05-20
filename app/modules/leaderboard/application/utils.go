@@ -14,71 +14,86 @@ import (
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
-func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboard *leaderboarddb.Leaderboard, sortedParticipantTags []string) (*leaderboarddb.Leaderboard, error) {
+// GenerateUpdatedLeaderboard creates a new LeaderboardData slice based on the current data
+// and a list of sorted participant tags in "tag:user" format.
+// The participants will be assigned the tags provided in the sortedParticipantTags list
+// in the order they appear. Non-participants from the current leaderboard are included
+// with their existing tags.
+func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboardData leaderboardtypes.LeaderboardData, sortedParticipantTags []string) (leaderboardtypes.LeaderboardData, error) {
 	if len(sortedParticipantTags) == 0 {
-		return nil, fmt.Errorf("cannot generate updated leaderboard with empty participant tags")
+		// This is already checked in UpdateLeaderboard, but keeping for GenerateUpdatedLeaderboard's contract
+		return nil, fmt.Errorf("cannot generate updated leaderboard data with empty participant tags")
 	}
 
-	leaderboardMap := make(map[sharedtypes.DiscordID]*leaderboardtypes.LeaderboardEntry)
-	for i := range currentLeaderboard.LeaderboardData {
-		entry := &currentLeaderboard.LeaderboardData[i]
-		leaderboardMap[entry.UserID] = entry
+	// Create a map to store the current leaderboard entries by user ID for quick lookup
+	currentEntries := make(map[sharedtypes.DiscordID]leaderboardtypes.LeaderboardEntry, len(currentLeaderboardData))
+	for _, entry := range currentLeaderboardData {
+		currentEntries[entry.UserID] = entry
 	}
 
-	updatedLeaderboardMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+	// Create a map to track participant user IDs for quick lookup
+	participantUsers := make(map[sharedtypes.DiscordID]bool, len(sortedParticipantTags))
 
+	// Create a slice for the new leaderboard data, starting with participants
+	newLeaderboardData := make([]leaderboardtypes.LeaderboardEntry, 0, len(sortedParticipantTags))
+
+	// Process sortedParticipantTags to get the new tag assignments for participants
 	for _, entryStr := range sortedParticipantTags {
 		parts := strings.Split(entryStr, ":")
 		if len(parts) != 2 {
-			s.logger.Warn("Invalid sorted participant tag format", attr.String("tag_user_string", entryStr))
-			continue
+			s.logger.Error("Invalid sorted participant tag format", "tag_user_string", entryStr)
+			return nil, fmt.Errorf("invalid sorted participant tag format: %s", entryStr)
 		}
 
-		tagNumInt, err := strconv.Atoi(parts[0])
+		tagNumberInt, err := strconv.Atoi(parts[0])
 		if err != nil {
-			s.logger.Warn("Invalid tag number format in sorted participant tag", attr.String("tag_string", parts[0]), attr.Error(err))
-			continue
+			s.logger.Error("Failed to parse tag number from sorted participant tag", "tag_string", parts[0], "error", err)
+			return nil, fmt.Errorf("invalid tag number format: %s", parts[0])
 		}
-		tagNum := sharedtypes.TagNumber(tagNumInt)
+		tagNumber := sharedtypes.TagNumber(tagNumberInt)
 		userID := sharedtypes.DiscordID(parts[1])
 
-		updatedLeaderboardMap[userID] = tagNum
-	}
-
-	newLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(updatedLeaderboardMap))
-	for userID, tagNum := range updatedLeaderboardMap {
-		tag := tagNum
+		// Add the participant with their new tag number
 		newLeaderboardData = append(newLeaderboardData, leaderboardtypes.LeaderboardEntry{
 			UserID:    userID,
-			TagNumber: &tag,
+			TagNumber: tagNumber,
 		})
+
+		// Mark user as participant
+		participantUsers[userID] = true
 	}
 
+	// Add non-participating users from the current leaderboard to the new data
+	// Their tags remain unchanged
+	for userID, entry := range currentEntries {
+		if !participantUsers[userID] {
+			newLeaderboardData = append(newLeaderboardData, entry)
+		}
+	}
+
+	// Sort the final list of leaderboard entries by tag number
 	slices.SortFunc(newLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber == nil && b.TagNumber == nil {
-			return 0
+		// Standard comparison for non-zero tags
+		if a.TagNumber != 0 && b.TagNumber != 0 {
+			return int(a.TagNumber - b.TagNumber)
 		}
-		if a.TagNumber == nil {
-			return -1
+		// Handle cases with tag 0. Assuming 0 is the zero value and should be sorted appropriately
+		if a.TagNumber == 0 && b.TagNumber == 0 {
+			return 0 // Both are 0, consider them equal for sorting purposes
 		}
-		if b.TagNumber == nil {
-			return 1
+		if a.TagNumber == 0 {
+			return 1 // Place 0 after non-zero tags
 		}
-		return int(*a.TagNumber - *b.TagNumber)
+		return -1 // Place non-zero tags before 0
 	})
 
-	return &leaderboarddb.Leaderboard{
-		LeaderboardData: newLeaderboardData,
-		IsActive:        true,
-		UpdateSource:    leaderboarddb.ServiceUpdateSourceProcessScores,
-	}, nil
+	return newLeaderboardData, nil
 }
 
 // FindTagByUserID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
 func (s *LeaderboardService) FindTagByUserID(ctx context.Context, leaderboard *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID) (int, bool) {
 	operationName := "FindTagByUserID"
 	s.logger.InfoContext(ctx, "Starting "+operationName,
-		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)
 
@@ -86,22 +101,21 @@ func (s *LeaderboardService) FindTagByUserID(ctx context.Context, leaderboard *l
 
 	startTime := time.Now()
 	defer func() {
-		duration := time.Since(startTime).Seconds()
-		s.metrics.RecordOperationDuration(ctx, operationName, "leaderboard", time.Duration(duration))
+		duration := time.Since(startTime)
+		s.metrics.RecordOperationDuration(ctx, operationName, "leaderboard", duration)
 	}()
 
 	for _, entry := range leaderboard.LeaderboardData {
 		if entry.UserID == userID {
 			s.logger.InfoContext(ctx, "Tag found",
-				attr.Int("tag", int(*entry.TagNumber)),
+				attr.Int("tag", int(entry.TagNumber)),
 				attr.String("user_id", string(userID)),
 			)
-			return int(*entry.TagNumber), true
+			return int(entry.TagNumber), true
 		}
 	}
 
 	s.logger.InfoContext(ctx, "Tag not found",
-		attr.String("leaderboard", fmt.Sprintf("%+v", leaderboard)),
 		attr.String("user_id", string(userID)),
 	)
 	s.metrics.RecordOperationFailure(ctx, operationName, "leaderboard")
@@ -137,7 +151,7 @@ func (s *LeaderboardService) PrepareTagAssignment(
 	}
 
 	for _, entry := range currentLeaderboard.LeaderboardData {
-		if entry.TagNumber != nil && *entry.TagNumber == tagNumber {
+		if entry.TagNumber != 0 && entry.TagNumber == tagNumber {
 			if entry.UserID == userID {
 				// User is re-claiming their own tag, allow as no-op or success
 				return nil, nil
@@ -156,27 +170,27 @@ func (s *LeaderboardService) PrepareTagAssignment(
 	}
 
 	// Create a copy of the leaderboard data with the new assignment
-	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, len(currentLeaderboard.LeaderboardData)+1)
+	updatedLeaderboardData := make(leaderboardtypes.LeaderboardData, len(currentLeaderboard.LeaderboardData))
 	copy(updatedLeaderboardData, currentLeaderboard.LeaderboardData)
 
 	// Add the new entry
 	updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-		TagNumber: &tagNumber,
+		TagNumber: tagNumber,
 		UserID:    userID,
 	})
 
 	// Sort by tag number
 	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber == nil && b.TagNumber == nil {
+		if a.TagNumber == 0 && b.TagNumber == 0 {
 			return 0
 		}
-		if a.TagNumber == nil {
-			return -1
-		}
-		if b.TagNumber == nil {
+		if a.TagNumber == 0 {
 			return 1
 		}
-		return int(*a.TagNumber - *b.TagNumber)
+		if b.TagNumber == 0 {
+			return -1
+		}
+		return int(a.TagNumber - b.TagNumber)
 	})
 
 	return updatedLeaderboardData, nil
@@ -210,7 +224,7 @@ func (s *LeaderboardService) PrepareTagUpdateForExistingUser(
 
 	// Check if the new tag is already assigned to another user
 	for _, entry := range currentLeaderboard.LeaderboardData {
-		if entry.UserID != userID && entry.TagNumber != nil && *entry.TagNumber == newTagNumber {
+		if entry.UserID != userID && entry.TagNumber != 0 && entry.TagNumber == newTagNumber {
 			// Return TagSwapNeededError instead of generic error
 			return nil, &TagSwapNeededError{
 				RequestorID: userID,
@@ -232,22 +246,22 @@ func (s *LeaderboardService) PrepareTagUpdateForExistingUser(
 
 	// Add the updated entry for the user
 	updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-		TagNumber: &newTagNumber,
+		TagNumber: newTagNumber,
 		UserID:    userID,
 	})
 
 	// Sort by tag number
 	slices.SortFunc(updatedLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber == nil && b.TagNumber == nil {
+		if a.TagNumber == 0 && b.TagNumber == 0 {
 			return 0
 		}
-		if a.TagNumber == nil {
-			return -1
-		}
-		if b.TagNumber == nil {
+		if a.TagNumber == 0 {
 			return 1
 		}
-		return int(*a.TagNumber - *b.TagNumber)
+		if b.TagNumber == 0 {
+			return -1
+		}
+		return int(a.TagNumber - b.TagNumber)
 	})
 
 	return updatedLeaderboardData, nil

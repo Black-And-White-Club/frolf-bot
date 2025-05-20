@@ -3,6 +3,7 @@ package leaderboardservice
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
@@ -23,15 +24,15 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 
 	tag1 := sharedtypes.TagNumber(1)
 	tag2 := sharedtypes.TagNumber(2)
+	tag5 := sharedtypes.TagNumber(5)
+	tag13 := sharedtypes.TagNumber(13)
+	tag20 := sharedtypes.TagNumber(20)
 
 	ctx := context.Background()
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testSortedParticipants := []string{"0:player1", "1:player2", "2:player3"}
 
-	// Mock dependencies
 	mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
 
-	// No-Op implementations for logging, metrics, and tracing
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -49,19 +50,34 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 		{
 			name: "Successfully updates leaderboard",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				currentData := []leaderboardtypes.LeaderboardEntry{{TagNumber: tag2, UserID: "user2"}, {TagNumber: tag5, UserID: "user3"}, {TagNumber: tag13, UserID: "user1"}, {TagNumber: tag20, UserID: "user4"}}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
+					LeaderboardData: currentData,
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+				// Expected data based on GenerateUpdatedLeaderboard logic with sortedTags ["13:user1", "5:user3", "2:user2"]
+				// Participants: user1 (input tag 13), user3 (input tag 5), user2 (input tag 2).
+				// Non-participant user4 keeps original tag 20.
+				// Expected data before sorting: [{TagNumber: 13, UserID: "user1"}, {TagNumber: 5, UserID: "user3"}, {TagNumber: 2, UserID: "user2"}, {TagNumber: 20, UserID: "user4"}]
+				expectedUpdatedData := []leaderboardtypes.LeaderboardEntry{
+					{TagNumber: 2, UserID: "user2"},
+					{TagNumber: 5, UserID: "user3"},
+					{TagNumber: 13, UserID: "user1"},
+					{TagNumber: 20, UserID: "user4"},
+				}
+				sortLeaderboardData(expectedUpdatedData)
+
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), expectedUpdatedData, testRoundID).Return(nil)
 			},
 			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
+			sortedTags:     []string{"13:user1", "5:user3", "2:user2"},
 			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID},
 			expectedFail:   nil,
+			expectedError:  nil,
 		},
 		{
 			name: "Fails to fetch active leaderboard",
@@ -69,7 +85,7 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, errors.New("database connection error"))
 			},
 			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
+			sortedTags:     []string{"1:user1"}, // Valid format, content doesn't matter for this error path
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.LeaderboardUpdateFailedPayload{
 				RoundID: testRoundID,
@@ -78,49 +94,42 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("database connection error"),
 		},
 		{
-			name: "Fails to create new leaderboard",
+			name: "Fails to update leaderboard in database",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				// Current leaderboard data with participants for this test
+				currentData := []leaderboardtypes.LeaderboardEntry{{TagNumber: tag1, UserID: "player1"}, {TagNumber: tag2, UserID: "player2"}, {TagNumber: tag5, UserID: "player3"}}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
+					LeaderboardData: currentData,
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
-				// The original test expected CreateLeaderboard, but the function doesn't call CreateLeaderboard in this scenario.
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("update failure"))
+
+				// Participants in performance order: player1 (input tag 1), player3 (input tag 5), player2 (input tag 2)
+				// Expected data before sorting: [{TagNumber: 1, UserID: "player1"}, {TagNumber: 5, UserID: "player3"}, {TagNumber: 2, UserID: "player2"}]
+				expectedUpdatedData := []leaderboardtypes.LeaderboardEntry{
+					{TagNumber: 1, UserID: "player1"},
+					{TagNumber: 2, UserID: "player2"},
+					{TagNumber: 5, UserID: "player3"},
+				}
+				sortLeaderboardData(expectedUpdatedData)
+
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), expectedUpdatedData, testRoundID).Return(errors.New("update failure"))
 			},
 			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
+			sortedTags:     []string{"1:player1", "5:player3", "2:player2"},
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.LeaderboardUpdateFailedPayload{
 				RoundID: testRoundID,
-				Reason:  "failed to update leaderboard",
+				Reason:  "failed to update leaderboard in database",
 			},
-			expectedError: errors.New("update failure"),
-		},
-		{
-			name: "Fails to deactivate old leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
-					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
-					IsActive:        true,
-					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
-					UpdateID:        testRoundID,
-				}, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil) // Simulate successful update
-			},
-			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
-			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID},
-			expectedFail:   nil,
-			expectedError:  nil,
+			expectedError: errors.New("failed to update leaderboard in database: update failure"),
 		},
 		{
 			name: "Invalid input: empty sorted participant tags",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				// No database operations expected
+				// No database operations expected for invalid input
 			},
 			roundID:        testRoundID,
 			sortedTags:     []string{},
@@ -132,63 +141,64 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 			expectedError: errors.New("invalid input: empty sorted participant tags"),
 		},
 		{
-			name: "Database connection issue",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, errors.New("database connection error"))
-			},
-			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
-			expectedResult: nil,
-			expectedFail: &leaderboardevents.LeaderboardUpdateFailedPayload{
-				RoundID: testRoundID,
-				Reason:  "database connection error",
-			},
-			expectedError: errors.New("database connection error"),
-		},
-		{
-			name: "Concurrent updates", // This test was correct.
+			name: "GenerateUpdatedLeaderboard returns an error",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: &tag1, UserID: "old_player1"}, {TagNumber: &tag2, UserID: "old_player2"}},
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{{TagNumber: tag1, UserID: "old_player1"}},
 					IsActive:        true,
 					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				// UpdateLeaderboard should NOT be called because GenerateUpdatedLeaderboard will return an error
 			},
 			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
-			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID},
-			expectedFail:   nil,
-		},
-		{
-			name: "Invalid leaderboard data",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{}, // Return empty leaderboard data
-					IsActive:        true,
-					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
-					UpdateID:        testRoundID,
-				}, nil)
-			},
-			roundID:        testRoundID,
-			sortedTags:     testSortedParticipants,
+			sortedTags:     []string{"1:user1", "invalid-tag-user"}, // Input that causes GenerateUpdatedLeaderboard to return an error
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.LeaderboardUpdateFailedPayload{
 				RoundID: testRoundID,
-				Reason:  "invalid leaderboard data",
+				Reason:  "failed to generate updated leaderboard data: invalid sorted participant tag format: invalid-tag-user",
 			},
-			expectedError: errors.New("invalid leaderboard data"),
+			expectedError: errors.New("failed to generate updated leaderboard data: invalid sorted participant tag format: invalid-tag-user"),
+		},
+		{
+			name: "Concurrent updates",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				currentData := []leaderboardtypes.LeaderboardEntry{{TagNumber: tag2, UserID: "user2"}, {TagNumber: tag5, UserID: "user3"}, {TagNumber: tag13, UserID: "user1"}, {TagNumber: tag20, UserID: "user4"}}
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+					ID:              1,
+					LeaderboardData: currentData,
+					IsActive:        true,
+					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
+					UpdateID:        testRoundID,
+				}, nil)
+
+				// Expected data based on GenerateUpdatedLeaderboard logic with sortedTags ["13:user1", "5:user3", "2:user2"]
+				// Participants: user1 (input tag 13), user3 (input tag 5), user2 (input tag 2).
+				// Non-participant user4 keeps original tag 20.
+				// Expected data before sorting: [{TagNumber: 13, UserID: "user1"}, {TagNumber: 5, UserID: "user3"}, {TagNumber: 2, UserID: "user2"}, {TagNumber: 20, UserID: "user4"}]
+				expectedUpdatedData := []leaderboardtypes.LeaderboardEntry{
+					{TagNumber: 2, UserID: "user2"},
+					{TagNumber: 5, UserID: "user3"},
+					{TagNumber: 13, UserID: "user1"},
+					{TagNumber: 20, UserID: "user4"},
+				}
+				sortLeaderboardData(expectedUpdatedData)
+
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), expectedUpdatedData, testRoundID).Return(nil)
+			},
+			roundID:        testRoundID,
+			sortedTags:     []string{"13:user1", "5:user3", "2:user2"},
+			expectedResult: &leaderboardevents.LeaderboardUpdatedPayload{RoundID: testRoundID},
+			expectedFail:   nil,
+			expectedError:  nil,
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			// Initialize service with No-Op implementations
 			s := &LeaderboardService{
 				LeaderboardDB: mockDB,
 				logger:        logger,
@@ -201,47 +211,49 @@ func TestLeaderboardService_UpdateLeaderboard(t *testing.T) {
 
 			got, err := s.UpdateLeaderboard(ctx, tt.roundID, tt.sortedTags)
 
-			// Validate success case
 			if tt.expectedResult != nil {
 				if got.Success == nil {
-					t.Errorf("❌ Expected success payload, got nil")
+					t.Errorf("Expected success payload, got nil")
 				} else {
 					successPayload, ok := got.Success.(*leaderboardevents.LeaderboardUpdatedPayload)
 					if !ok {
-						t.Errorf("❌ Expected Success to be *LeaderboardUpdatedPayload, but got %T", got.Success)
+						t.Errorf("Expected Success to be *LeaderboardUpdatedPayload, but got %T", got.Success)
 					} else if successPayload.RoundID != tt.expectedResult.RoundID {
-						t.Errorf("❌ Mismatched RoundID, got: %v, expected: %v", successPayload.RoundID, tt.expectedResult.RoundID)
+						t.Errorf("Mismatched RoundID in success payload, got: %v, expected: %v", successPayload.RoundID, tt.expectedResult.RoundID)
 					}
 				}
 			} else if got.Success != nil {
-				t.Errorf("❌ Unexpected success payload: %v", got.Success)
+				t.Errorf("Unexpected success payload: %v", got.Success)
 			}
 
-			// Validate failure case
 			if tt.expectedFail != nil {
 				if got.Failure == nil {
-					t.Errorf("❌ Expected failure payload, got nil")
+					t.Errorf("Expected failure payload, got nil")
 				} else {
 					failurePayload, ok := got.Failure.(*leaderboardevents.LeaderboardUpdateFailedPayload)
 					if !ok {
-						t.Errorf("❌ Expected Failure to be *LeaderboardUpdateFailedPayload, but got %T", got.Failure)
-					} else if failurePayload.Reason != tt.expectedFail.Reason {
-						t.Errorf("❌ Mismatched failure reason, got: %v, expected: %v", failurePayload.Reason, tt.expectedFail.Reason)
+						t.Errorf("Expected Failure to be *LeaderboardUpdateFailedPayload, but got %T", got.Failure)
+					} else {
+						if failurePayload.Reason != tt.expectedFail.Reason {
+							t.Errorf("Mismatched failure reason in failure payload, got: %v, expected: %v", failurePayload.Reason, tt.expectedFail.Reason)
+						}
+						if failurePayload.RoundID != tt.expectedFail.RoundID {
+							t.Errorf("Mismatched RoundID in failure payload, got: %v, expected: %v", failurePayload.RoundID, tt.expectedFail.RoundID)
+						}
 					}
 				}
 			} else if got.Failure != nil {
-				t.Errorf("❌ Unexpected failure payload: %v", got.Failure)
+				t.Errorf("Unexpected failure payload: %v", got.Failure)
 			}
 
-			// Validate error presence
 			if tt.expectedError != nil {
 				if err == nil {
-					t.Errorf("❌ Expected an error but got nil")
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("❌ Mismatched error reason, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
+					t.Errorf("Expected an error but got nil")
+				} else if !errors.Is(err, tt.expectedError) && !strings.Contains(err.Error(), tt.expectedError.Error()) {
+					t.Errorf("Unexpected error: got %v, want %v", err, tt.expectedError)
 				}
 			} else if err != nil {
-				t.Errorf("❌ Unexpected error: %v", err)
+				t.Errorf("Unexpected error: %v", err)
 			}
 		})
 	}

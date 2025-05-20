@@ -108,9 +108,8 @@ func TestLeaderboardService_BatchTagAssignmentRequested(t *testing.T) {
 			expectedSuccessPayload: &leaderboardevents.BatchTagAssignedPayload{ // Outgoing is leaderboardevents
 				RequestingUserID: "test_user_id",
 				BatchID:          "batch-2",
-				AssignmentCount:  2, // Count of attempted assignments (service includes all attempted in success payload)
-				Assignments: []leaderboardevents.TagAssignmentInfo{ // Outgoing is leaderboardevents
-					{UserID: "user1", TagNumber: -1}, // Service includes attempted assignments in success payload
+				AssignmentCount:  1, // Should be count of *valid* assignments processed
+				Assignments: []leaderboardevents.TagAssignmentInfo{ // Should contain only *valid* assignments
 					{UserID: "user2", TagNumber: 2},
 				},
 			},

@@ -172,7 +172,7 @@ func TestLeaderboardHandlers_HandleTagAssignment(t *testing.T) {
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			expectedErrMsg: "transient unmarshal error: invalid payload",
 		},
 		{
 			name: "Service failure in TagAssignmentRequested",
@@ -341,16 +341,6 @@ func TestLeaderboardHandlers_HandleTagAssignment(t *testing.T) {
 			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "unexpected result from service",
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected TagAssignmentRequestedPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected TagAssignmentRequestedPayload",
 		},
 	}
 

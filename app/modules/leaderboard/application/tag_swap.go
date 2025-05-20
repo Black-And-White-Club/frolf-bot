@@ -20,8 +20,25 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 	)
 
 	return s.serviceWrapper(ctx, "TagSwapRequested", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		// --- Moved this check BEFORE the DB call ---
+		if payload.RequestorID == payload.TargetID {
+			s.logger.ErrorContext(ctx, "Cannot swap tag with self",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("requestor_id", string(payload.RequestorID)),
+			)
+			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, "cannot swap tag with self")
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagSwapFailedPayload{
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+					Reason:      "cannot swap tag with self",
+				},
+			}, nil
+		}
+		// --- End of moved check ---
+
 		startTime := time.Now()
-		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx) // Now this is called after the self-swap check
 		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "TagSwapRequested", time.Duration(time.Since(startTime).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",

@@ -94,8 +94,8 @@ func TestCheckTagAvailability(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_A", TagNumber: tagPtr(1)},
-						{UserID: "user_B", TagNumber: tagPtr(2)},
+						{UserID: "user_A", TagNumber: 1},
+						{UserID: "user_B", TagNumber: 2},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
@@ -155,8 +155,8 @@ func TestCheckTagAvailability(t *testing.T) {
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_X", TagNumber: tagPtr(50)},
-						{UserID: "user_Y", TagNumber: tagPtr(60)},
+						{UserID: "user_X", TagNumber: 50},
+						{UserID: "user_Y", TagNumber: 60},
 					},
 					IsActive:     true,
 					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,

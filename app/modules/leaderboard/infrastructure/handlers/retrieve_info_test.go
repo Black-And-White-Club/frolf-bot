@@ -13,6 +13,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
@@ -88,7 +89,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			expectedErrMsg: "transient unmarshal error: invalid payload",
 		},
 		{
 			name: "Service failure in GetLeaderboard",
@@ -265,16 +266,20 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 	}
 }
 
-func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
+func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testTag := sharedtypes.TagNumber(1)
+	testResponse := roundtypes.ResponseAccept
+	testJoinedLate := true
 
-	testPayload := &sharedevents.DiscordTagLookupRequestPayload{
-		UserID: testUserID,
+	testPayload := &sharedevents.RoundTagLookupRequestPayload{
+		UserID:     testUserID,
+		RoundID:    testRoundID,
+		Response:   testResponse,
+		JoinedLate: &testJoinedLate,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
@@ -282,8 +287,8 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl) // Use the correct mock type
-	mockHelpers := mocks.NewMockHelpers(ctrl)                       // Use the correct mock type
+	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
+	mockHelpers := mocks.NewMockHelpers(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
@@ -299,7 +304,509 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle GetTagByUserIDRequest - Tag Found", // Renamed for clarity
+			name: "Successfully handle RoundGetTagRequest - Tag Found",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed with the test payload
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a successful result (Tag Found)
+				testTagNumber := sharedtypes.TagNumber(5) // Example found tag
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: &sharedevents.RoundTagLookupResultPayload{
+							UserID:    testUserID,
+							RoundID:   testRoundID,
+							TagNumber: &testTagNumber,
+							Found:     true,
+						},
+					},
+					nil, // No system error from service
+				)
+
+				// Mock CreateResultMessage for the success case
+				successResultPayload := &sharedevents.RoundTagLookupResultPayload{
+					UserID:    testUserID,
+					RoundID:   testRoundID,
+					TagNumber: &testTagNumber,
+					Found:     true,
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					successResultPayload,
+					sharedevents.RoundTagLookupFound, // Expected event type for Tag Found
+				).Return(testMsg, nil) // Return a mock message and no error
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg}, // Expect the mock success message
+			wantErr: false,
+		},
+		{
+			name: "Successfully handle RoundGetTagRequest - Tag Not Found",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed with the test payload
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a successful result (Tag Not Found)
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: &sharedevents.RoundTagLookupResultPayload{
+							UserID:    testUserID,
+							RoundID:   testRoundID,
+							TagNumber: nil, // Tag not found
+							Found:     false,
+						},
+					},
+					nil, // No system error from service
+				)
+
+				// Mock CreateResultMessage for the not found case
+				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayload{
+					UserID:    testUserID,
+					RoundID:   testRoundID,
+					TagNumber: nil,
+					Found:     false,
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					notFoundResultPayload,
+					sharedevents.RoundTagLookupNotFound, // Expected event type for Tag Not Found
+				).Return(testMsg, nil) // Return a mock message and no error
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg}, // Expect the mock not found message
+			wantErr: false,
+		},
+		{
+			name: "Fail to unmarshal payload",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to return an error
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+				// No service or CreateResultMessage calls expected
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any()).Times(0)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			},
+			msg:            invalidMsg, // Use an invalid message
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "transient unmarshal error: invalid payload",
+		},
+		{
+			name: "Service returns unexpected system error",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a system error
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{}, // No Success, Failure, or Error fields set
+					fmt.Errorf("internal service error"),            // Return a system error
+				)
+
+				// No CreateResultMessage call expected
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed during RoundGetTagByUserID service call: internal service error",
+		},
+		{
+			name: "Service success but CreateResultMessage fails (Tag Found)",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a successful result (Tag Found)
+				testTagNumber := sharedtypes.TagNumber(5)
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: &sharedevents.RoundTagLookupResultPayload{
+							UserID:    testUserID,
+							RoundID:   testRoundID,
+							TagNumber: &testTagNumber,
+							Found:     true,
+						},
+					},
+					nil,
+				)
+
+				// Mock CreateResultMessage to return an error
+				successResultPayload := &sharedevents.RoundTagLookupResultPayload{
+					UserID:    testUserID,
+					RoundID:   testRoundID,
+					TagNumber: &testTagNumber,
+					Found:     true,
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					successResultPayload,
+					sharedevents.RoundTagLookupFound,
+				).Return(nil, fmt.Errorf("failed to create result message")) // Return error from CreateResultMessage
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create result message",
+		},
+		{
+			name: "Service success but CreateResultMessage fails (Tag Not Found)",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a successful result (Tag Not Found)
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Success: &sharedevents.RoundTagLookupResultPayload{
+							UserID:    testUserID,
+							RoundID:   testRoundID,
+							TagNumber: nil,
+							Found:     false,
+						},
+					},
+					nil,
+				)
+
+				// Mock CreateResultMessage to return an error
+				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayload{
+					UserID:    testUserID,
+					RoundID:   testRoundID,
+					TagNumber: nil,
+					Found:     false,
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					notFoundResultPayload,
+					sharedevents.RoundTagLookupNotFound,
+				).Return(nil, fmt.Errorf("failed to create result message")) // Return error from CreateResultMessage
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: failed to create result message",
+		},
+		{
+			name: "Service returns business failure (Failure field)",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a business failure
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Failure: &sharedevents.RoundTagLookupFailedPayload{
+							UserID:  testUserID,
+							RoundID: testRoundID,
+							Reason:  "No active round found",
+						},
+					},
+					nil, // No system error from service
+				)
+
+				// Mock CreateResultMessage for the failure case
+				failureResultPayload := &sharedevents.RoundTagLookupFailedPayload{
+					UserID:  testUserID,
+					RoundID: testRoundID,
+					Reason:  "No active round found",
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					leaderboardevents.GetTagNumberFailed, // Expected event type for failure
+				).Return(testMsg, nil) // Return a mock failure message and no error
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg}, // Expect the mock failure message
+			wantErr: false,
+		},
+		{
+			name: "Service returns business failure but CreateResultMessage fails",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a business failure
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Failure: &sharedevents.RoundTagLookupFailedPayload{
+							UserID:  testUserID,
+							RoundID: testRoundID,
+							Reason:  "No active round found",
+						},
+					},
+					nil,
+				)
+
+				// Mock CreateResultMessage to return an error
+				failureResultPayload := &sharedevents.RoundTagLookupFailedPayload{
+					UserID:  testUserID,
+					RoundID: testRoundID,
+					Reason:  "No active round found",
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					leaderboardevents.GetTagNumberFailed,
+				).Return(nil, fmt.Errorf("failed to create failure message")) // Return error from CreateResultMessage
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create failure message: failed to create failure message",
+		},
+		{
+			name: "Service returns system error within result (Error field)",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a system error within the result struct
+				serviceErr := fmt.Errorf("database connection failed")
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Error: serviceErr, // Return system error in the Error field
+					},
+					nil, // No system error from service call itself
+				)
+
+				// Mock CreateResultMessage for the failure case due to system error
+				failureResultPayload := sharedevents.RoundTagLookupFailedPayload{
+					UserID:  testUserID,
+					RoundID: testRoundID,
+					Reason:  serviceErr.Error(), // Reason should be the error message
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					leaderboardevents.GetTagNumberFailed,
+				).Return(testMsg, nil) // Return a mock failure message and no error
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg}, // Expect the mock failure message
+			wantErr: false,
+		},
+		{
+			name: "Service returns system error within result but CreateResultMessage fails",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a system error within the result struct
+				serviceErr := fmt.Errorf("database connection failed")
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{
+						Error: serviceErr,
+					},
+					nil,
+				)
+
+				// Mock CreateResultMessage to return an error
+				failureResultPayload := sharedevents.RoundTagLookupFailedPayload{
+					UserID:  testUserID,
+					RoundID: testRoundID,
+					Reason:  serviceErr.Error(),
+				}
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failureResultPayload,
+					leaderboardevents.GetTagNumberFailed,
+				).Return(nil, fmt.Errorf("failed to create failure message")) // Return error from CreateResultMessage
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create failure message: failed to create failure message",
+		},
+		{
+			name: "Service returns unexpected nil result fields",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to succeed
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				// Mock the service call to return a result with no fields set
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{}, // All result fields are nil
+					nil, // No system error from service
+				)
+
+				// No CreateResultMessage call expected
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "RoundGetTagByUserID service returned unexpected nil result fields",
+		},
+		{
+			name: "Invalid payload type from UnmarshalPayload",
+			mockSetup: func() {
+				// Mock UnmarshalPayload to return an error indicating wrong type
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagLookupRequestPayload"))
+				// No service or CreateResultMessage calls expected
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any()).Times(0)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+			},
+			msg:            invalidMsg, // Use an invalid message
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "transient unmarshal error: invalid payload type: expected RoundTagLookupRequestPayload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			h := &LeaderboardHandlers{
+				leaderboardService: mockLeaderboardService,
+				logger:             logger,
+				tracer:             tracer,
+				metrics:            metrics,
+				Helpers:            mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
+			}
+
+			// Call the specific handler method being tested
+			got, err := h.HandleRoundGetTagRequest(tt.msg)
+
+			// Assert error
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleRoundGetTagRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleRoundGetTagRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			}
+
+			// Assert returned messages (only if no error is expected)
+			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+				// DeepEqual can be tricky with message.Message due to internal fields.
+				// A more robust check might compare message UUIDs, topics, and payloads.
+				// For simplicity here, we'll do a basic check, but be aware of DeepEqual limitations.
+				t.Errorf("HandleRoundGetTagRequest() = %v, want %v", got, tt.want)
+			} else if tt.wantErr && got != nil {
+				t.Errorf("HandleRoundGetTagRequest() returned messages %v, want nil for error case", got)
+			}
+		})
+	}
+}
+
+func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testRqstUserID := sharedtypes.DiscordID("8675309")
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testTag := sharedtypes.TagNumber(1)
+
+	testPayload := &sharedevents.DiscordTagLookupRequestPayload{
+		UserID: testUserID,
+	}
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
+
+	// Mock dependencies
+	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
+	mockHelpers := mocks.NewMockHelpers(ctrl)
+
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+	metrics := &leaderboardmetrics.NoOpMetrics{}
+
+	tests := []struct {
+		name           string
+		mockSetup      func()
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
+	}{
+		{
+			name: "Successfully handle GetTagByUserIDRequest - Tag Found",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -308,33 +815,34 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
+				// Update: Now expecting the service to be called with just the UserID
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID, // Just passing the UserID rather than payload struct
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetTagNumberResponsePayload{
-							TagNumber: &testTag,
-							UserID:    testUserID,
-							RoundID:   testRoundID,
-							Found:     true, // Expect Found: true
+						Success: &sharedevents.DiscordTagLookupResultPayload{
+							TagNumber:        &testTag,
+							UserID:           testUserID,
+							RequestingUserID: testRqstUserID,
+							Found:            true,
 						},
 					},
 					nil,
 				)
 
-				successResponsePayload := &leaderboardevents.GetTagNumberResponsePayload{
-					TagNumber: &testTag,
-					UserID:    testUserID,
-					RoundID:   testRoundID,
-					Found:     true,
+				successResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+					TagNumber:        &testTag,
+					UserID:           testUserID,
+					RequestingUserID: testRqstUserID,
+					Found:            true,
 				}
 
+				// Updated event type to match the refactored handler
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResponsePayload,
-					leaderboardevents.GetTagNumberResponse, // Expect GetTagNumberResponse event
+					sharedevents.DiscordTagLookupByUserIDSuccess,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -342,7 +850,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Successfully handle GetTagByUserIDRequest - Tag Not Found", // New test case for Tag Not Found
+			name: "Successfully handle GetTagByUserIDRequest - Tag Not Found",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -351,33 +859,33 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetTagNumberResponsePayload{
-							TagNumber: nil, // TagNumber is nil
-							UserID:    testUserID,
-							RoundID:   testRoundID,
-							Found:     false, // Expect Found: false
+						Success: &sharedevents.DiscordTagLookupResultPayload{
+							TagNumber:        nil,
+							UserID:           testUserID,
+							RequestingUserID: testRqstUserID,
+							Found:            false,
 						},
 					},
 					nil,
 				)
 
-				notFoundResponsePayload := &leaderboardevents.GetTagNumberResponsePayload{
-					TagNumber: nil,
-					UserID:    testUserID,
-					RoundID:   testRoundID,
-					Found:     false,
+				notFoundResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+					TagNumber:        nil,
+					UserID:           testUserID,
+					RequestingUserID: testRqstUserID,
+					Found:            false,
 				}
 
+				// Updated event type to match the refactored handler
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					notFoundResponsePayload,
-					leaderboardevents.GetTagByUserIDNotFound, // Expect GetTagByUserIDNotFound event
+					sharedevents.DiscordTagLoopupByUserIDNotFound,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -392,10 +900,10 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			expectedErrMsg: "transient unmarshal error: invalid payload",
 		},
 		{
-			name: "Service returns unexpected system error", // Renamed for clarity
+			name: "Service returns unexpected system error",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -404,19 +912,18 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{}, // Result is empty
-					fmt.Errorf("internal service error"),            // Error is returned directly
+					leaderboardservice.LeaderboardOperationResult{},
+					fmt.Errorf("internal service error"),
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed during GetTagByUserID service call: internal service error", // Match the handler's error wrapping
+			expectedErrMsg: "failed during GetTagByUserID service call: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -428,42 +935,41 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetTagNumberResponsePayload{
-							TagNumber: &testTag,
-							UserID:    testUserID,
-							RoundID:   testRoundID,
-							Found:     true,
+						Success: &sharedevents.DiscordTagLookupResultPayload{
+							TagNumber:        &testTag,
+							UserID:           testUserID,
+							RequestingUserID: testRqstUserID,
+							Found:            true,
 						},
 					},
 					nil,
 				)
 
-				successResponsePayload := &leaderboardevents.GetTagNumberResponsePayload{
-					TagNumber: &testTag,
-					UserID:    testUserID,
-					RoundID:   testRoundID,
-					Found:     true,
+				successResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+					TagNumber:        &testTag,
+					UserID:           testUserID,
+					RequestingUserID: testRqstUserID,
+					Found:            true,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResponsePayload,
-					leaderboardevents.GetTagNumberResponse,
+					sharedevents.DiscordTagLookupByUserIDSuccess,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "failed to create success/not found message: failed to create result message",
 		},
 		{
-			name: "Service returns business failure (Failure field)", // Renamed for clarity
+			name: "Service returns business failure (Failure field)",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -472,27 +978,28 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Failure: &sharedevents.DiscordTagLookupByUserIDFailedPayload{
-							Reason: "No active leaderboard found", // Match the service's failure reason
+							UserID: testUserID,
+							Reason: "No active leaderboard found",
 						},
 					},
 					nil,
 				)
 
 				failureResultPayload := &sharedevents.DiscordTagLookupByUserIDFailedPayload{
+					UserID: testUserID,
 					Reason: "No active leaderboard found",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed,
+					sharedevents.DiscordTagLookupByUserIDFailed,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -501,7 +1008,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			expectedErrMsg: "",
 		},
 		{
-			name: "Service returns system error within result (Error field)", // New test case for Error field
+			name: "Service returns system error within result (Error field)",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -510,34 +1017,32 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Error: fmt.Errorf("database connection failed"), // Error is in the result struct
+						Error: fmt.Errorf("database connection failed"),
 					},
-					nil, // No error returned directly
+					nil,
 				)
-
-				failureResultPayload := &sharedevents.DiscordTagLookupByUserIDFailedPayload{
-					Reason: "database connection failed", // Reason is the error message
-				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed,
+					sharedevents.DiscordTagLookupByUserIDFailedPayload{
+						UserID: testUserID,
+						Reason: "database connection failed",
+					},
+					sharedevents.DiscordTagLookupByUserIDFailed,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
 			want:           []*message.Message{testMsg},
-			wantErr:        false, // Handler returns a message, not an error for this case
+			wantErr:        false,
 			expectedErrMsg: "",
 		},
 		{
-			name: "Service returns unexpected nil result fields", // Renamed for clarity
+			name: "Service returns unexpected nil result fields",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -546,71 +1051,18 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					},
 				)
 
-				// Update the service call expectation to use the payload struct
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					*testPayload, // Pass the payload struct
+					testUserID,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{}, // Empty result
-					nil, // No error returned directly
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "GetTagByUserID service returned unexpected nil result fields", // Match the handler's error
-		},
-		{
-			name: "Service returns success with unexpected payload type", // New test case for unexpected success payload
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				// Update the service call expectation to use the payload struct
-				mockLeaderboardService.EXPECT().GetTagByUserID(
-					gomock.Any(),
-					*testPayload, // Pass the payload struct
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Success: "unexpected string payload", // Return a string instead of the expected struct
-					},
+					leaderboardservice.LeaderboardOperationResult{},
 					nil,
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected success payload type from GetTagByUserID: expected *leaderboardevents.GetTagNumberResponsePayload, got string", // Match the handler's error
-		},
-		{
-			name: "Service returns failure with unexpected payload type", // New test case for unexpected failure payload
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				// Update the service call expectation to use the payload struct
-				mockLeaderboardService.EXPECT().GetTagByUserID(
-					gomock.Any(),
-					*testPayload, // Pass the payload struct
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Failure: "unexpected string payload", // Return a string instead of the expected struct
-					},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected failure payload type from GetTagByUserID: expected *sharedevents.DiscordTagLookupByUserIDFailedPayload, got string", // Match the handler's error
+			expectedErrMsg: "service returned unexpected nil result: GetTagByUserID service returned unexpected nil result fields",
 		},
 	}
 

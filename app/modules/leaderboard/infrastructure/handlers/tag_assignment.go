@@ -28,12 +28,12 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 			result, err := h.leaderboardService.TagAssignmentRequested(ctx, *tagAssignmentRequestedPayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "TagAssignmentRequested failed", attr.CorrelationIDFromMsg(msg), attr.Error(err))
-				return nil, err
+				return nil, fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
 			}
 
 			if result == (leaderboardservice.LeaderboardOperationResult{}) {
 				h.logger.ErrorContext(ctx, "Service returned empty result", attr.CorrelationIDFromMsg(msg))
-				return nil, fmt.Errorf("empty result from service")
+				return nil, fmt.Errorf("unexpected result from service")
 			}
 
 			var outMsgs []*message.Message
@@ -96,7 +96,7 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 			h.logger.ErrorContext(ctx, "Service returned result with neither Success nor Failure payload set, and no error",
 				attr.CorrelationIDFromMsg(msg),
 			)
-			return nil, fmt.Errorf("unexpected service result: neither success nor failure")
+			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)
 

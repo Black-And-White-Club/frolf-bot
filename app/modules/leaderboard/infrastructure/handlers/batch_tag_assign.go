@@ -30,7 +30,6 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 			)
 
 			result, err := h.leaderboardService.BatchTagAssignmentRequested(ctx, *batchTagAssignmentRequestedPayload)
-			// --- IMPORTANT: Check for error from service first ---
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Service failed to handle BatchTagAssignmentRequested event",
 					attr.CorrelationIDFromMsg(msg),
@@ -44,52 +43,38 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 					Reason:           err.Error(), // Default reason is the error message from the service call
 				}
 
-				// If the service also returned a failure payload in the result struct,
-				// perform a type assertion and use its reason if available.
-				// This check is secondary to the non-nil error check.
 				if result.Failure != nil {
-					// --- Perform type assertion here ---
 					if serviceFailurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload); ok {
 						failurePayload.Reason = serviceFailurePayload.Reason
-						// Optionally copy other fields from serviceFailurePayload if needed
 					} else {
-						// Log a warning if result.Failure was not the expected type
 						h.logger.WarnContext(ctx, "Service returned non-nil result.Failure, but it was not the expected type",
 							attr.CorrelationIDFromMsg(msg),
 							attr.Any("actual_type", fmt.Sprintf("%T", result.Failure)),
 						)
-						// Keep the default reason from the service error
 					}
 				}
 
-				// --- Pass a pointer to the failurePayload to CreateResultMessage ---
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					&failurePayload, // Pass the address of the struct
 					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
 				)
 				if errMsg != nil {
-					// If we fail to create the failure message, return the original service error
-					// to Watermill for potential retry/dead-lettering.
 					return nil, fmt.Errorf("failed to create failure message after service error: %w", errMsg)
 				}
 
-				// Return the failure message to be published.
-				// Return nil error to Watermill so it doesn't retry this handler execution,
-				// as we have successfully processed the failure by publishing a failure event.
 				return []*message.Message{failureMsg}, nil
 			}
 
-			// If there was no error from the service, check for success or failure payloads in the result struct.
 			if result.Failure != nil {
 				h.logger.InfoContext(ctx, "Batch tag assignment failed according to service (no service error returned)",
 					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure), // result.Failure is already a pointer here if service returns it
+					attr.Any("failure_payload", result.Failure),
 				)
 
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
-					result.Failure, // Pass the pointer from the service result
+					result.Failure,
 					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
 				)
 				if errMsg != nil {
@@ -104,7 +89,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 
 				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
-					result.Success, // Pass the pointer from the service result
+					result.Success,
 					leaderboardevents.LeaderboardBatchTagAssigned, // Publish to the leaderboardevents success topic
 				)
 				if err != nil {

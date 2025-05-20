@@ -82,7 +82,7 @@ func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, tagNumber
 func (l *Leaderboard) HasTagNumber(tagNumber sharedtypes.TagNumber) bool {
 	for _, entry := range l.LeaderboardData {
 		// Safely check if TagNumber is not nil before dereferencing
-		if entry.TagNumber != nil && *entry.TagNumber == tagNumber {
+		if entry.TagNumber != 0 && entry.TagNumber == tagNumber {
 			return true
 		}
 	}
@@ -105,8 +105,8 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
-		if entry.TagNumber != nil {
-			tagMap[*entry.TagNumber] = entry.UserID
+		if entry.TagNumber != 0 {
+			tagMap[entry.TagNumber] = entry.UserID
 		}
 	}
 
@@ -120,7 +120,7 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 	for tag, uid := range tagMap {
 		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tagValue,
+			TagNumber: tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -175,8 +175,8 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
 		// Safely handle nil TagNumber pointers
-		if entry.TagNumber != nil {
-			tagMap[*entry.TagNumber] = entry.UserID
+		if entry.TagNumber != 0 {
+			tagMap[entry.TagNumber] = entry.UserID
 		}
 	}
 
@@ -191,7 +191,7 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 		// Create a pointer to the tag value
 		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tagValue,
+			TagNumber: tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -287,8 +287,8 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	tagMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
 	for _, entry := range leaderboard.LeaderboardData {
 		// Safely handle nil TagNumber pointers
-		if entry.TagNumber != nil {
-			tagMap[*entry.TagNumber] = entry.UserID
+		if entry.TagNumber != 0 {
+			tagMap[entry.TagNumber] = entry.UserID
 		}
 	}
 
@@ -321,7 +321,7 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 		// Create a pointer to the tag value
 		tagValue := tag
 		updatedLeaderboardData = append(updatedLeaderboardData, leaderboardtypes.LeaderboardEntry{
-			TagNumber: &tagValue,
+			TagNumber: tagValue,
 			UserID:    sharedtypes.DiscordID(uid),
 		})
 	}
@@ -377,8 +377,8 @@ func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, userID sharedty
 	// Query for the user's tag in active leaderboard
 	var userTag *sharedtypes.TagNumber
 	for _, entry := range activeLeaderboard.LeaderboardData {
-		if entry.UserID == userID && entry.TagNumber != nil {
-			tagVal := *entry.TagNumber
+		if entry.UserID == userID && entry.TagNumber != 0 {
+			tagVal := entry.TagNumber
 			userTag = &tagVal
 			break
 		}

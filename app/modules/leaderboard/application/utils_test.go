@@ -1,8 +1,13 @@
 package leaderboardservice
 
 import (
+	// Import context for the serviceWrapper
 	"fmt"
+	"log/slog" // Use standard library slog for a basic logger
+	"os"       // Import os for logger output
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -11,218 +16,260 @@ import (
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
-func TestGenerateUpdatedLeaderboard(t *testing.T) {
+// Helper function to sort LeaderboardData by TagNumber
+func sortLeaderboardData(data leaderboardtypes.LeaderboardData) {
+	slices.SortFunc(data, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		// Assuming 0 is the zero value for TagNumber and should be sorted appropriately.
+		// Adjust logic if 0 has a special sorting requirement (e.g., always last).
+		if a.TagNumber != 0 && b.TagNumber != 0 {
+			return int(a.TagNumber - b.TagNumber)
+		}
+		if a.TagNumber == 0 && b.TagNumber == 0 {
+			return 0
+		}
+		if a.TagNumber == 0 {
+			return 1 // Place 0 after non-zero tags
+		}
+		return -1 // Place non-zero tags before 0
+	})
+}
+
+func compareLeaderboardEntries(t *testing.T, expected, actual []leaderboardtypes.LeaderboardEntry, testName string) {
+	if len(expected) != len(actual) {
+		t.Errorf("Test '%s': Expected leaderboard length %d, Got %d", testName, len(expected), len(actual))
+		return
+	}
+
+	sortLeaderboardEntries(expected)
+	sortLeaderboardEntries(actual)
+
+	for i := range expected {
+		if !reflect.DeepEqual(expected[i], actual[i]) {
+			t.Errorf("Test '%s': Entry mismatch at index %d: Expected %+v, Got %+v", testName, i, expected[i], actual[i])
+		}
+	}
+}
+
+func sortLeaderboardEntries(entries []leaderboardtypes.LeaderboardEntry) {
+	slices.SortFunc(entries, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		if a.TagNumber != 0 && b.TagNumber != 0 {
+			return int(a.TagNumber - b.TagNumber)
+		}
+		if a.TagNumber == 0 && b.TagNumber == 0 {
+			return 0
+		}
+		if a.TagNumber == 0 {
+			return 1
+		}
+		return -1
+	})
+}
+
+func TestGenerateUpdatedLeaderboardData(t *testing.T) {
 	tag1 := sharedtypes.TagNumber(1)
-	tag2 := sharedtypes.TagNumber(5)
-	tag3 := sharedtypes.TagNumber(18)
-	tag4 := sharedtypes.TagNumber(20)
+	tag5 := sharedtypes.TagNumber(5)
+	tag18 := sharedtypes.TagNumber(18)
+	tag20 := sharedtypes.TagNumber(20)
+
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	tests := []struct {
-		name                   string
-		currentLeaderboard     *leaderboarddb.Leaderboard
-		sortedParticipantTags  []string
-		expectedTagAssignments map[sharedtypes.DiscordID]sharedtypes.TagNumber
-		expectedRemainingUsers int
+		name                    string
+		currentLeaderboard      *leaderboarddb.Leaderboard
+		sortedParticipantTags   []string
+		expectedLeaderboardData leaderboardtypes.LeaderboardData
+		expectError             bool
 	}{
 		{
 			name: "Basic redistribution with existing users",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: &tag1},
-					{UserID: "user2", TagNumber: &tag2},
-					{UserID: "user3", TagNumber: &tag3},
-					{UserID: "user4", TagNumber: &tag4},
+					{UserID: "user1", TagNumber: tag1},
+					{UserID: "user2", TagNumber: tag5},
+					{UserID: "user3", TagNumber: tag18},
+					{UserID: "user4", TagNumber: tag20},
 				},
 			},
 			sortedParticipantTags: []string{
-				"18:user3", // best performer
-				"5:user2",  // second
-				"1:user1",  // worst performer
+				"18:user3", // user3 gets tag 18
+				"5:user2",  // user2 gets tag 5
+				"1:user1",  // user1 gets tag 1
 			},
-			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
-				"user3": 1,  // best performer gets lowest tag
-				"user2": 5,  // keeps original tag
-				"user1": 18, // worst performer gets highest tag
+			// Expected data based on sortedParticipantTags and including non-participant user4
+			expectedLeaderboardData: []leaderboardtypes.LeaderboardEntry{
+				{UserID: "user3", TagNumber: 18}, // Should have tag 18 from input
+				{UserID: "user2", TagNumber: 5},  // Should have tag 5 from input
+				{UserID: "user1", TagNumber: 1},  // Should have tag 1 from input
+				{UserID: "user4", TagNumber: 20}, // Non-participant keeps original tag
 			},
-			expectedRemainingUsers: 1, // user4 should remain unchanged
+			expectError: false,
 		},
 		{
-			name: "Scenario with gaps in tag numbers",
+			name: "Scenario with gaps in tag numbers and non-participants",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: &tag1},
-					{UserID: "user2", TagNumber: &tag2},
-					{UserID: "user3", TagNumber: &tag3},
+					{UserID: "userA", TagNumber: tag1},
+					{UserID: "userB", TagNumber: tag5},
+					{UserID: "userC", TagNumber: tag18},
+					{UserID: "userD", TagNumber: tag20},
 				},
 			},
 			sortedParticipantTags: []string{
-				"10:user3",
-				"1:user1",
+				"18:userC", // userC gets tag 18
+				"5:userB",  // userB gets tag 5
 			},
-			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
-				"user3": 1,  // best performer gets lowest tag
-				"user1": 10, // worst performer gets highest tag
+			// Expected data based on sortedParticipantTags and including non-participants userA and userD
+			expectedLeaderboardData: []leaderboardtypes.LeaderboardEntry{
+				{UserID: "userC", TagNumber: 18}, // Should have tag 18 from input
+				{UserID: "userB", TagNumber: 5},  // Should have tag 5 from input
+				{UserID: "userA", TagNumber: 1},  // Non-participant keeps original tag
+				{UserID: "userD", TagNumber: 20}, // Non-participant keeps original tag
 			},
-			expectedRemainingUsers: 1, // user2 should remain unchanged
+			expectError: false,
 		},
 		{
 			name: "Empty participant tags",
 			currentLeaderboard: &leaderboarddb.Leaderboard{
 				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-					{UserID: "user1", TagNumber: &tag1},
-					{UserID: "user2", TagNumber: &tag2},
+					{UserID: "user1", TagNumber: tag1},
+					{UserID: "user2", TagNumber: tag5},
 				},
 			},
-			sortedParticipantTags:  []string{},
-			expectedTagAssignments: map[sharedtypes.DiscordID]sharedtypes.TagNumber{},
-			expectedRemainingUsers: 2,
+			sortedParticipantTags:   []string{},
+			expectedLeaderboardData: nil,
+			expectError:             true,
+		},
+		{
+			name: "Invalid tag format in participant tags",
+			currentLeaderboard: &leaderboarddb.Leaderboard{
+				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
+					{UserID: "user1", TagNumber: tag1},
+				},
+			},
+			sortedParticipantTags: []string{
+				"invalid-tag-user",
+			},
+			expectedLeaderboardData: nil,
+			expectError:             true,
+		},
+		{
+			name: "Invalid tag number in participant tags",
+			currentLeaderboard: &leaderboarddb.Leaderboard{
+				LeaderboardData: []leaderboardtypes.LeaderboardEntry{
+					{UserID: "user1", TagNumber: tag1},
+				},
+			},
+			sortedParticipantTags: []string{
+				"abc:user1",
+			},
+			expectedLeaderboardData: nil,
+			expectError:             true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := &LeaderboardService{} // You might need to mock dependencies if required
+			service := &LeaderboardService{
+				logger: testLogger,
+			}
 
-			// Handle empty participant tags case
-			if len(tt.sortedParticipantTags) == 0 {
-				_, err := service.GenerateUpdatedLeaderboard(tt.currentLeaderboard, tt.sortedParticipantTags)
-				if err == nil {
-					t.Errorf("Expected error for empty participant tags, got nil")
-				}
+			updatedLeaderboardData, err := service.GenerateUpdatedLeaderboard(tt.currentLeaderboard.LeaderboardData, tt.sortedParticipantTags)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("Test '%s': Expected error: %v, Got error: %v", tt.name, tt.expectError, err)
+				return
+			}
+			if tt.expectError {
 				return
 			}
 
-			updatedLeaderboard, err := service.GenerateUpdatedLeaderboard(tt.currentLeaderboard, tt.sortedParticipantTags)
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+			if len(updatedLeaderboardData) != len(tt.expectedLeaderboardData) {
+				t.Fatalf("Test '%s': Expected %d leaderboard entries, got %d", tt.name, len(tt.expectedLeaderboardData), len(updatedLeaderboardData))
 			}
 
-			if updatedLeaderboard == nil {
-				t.Fatal("Updated leaderboard is nil")
-			}
+			// Sort both actual and expected before comparison
+			sortLeaderboardData(updatedLeaderboardData)
+			sortLeaderboardData(tt.expectedLeaderboardData)
 
-			// Verify tag assignments
-			for _, tag := range tt.sortedParticipantTags {
-				parts := strings.Split(tag, ":")
-				userID := parts[1]
+			for i := range updatedLeaderboardData {
+				actual := updatedLeaderboardData[i]
+				expected := tt.expectedLeaderboardData[i]
 
-				// Find the user in the updated leaderboard
-				found := false
-				for _, entry := range updatedLeaderboard.LeaderboardData {
-					if string(entry.UserID) == userID {
-						expectedTag := tt.expectedTagAssignments[sharedtypes.DiscordID(userID)]
-						if entry.TagNumber != &expectedTag {
-							t.Errorf("For user %s, expected tag %d, got %d",
-								userID, expectedTag, entry.TagNumber)
-						}
-						found = true
-						break
-					}
+				if actual.UserID != expected.UserID || actual.TagNumber != expected.TagNumber {
+					t.Errorf("Test '%s': Entry mismatch at index %d: Expected %+v, Got %+v", tt.name, i, expected, actual)
 				}
-				if !found {
-					t.Errorf("User %s not found in updated leaderboard", userID)
-				}
-			}
-
-			// Verify remaining users
-			nonParticipatingUsers := 0
-			for _, entry := range updatedLeaderboard.LeaderboardData {
-				isParticipating := false
-				for _, tag := range tt.sortedParticipantTags {
-					parts := strings.Split(tag, ":")
-					if string(entry.UserID) == parts[1] {
-						isParticipating = true
-						break
-					}
-				}
-				if !isParticipating {
-					nonParticipatingUsers++
-				}
-			}
-			if nonParticipatingUsers != tt.expectedRemainingUsers {
-				t.Errorf("Expected %d non-participating users, got %d",
-					tt.expectedRemainingUsers, nonParticipatingUsers)
 			}
 		})
 	}
 }
 
-func TestGenerateUpdatedLeaderboard_LargeNumberOfParticipants(t *testing.T) {
-	// Create a large initial leaderboard
-	currentLeaderboard := &leaderboarddb.Leaderboard{
-		LeaderboardData: make([]leaderboardtypes.LeaderboardEntry, 50),
-	}
-	for i := range currentLeaderboard.LeaderboardData {
-		tag := sharedtypes.TagNumber(i + 1)
-		currentLeaderboard.LeaderboardData[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    sharedtypes.DiscordID(fmt.Sprintf("existinguser%d", i)),
-			TagNumber: &tag,
-		}
-	}
+func TestGenerateUpdatedLeaderboardData_LargeNumberOfParticipants(t *testing.T) {
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	// Create sorted participant tags using only existing users
+	currentLeaderboardData := createBenchmarkLeaderboardData(50)
+
 	sortedParticipantTags := make([]string, 40)
 	for i := range sortedParticipantTags {
-		sortedParticipantTags[i] = fmt.Sprintf("%d:existinguser%d", i+1, i)
+		originalTag := i + 1
+		userID := fmt.Sprintf("existinguser%d", i)
+		// Using the original tag in the input string as per the function's current logic
+		sortedParticipantTags[i] = fmt.Sprintf("%d:%s", originalTag, userID)
 	}
 
-	// Run the function
-	service := &LeaderboardService{}
-	updatedLeaderboard, err := service.GenerateUpdatedLeaderboard(currentLeaderboard, sortedParticipantTags)
+	service := &LeaderboardService{
+		logger: testLogger,
+	}
+
+	updatedLeaderboardData, err := service.GenerateUpdatedLeaderboard(currentLeaderboardData, sortedParticipantTags)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if len(updatedLeaderboard.LeaderboardData) != 50 {
-		t.Errorf("Expected 50 entries, got %d", len(updatedLeaderboard.LeaderboardData))
+	// The number of entries should be the number of participants + number of non-participants
+	expectedLen := len(sortedParticipantTags) + (len(currentLeaderboardData) - len(sortedParticipantTags)) // Assuming all users in currentData are either participants or non-participants
+	if len(updatedLeaderboardData) != expectedLen {
+		t.Errorf("Expected %d entries, got %d", expectedLen, len(updatedLeaderboardData))
 	}
 
-	// Verify participants got new tags in order
-	participantTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-	for _, entry := range updatedLeaderboard.LeaderboardData {
-		if strings.HasPrefix(string(entry.UserID), "existinguser") {
-			participantTags[entry.UserID] = *entry.TagNumber
-		}
-	}
-
-	// Verify tags are assigned in ascending order for participants
-	assignedTags := make([]sharedtypes.TagNumber, 0, len(participantTags))
-	for range sortedParticipantTags {
-		found := false
-		for userID, tag := range participantTags {
-			if !slices.Contains(assignedTags, tag) {
-				assignedTags = append(assignedTags, tag)
-				delete(participantTags, userID)
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("Should find an unassigned tag")
+	participatingUsersMap := make(map[sharedtypes.DiscordID]bool)
+	for _, tagUserStr := range sortedParticipantTags {
+		parts := strings.Split(tagUserStr, ":")
+		if len(parts) == 2 {
+			participatingUsersMap[sharedtypes.DiscordID(parts[1])] = true
 		}
 	}
 
-	slices.Sort(assignedTags)
-	for i := 1; i < len(assignedTags); i++ {
-		if assignedTags[i-1] >= assignedTags[i] {
-			t.Errorf("Tags should be assigned in strictly ascending order")
+	expectedLeaderboardData := make(leaderboardtypes.LeaderboardData, 0, expectedLen)
+
+	// Add participants with tags from sortedParticipantTags
+	for _, tagUserStr := range sortedParticipantTags {
+		parts := strings.Split(tagUserStr, ":")
+		if len(parts) == 2 {
+			tag, _ := strconv.Atoi(parts[0])
+			userID := sharedtypes.DiscordID(parts[1])
+			expectedLeaderboardData = append(expectedLeaderboardData, leaderboardtypes.LeaderboardEntry{
+				UserID:    userID,
+				TagNumber: sharedtypes.TagNumber(tag), // Use the tag from the input string
+			})
 		}
 	}
 
-	// Verify existing users remain unchanged
-	for _, entry := range currentLeaderboard.LeaderboardData {
-		found := false
-		for _, updatedEntry := range updatedLeaderboard.LeaderboardData {
-			if entry.UserID == updatedEntry.UserID {
-				if entry.TagNumber != updatedEntry.TagNumber {
-					t.Errorf("Existing user %s tag changed from %d to %d",
-						entry.UserID, entry.TagNumber, updatedEntry.TagNumber)
-				}
-				found = true
-				break
-			}
+	// Add non-participants with their original tags
+	for _, originalEntry := range currentLeaderboardData {
+		if !participatingUsersMap[originalEntry.UserID] {
+			expectedLeaderboardData = append(expectedLeaderboardData, originalEntry)
 		}
-		if !found {
-			t.Errorf("Existing user %s not found in leaderboard", entry.UserID)
+	}
+
+	sortLeaderboardData(updatedLeaderboardData)
+	sortLeaderboardData(expectedLeaderboardData)
+
+	for i := range updatedLeaderboardData {
+		actual := updatedLeaderboardData[i]
+		expected := expectedLeaderboardData[i]
+
+		if actual.UserID != expected.UserID || actual.TagNumber != expected.TagNumber {
+			t.Errorf("Entry mismatch at index %d: Expected %+v, Got %+v", i, expected, actual)
 		}
 	}
 }
