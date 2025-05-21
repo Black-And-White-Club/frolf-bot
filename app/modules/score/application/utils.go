@@ -28,8 +28,10 @@ func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, roundID shar
 	for i := 0; i < len(scores); i++ {
 		intScore := int(scores[i].Score)
 
-		if intScore < -100 || intScore > 100 {
-			err := fmt.Errorf("invalid score value: %d for user %s", intScore, scores[i].UserID)
+		// Validate score range for disc golf
+		// Using the agreed-upon range of -36 to +72
+		if intScore < -36 || intScore > 72 {
+			err := fmt.Errorf("invalid score value: %d for user %s. Score must be between -36 and 72", intScore, scores[i].UserID)
 			s.logger.WarnContext(ctx, "Invalid score detected during processing",
 				attr.RoundID("round_id", roundID),
 				attr.String("user_id", string(scores[i].UserID)),

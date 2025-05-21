@@ -1,7 +1,6 @@
-package handler_tests
+package userhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -14,66 +13,33 @@ import (
 	"github.com/google/uuid"
 )
 
+// TestHandleUserRoleUpdateRequest is an integration test for the HandleUserRoleUpdateRequest handler.
 func TestHandleUserRoleUpdateRequest(t *testing.T) {
-	// Skip if the test environment setup failed
-	if testEnv == nil {
-		t.Skip("Test environment not initialized")
-	}
-
-	// Setup test dependencies (database, NATS, router, EventBus)
-	deps := SetupTestUserHandler(t, testEnv)
-
-	// Ensure proper cleanup after this test function
-	t.Cleanup(func() {
-		CleanupHandlerTestDeps(deps)
-
-		// Clean all relevant NATS streams after the entire test function
-		ctx, cancel := context.WithTimeout(deps.Ctx, 5*time.Second)
-		defer cancel()
-
-		if err := deps.ResetJetStreamState(ctx, "user", "discord"); err != nil {
-			t.Logf("Warning: Failed to clean NATS streams after test: %v", err)
-		}
-
-		// Clean DB tables
-		if err := testutils.CleanUserIntegrationTables(ctx, deps.TestEnvironment.DB); err != nil {
-			t.Logf("Warning: Failed to clean DB tables after test: %v", err)
-		}
-	})
-
+	// Define the test cases using an anonymous struct
 	tests := []struct {
-		name                   string
-		setupFn                func(t *testing.T, deps HandlerTestDeps)
-		publishMsgFn           func(t *testing.T, deps HandlerTestDeps) *message.Message
-		validateFn             func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message)
+		name string
+		// Modified function signatures to explicitly accept deps
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
 		expectedOutgoingTopics []string
+		expectHandlerError     bool
+		timeout                time.Duration // Added timeout field for consistency
 	}{
 		{
 			name: "Success - role updated",
-			setupFn: func(t *testing.T, deps HandlerTestDeps) {
-				// Clean database and NATS streams before the test
-				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-					t.Fatalf("Failed to clean DB: %v", err)
-				}
-				// Clean NATS streams for topics relevant to this handler's output
-				if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
-					t.Fatalf("Failed to clean NATS discord stream: %v", err)
-				}
-				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
-					t.Fatalf("Failed to clean NATS user stream: %v", err)
-				}
-
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Create a user that will have their role updated
+				userID := sharedtypes.DiscordID("user-to-update-role")
 				tagNum := sharedtypes.TagNumber(101)
-				result, err := deps.UserModule.UserService.CreateUser(deps.Ctx, "user-to-update-role", &tagNum)
-				if err != nil {
-					t.Fatalf("Failed to create test user: %v", err)
+				// Use UserService.CreateUser to ensure the user exists in the database
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, userID, &tagNum)
+				if createErr != nil || createResult.Success == nil {
+					t.Fatalf("Failed to create test user for role update: %v, result: %+v", createErr, createResult.Failure)
 				}
-				if result.Failure != nil {
-					t.Fatalf("Failed to create test user: %v", result.Failure)
-				}
+				return nil
 			},
-			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create the payload for the role update request
 				payload := userevents.UserRoleUpdateRequestPayload{
 					UserID:      "user-to-update-role",
@@ -85,17 +51,16 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Fatalf("Marshal error: %v", err)
 				}
 
-				// Create and publish the message using the EventBus
+				// Create and publish the message using testutils.PublishMessage
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", userevents.UserRoleUpdateRequest)
 
-				if err := deps.EventBus.Publish(userevents.UserRoleUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// Validate the received messages on the success topic
 				msgs := receivedMsgs[userevents.DiscordUserRoleUpdated]
 				if len(msgs) != 1 {
@@ -128,26 +93,19 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				}
 			},
 			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdated},
+			timeout:                5 * time.Second,
 		},
 		{
 			name: "Failure - invalid role",
-			setupFn: func(t *testing.T, deps HandlerTestDeps) {
-				// Clean database and NATS streams
-				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-					t.Fatalf("Failed to clean DB: %v", err)
-				}
-				if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
-					t.Fatalf("Failed to clean NATS discord stream: %v", err)
-				}
-				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
-					t.Fatalf("Failed to clean NATS user stream: %v", err)
-				}
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// No specific setup needed for this test case, as the role is invalid
+				return nil
 			},
-			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create payload with an invalid role string
 				payload := userevents.UserRoleUpdateRequestPayload{
 					UserID:      "any-user-id",
-					Role:        "invalid-role",
+					Role:        "invalid-role", // This will cause the failure
 					RequesterID: "requester-456",
 				}
 				data, err := json.Marshal(payload)
@@ -155,17 +113,16 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Fatalf("Marshal error: %v", err)
 				}
 
-				// Create and publish the message using the EventBus
+				// Create and publish the message using testutils.PublishMessage
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", userevents.UserRoleUpdateRequest)
 
-				if err := deps.EventBus.Publish(userevents.UserRoleUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// Validate the received messages on the failure topic
 				msgs := receivedMsgs[userevents.DiscordUserRoleUpdateFailed]
 				if len(msgs) != 1 {
@@ -188,157 +145,108 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				if payload.Success {
 					t.Errorf("Expected Success to be false, got true")
 				}
-				if payload.Error != "invalid role" {
+				if payload.Error != "invalid role" { // Assuming this is the expected error message from the handler
 					t.Errorf("Expected Error 'invalid role', got %q", payload.Error)
 				}
 
 				// Assert Correlation ID
-				if msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+				if resultMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
 					t.Errorf("Correlation ID mismatch")
 				}
 			},
 			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdateFailed},
+			timeout:                5 * time.Second,
 		},
-		// {  //I have no idea why, but if there are two fails in a test function, the 2nd won't pass.
-		// 	name: "Failure - user not found",
-		// 	setupFn: func(t *testing.T, deps HandlerTestDeps) {
-		// 		// Clean database to ensure the user does NOT exist
-		// 		if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-		// 			t.Fatalf("Failed to clean DB: %v", err)
-		// 		}
-		// 		if err := deps.ResetJetStreamState(deps.Ctx, "discord"); err != nil {
-		// 			t.Fatalf("Failed to clean NATS discord stream: %v", err)
-		// 		}
-		// 		if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
-		// 			t.Fatalf("Failed to clean NATS user stream: %v", err)
-		// 		}
-		// 	},
-		// 	publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
-		// 		// Create payload for a non-existent user
-		// 		payload := userevents.UserRoleUpdateRequestPayload{
-		// 			UserID:      "non-existent-user-for-role-update",
-		// 			Role:        sharedtypes.UserRoleAdmin,
-		// 			RequesterID: "requester-789",
-		// 		}
-		// 		data, err := json.Marshal(payload)
-		// 		if err != nil {
-		// 			t.Fatalf("Marshal error: %v", err)
-		// 		}
+		{
+			name: "Failure - user not found",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// Ensure the user does NOT exist in the database for this test
+				// No user creation needed here.
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				// Create payload for a non-existent user
+				payload := userevents.UserRoleUpdateRequestPayload{
+					UserID:      "non-existent-user-for-role-update",
+					Role:        sharedtypes.UserRoleAdmin,
+					RequesterID: "requester-789",
+				}
+				data, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Marshal error: %v", err)
+				}
 
-		// 		// Create and publish the message using the EventBus
-		// 		msg := message.NewMessage(uuid.New().String(), data)
-		// 		msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-		// 		msg.Metadata.Set("topic", userevents.UserRoleUpdateRequest)
+				// Create and publish the message using testutils.PublishMessage
+				msg := message.NewMessage(uuid.New().String(), data)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-		// 		if err := deps.EventBus.Publish(userevents.UserRoleUpdateRequest, msg); err != nil {
-		// 			t.Fatalf("Publish error: %v", err)
-		// 		}
-		// 		return msg
-		// 	},
-		// 	validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
-		// 		// Validate the received messages on the failure topic
-		// 		msgs := receivedMsgs[userevents.DiscordUserRoleUpdateFailed]
-		// 		if len(msgs) != 1 {
-		// 			t.Fatalf("Expected 1 message on topic %s, got %d", userevents.DiscordUserRoleUpdateFailed, len(msgs))
-		// 		}
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
+					t.Fatalf("Publish error: %v", err)
+				}
+				return msg
+			},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// Validate the received messages on the failure topic
+				msgs := receivedMsgs[userevents.DiscordUserRoleUpdateFailed]
+				if len(msgs) != 1 {
+					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.DiscordUserRoleUpdateFailed, len(msgs))
+				}
 
-		// 		resultMsg := msgs[0]
-		// 		var payload userevents.UserRoleUpdateResultPayload
-		// 		if err := deps.UserModule.Helper.UnmarshalPayload(resultMsg, &payload); err != nil {
-		// 			t.Fatalf("Unmarshal error: %v", err)
-		// 		}
+				resultMsg := msgs[0]
+				var payload userevents.UserRoleUpdateResultPayload
+				if err := deps.UserModule.Helper.UnmarshalPayload(resultMsg, &payload); err != nil {
+					t.Fatalf("Unmarshal error: %v", err)
+				}
 
-		// 		// Assert payload fields
-		// 		if payload.UserID != "non-existent-user-for-role-update" {
-		// 			t.Errorf("Expected UserID 'non-existent-user-for-role-update', got %q", payload.UserID)
-		// 		}
-		// 		if payload.Role != sharedtypes.UserRoleAdmin {
-		// 			t.Errorf("Expected Role '%s', got '%s'", sharedtypes.UserRoleAdmin, payload.Role)
-		// 		}
-		// 		if payload.Success {
-		// 			t.Errorf("Expected Success to be false, got true")
-		// 		}
-		// 		if payload.Error != "user not found" {
-		// 			t.Errorf("Expected Error 'user not found', got %q", payload.Error)
-		// 		}
+				// Assert payload fields
+				if payload.UserID != "non-existent-user-for-role-update" {
+					t.Errorf("Expected UserID 'non-existent-user-for-role-update', got %q", payload.UserID)
+				}
+				if payload.Role != sharedtypes.UserRoleAdmin {
+					t.Errorf("Expected Role '%s', got '%s'", sharedtypes.UserRoleAdmin, payload.Role)
+				}
+				if payload.Success {
+					t.Errorf("Expected Success to be false, got true")
+				}
+				if payload.Error != "user not found" { // Assuming this is the expected error message from the handler
+					t.Errorf("Expected Error 'user not found', got %q", payload.Error)
+				}
 
-		// 		// Assert Correlation ID
-		// 		if msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-		// 			t.Errorf("Correlation ID mismatch")
-		// 		}
-		// 	},
-		// 	expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdateFailed},
-		// },
+				// Assert Correlation ID
+				if resultMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+					t.Errorf("Correlation ID mismatch")
+				}
+			},
+			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdateFailed},
+			timeout:                5 * time.Second,
+		},
 	}
 
 	// Run each test as a subtest
 	for _, tc := range tests {
+		tc := tc // capture range variable for use in t.Run closure
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a subtest-specific context with timeout
-			subCtx, cancel := context.WithTimeout(deps.Ctx, 10*time.Second)
-			defer cancel()
+			// Setup dependencies for each subtest
+			deps := SetupTestUserHandler(t)
 
-			// Execute the setup function for the current test case
-			tc.setupFn(t, deps)
-
-			// Create a map to collect received messages
-			receivedMsgs := make(map[string][]*message.Message)
-
-			// Subscribe to expected outgoing topics BEFORE publishing
-			// Use unique subscriber IDs for each test to avoid cross-test interference
-			subscriptions := make([]message.Subscriber, 0, len(tc.expectedOutgoingTopics))
-
-			// Subscribe to all expected topics
-			for _, topic := range tc.expectedOutgoingTopics {
-				// Use a unique consumer group for this test
-				sub, err := deps.EventBus.Subscribe(subCtx, topic)
-				if err != nil {
-					t.Fatalf("Subscribe error on topic %q: %v", topic, err)
-				}
-
-				// Start a goroutine to collect messages
-				go func(topic string, ch <-chan *message.Message) {
-					for {
-						select {
-						case msg, ok := <-ch:
-							if !ok {
-								return // Channel closed
-							}
-							receivedMsgs[topic] = append(receivedMsgs[topic], msg)
-							msg.Ack()
-						case <-subCtx.Done():
-							return // Context cancelled
-						}
-					}
-				}(topic, sub)
+			// Construct the testutils.TestCase from the anonymous struct fields
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				// Pass deps and env to the inner function calls
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, incomingMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    tc.expectHandlerError,
+				MessageTimeout: tc.timeout,
 			}
-
-			// Give subscriptions time to register
-			time.Sleep(200 * time.Millisecond)
-
-			// Publish the incoming message
-			incoming := tc.publishMsgFn(t, deps)
-
-			// Wait for message processing using a more reliable approach
-			err := testutils.WaitFor(5*time.Second, 100*time.Millisecond, func() error {
-				for _, topic := range tc.expectedOutgoingTopics {
-					if len(receivedMsgs[topic]) == 0 {
-						return context.DeadlineExceeded // Keep waiting
-					}
-				}
-				return nil // All expected messages received
-			})
-			if err != nil {
-				t.Fatalf("Timed out waiting for messages: %v", err)
-			}
-
-			// Validate results
-			tc.validateFn(t, deps, incoming, receivedMsgs)
-
-			// Clean up subscriptions
-			for _, sub := range subscriptions {
-				sub.Close()
-			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

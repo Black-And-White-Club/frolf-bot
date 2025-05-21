@@ -1,13 +1,10 @@
-package handler_tests
+package userhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -22,30 +19,24 @@ import (
 
 // TestHandleUserSignupRequest is an integration test for the HandleUserSignupRequest handler.
 func TestHandleUserSignupRequest(t *testing.T) {
-	// Use the handler-specific setup function
-	deps := SetupTestUserHandler(t, testEnv)
-	// Defer the handler-specific cleanup
-	defer CleanupHandlerTestDeps(deps)
-
+	// Define the test cases using an anonymous struct, similar to the leaderboard example
 	tests := []struct {
-		name                   string
-		setupFn                func(t *testing.T, deps HandlerTestDeps)
-		publishMsgFn           func(t *testing.T, deps HandlerTestDeps) *message.Message
-		validateFn             func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message)
+		name string
+		// Modified function signatures to explicitly accept deps
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
 		expectedOutgoingTopics []string
+		expectHandlerError     bool
+		timeout                time.Duration // Added timeout field for consistency
 	}{
 		{
 			name: "Success - User Signup without Tag",
-			setupFn: func(t *testing.T, deps HandlerTestDeps) {
-				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-					t.Fatalf("Failed to clean database before test case: %v", err)
-				}
-				// Clean relevant NATS streams
-				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil { // Assuming user events go to "user" stream
-					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
-				}
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// No specific setup needed for this case beyond what SetupTestUserHandler provides.
+				return nil // Return initial state if any
 			},
-			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-notag-123")
 				payload := userevents.UserSignupRequestPayload{
 					UserID:    userID,
@@ -57,43 +48,38 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", userevents.UserSignupRequest)
 
-				inputTopic := userevents.UserSignupRequest // Assuming the constant is the topic name
-				if err := deps.EventBus.Publish(inputTopic, msg); err != nil {
-					t.Fatalf("Failed to publish message to handler input topic %q: %v", inputTopic, err)
+				// Use testutils.PublishMessage to publish the message.
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
 				}
-				log.Printf("Published message %s to topic %q", msg.UUID, inputTopic)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
-				// 1. Verify user was created in the database
+			expectedOutgoingTopics: []string{userevents.UserCreated},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// 1. Verify user was created in the database (via service call, as per your strategy)
 				userID := sharedtypes.DiscordID("testuser-notag-123")
-				// Corrected: Declare variable with the correct type *usertypes.UserData
+				// Use WaitFor for eventual consistency in DB
 				var createdUser *usertypes.UserData
 				err := testutils.WaitFor(5*time.Second, 100*time.Millisecond, func() error {
-					// Use the service from the user module to check the DB
-					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(deps.Ctx, userID)
+					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
 					if getUserErr != nil {
-						// If the error is "user not found", keep waiting. Other errors are fatal.
-						if errors.Is(getUserErr, errors.New("user not found")) { // Assuming service returns this specific error string on not found
-							return errors.New("user not found in DB yet") // Continue waiting
-						}
-						return fmt.Errorf("unexpected error from GetUser: %w", getUserErr) // Fatal error
+						return fmt.Errorf("service returned error: %w", getUserErr) // Propagate technical errors
 					}
 					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User == nil {
-						return errors.New("user not found in DB yet (success payload is nil)") // Continue waiting
+						return errors.New("user not found in DB yet or success payload is nil") // Keep waiting
 					}
-					// Corrected: Assign to the variable of type *usertypes.UserData
 					createdUser = getUserResult.Success.(*userevents.GetUserResponsePayload).User
 					return nil // Success, user found
 				})
 				if err != nil {
 					t.Fatalf("User not found in database after waiting: %v", err)
 				}
+
 				if createdUser.UserID != userID {
 					t.Errorf("Created user ID mismatch: expected %q, got %q", userID, createdUser.UserID)
 				}
+				// Removed createdUser.TagNumber check as usertypes.UserData does not contain it.
 
 				// 2. Verify the UserCreated event was published
 				expectedTopic := userevents.UserCreated
@@ -107,13 +93,16 @@ func TestHandleUserSignupRequest(t *testing.T) {
 
 				receivedMsg := msgs[0]
 				var successPayload userevents.UserCreatedPayload
-				// Assuming your utils.Helpers.UnmarshalPayload can unmarshal from message.Message
-				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal UserCreatedPayload: %v", err)
 				}
 
 				if successPayload.UserID != userID {
 					t.Errorf("UserCreatedPayload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
+				}
+				// This check is correct for the event payload
+				if successPayload.TagNumber != nil {
+					t.Errorf("UserCreatedPayload TagNumber mismatch: expected nil, got %d", *successPayload.TagNumber)
 				}
 
 				// Verify correlation ID is propagated
@@ -121,19 +110,16 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Errorf("Correlation ID mismatch: expected %q, got %q", incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey), receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreated},
+			expectHandlerError: false,
+			timeout:            5 * time.Second, // Default timeout for this test case
 		},
 		{
-			name: "Success - User Signup with Tag",
-			setupFn: func(t *testing.T, deps HandlerTestDeps) {
-				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-					t.Fatalf("Failed to clean database before test case: %v", err)
-				}
-				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
-					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
-				}
+			name: "Success - User Signup with Tag (requests availability check)",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// No specific setup needed for this case beyond what SetupTestUserHandler provides.
+				return nil
 			},
-			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
 				payload := userevents.UserSignupRequestPayload{
@@ -146,34 +132,39 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", userevents.UserSignupRequest)
 
-				inputTopic := userevents.UserSignupRequest
-				if err := deps.EventBus.Publish(inputTopic, msg); err != nil {
-					t.Fatalf("Failed to publish message to handler input topic %q: %v", inputTopic, err)
+				// Use testutils.PublishMessage
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
 				}
-				log.Printf("Published message %s to topic %q", msg.UUID, inputTopic)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
+			expectedOutgoingTopics: []string{userevents.TagAvailabilityCheckRequested},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
+				tagNumber := sharedtypes.TagNumber(24)
 
-				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(deps.Ctx, userID)
-
-				if getUserErr == nil && getUserResult.Success != nil {
-					foundUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
-					t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, foundUser)
-				}
-
-				if getUserErr == nil && getUserResult.Failure != nil {
-					failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayload)
-					if !ok || failurePayload.Reason != "user not found" {
-						t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got unexpected failure payload: %+v (error: %v)", getUserResult.Failure, getUserErr)
+				// Verify user is NOT created in the database (via service call)
+				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
+				// Expecting an error or a failure payload indicating "not found"
+				if getUserErr == nil { // No technical error, now check business result
+					if getUserResult.Success != nil {
+						foundUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
+						t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, foundUser)
 					}
-				} else if getUserErr == nil && getUserResult.Failure == nil {
-					t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got nil error and no payload")
+					if getUserResult.Failure == nil {
+						t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got nil results")
+					} else {
+						failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayload)
+						if !ok || failurePayload.Reason != "user not found" { // Assuming service returns this specific reason
+							t.Errorf("Expected GetUser to return 'user not found' failure, but got unexpected failure payload: %+v", getUserResult.Failure)
+						}
+					}
+				} else if !errors.Is(getUserErr, errors.New("user not found")) { // Check if it's the expected "user not found" error
+					t.Errorf("Expected GetUser to return 'user not found' error, but got unexpected error: %v", getUserErr)
 				}
 
+				// Verify the TagAvailabilityCheckRequested event was published
 				expectedTopic := userevents.TagAvailabilityCheckRequested
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -185,11 +176,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 
 				receivedMsg := msgs[0]
 				var checkPayload userevents.TagAvailabilityCheckRequestedPayload
-				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &checkPayload); err != nil {
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &checkPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal TagAvailabilityCheckRequestedPayload: %v", err)
 				}
 
-				tagNumber := sharedtypes.TagNumber(24)
 				if checkPayload.TagNumber != tagNumber {
 					t.Errorf("TagAvailabilityCheckRequestedPayload TagNumber mismatch: expected %d, got %d", tagNumber, checkPayload.TagNumber)
 				}
@@ -206,29 +196,24 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.TagAvailabilityCheckRequested},
+			expectHandlerError: false,
+			timeout:            5 * time.Second, // Default timeout for this test case
 		},
 		{
-			name: "Failure - User Already Exists",
-			setupFn: func(t *testing.T, deps HandlerTestDeps) {
-				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.TestEnvironment.DB); err != nil {
-					t.Fatalf("Failed to clean database before test case: %v", err)
-				}
-				if err := deps.ResetJetStreamState(deps.Ctx, "user"); err != nil {
-					t.Fatalf("Failed to clean NATS streams before test case: %v", err)
-				}
-
+			name: "Failure - User Already Exists (no tag)",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Pre-create the user to simulate "already exists" scenario
 				userID := sharedtypes.DiscordID("testuser-exists-789")
-				tag := sharedtypes.TagNumber(23) // Dummy tag
+				tag := sharedtypes.TagNumber(23) // Dummy tag for pre-creation
 				// Use the service from the user module to create the user
-				createResult, createErr := deps.UserModule.UserService.CreateUser(deps.Ctx, userID, &tag)
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, userID, &tag) // Use env.Ctx
 				if createErr != nil || createResult.Success == nil {
 					t.Fatalf("Failed to pre-create user for test setup: %v, result: %+v", createErr, createResult.Failure)
 				}
 				log.Printf("Pre-created user %q for test", userID)
+				return nil
 			},
-			publishMsgFn: func(t *testing.T, deps HandlerTestDeps) *message.Message {
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-exists-789") // Same user ID as pre-created
 				payload := userevents.UserSignupRequestPayload{
 					UserID:    userID,
@@ -240,38 +225,33 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", userevents.UserSignupRequest)
 
-				inputTopic := userevents.UserSignupRequest
-				if err := deps.EventBus.Publish(inputTopic, msg); err != nil {
-					t.Fatalf("Failed to publish message to handler input topic %q: %v", inputTopic, err)
+				// Use testutils.PublishMessage
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
 				}
-				log.Printf("Published message %s to topic %q", msg.UUID, inputTopic)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps HandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
+			expectedOutgoingTopics: []string{userevents.UserCreationFailed},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// 1. Verify user still exists (no change expected from signup attempt)
 				userID := sharedtypes.DiscordID("testuser-exists-789")
-				// Corrected: Declare variable with the correct type *usertypes.UserData
-				var existingUser *usertypes.UserData
-				// Use the service from the user module to check the DB
-				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(deps.Ctx, userID)
-				// Expect no error and a successful result
+				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
+				// Expect no technical error and a successful result (user was already there)
 				if getUserErr != nil {
 					t.Fatalf("Expected GetUser to succeed for existing user, but got error: %v", getUserErr)
 				}
 				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User == nil {
 					t.Fatalf("Expected GetUser to return success payload for existing user, but got nil. Failure: %+v", getUserResult.Failure)
 				}
-				// Corrected: Assign to the variable of type *usertypes.UserData
-				existingUser = getUserResult.Success.(*userevents.GetUserResponsePayload).User
+				existingUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
 				if existingUser.UserID != userID {
 					t.Errorf("Existing user ID mismatch: expected %q, got %q", userID, existingUser.UserID)
 				}
-				// Assert original role/tag on existingUser (*usertypes.UserData) if applicable
+				// Removed existingUser.TagNumber check as usertypes.UserData does not contain it.
 
 				// 2. Verify the UserCreationFailed event was published
-				expectedTopic := userevents.UserCreationFailed // Assuming the constant is the topic name
+				expectedTopic := userevents.UserCreationFailed
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -282,7 +262,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 
 				receivedMsg := msgs[0]
 				var failedPayload userevents.UserCreationFailedPayload
-				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &failedPayload); err != nil {
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &failedPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal UserCreationFailedPayload: %v", err)
 				}
 
@@ -292,6 +272,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				expectedReason := "user already exists" // Assuming this is the reason from your service/wrapper
 				if failedPayload.Reason != expectedReason {
 					t.Errorf("UserCreationFailedPayload Reason mismatch: expected %q, got %q", expectedReason, failedPayload.Reason)
+				}
+				// This check is correct for the event payload
+				if failedPayload.TagNumber != nil {
+					t.Errorf("UserCreationFailedPayload TagNumber mismatch: expected nil, got %v", failedPayload.TagNumber)
 				}
 
 				// Verify correlation ID is propagated
@@ -305,58 +289,36 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailed},
+			expectHandlerError: false,
+			timeout:            5 * time.Second, // Default timeout for this test case
 		},
 	}
 
+	// Run the test cases using testutils.RunTest
 	for _, tc := range tests {
+		tc := tc // capture range variable for use in t.Run closure
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup test case specific dependencies and state
-			tc.setupFn(t, deps)
+			deps := SetupTestUserHandler(t) // Setup dependencies for each subtest
 
-			receivedMsgs := make(map[string][]*message.Message)
-			subscribers := make(map[string]message.Subscriber)
-			subCtx, cancelSub := context.WithTimeout(deps.Ctx, 5*time.Second)
-			defer cancelSub()
-
-			// Subscribe to each expected outgoing topic
-			for _, topic := range tc.expectedOutgoingTopics {
-				consumerName := fmt.Sprintf("test-consumer-%s-%s", sanitizeTopicForNATS(topic), uuid.New().String()[:8])
-				sub, err := deps.EventBus.Subscribe(subCtx, topic)
-				if err != nil {
-					t.Fatalf("Failed to subscribe to topic %q: %v", topic, err)
-				}
-				subscribers[topic] = deps.EventBus // Store the EventBus
-				log.Printf("Subscribed to topic %q with consumer %q", topic, consumerName)
-
-				// Start a goroutine to collect messages from this subscription
-				go func(topic string, messages <-chan *message.Message) {
-					for msg := range messages {
-						log.Printf("Received message %s on topic %q", msg.UUID, topic)
-						receivedMsgs[topic] = append(receivedMsgs[topic], msg)
-						// Acknowledge the message so it's not redelivered
-						msg.Ack()
-					}
-				}(topic, sub) // Pass the topic and the channel to the goroutine
+			// Construct the testutils.TestCase from the anonymous struct fields
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				// Pass deps to the inner function calls
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					// The tc.validateFn needs access to `deps`, which is captured by this outer closure
+					tc.validateFn(t, deps, env, incomingMsg, receivedMsgs, initialState) // FIX: Pass 'env' here
+				},
+				ExpectError:    tc.expectHandlerError,
+				MessageTimeout: tc.timeout,
 			}
-
-			// --- Publish the incoming message ---
-			incomingMsg := tc.publishMsgFn(t, deps)
-
-			time.Sleep(500 * time.Millisecond)
-
-			// --- Validate the results ---
-			tc.validateFn(t, deps, incomingMsg, receivedMsgs)
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
-}
-
-// sanitizeTopicForNATS is a helper to create a valid NATS consumer name from a topic.
-func sanitizeTopicForNATS(topic string) string {
-	sanitized := strings.ReplaceAll(topic, ".", "_")
-	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
-	sanitized = reg.ReplaceAllString(sanitized, "")
-	sanitized = strings.TrimPrefix(sanitized, "-")
-	sanitized = strings.TrimSuffix(sanitized, "-")
-	return sanitized
 }

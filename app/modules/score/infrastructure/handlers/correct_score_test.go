@@ -184,7 +184,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create response message: failed to create result message",
+			expectedErrMsg: "failed to create ScoreUpdateSuccess message: failed to create result message", // Corrected error message
 		},
 		{
 			name: "Service failure and CreateResultMessage fails",
@@ -320,7 +320,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "unexpected result from service: neither success nor failure", // Corrected error message
 		},
 		{
 			name: "Invalid payload type",

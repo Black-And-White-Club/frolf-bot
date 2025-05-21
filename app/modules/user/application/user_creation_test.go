@@ -36,7 +36,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		userID           sharedtypes.DiscordID
 		tag              *sharedtypes.TagNumber
 		expectedOpResult UserOperationResult
-		expectedErr      error
+		expectedErr      error // This should be the error returned by the mocked serviceWrapper
 	}{
 		{
 			name: "Successfully creates a user",
@@ -60,9 +60,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		{
 			name: "Fails to create a user due to DB error",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// Simulate a DB error that translateDBError will convert to ErrUserAlreadyExists
 				mockDB.EXPECT().
 					CreateUser(gomock.Any(), gomock.Any()).
-					Return(errors.New("user already exists"))
+					Return(errors.New("SQLSTATE 23505: duplicate key value")) // Use a specific SQL error
 			},
 			userID: testUserID,
 			tag:    &testTag,
@@ -71,11 +72,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				Failure: &userevents.UserCreationFailedPayload{
 					UserID:    testUserID,
 					TagNumber: &testTag,
-					Reason:    "user already exists",
+					Reason:    ErrUserAlreadyExists.Error(), // Expected reason from translateDBError
 				},
-				Error: errors.New("user already exists"),
+				Error: ErrUserAlreadyExists, // Expected error from translateDBError
 			},
-			expectedErr: errors.New("CreateUser operation failed: user already exists"),
+			expectedErr: ErrUserAlreadyExists, // The mocked serviceWrapper returns this error directly
 		},
 		{
 			name: "With nil tag pointer",
@@ -99,6 +100,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		{
 			name: "Fails due to unexpected database error",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// Simulate an unexpected DB error
 				mockDB.EXPECT().
 					CreateUser(gomock.Any(), gomock.Any()).
 					Return(errors.New("database connection lost"))
@@ -110,11 +112,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				Failure: &userevents.UserCreationFailedPayload{
 					UserID:    testUserID,
 					TagNumber: &testTag,
-					Reason:    "database connection lost",
+					Reason:    "database connection lost", // translateDBError returns original error
 				},
-				Error: errors.New("database connection lost"),
+				Error: errors.New("database connection lost"), // translateDBError returns original error
 			},
-			expectedErr: errors.New("CreateUser operation failed: database connection lost"),
+			expectedErr: errors.New("database connection lost"), // The mocked serviceWrapper returns this error directly
 		},
 		{
 			name: "Fails due to empty Discord ID",
@@ -128,11 +130,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				Failure: &userevents.UserCreationFailedPayload{
 					UserID:    "",
 					TagNumber: &testTag,
-					Reason:    "invalid Discord ID",
+					Reason:    ErrInvalidDiscordID.Error(),
 				},
-				Error: errors.New("invalid Discord ID"),
+				Error: ErrInvalidDiscordID,
 			},
-			expectedErr: errors.New("invalid Discord ID"),
+			expectedErr: ErrInvalidDiscordID,
 		},
 		{
 			name: "Fails due to negative tag number",
@@ -146,13 +148,12 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				Failure: &userevents.UserCreationFailedPayload{
 					UserID:    testUserID,
 					TagNumber: &negativeTag,
-					Reason:    "tag number cannot be negative",
+					Reason:    ErrNegativeTagNumber.Error(),
 				},
-				Error: errors.New("tag number cannot be negative"),
+				Error: ErrNegativeTagNumber,
 			},
-			expectedErr: errors.New("tag number cannot be negative"),
+			expectedErr: ErrNegativeTagNumber,
 		},
-		// Add a test case for nil context
 		{
 			name: "Fails due to nil context",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
@@ -162,10 +163,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:    &testTag,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: nil,
-				Error:   errors.New("context cannot be nil"),
+				Failure: nil, // Nil context returns a failure payload with nil Failure field
+				Error:   ErrNilContext,
 			},
-			expectedErr: errors.New("context cannot be nil"),
+			expectedErr: ErrNilContext,
 		},
 	}
 

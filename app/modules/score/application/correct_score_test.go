@@ -37,7 +37,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		score          sharedtypes.Score
 		tagNumber      *sharedtypes.TagNumber
 		expectedResult ScoreOperationResult
-		expectedError  error
+		expectedError  error // This should be nil if the service returns a Failure payload
 	}{
 		{
 			name: "Successfully corrects score",
@@ -105,9 +105,10 @@ func TestScoreService_CorrectScore(t *testing.T) {
 					UserID:  testUserID,
 					Error:   "database connection failed",
 				},
-				Error: errors.New("database connection failed"),
+				// The 'Error' field below was incorrect as ScoreOperationResult does not have it.
+				// Error: errors.New("database connection failed"),
 			},
-			expectedError: errors.New("database connection failed"),
+			expectedError: nil, // Corrected: The service returns nil error for this case
 		},
 		{
 			name: "Fails due to invalid tag number",
@@ -129,9 +130,10 @@ func TestScoreService_CorrectScore(t *testing.T) {
 					UserID:  testUserID,
 					Error:   "invalid tag number",
 				},
-				Error: errors.New("invalid tag number"),
+				// The 'Error' field below was incorrect as ScoreOperationResult does not have it.
+				// Error: errors.New("invalid tag number"),
 			},
-			expectedError: errors.New("invalid tag number"),
+			expectedError: nil, // Corrected: The service returns nil error for this case
 		},
 	}
 
@@ -150,6 +152,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 				metrics: metrics,
 				tracer:  tracer,
 				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+					// In test, simply call the service function directly without wrapping
 					return serviceFunc(ctx)
 				},
 			}
@@ -160,30 +163,30 @@ func TestScoreService_CorrectScore(t *testing.T) {
 
 			// Validate result
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
-				t.Errorf("❌ Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
+				t.Errorf("Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
 			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
 				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
 				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
 				if okGot && okExpected && *successGot != *successExpected {
-					t.Errorf("❌ Mismatched success payload, got: %v, expected: %v", successGot, successExpected)
+					t.Errorf("Mismatched success payload, got: %v, expected: %v", successGot, successExpected)
 				}
 			}
 
 			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
-				t.Errorf("❌ Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
+				t.Errorf("Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
 			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
 				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
 				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
 				if okGot && okExpected && *failureGot != *failureExpected {
-					t.Errorf("❌ Mismatched failure payload, got: %v, expected: %v", failureGot, failureExpected)
+					t.Errorf("Mismatched failure payload, got: %v, expected: %v", failureGot, failureExpected)
 				}
 			}
 
 			// Validate error
 			if (err != nil) != (tt.expectedError != nil) {
-				t.Errorf("❌ Unexpected error: %v", err)
-			} else if err != nil && err.Error() != tt.expectedError.Error() {
-				t.Errorf("❌ Mismatched error message, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
+				t.Errorf("Unexpected error: %v", err)
+			} else if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
+				t.Errorf("Mismatched error message, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
 			}
 		})
 	}

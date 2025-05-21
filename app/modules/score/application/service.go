@@ -102,9 +102,12 @@ func serviceWrapper(
 		}
 	}()
 
-	// Call the service function **with new context**
+	// Call the service function
 	result, err = serviceFunc(ctx)
-	if err != nil {
+
+	// If the service function returned an error AND did NOT populate a Failure payload,
+	// then it's a true system error that should be propagated.
+	if err != nil && result.Failure == nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
 		logger.ErrorContext(ctx, "Error in "+operationName,
 			attr.RoundID("round_id", roundID),
@@ -113,18 +116,23 @@ func serviceWrapper(
 		)
 		metrics.RecordOperationFailure(ctx, operationName, roundID)
 		span.RecordError(wrappedErr)
-		return ScoreOperationResult{}, wrappedErr
+		return ScoreOperationResult{}, wrappedErr // Return empty result and wrapped error
 	}
 
-	// Log success
-	logger.InfoContext(ctx, operationName+" completed successfully",
-		attr.String("operation", operationName),
-		attr.RoundID("round_id", roundID),
-		attr.ExtractCorrelationID(ctx),
-	)
-	metrics.RecordOperationSuccess(ctx, operationName, roundID)
+	// If there was an error but a Failure payload was populated, or no error occurred,
+	// log success and return the result.
+	if err == nil || result.Failure != nil { // This condition explicitly handles both success and handled business failures
+		logger.InfoContext(ctx, operationName+" completed successfully",
+			attr.String("operation", operationName),
+			attr.RoundID("round_id", roundID),
+			attr.ExtractCorrelationID(ctx),
+		)
+		metrics.RecordOperationSuccess(ctx, operationName, roundID)
+		return result, nil // Return the actual result and nil error
+	}
 
-	return result, nil
+	// Fallback for unexpected scenarios (should ideally not be reached)
+	return ScoreOperationResult{}, fmt.Errorf("unexpected state after %s operation", operationName)
 }
 
 // ScoreOperationResult represents a generic result from a score operation

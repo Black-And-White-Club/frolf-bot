@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -28,13 +30,15 @@ func TestProcessRoundScores(t *testing.T) {
 
 	// Define test cases using table-driven approach
 	testCases := []struct {
-		name           string
-		setupFunc      func() (sharedtypes.RoundID, []sharedtypes.ScoreInfo, map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-		expectError    bool
-		validateFunc   func(t *testing.T, roundID sharedtypes.RoundID, result interface{}, err error)
-		cleanupBefore  bool
-		concurrent     bool
-		concurrentSize int
+		name                 string
+		setupFunc            func() (sharedtypes.RoundID, []sharedtypes.ScoreInfo, map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+		expectError          bool
+		expectFailurePayload bool
+		expectedFailureError string
+		validateFunc         func(t *testing.T, roundID sharedtypes.RoundID, result scoreservice.ScoreOperationResult, err error)
+		cleanupBefore        bool
+		concurrent           bool
+		concurrentSize       int
 	}{
 		{
 			name: "Successfully processes round scores with tags",
@@ -88,16 +92,20 @@ func TestProcessRoundScores(t *testing.T) {
 
 				return sharedtypes.RoundID(parsedUUID), scores, expectedTagMappings
 			},
-			expectError: false,
-			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result interface{}, err error) {
+			expectError:          false,
+			expectFailurePayload: false,
+			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result scoreservice.ScoreOperationResult, err error) {
 				if err != nil {
-					t.Fatalf("Failed to process round scores: %v", err)
+					t.Fatalf("Expected nil error, got: %v", err)
+				}
+				if result.Success == nil {
+					t.Fatalf("Expected success payload, got nil")
 				}
 
-				// Fix the type assertion to match the actual return type []sharedtypes.TagMapping
-				tagMappingsResult, ok := result.([]sharedtypes.TagMapping)
+				// Declare and assign successPayload here, where it's used
+				successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
 				if !ok {
-					t.Fatalf("Invalid result type, expected []sharedtypes.TagMapping, got %T", result)
+					t.Fatalf("Invalid success payload type, expected *ProcessRoundScoresSuccessPayload, got %T", result.Success)
 				}
 
 				// Verify scores were stored in DB
@@ -110,8 +118,8 @@ func TestProcessRoundScores(t *testing.T) {
 					t.Error("Expected scores in DB, got none")
 				}
 
-				// Optional: Check tag mappings
-				if len(tagMappingsResult) == 0 {
+				// Optional: Check tag mappings from the success payload
+				if len(successPayload.TagMappings) == 0 {
 					t.Error("Expected tag mappings in result, got none")
 				}
 				// Add more specific checks for tag mappings if needed
@@ -161,10 +169,23 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 				return sharedtypes.RoundID(parsedUUID), scores, nil
 			},
-			expectError: false,
-			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result interface{}, err error) {
+			expectError:          false,
+			expectFailurePayload: false,
+			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result scoreservice.ScoreOperationResult, err error) {
 				if err != nil {
-					t.Fatalf("Failed to process round scores: %v", err)
+					t.Fatalf("Expected nil error, got: %v", err)
+				}
+				if result.Success == nil {
+					t.Fatalf("Expected success payload, got nil")
+				}
+
+				successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+				if !ok {
+					t.Fatalf("Invalid success payload type, expected *ProcessRoundScoresSuccessPayload, got %T", result.Success)
+				}
+				// Use successPayload to avoid "declared and not used" warning
+				if successPayload.RoundID != roundID {
+					t.Errorf("Mismatched RoundID in success payload, got: %v, expected: %v", successPayload.RoundID, roundID)
 				}
 
 				// Verify scores were stored in DB
@@ -193,14 +214,25 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 				return sharedtypes.RoundID(parsedUUID), []sharedtypes.ScoreInfo{}, nil
 			},
-			expectError: true,
-			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result interface{}, err error) {
-				if err == nil {
-					t.Error("Expected error when processing empty score list, got nil")
+			expectError:          false, // Expect nil Go error
+			expectFailurePayload: true,  // Expect a failure payload
+			expectedFailureError: "cannot process empty score list",
+			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result scoreservice.ScoreOperationResult, err error) {
+				if err != nil {
+					t.Errorf("Expected nil error for business failure, got: %v", err)
 				}
-				// Check the error message content
-				if err != nil && !strings.Contains(err.Error(), "cannot process empty score list") {
-					t.Errorf("Expected error message to contain 'cannot process empty score list', got: %v", err)
+				if result.Success != nil {
+					t.Errorf("Expected nil success payload, got %+v", result.Success)
+				}
+				if result.Failure == nil {
+					t.Errorf("Expected non-nil failure payload, got nil")
+				} else {
+					failurePayload, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
+					if !ok {
+						t.Errorf("Expected *ProcessRoundScoresFailurePayload, got %T", result.Failure)
+					} else if failurePayload.Error != "cannot process empty score list" {
+						t.Errorf("Mismatched failure error message, got: %q, expected: %q", failurePayload.Error, "cannot process empty score list")
+					}
 				}
 			},
 			cleanupBefore: true,
@@ -230,10 +262,14 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 				return sharedtypes.RoundID(parsedUUID), scores, nil
 			},
-			expectError: false,
-			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result interface{}, err error) {
+			expectError:          false,
+			expectFailurePayload: false,
+			validateFunc: func(t *testing.T, roundID sharedtypes.RoundID, result scoreservice.ScoreOperationResult, err error) {
 				if err != nil {
-					t.Fatalf("Failed to process round scores: %v", err)
+					t.Fatalf("Expected nil error, got: %v", err)
+				}
+				if result.Success == nil {
+					t.Fatalf("Expected success payload, got nil")
 				}
 
 				// Verify scores were stored in DB in sorted order
@@ -263,8 +299,9 @@ func TestProcessRoundScores(t *testing.T) {
 				placeholderID, _ := uuid.Parse("00000000-0000-0000-0000-000000000000")
 				return sharedtypes.RoundID(placeholderID), nil, nil
 			},
-			expectError:   false,
-			cleanupBefore: true,
+			expectError:          false,
+			expectFailurePayload: false,
+			cleanupBefore:        true,
 		},
 	}
 
@@ -289,12 +326,7 @@ func TestProcessRoundScores(t *testing.T) {
 				result, err := deps.Service.ProcessRoundScores(deps.Ctx, roundID, scores)
 
 				// Validate the result
-				// Pass result.Success if expectError is false, otherwise pass nil
-				validateResult := result.Success
-				if tc.expectError {
-					validateResult = nil
-				}
-				tc.validateFunc(t, roundID, validateResult, err)
+				tc.validateFunc(t, roundID, result, err) // Pass the entire result struct
 			}
 		})
 	}
@@ -357,14 +389,10 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 				errChan <- err
 				return
 			}
-			if result.Error != nil {
-				errChan <- result.Error
-				return
-			}
 			if result.Failure != nil {
 				// Convert business logic failure to an error for the channel
-				if failureErr, ok := result.Failure.(error); ok {
-					errChan <- failureErr
+				if failureErr, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailurePayload); ok {
+					errChan <- fmt.Errorf("business failure: %s", failureErr.Error)
 				} else {
 					errChan <- fmt.Errorf("concurrent test: unexpected failure result type: %T", result.Failure)
 				}

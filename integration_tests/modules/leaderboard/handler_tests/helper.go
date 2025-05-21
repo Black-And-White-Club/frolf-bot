@@ -7,8 +7,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"regexp"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +16,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	eventbusmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/eventbus"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
@@ -228,30 +225,6 @@ func tagPtr(n sharedtypes.TagNumber) *sharedtypes.TagNumber {
 
 func boolPtr(b bool) *bool {
 	return &b
-}
-
-// sanitizeForNATS sanitizes a string for use in NATS topics or durable names.
-func sanitizeForNATS(s string) string {
-	sanitized := strings.ReplaceAll(s, ".", "_")
-	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
-	sanitized = reg.ReplaceAllString(sanitized, "")
-	sanitized = strings.Trim(sanitized, "-_")
-	return sanitized
-}
-
-func sortLeaderboardData(data leaderboardtypes.LeaderboardData) {
-	slices.SortFunc(data, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber == 0 && b.TagNumber == 0 {
-			return 0
-		}
-		if a.TagNumber == 0 {
-			return -1
-		}
-		if b.TagNumber == 0 {
-			return 1
-		}
-		return int(a.TagNumber - b.TagNumber)
-	})
 }
 
 // WaitForMessageProcessed waits for a signal on a channel indicating a message has been processed.

@@ -3,7 +3,6 @@ package scorehandler_integration_tests
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,28 +15,97 @@ import (
 	"github.com/google/uuid"
 )
 
-const CorrectScoreRequestTopic = scoreevents.ScoreUpdateRequest
+// publishScoreUpdateRequest helper to publish a ScoreUpdateRequest message.
+func publishScoreUpdateRequest(t *testing.T, deps ScoreHandlerTestDeps, payload scoreevents.ScoreUpdateRequestPayload) *message.Message {
+	t.Helper()
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Failed to marshal request payload: %v", err)
+	}
+	msg := message.NewMessage(uuid.New().String(), data)
+	correlationID := uuid.New().String()
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
+	msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequest)
+
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequest, msg); err != nil {
+		t.Fatalf("Failed to publish ScoreUpdateRequest: %v", err)
+	}
+	return msg
+}
+
+// validateScoreUpdateSuccess helper to validate a ScoreUpdateSuccess message.
+func validateScoreUpdateSuccess(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, responseMsg *message.Message) {
+	t.Helper()
+	var successPayload scoreevents.ScoreUpdateSuccessPayload
+	if err := deps.ScoreModule.Helper.UnmarshalPayload(responseMsg, &successPayload); err != nil {
+		t.Fatalf("Unmarshal error for ScoreUpdateSuccessPayload: %v", err)
+	}
+
+	var incomingPayload scoreevents.ScoreUpdateRequestPayload
+	if err := json.Unmarshal(incomingMsg.Payload, &incomingPayload); err != nil {
+		t.Fatalf("Failed to unmarshal incoming payload: %v", err)
+	}
+
+	if successPayload.RoundID != incomingPayload.RoundID {
+		t.Errorf("ScoreUpdateSuccessPayload RoundID mismatch: expected %v, got %v", incomingPayload.RoundID, successPayload.RoundID)
+	}
+	if successPayload.UserID != incomingPayload.UserID {
+		t.Errorf("ScoreUpdateSuccessPayload UserID mismatch: expected %q, got %q", incomingPayload.UserID, successPayload.UserID)
+	}
+	if successPayload.Score != incomingPayload.Score {
+		t.Errorf("ScoreUpdateSuccessPayload Score mismatch: expected %v, got %v", incomingPayload.Score, successPayload.Score)
+	}
+	if responseMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+		t.Error("Correlation ID mismatch in success message")
+	}
+}
+
+// validateScoreUpdateFailure helper to validate a ScoreUpdateFailure message.
+func validateScoreUpdateFailure(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, responseMsg *message.Message) {
+	t.Helper()
+	var failurePayload scoreevents.ScoreUpdateFailurePayload
+	if err := deps.ScoreModule.Helper.UnmarshalPayload(responseMsg, &failurePayload); err != nil {
+		t.Fatalf("Unmarshal error for ScoreUpdateFailurePayload: %v", err)
+	}
+
+	var incomingPayload scoreevents.ScoreUpdateRequestPayload
+	if err := json.Unmarshal(incomingMsg.Payload, &incomingPayload); err != nil {
+		t.Fatalf("Failed to unmarshal incoming payload: %v", err)
+	}
+
+	if failurePayload.RoundID != incomingPayload.RoundID {
+		t.Errorf("ScoreUpdateFailurePayload RoundID mismatch: expected %v, got %v", incomingPayload.RoundID, failurePayload.RoundID)
+	}
+	if failurePayload.UserID != incomingPayload.UserID {
+		t.Errorf("ScoreUpdateFailurePayload UserID mismatch: expected %q, got %q", incomingPayload.UserID, failurePayload.UserID)
+	}
+	if failurePayload.Error == "" {
+		t.Error("Expected non-empty error message in failure payload")
+	}
+	if responseMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+		t.Error("Correlation ID mismatch in failure message")
+	}
+}
 
 func TestHandleCorrectScoreRequest(t *testing.T) {
-	deps := SetupTestScoreHandler(t, testEnv)
-	generator := testutils.NewTestDataGenerator(100)
+	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
-	tests := []struct {
+	testCases := []struct {
 		name                   string
-		setupFn                func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID
-		publishMsgFn           func(t *testing.T, deps ScoreHandlerTestDeps, roundID sharedtypes.RoundID, generator *testutils.TestDataGenerator) *message.Message
-		validateFn             func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) // Removed handlerErr parameter
-		expectedOutgoingTopics []string                                                                                                                // Topics the test will subscribe to and wait for messages on
+		users                  []testutils.User // Users defined at the test case level
+		setupFn                func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User) sharedtypes.RoundID
+		publishMsgFn           func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message
+		validateFn             func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialRoundID sharedtypes.RoundID)
+		expectedOutgoingTopics []string
+		expectHandlerError     bool
+		timeout                time.Duration
 	}{
 		{
-			name: "Success - Correct score with valid data",
-			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
+			name:  "Success - Correct score with valid data",
+			users: generator.GenerateUsers(2), // Pre-generate users for this test case
+			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User) sharedtypes.RoundID {
 				ctx := deps.Ctx
-				_ = testutils.CleanScoreIntegrationTables(ctx, deps.DB)
-				_ = deps.ResetJetStreamState(ctx, "score")
-				_ = deps.ResetJetStreamState(ctx, "leaderboard")
 
-				users := generator.GenerateUsers(2)
 				roundID := sharedtypes.RoundID(uuid.New())
 				tag1 := sharedtypes.TagNumber(42)
 				scores := []sharedtypes.ScoreInfo{
@@ -49,59 +117,23 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				if processErr != nil || processResult.Error != nil {
 					t.Fatalf("Failed to process initial round scores for setup: %v, result: %+v", processErr, processResult.Error)
 				}
-
 				return roundID
 			},
-			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, roundID sharedtypes.RoundID, generator *testutils.TestDataGenerator) *message.Message {
-				users := generator.GenerateUsers(2)
+			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
 					RoundID: roundID,
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(-3),
 				}
-
-				data, _ := json.Marshal(payload)
-				msg := message.NewMessage(uuid.New().String(), data)
-				correlationID := uuid.New().String()
-				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-				msg.Metadata.Set("topic", CorrectScoreRequestTopic)
-
-				if err := deps.EventBus.Publish(CorrectScoreRequestTopic, msg); err != nil {
-					t.Fatalf("Failed to publish: %v", err)
-				}
-				return msg
+				return publishScoreUpdateRequest(t, deps, payload)
 			},
-			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message) {
+			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
 				expectedSuccessTopic := scoreevents.ScoreUpdateSuccess
 				successMsgs := received[expectedSuccessTopic]
 				if len(successMsgs) != 1 {
 					t.Fatalf("Expected 1 success message on topic %q, got %d", expectedSuccessTopic, len(successMsgs))
 				}
-
-				successMsg := successMsgs[0]
-				var successPayload scoreevents.ScoreUpdateSuccessPayload
-				err := deps.ScoreModule.Helper.UnmarshalPayload(successMsg, &successPayload)
-				if err != nil {
-					t.Fatalf("Unmarshal error for ScoreUpdateSuccessPayload: %v", err)
-				}
-
-				var incomingPayload scoreevents.ScoreUpdateRequestPayload
-				if err := json.Unmarshal(incomingMsg.Payload, &incomingPayload); err != nil {
-					t.Fatalf("Failed to unmarshal incoming payload: %v", err)
-				}
-
-				if successPayload.RoundID != incomingPayload.RoundID {
-					t.Errorf("ScoreUpdateSuccessPayload RoundID mismatch: expected %v, got %v", incomingPayload.RoundID, successPayload.RoundID)
-				}
-				if successPayload.UserID != incomingPayload.UserID {
-					t.Errorf("ScoreUpdateSuccessPayload UserID mismatch: expected %q, got %q", incomingPayload.UserID, successPayload.UserID)
-				}
-				if successPayload.Score != incomingPayload.Score {
-					t.Errorf("ScoreUpdateSuccessPayload Score mismatch: expected %v, got %v", incomingPayload.Score, successPayload.Score)
-				}
-				if successMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-					t.Error("Correlation ID mismatch in success message")
-				}
+				validateScoreUpdateSuccess(t, deps, incomingMsg, successMsgs[0])
 
 				unexpectedFailureTopic := scoreevents.ScoreUpdateFailure
 				if len(received[unexpectedFailureTopic]) > 0 {
@@ -112,51 +144,50 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedBatchTopic, len(received[unexpectedBatchTopic]))
 				}
 			},
+			// Update to use the actual event topics defined in scoreevents package
 			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateSuccess},
+			expectHandlerError:     false,
+			timeout:                5 * time.Second,
 		},
 		{
-			name: "Failure - Score record not found",
-			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
-				_ = testutils.CleanScoreIntegrationTables(deps.Ctx, deps.DB)
-				_ = deps.ResetJetStreamState(deps.Ctx, "score")
+			name:  "Failure - Score record not found",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User) sharedtypes.RoundID {
 				return sharedtypes.RoundID(uuid.New()) // Return a RoundID that doesn't exist in the DB
 			},
-			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, roundID sharedtypes.RoundID, generator *testutils.TestDataGenerator) *message.Message {
-				user := generator.GenerateUsers(1)[0]
+			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
 					RoundID: roundID, // This RoundID does not have a score record
-					UserID:  sharedtypes.DiscordID(user.UserID),
+					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(-1),
 				}
-
-				data, _ := json.Marshal(payload)
-				msg := message.NewMessage(uuid.New().String(), data)
-				correlationID := uuid.New().String()
-				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-				msg.Metadata.Set("topic", CorrectScoreRequestTopic)
-
-				if err := deps.EventBus.Publish(CorrectScoreRequestTopic, msg); err != nil {
-					t.Fatalf("Failed to publish: %v", err)
-				}
-				return msg
+				return publishScoreUpdateRequest(t, deps, payload)
 			},
-			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message) {
-				// Expect no messages to be published on any topic
-				if len(received) > 0 {
-					t.Errorf("Expected no messages to be published, but received: %+v", received)
+			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
+				// Based on the handler, we should expect a failure message
+				failureTopic := scoreevents.ScoreUpdateFailure
+				failureMsgs := received[failureTopic]
+				if len(failureMsgs) != 1 {
+					t.Fatalf("Expected 1 failure message on topic %q, got %d", failureTopic, len(failureMsgs))
 				}
-				// Note: The router will log the handler's error, but we don't assert on logs in this test.
+				validateScoreUpdateFailure(t, deps, incomingMsg, failureMsgs[0])
+
+				// Verify no success message was sent
+				successTopic := scoreevents.ScoreUpdateSuccess
+				if len(received[successTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d", successTopic, len(received[successTopic]))
+				}
 			},
-			expectedOutgoingTopics: []string{}, // Expect no outgoing messages
+			// Update to use the actual event topics defined in scoreevents package
+			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailure},
+			expectHandlerError:     false, // The handler should handle this gracefully with a failure message
+			timeout:                5 * time.Second,
 		},
 		{
-			name: "Failure - Invalid Score Value",
-			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, generator *testutils.TestDataGenerator) sharedtypes.RoundID {
+			name:  "Failure - Invalid Score Value",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User) sharedtypes.RoundID {
 				ctx := deps.Ctx
-				_ = testutils.CleanScoreIntegrationTables(ctx, deps.DB)
-				_ = deps.ResetJetStreamState(ctx, "score")
-
-				users := generator.GenerateUsers(1)
 				roundID := sharedtypes.RoundID(uuid.New())
 				scores := []sharedtypes.ScoreInfo{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), Score: sharedtypes.Score(0)},
@@ -166,103 +197,98 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				if processErr != nil || processResult.Error != nil {
 					t.Fatalf("Failed to process initial round scores for setup: %v, result: %+v", processErr, processResult.Error)
 				}
-
 				return roundID
 			},
-			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, roundID sharedtypes.RoundID, generator *testutils.TestDataGenerator) *message.Message {
-				user := generator.GenerateUsers(1)[0]
+			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
 					RoundID: roundID,
-					UserID:  sharedtypes.DiscordID(user.UserID),
+					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(99999), // Intentionally invalid score
 				}
+				return publishScoreUpdateRequest(t, deps, payload)
+			},
+			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
+				// Based on the handler, we should expect a failure message for invalid score
+				failureTopic := scoreevents.ScoreUpdateFailure
+				failureMsgs := received[failureTopic]
+				if len(failureMsgs) != 1 {
+					t.Fatalf("Expected 1 failure message on topic %q, got %d", failureTopic, len(failureMsgs))
+				}
+				validateScoreUpdateFailure(t, deps, incomingMsg, failureMsgs[0])
 
-				data, _ := json.Marshal(payload)
-				msg := message.NewMessage(uuid.New().String(), data)
+				// Verify no success message was sent
+				successTopic := scoreevents.ScoreUpdateSuccess
+				if len(received[successTopic]) > 0 {
+					t.Errorf("Expected no messages on topic %q, but received %d", successTopic, len(received[successTopic]))
+				}
+			},
+			// Update to use the actual event topics defined in scoreevents package
+			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailure},
+			expectHandlerError:     false, // The handler should handle this gracefully with a failure message
+			timeout:                5 * time.Second,
+		},
+		{
+			name:  "Failure - Invalid Payload Format",
+			users: generator.GenerateUsers(1),
+			setupFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User) sharedtypes.RoundID {
+				return sharedtypes.RoundID(uuid.New())
+			},
+			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
+				// Create a message with invalid JSON
+				msg := message.NewMessage(uuid.New().String(), []byte("invalid JSON"))
 				correlationID := uuid.New().String()
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-				msg.Metadata.Set("topic", CorrectScoreRequestTopic)
+				msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequest)
 
-				if err := deps.EventBus.Publish(CorrectScoreRequestTopic, msg); err != nil {
-					t.Fatalf("Failed to publish: %v", err)
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequest, msg); err != nil {
+					t.Fatalf("Failed to publish invalid message: %v", err)
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message) {
-				// Expect no messages to be published on any topic
-				if len(received) > 0 {
-					t.Errorf("Expected no messages to be published, but received: %+v", received)
+			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
+				// No messages should be published for unmarshal errors
+				for topic, msgs := range received {
+					if len(msgs) > 0 {
+						t.Errorf("Expected no messages on topic %q, but received %d", topic, len(msgs))
+					}
 				}
-				// Note: The router will log the handler's error, but we don't assert on logs in this test.
 			},
-			expectedOutgoingTopics: []string{}, // Expect no outgoing messages
+			expectedOutgoingTopics: []string{},
+			expectHandlerError:     true, // We expect an error for unmarshal failure
+			timeout:                5 * time.Second,
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
+		tc := tc // Capture range variable for use in closures
 		t.Run(tc.name, func(t *testing.T) {
-			roundID := tc.setupFn(t, deps, generator)
+			deps := SetupTestScoreHandler(t) // Setup per-test dependencies for this subtest
+			users := tc.users                // Use the pre-generated users for this test case
 
-			received := make(map[string][]*message.Message)
-			ctx, cancel := context.WithTimeout(deps.Ctx, 8*time.Second)
-			defer cancel()
+			// Execute the custom setup function to get the initial state (roundID)
+			initialRoundID := tc.setupFn(t, deps, users)
 
-			wg := &sync.WaitGroup{}
-			for _, topic := range tc.expectedOutgoingTopics {
-				wg.Add(1)
-				sub, err := deps.EventBus.Subscribe(ctx, topic)
-				if err != nil {
-					t.Fatalf("Subscribe failed: %v", err)
-				}
-
-				go func(topic string, ch <-chan *message.Message) {
-					defer wg.Done()
-					for {
-						select {
-						case msg, ok := <-ch:
-							if !ok {
-								return
-							}
-							received[topic] = append(received[topic], msg)
-							msg.Ack()
-						case <-ctx.Done():
-							return
-						}
-					}
-				}(topic, sub)
+			// Construct the generic testutils.TestCase
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					// This SetupFn for testutils.TestCase should just return the already setup initialState
+					return initialRoundID
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					// Now we can use the pre-generated users directly
+					return tc.publishMsgFn(t, deps, users, initialRoundID)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incoming *message.Message, received map[string][]*message.Message, initialState interface{}) {
+					// Pass the initialState (which is initialRoundID) to the custom validateFn
+					tc.validateFn(t, deps, incoming, received, initialState.(sharedtypes.RoundID))
+				},
+				ExpectError:    tc.expectHandlerError,
+				MessageTimeout: tc.timeout, // Pass the timeout
 			}
-
-			time.Sleep(100 * time.Millisecond)
-
-			incomingMsg := tc.publishMsgFn(t, deps, roundID, generator)
-
-			// Wait for all expected messages to be received or timeout
-			waitStartTime := time.Now()
-			for {
-				allReceived := true
-				for _, topic := range tc.expectedOutgoingTopics {
-					if len(received[topic]) == 0 {
-						allReceived = false
-						break
-					}
-				}
-				if allReceived {
-					break
-				}
-
-				// If we time out and no messages were expected, this is okay.
-				// If messages were expected, this is a failure.
-				if time.Since(waitStartTime) > 7*time.Second {
-					if len(tc.expectedOutgoingTopics) > 0 {
-						t.Fatalf("Timeout waiting for expected messages on all topics. Received: %+v", received)
-					}
-					break // Exit loop if no messages expected and timed out
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-
-			// Call validateFn without handlerErr
-			tc.validateFn(t, deps, incomingMsg, received)
+			// Run the test using the testutils.RunTest helper
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

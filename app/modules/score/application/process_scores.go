@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
@@ -32,7 +33,13 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 				roundIDAttr,
 				attr.Error(err),
 			)
-			return ScoreOperationResult{Error: err}, err
+			// Return a failure payload for business logic errors from ProcessScoresForStorage
+			return ScoreOperationResult{
+				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					RoundID: roundID,
+					Error:   err.Error(),
+				},
+			}, nil // Return nil error to indicate handled business failure
 		}
 
 		tagMappings := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(processedScores))
@@ -61,7 +68,13 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 				roundIDAttr,
 				attr.Error(err),
 			)
-			return ScoreOperationResult{Error: err}, err
+			// Return a failure payload for business logic errors from LogScores
+			return ScoreOperationResult{
+				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					RoundID: roundID,
+					Error:   err.Error(),
+				},
+			}, nil // Return nil error to indicate handled business failure
 		}
 		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 		s.metrics.RecordScoreProcessingSuccess(ctx, roundID)
@@ -79,6 +92,12 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 			roundIDAttr,
 			attr.Int("num_tag_mappings", len(tagMappingPayload)),
 		)
-		return ScoreOperationResult{Success: tagMappingPayload}, nil
+		// Wrap the tagMappingPayload in the expected success struct
+		return ScoreOperationResult{
+			Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+				RoundID:     roundID,
+				TagMappings: tagMappingPayload,
+			},
+		}, nil
 	})
 }

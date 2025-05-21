@@ -2,6 +2,7 @@ package scoreservice
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
@@ -12,6 +13,27 @@ import (
 // CorrectScore updates a player's score and returns the appropriate payload.
 func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error) {
 	return s.serviceWrapper(ctx, "CorrectScore", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
+		// Validate the incoming score value at the service layer
+		// Adjusted bounds for disc golf: assuming a valid score is between -36 and +72 (e.g., 18 holes, -2 per hole to +4 per hole).
+		// Adjust these bounds based on your actual game rules and typical course pars.
+		if score < -36 || score > 72 {
+			validationError := fmt.Errorf("invalid score value: %v. Score must be between -36 and 72 for disc golf", score)
+			s.logger.ErrorContext(ctx, "Invalid score value received",
+				attr.ExtractCorrelationID(ctx),
+				attr.RoundID("round_id", roundID),
+				attr.String("user_id", string(userID)),
+				attr.Any("score", score),
+				attr.Error(validationError),
+			)
+			return ScoreOperationResult{
+				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					RoundID: roundID,
+					UserID:  userID,
+					Error:   validationError.Error(),
+				},
+			}, nil // Return nil error as this is a handled business validation failure
+		}
+
 		scoreInfo := sharedtypes.ScoreInfo{
 			UserID:    userID,
 			Score:     score,
@@ -27,14 +49,17 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 				attr.String("user_id", string(userID)),
 				attr.Error(err),
 			)
+			// If there's a business error (like record not found),
+			// return the Failure payload and a nil error.
+			// This signals that the business logic handled the error,
+			// and it's not a system error to be propagated further as an 'error'.
 			return ScoreOperationResult{
 				Failure: &scoreevents.ScoreUpdateFailurePayload{
 					RoundID: roundID,
 					UserID:  userID,
-					Error:   err.Error(), // Use the error message from the DB.
+					Error:   err.Error(),
 				},
-				Error: err,
-			}, err
+			}, nil
 		}
 		s.metrics.RecordScoreCorrectionSuccess(ctx, roundID)
 		s.logger.InfoContext(ctx, "Score corrected successfully",
