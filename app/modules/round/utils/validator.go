@@ -36,11 +36,11 @@ func (v *RoundValidatorImpl) ValidateBaseRoundPayload(input roundtypes.BaseRound
 		errs = append(errs, "start time cannot be empty")
 	}
 
-	if input.Location == nil {
+	if input.Location == nil || *input.Location == "" {
 		errs = append(errs, "location cannot be empty")
 	}
 
-	if input.Description == nil {
+	if input.Description == nil || *input.Description == "" {
 		errs = append(errs, "description cannot be empty")
 	}
 
@@ -55,15 +55,15 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 		errs = append(errs, "title cannot be empty")
 	}
 
-	if input.StartTime == "" { // Check for empty string instead of nil
+	if input.StartTime == "" {
 		errs = append(errs, "start time cannot be empty")
 	}
 
-	if input.Location == nil {
+	if input.Location == nil || *input.Location == "" {
 		errs = append(errs, "location cannot be empty")
 	}
 
-	if input.Description == nil {
+	if input.Description == nil || *input.Description == "" {
 		errs = append(errs, "description cannot be empty")
 	}
 

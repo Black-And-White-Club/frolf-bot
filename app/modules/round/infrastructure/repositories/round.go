@@ -21,12 +21,9 @@ type RoundDBImpl struct {
 
 // CreateRound creates a new round in the database and retrieves the generated ID.
 func (db *RoundDBImpl) CreateRound(ctx context.Context, round *roundtypes.Round) error {
-	// In RoundDBImpl.CreateRound
-	err := db.DB.NewInsert().
+	_, err := db.DB.NewInsert().
 		Model(round).
-		ExcludeColumn("id").
-		Returning("id").
-		Scan(ctx, &round.ID)
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create round: %w", err)
 	}

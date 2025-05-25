@@ -12,7 +12,7 @@ import (
 // Round represents a single round in the tournament.
 type Round struct {
 	bun.BaseModel  `bun:"table:rounds,alias:r"`
-	ID             sharedtypes.RoundID      `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
+	ID             sharedtypes.RoundID      `bun:"id,pk,type:uuid"`
 	Title          roundtypes.Title         `bun:"title,notnull"`
 	Description    roundtypes.Description   `bun:"description,nullzero"`
 	Location       roundtypes.Location      `bun:"location,nullzero"`

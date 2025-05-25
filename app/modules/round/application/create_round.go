@@ -31,11 +31,11 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		if len(errs) > 0 {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: roundevents.RoundValidationFailedPayload{
+				Failure: &roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
 					ErrorMessage: errs,
 				},
-			}, fmt.Errorf("validation failed: %v", errs)
+			}, nil // ← Changed from fmt.Errorf to nil
 		} else {
 			s.metrics.RecordValidationSuccess(ctx)
 		}
@@ -49,11 +49,11 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		if err != nil {
 			s.metrics.RecordTimeParsingError(ctx)
 			return RoundOperationResult{
-				Failure: roundevents.RoundValidationFailedPayload{
+				Failure: &roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
 					ErrorMessage: []string{err.Error()},
 				},
-			}, fmt.Errorf("time parsing failed: %w", err)
+			}, nil // ← Changed from fmt.Errorf to nil
 		} else {
 			s.metrics.RecordTimeParsingSuccess(ctx)
 		}
@@ -63,15 +63,16 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		if parsedTime.Before(time.Now().UTC()) {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: roundevents.RoundValidationFailedPayload{
+				Failure: &roundevents.RoundValidationFailedPayload{
 					UserID:       payload.UserID,
 					ErrorMessage: []string{"start time is in the past"},
 				},
-			}, fmt.Errorf("validation failed: [start time is in the past]")
+			}, nil // ← Changed from fmt.Errorf to nil
 		}
 
 		// Create round object
 		roundObject := roundtypes.Round{
+			ID:           sharedtypes.RoundID(uuid.New()),
 			Title:        roundtypes.Title(payload.Title),
 			Description:  &payload.Description,
 			Location:     &payload.Location,
@@ -97,7 +98,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 			attr.String("created_by", string(roundObject.CreatedBy)),
 		)
 
-		return RoundOperationResult{Success: createdPayload}, nil
+		return RoundOperationResult{Success: &createdPayload}, nil
 	})
 
 	return result, err
@@ -110,7 +111,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayload{
 					UserID:       payload.Round.CreatedBy,
 					ErrorMessage: "invalid round data",
 				},
@@ -128,6 +129,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 		// Map round data to the database model
 		roundDB := roundtypes.Round{
+			ID:           payload.Round.ID,
 			Title:        roundTypes.Title,
 			Description:  roundTypes.Description,
 			Location:     roundTypes.Location,
@@ -141,7 +143,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {
 			return RoundOperationResult{
-				Failure: roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayload{
 					UserID:       roundDB.CreatedBy,
 					ErrorMessage: "one or more required fields are nil",
 				},
@@ -176,7 +178,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		if err := s.RoundDB.CreateRound(ctx, &roundDB); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "create_round")
 			return RoundOperationResult{
-				Failure: roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayload{
 					UserID:       roundTypes.CreatedBy,
 					ErrorMessage: fmt.Sprintf("failed to store round: %v", err),
 				},
@@ -198,7 +200,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)
 
-		return RoundOperationResult{Success: roundevents.RoundCreatedPayload{
+		return RoundOperationResult{Success: &roundevents.RoundCreatedPayload{
 			BaseRoundPayload: roundtypes.BaseRoundPayload{
 				RoundID:     roundDB.ID,
 				Title:       roundDB.Title,
@@ -233,7 +235,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, roundID sharedt
 				attr.Error(dbErr),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: roundID,
 					Error:   fmt.Sprintf("database update failed: %v", dbErr),
 				},

@@ -48,9 +48,9 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(roundevents.RoundEntityCreatedPayload)
+				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
 				if !ok {
-					t.Errorf("Expected success result of type roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
 					return
 				}
 
@@ -100,16 +100,16 @@ func TestValidateAndProcessRound(t *testing.T) {
 				UserID:      "user_123",
 				ChannelID:   "channel_abc",
 			},
-			expectedError:   true,
+			expectedError:   false,
 			expectedSuccess: false,
 			validateResult: func(t *testing.T, deps RoundTestDeps, result roundservice.RoundOperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				// Updated expected error message to match actual output
@@ -139,16 +139,16 @@ func TestValidateAndProcessRound(t *testing.T) {
 				UserID:      "user_456",
 				ChannelID:   "channel_def",
 			},
-			expectedError:   true,
+			expectedError:   false,
 			expectedSuccess: false,
 			validateResult: func(t *testing.T, deps RoundTestDeps, result roundservice.RoundOperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				// Updated to check for substring due to dynamic timestamps in the actual error message
@@ -175,16 +175,16 @@ func TestValidateAndProcessRound(t *testing.T) {
 				UserID:      "user_789",
 				ChannelID:   "channel_ghi",
 			},
-			expectedError:   true,
+			expectedError:   false,
 			expectedSuccess: false,
 			validateResult: func(t *testing.T, deps RoundTestDeps, result roundservice.RoundOperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				// Updated expected error message to match actual output
@@ -218,9 +218,9 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(roundevents.RoundEntityCreatedPayload)
+				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
 				if !ok {
-					t.Errorf("Expected success result of type roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
 					return
 				}
 

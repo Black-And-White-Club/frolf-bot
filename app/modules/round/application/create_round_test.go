@@ -110,7 +110,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 					ErrorMessage: []string{"Title is required", "Description is required", "Location is required", "Start time is required", "User ID is required"},
 				},
 			},
-			expectedError: errors.New("validation failed: [Title is required Description is required Location is required Start time is required User ID is required]"),
+			expectedError: nil,
 		},
 		{
 			name: "invalid timezone",
@@ -137,7 +137,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 					ErrorMessage: []string{"invalid timezone"},
 				},
 			},
-			expectedError: errors.New("time parsing failed: invalid timezone"),
+			expectedError: nil,
 		},
 		{
 			name: "start time in the past",
@@ -164,7 +164,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 					ErrorMessage: []string{"start time is in the past"},
 				},
 			},
-			expectedError: errors.New("validation failed: [start time is in the past]"),
+			expectedError: nil,
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				},
 			}
 
-			_, err := s.ValidateAndProcessRound(ctx, tt.payload, mockTimeParser)
+			result, err := s.ValidateAndProcessRound(ctx, tt.payload, mockTimeParser) // ← Capture result
 
 			// Validate error presence
 			if tt.expectedError != nil {
@@ -196,20 +196,101 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				} else if err.Error() != tt.expectedError.Error() {
 					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
 				}
+				return // Skip result validation if we expected an error
 			} else {
 				if err != nil {
 					t.Errorf("expected no error, got: %v", err)
+					return
 				}
-				if tt.expectedError != nil {
-					if err == nil {
-						t.Errorf("expected error: %v, got: nil", tt.expectedError)
-					} else if err.Error() != tt.expectedError.Error() {
-						t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-					}
-				} else if err != nil {
-					t.Errorf("expected no error, got: %v", err)
+			}
+
+			// Validate Success Results
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got nil")
+					return
 				}
 
+				// Cast the interface{} to the expected type
+				expectedSuccess, ok := tt.expectedResult.Success.(*roundevents.RoundEntityCreatedPayload)
+				if !ok {
+					t.Errorf("expected success result is not RoundEntityCreatedPayload")
+					return
+				}
+
+				actualSuccess, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
+				if !ok {
+					t.Errorf("actual success result is not RoundEntityCreatedPayload")
+					return
+				}
+
+				// Now validate the fields
+				if actualSuccess.Round.Title != expectedSuccess.Round.Title {
+					t.Errorf("expected title %q, got %q", expectedSuccess.Round.Title, actualSuccess.Round.Title)
+				}
+
+				if actualSuccess.Round.CreatedBy != expectedSuccess.Round.CreatedBy {
+					t.Errorf("expected created_by %q, got %q", expectedSuccess.Round.CreatedBy, actualSuccess.Round.CreatedBy)
+				}
+
+				if actualSuccess.Round.State != expectedSuccess.Round.State {
+					t.Errorf("expected state %q, got %q", expectedSuccess.Round.State, actualSuccess.Round.State)
+				}
+
+				if actualSuccess.DiscordChannelID != expectedSuccess.DiscordChannelID {
+					t.Errorf("expected channel_id %q, got %q", expectedSuccess.DiscordChannelID, actualSuccess.DiscordChannelID)
+				}
+
+				// Validate that ID was generated (if you add UUID generation)
+				if actualSuccess.Round.ID == sharedtypes.RoundID(uuid.Nil) {
+					t.Errorf("expected Round.ID to be generated, got nil UUID")
+				}
+			}
+
+			// Validate Failure Results
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got nil")
+					return
+				}
+
+				// Cast the interface{} to the expected type
+				expectedFailure, ok := tt.expectedResult.Failure.(*roundevents.RoundValidationFailedPayload)
+				if !ok {
+					t.Errorf("expected failure result is not RoundValidationFailedPayload")
+					return
+				}
+
+				actualFailure, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				if !ok {
+					t.Errorf("actual failure result is not RoundValidationFailedPayload")
+					return
+				}
+
+				if actualFailure.UserID != expectedFailure.UserID {
+					t.Errorf("expected failure UserID %q, got %q", expectedFailure.UserID, actualFailure.UserID)
+				}
+
+				// Validate error messages
+				if len(actualFailure.ErrorMessage) != len(expectedFailure.ErrorMessage) {
+					t.Errorf("expected %d error messages, got %d", len(expectedFailure.ErrorMessage), len(actualFailure.ErrorMessage))
+				} else {
+					for i, expectedMsg := range expectedFailure.ErrorMessage {
+						if i < len(actualFailure.ErrorMessage) && actualFailure.ErrorMessage[i] != expectedMsg {
+							t.Errorf("expected error message[%d] %q, got %q", i, expectedMsg, actualFailure.ErrorMessage[i])
+						}
+					}
+				}
+			}
+
+			// Ensure we don't have both success and failure
+			if result.Success != nil && result.Failure != nil {
+				t.Errorf("result should not have both success and failure")
+			}
+
+			// Ensure we have either success or failure (not neither)
+			if result.Success == nil && result.Failure == nil {
+				t.Errorf("result should have either success or failure, got neither")
 			}
 		})
 	}

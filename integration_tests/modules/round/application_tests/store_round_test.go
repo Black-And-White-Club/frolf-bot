@@ -24,7 +24,7 @@ func TestStoreRound(t *testing.T) {
 		// Directly construct RoundEntityCreatedPayload
 		return roundevents.RoundEntityCreatedPayload{
 			Round: roundtypes.Round{
-				ID:           sharedtypes.RoundID(uuid.Nil), // Set to Nil so StoreRound assigns a new one
+				ID:           sharedtypes.RoundID(uuid.New()),
 				Title:        roundtypes.Title("Test Round Title"),
 				Description:  &description,
 				Location:     &location,
@@ -58,9 +58,9 @@ func TestStoreRound(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(roundevents.RoundCreatedPayload)
+				successPayload, ok := result.Success.(*roundevents.RoundCreatedPayload)
 				if !ok {
-					t.Errorf("Expected success result of type RoundCreatedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *RoundCreatedPayload, but got %T", result.Success)
 					return
 				}
 				if successPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
@@ -122,9 +122,9 @@ func TestStoreRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type RoundCreationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				expectedErrMsg := "invalid round data"
@@ -153,9 +153,9 @@ func TestStoreRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type RoundCreationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				expectedErrMsg := "invalid round data"
@@ -181,9 +181,9 @@ func TestStoreRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type RoundCreationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				expectedErrMsg := "invalid round data"
@@ -209,9 +209,9 @@ func TestStoreRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type RoundCreationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
 					return
 				}
 				expectedErrMsg := "invalid round data"
@@ -238,7 +238,7 @@ func TestStoreRound(t *testing.T) {
 			// Extract the RoundID from the successful result for DB state validation
 			var expectedRoundID sharedtypes.RoundID
 			if tt.expectedSuccess {
-				if successPayload, ok := result.Success.(roundevents.RoundCreatedPayload); ok {
+				if successPayload, ok := result.Success.(*roundevents.RoundCreatedPayload); ok {
 					expectedRoundID = successPayload.RoundID
 				}
 			}
