@@ -86,6 +86,9 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			startTime := sharedtypes.StartTime(*payload.RoundUpdateRequestPayload.StartTime)
 			existingRound.StartTime = &startTime
 		}
+		if payload.RoundUpdateRequestPayload.EventType != nil {
+			existingRound.EventType = payload.RoundUpdateRequestPayload.EventType
+		}
 
 		// Update the round in the database
 		if err := s.RoundDB.UpdateRound(ctx, existingRound.ID, existingRound); err != nil {

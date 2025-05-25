@@ -7,6 +7,7 @@ import (
 	"time"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -85,7 +86,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Correctly convert round.ID to sharedtypes.RoundID (which is uuid.UUID)
-				parsedUUID, err := uuid.Parse(string(round.ID))
+				parsedUUID, err := uuid.Parse(round.ID.String())
 				if err != nil {
 					t.Fatalf("Failed to parse UUID: %v", err)
 				}
@@ -139,7 +140,7 @@ func TestProcessRoundScores(t *testing.T) {
 					ParticipantCount: len(users),
 					Users:            users,
 					State:            "COMPLETED",
-					Finalized:        (*testutils.Finalized)(&finalized),
+					Finalized:        (*roundtypes.Finalized)(&finalized),
 				}
 
 				// Generate a round with participants but no tags
@@ -163,7 +164,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Correctly convert round.ID to sharedtypes.RoundID
-				parsedUUID, err := uuid.Parse(string(round.ID))
+				parsedUUID, err := uuid.Parse(round.ID.String())
 				if err != nil {
 					t.Fatalf("Failed to parse UUID: %v", err)
 				}
@@ -208,7 +209,7 @@ func TestProcessRoundScores(t *testing.T) {
 				round := generator.GenerateRound("admin123", 0, nil)
 
 				// Correctly convert round.ID to sharedtypes.RoundID (which is uuid.UUID)
-				parsedUUID, err := uuid.Parse(string(round.ID))
+				parsedUUID, err := uuid.Parse(round.ID.String())
 				if err != nil {
 					t.Fatalf("Failed to parse UUID: %v", err)
 				}
@@ -256,7 +257,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Correctly convert round.ID to sharedtypes.RoundID
-				parsedUUID, err := uuid.Parse(string(round.ID))
+				parsedUUID, err := uuid.Parse(round.ID.String())
 				if err != nil {
 					t.Fatalf("Failed to parse UUID: %v", err)
 				}
@@ -335,7 +336,7 @@ func TestProcessRoundScores(t *testing.T) {
 // runConcurrentScoreTest handles the concurrent score processing test
 func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.TestDataGenerator, numRounds int) {
 	users := generator.GenerateUsers(5)
-	rounds := make([]testutils.Round, numRounds)
+	rounds := make([]roundtypes.Round, numRounds)
 	scoresList := make([][]sharedtypes.ScoreInfo, numRounds)
 
 	// Generate test data for each round
@@ -371,7 +372,7 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 	for i := 0; i < numRounds; i++ {
 		go func(idx int) {
 			// Correctly convert round.ID to sharedtypes.RoundID (which is uuid.UUID)
-			parsedUUID, err := uuid.Parse(string(rounds[idx].ID))
+			parsedUUID, err := uuid.Parse(rounds[idx].ID.String())
 			if err != nil {
 				errChan <- err
 				return
@@ -418,7 +419,7 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 	// Verify all rounds have scores in DB
 	for i := 0; i < numRounds; i++ {
 		// Correctly convert round.ID to sharedtypes.RoundID (which is uuid.UUID)
-		parsedUUID, err := uuid.Parse(string(rounds[i].ID))
+		parsedUUID, err := uuid.Parse(rounds[i].ID.String())
 		if err != nil {
 			t.Fatalf("Failed to parse UUID: %v", err)
 		}
@@ -537,7 +538,7 @@ func TestProcessScoresForStorage(t *testing.T) {
 			round := generator.GenerateRound("admin123", 0, nil)
 
 			// Correctly convert round.ID to sharedtypes.RoundID (which is uuid.UUID)
-			parsedUUID, err := uuid.Parse(string(round.ID))
+			parsedUUID, err := uuid.Parse(round.ID.String())
 			if err != nil {
 				t.Fatalf("Failed to parse UUID: %v", err)
 			}

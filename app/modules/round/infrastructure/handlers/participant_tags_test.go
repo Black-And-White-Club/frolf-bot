@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
@@ -22,32 +21,31 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
+func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
+	// Corrected type for testChangedTags to match expected payload type
+	// Use pointers to TagNumber values
+	tn1 := sharedtypes.TagNumber(1)
+	tn2 := sharedtypes.TagNumber(13)
+	testChangedTags := map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
+		sharedtypes.DiscordID("user1"): &tn1, // Take address of the TagNumber value
+		sharedtypes.DiscordID("user2"): &tn2, // Take address of the TagNumber value
+	}
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testStartTime := sharedtypes.StartTime(time.Now())
-	testTitle := roundtypes.Title("Test Round")
-	testUserID := sharedtypes.DiscordID("1234567890")
-	testEventMessageID := "discord-msg-123"
+	// Corrected type for testScheduledRoundID
 
-	// Payload for RoundScheduled event (input to HandleDiscordMessageIDUpdated)
-	testScheduledPayload := &roundevents.RoundScheduledPayload{
-		BaseRoundPayload: roundtypes.BaseRoundPayload{
-			RoundID:     testRoundID,
-			Title:       testTitle,
-			Description: nil,
-			Location:    nil,
-			StartTime:   &testStartTime,
-			UserID:      testUserID,
-		},
-		EventMessageID: testEventMessageID,
+	testPayload := &roundevents.ScheduledRoundTagUpdatePayload{
+		ChangedTags: testChangedTags,
 	}
 
-	// Message for RoundScheduled event (input message to the handler)
-	scheduledPayloadBytes, _ := json.Marshal(testScheduledPayload)
-	testScheduledMsg := message.NewMessage("input-msg-id", scheduledPayloadBytes)
+	// Corrected DiscordRoundUpdatePayload initialization to match its actual fields
+	discordUpdatePayload := &roundevents.DiscordRoundUpdatePayload{
+		RoundIDs:        []sharedtypes.RoundID{testRoundID}, // Use RoundIDs (plural) and make it a slice
+		EventMessageIDs: []string{"some-event-message-id"},  // Example value, adjust as needed
+		Participants:    []roundtypes.Participant{},         // Initialize as empty or with relevant participants
+	}
 
-	// A dummy message for failure results, if needed
-	dummyFailureMsg := message.NewMessage("failure-msg-id", []byte("dummy failure"))
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
@@ -64,29 +62,33 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
 	}{
 		{
-			name: "Successfully handle DiscordMessageIDUpdated",
+			name: "Successfully handle ScheduledRoundTagUpdate",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundScheduledPayload) = *testScheduledPayload
+						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ScheduleRoundEvents(
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
-					*testScheduledPayload, // Expect RoundScheduledPayload
-					testEventMessageID,    // Expect EventMessageID
+					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: testScheduledPayload, // Return success
+						Success: discordUpdatePayload,
 					},
 					nil,
 				)
-				// No CreateResultMessage mock here, as HandleDiscordMessageIDUpdated returns nil on success
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					discordUpdatePayload,
+					roundevents.TagsUpdatedForScheduledRounds,
+				).Return(testMsg, nil)
 			},
-			msg:     testScheduledMsg,
-			want:    nil, // Expect nil on success
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
 		},
 		{
@@ -100,105 +102,45 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service failure in ScheduleRoundEvents",
+			name: "Service failure in UpdateScheduledRoundsWithNewTags",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundScheduledPayload) = *testScheduledPayload
+						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().ScheduleRoundEvents(
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
-					*testScheduledPayload,
-					testEventMessageID,
+					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
 			},
-			msg:            testScheduledMsg,
+			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to schedule round events: internal service error",
+			expectedErrMsg: "failed to handle ScheduledRoundTagUpdate event: internal service error",
 		},
 		{
-			name: "Unknown result from ScheduleRoundEvents",
+			name: "Service returns failure payload",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundScheduledPayload) = *testScheduledPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ScheduleRoundEvents(
-					gomock.Any(),
-					*testScheduledPayload,
-					testEventMessageID,
-				).Return(
-					roundservice.RoundOperationResult{}, // Return empty result
-					nil,
-				)
-			},
-			msg:            testScheduledMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
-		},
-		{
-			name: "Failure result from ScheduleRoundEvents",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundScheduledPayload) = *testScheduledPayload
+						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
 						return nil
 					},
 				)
 
 				failurePayload := &roundevents.RoundErrorPayload{
 					RoundID: testRoundID,
-					// Add other fields if necessary for a complete RoundErrorPayload
+					Error:   "some error",
 				}
-				mockRoundService.EXPECT().ScheduleRoundEvents(
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
-					*testScheduledPayload,
-					testEventMessageID,
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: failurePayload,
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failurePayload, // Expect the failure payload
-					roundevents.RoundError,
-				).Return(dummyFailureMsg, nil) // Return a dummy failure message
-			},
-			msg:     testScheduledMsg,
-			want:    []*message.Message{dummyFailureMsg},
-			wantErr: false,
-		},
-		{
-			name: "Failure result from ScheduleRoundEvents and CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundScheduledPayload) = *testScheduledPayload
-						return nil
-					},
-				)
-
-				failurePayload := &roundevents.RoundErrorPayload{
-					RoundID: testRoundID,
-				}
-				mockRoundService.EXPECT().ScheduleRoundEvents(
-					gomock.Any(),
-					*testScheduledPayload,
-					testEventMessageID,
+					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
 						Failure: failurePayload,
@@ -209,13 +151,66 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					roundevents.RoundError,
-				).Return(nil, fmt.Errorf("failed to create result message after failure"))
+					roundevents.RoundUpdateError,
+				).Return(testMsg, nil)
 			},
-			msg:            testScheduledMsg,
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "Service success but CreateResultMessage fails",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: discordUpdatePayload,
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					discordUpdatePayload,
+					roundevents.TagsUpdatedForScheduledRounds,
+				).Return(nil, fmt.Errorf("failed to create result message"))
+			},
+			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: failed to create result message after failure",
+			expectedErrMsg: "failed to create success message: failed to create result message",
+		},
+		{
+			name: "Unknown result from UpdateScheduledRoundsWithNewTags",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
+					gomock.Any(),
+					*testPayload,
+				).Return(
+					roundservice.RoundOperationResult{}, // Return empty result
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "unexpected result from service",
 		},
 	}
 
@@ -240,17 +235,17 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				},
 			}
 
-			got, err := h.HandleDiscordMessageIDUpdated(tt.msg) // Call the correct handler
+			got, err := h.HandleScheduledRoundTagUpdate(tt.msg)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleDiscordMessageIDUpdated() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HandleScheduledRoundTagUpdate() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleDiscordMessageIDUpdated() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleScheduledRoundTagUpdate() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleDiscordMessageIDUpdated() = %v, want %v", got, tt.want)
+				t.Errorf("HandleScheduledRoundTagUpdate() = %v, want %v", got, tt.want)
 			}
 		})
 	}

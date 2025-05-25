@@ -164,32 +164,6 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 			startTime = time.Time(*roundDB.StartTime)
 		}
 
-		s.logger.Debug("🔍 roundDB.Title", attr.String("title", string(roundDB.Title)))
-
-		if roundDB.Description == nil {
-			s.logger.Debug("⚠️ Description is nil")
-		} else {
-			s.logger.Debug("✅ Description exists", attr.String("description", string(*roundDB.Description)))
-		}
-
-		if roundDB.Location == nil {
-			s.logger.Debug("⚠️ Location is nil")
-		} else {
-			s.logger.Debug("✅ Location exists", attr.String("location", string(*roundDB.Location)))
-		}
-
-		if roundDB.StartTime == nil {
-			s.logger.Debug("⚠️ StartTime is nil")
-		} else {
-			s.logger.Debug("✅ StartTime exists", attr.Time("start_time", time.Time(*roundDB.StartTime)))
-		}
-
-		if roundDB.EventType == nil {
-			s.logger.Debug("⚠️ EventType is nil")
-		} else {
-			s.logger.Debug("✅ EventType exists", attr.String("event_type", string(*roundDB.EventType)))
-		}
-
 		s.logger.InfoContext(ctx, "About to create round in DB",
 			attr.String("title", string(roundDB.Title)),
 			attr.String("description", desc),

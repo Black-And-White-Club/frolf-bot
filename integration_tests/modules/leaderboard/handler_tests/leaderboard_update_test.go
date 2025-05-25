@@ -19,22 +19,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Helper: Parse "tag:user" string into LeaderboardEntry
-func parseTagUserStrings(tagUsers []string) leaderboardtypes.LeaderboardData {
-	data := leaderboardtypes.LeaderboardData{}
-	for _, entry := range tagUsers {
-		parts := strings.Split(entry, ":")
-		if len(parts) == 2 {
-			tag, _ := strconv.Atoi(parts[0])
-			data = append(data, leaderboardtypes.LeaderboardEntry{
-				UserID:    sharedtypes.DiscordID(parts[1]),
-				TagNumber: sharedtypes.TagNumber(tag),
-			})
-		}
-	}
-	return data
-}
-
 // Helper: Validate success response for leaderboard update
 func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.LeaderboardUpdateRequestedPayload, msg *message.Message) leaderboardevents.LeaderboardUpdatedPayload {
 	t.Helper()

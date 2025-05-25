@@ -72,7 +72,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 
 				// --- Check the Type of the Success Payload to Determine Next Topic ---
 				switch successPayload := result.Success.(type) {
-				case roundevents.ParticipantRemovalRequestPayload:
+				case *roundevents.ParticipantRemovalRequestPayload: // Changed to pointer type
 					// If CheckParticipantStatus returned a Removal Payload, publish a Removal Request message
 					removalRequestMsg, err := h.helpers.CreateResultMessage(
 						msg,
@@ -93,7 +93,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					)
 					return []*message.Message{removalRequestMsg}, nil // Return the removal message
 
-				case roundevents.ParticipantJoinValidationRequestPayload:
+				case *roundevents.ParticipantJoinValidationRequestPayload: // Changed to pointer type
 					// If CheckParticipantStatus returned a Validation Payload, publish a Validation Request message
 					validationRequestMsg, err := h.helpers.CreateResultMessage(
 						msg,
@@ -468,7 +468,14 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 		"HandleTagNumberFound",
 		&sharedevents.RoundTagLookupResultPayload{}, // Target payload type (shared result payload)
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagLookupResultPayload := payload.(*sharedevents.RoundTagLookupResultPayload)
+			// Correct type assertion for the incoming payload
+			tagLookupResultPayload, ok := payload.(*sharedevents.RoundTagLookupResultPayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Invalid payload type for HandleTagNumberFound",
+					attr.Any("payload", payload),
+				)
+				return nil, fmt.Errorf("invalid payload type for HandleTagNumberFound")
+			}
 
 			h.logger.InfoContext(ctx, "Received RoundTagLookupFound event",
 				attr.CorrelationIDFromMsg(msg),
@@ -479,13 +486,12 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 				attr.Any("original_joined_late", tagLookupResultPayload.OriginalJoinedLate),
 			)
 
-			// Construct payload for handleParticipantUpdate using data from the shared result payload.
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{ // Assuming this struct is used by handleParticipantUpdate
+			updatePayload := &roundevents.ParticipantJoinRequestPayload{
 				RoundID:    tagLookupResultPayload.RoundID,
 				UserID:     tagLookupResultPayload.UserID,
-				TagNumber:  tagLookupResultPayload.TagNumber,          // Use tag number from result payload
-				JoinedLate: tagLookupResultPayload.OriginalJoinedLate, // Use original joined late from result payload
-				Response:   tagLookupResultPayload.OriginalResponse,   // Use original response from result payload
+				TagNumber:  tagLookupResultPayload.TagNumber,
+				JoinedLate: tagLookupResultPayload.OriginalJoinedLate,
+				Response:   tagLookupResultPayload.OriginalResponse,
 			}
 
 			// Call the helper method to update participant status.
@@ -497,13 +503,19 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 	return wrappedHandler(msg)
 }
 
-// HandleTagNumberNotFound handles the event when a tag number lookup result is received.
+// HandleTagNumberNotFound processes events where a tag number lookup did not find a tag.
 func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagNumberNotFound",
 		&sharedevents.RoundTagLookupResultPayload{}, // Target payload type (shared result payload)
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagLookupResultPayload := payload.(*sharedevents.RoundTagLookupResultPayload)
+			tagLookupResultPayload, ok := payload.(*sharedevents.RoundTagLookupResultPayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Invalid payload type for HandleTagNumberNotFound",
+					attr.Any("payload", payload),
+				)
+				return nil, fmt.Errorf("invalid payload type for HandleTagNumberNotFound")
+			}
 
 			h.logger.InfoContext(ctx, "Received RoundTagLookupNotFound event",
 				attr.CorrelationIDFromMsg(msg),
@@ -515,13 +527,12 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 				attr.Any("original_joined_late", tagLookupResultPayload.OriginalJoinedLate),
 			)
 
-			// Construct payload for handleParticipantUpdate using data from the shared result payload.
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{ // Assuming this struct is used by handleParticipantUpdate
+			updatePayload := &roundevents.ParticipantJoinRequestPayload{
 				RoundID:    tagLookupResultPayload.RoundID,
 				UserID:     tagLookupResultPayload.UserID,
-				TagNumber:  nil,                                       // Tag number is nil as not found
-				JoinedLate: tagLookupResultPayload.OriginalJoinedLate, // Use original joined late from result payload
-				Response:   tagLookupResultPayload.OriginalResponse,   // Use original response from result payload
+				TagNumber:  nil,
+				JoinedLate: tagLookupResultPayload.OriginalJoinedLate,
+				Response:   tagLookupResultPayload.OriginalResponse,
 			}
 
 			return h.handleParticipantUpdate(ctx, msg, updatePayload, tagLookupResultPayload.OriginalResponse)
@@ -531,12 +542,19 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 	return wrappedHandler(msg)
 }
 
+// HandleParticipantDeclined processes events where a participant declines a round invitation.
 func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantDeclined",
 		&roundevents.ParticipantDeclinedPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			participantDeclinedPayload := payload.(*roundevents.ParticipantDeclinedPayload)
+			participantDeclinedPayload, ok := payload.(*roundevents.ParticipantDeclinedPayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Invalid payload type for HandleParticipantDeclined",
+					attr.Any("payload", payload),
+				)
+				return nil, fmt.Errorf("invalid payload type for HandleParticipantDeclined")
+			}
 
 			// Log the received event
 			h.logger.InfoContext(ctx, "Received ParticipantDeclined event",
@@ -545,8 +563,17 @@ func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*mess
 				attr.String("user_id", string(participantDeclinedPayload.UserID)),
 			)
 
+			// Construct payload for handleParticipantUpdate, as ParticipantDeclinedPayload is not directly compatible
+			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+				RoundID:    participantDeclinedPayload.RoundID,
+				UserID:     participantDeclinedPayload.UserID,
+				Response:   roundtypes.ResponseDecline, // Explicitly set response for this handler
+				TagNumber:  nil,                        // Tag number is not relevant for a decline
+				JoinedLate: nil,                        // JoinedLate is not relevant for a decline
+			}
+
 			// Call the helper method to update participant status for decline
-			return h.handleParticipantUpdate(ctx, msg, participantDeclinedPayload, roundtypes.ResponseDecline)
+			return h.handleParticipantUpdate(ctx, msg, updatePayload, roundtypes.ResponseDecline)
 		},
 	)
 
@@ -555,65 +582,69 @@ func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*mess
 }
 
 // handleParticipantUpdate is a helper function to process participant status updates triggered by various events.
-func (h *RoundHandlers) handleParticipantUpdate(ctx context.Context, msg *message.Message, payload roundevents.ParticipantUpdatePayload, response roundtypes.Response) ([]*message.Message, error) {
-	roundID := payload.GetRoundID()
-	userID := payload.GetUserID()
-	tagNumber := payload.GetTagNumber()
-	joinedLate := payload.GetJoinedLate() // Get JoinedLate from the payload interface
-
-	// Log the incoming payload details and the response parameter
-	h.logger.InfoContext(ctx, "Processing participant update helper",
-		attr.CorrelationIDFromMsg(msg),
-		attr.String("round_id", roundID.String()),
-		attr.String("user_id", string(userID)),
-		attr.String("response_param", string(response)), // Response status passed into the helper
-		attr.Any("tag_number_payload", tagNumber),       // Tag number from the payload interface
-		attr.Any("joined_late_payload", joinedLate),     // JoinedLate from the payload interface
-	)
-
-	if tagNumber != nil {
-		h.logger.InfoContext(ctx, "Tag number present in helper payload",
+func (h *RoundHandlers) handleParticipantUpdate(
+	ctx context.Context,
+	msg *message.Message,
+	updatePayload *roundevents.ParticipantJoinRequestPayload,
+	originalResponse roundtypes.Response, // Added to determine the correct success topic
+) ([]*message.Message, error) {
+	// Call the service function to update participant status
+	updateResult, updateErr := h.roundService.UpdateParticipantStatus(ctx, *updatePayload)
+	if updateErr != nil {
+		h.logger.ErrorContext(ctx, "UpdateParticipantStatus service failed in helper",
 			attr.CorrelationIDFromMsg(msg),
-			attr.Int("tag_number", int(*tagNumber)),
+			attr.Any("error", updateErr),
 		)
-	} else {
-		h.logger.InfoContext(ctx, "Tag number is nil in helper payload",
-			attr.CorrelationIDFromMsg(msg),
-		)
+		return nil, fmt.Errorf("UpdateParticipantStatus service failed in helper: %w", updateErr)
 	}
 
-	// Call the service function to update the participant status in the database.
-	// The payload for the service call includes the response, tag number, and joined late status.
-	result, err := h.roundService.UpdateParticipantStatus(ctx, roundevents.ParticipantJoinRequestPayload{
-		RoundID:    roundID,
-		UserID:     userID,
-		Response:   response,   // Pass the response status received by the helper
-		TagNumber:  tagNumber,  // Pass the tag number from the payload interface
-		JoinedLate: joinedLate, // Pass the joined late status from the payload interface
-	})
-	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed during UpdateParticipantStatus service call in helper",
-			attr.CorrelationIDFromMsg(msg),
-			attr.Any("error", err),
-		)
-		return nil, fmt.Errorf("UpdateParticipantStatus service failed in helper: %w", err)
-	}
+	var messagesToReturn []*message.Message
 
-	// --- Handle Service Result ---
-	if result.Failure != nil {
-		// The service returned a failure payload
-		h.logger.InfoContext(ctx, "UpdateParticipantStatus returned failure in helper",
-			attr.CorrelationIDFromMsg(msg),
-			attr.Any("failure_payload", result.Failure),
-		)
+	if updateResult.Success != nil {
+		// Determine the correct topic for the success message based on the original response
+		var successTopic string
+		if originalResponse == roundtypes.ResponseDecline {
+			successTopic = roundevents.RoundParticipantDeclined
+		} else {
+			successTopic = roundevents.RoundParticipantJoined // Default for other join-like events
+		}
 
-		// Create failure message to publish
-		// The failure payload type should match what RoundParticipantJoinError expects
-		failurePayload, ok := result.Failure.(roundevents.RoundParticipantJoinErrorPayload)
+		// Perform type assertion to get the concrete *roundevents.ParticipantJoinedPayload
+		participantJoinedPayload, ok := updateResult.Success.(*roundevents.ParticipantJoinedPayload)
+		if !ok {
+			h.logger.ErrorContext(ctx, "Unexpected success payload type from UpdateParticipantStatus in helper",
+				attr.CorrelationIDFromMsg(msg),
+				attr.Any("payload_type", fmt.Sprintf("%T", updateResult.Success)),
+			)
+			return nil, fmt.Errorf("unexpected success payload type from UpdateParticipantStatus in helper: expected *roundevents.ParticipantJoinedPayload, got %T", updateResult.Success)
+		}
+
+		// Create the message for Discord update
+		discordUpdateMsg, err := h.helpers.CreateResultMessage(
+			msg,
+			participantJoinedPayload,
+			successTopic, // Use the dynamically determined topic
+		)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "Failed to create success message",
+				attr.CorrelationIDFromMsg(msg),
+				attr.Error(err),
+			)
+			return nil, fmt.Errorf("failed to create success message: %w", err)
+		}
+		messagesToReturn = append(messagesToReturn, discordUpdateMsg)
+
+	} else if updateResult.Failure != nil {
+		h.logger.InfoContext(ctx, "Participant status update failed with specific error",
+			attr.CorrelationIDFromMsg(msg),
+			attr.Any("failure_payload", updateResult.Failure),
+		)
+		// Corrected: Assert to pointer type *roundevents.RoundParticipantJoinErrorPayload
+		failurePayload, ok := updateResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 		if !ok {
 			h.logger.ErrorContext(ctx, "Unexpected failure payload type from UpdateParticipantStatus in helper",
 				attr.CorrelationIDFromMsg(msg),
-				attr.Any("payload_type", fmt.Sprintf("%T", result.Failure)),
+				attr.Any("payload_type", fmt.Sprintf("%T", updateResult.Failure)),
 			)
 			return nil, fmt.Errorf("unexpected failure payload type from UpdateParticipantStatus")
 		}
@@ -631,89 +662,15 @@ func (h *RoundHandlers) handleParticipantUpdate(ctx context.Context, msg *messag
 			return nil, fmt.Errorf("failed to create failure message after update in helper: %w", errMsg)
 		}
 
-		return []*message.Message{failureMsg}, nil // Return failure message to be published
-
-	} else if result.Success != nil {
-		// The service returned a success payload (should be ParticipantJoinedPayload)
-		successPayload, ok := result.Success.(roundevents.ParticipantJoinedPayload)
-		if !ok {
-			err := fmt.Errorf("unexpected success payload type from UpdateParticipantStatus in helper: expected ParticipantJoinedPayload, got %T", result.Success)
-			h.logger.ErrorContext(ctx, "Unexpected success payload type from service in helper",
-				attr.CorrelationIDFromMsg(msg),
-				attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
-			)
-			return nil, err
-		}
-
-		h.logger.InfoContext(ctx, "UpdateParticipantStatus returned success in helper",
-			attr.CorrelationIDFromMsg(msg),
-			attr.Any("success_payload_type", fmt.Sprintf("%T", successPayload)),
-		)
-
-		// --- Determine Topic Based on Response ---
-		var publishTopic string
-		var publishEventName string // Optional: for logging clarity
-
-		switch response { // Check the response status passed to the helper
-		case roundtypes.ResponseAccept, roundtypes.ResponseTentative:
-			publishTopic = roundevents.RoundParticipantJoined // Use the Joined topic for Accept/Tentative
-			publishEventName = "RoundParticipantJoined"
-			h.logger.InfoContext(ctx, "Participant Accepted/Tentative - Publishing Joined event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", successPayload.RoundID),
-				attr.Int("accepted_count", len(successPayload.AcceptedParticipants)), // Log counts from returned payload
-				attr.Int("tentative_count", len(successPayload.TentativeParticipants)),
-			)
-		case roundtypes.ResponseDecline:
-			// Publish a different event for Declined participants
-			publishTopic = roundevents.RoundParticipantDeclined // Assuming this topic/event exists
-			publishEventName = "RoundParticipantDeclined"
-			h.logger.InfoContext(ctx, "Participant Declined - Publishing Declined event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", successPayload.RoundID),
-				attr.Int("declined_count", len(successPayload.DeclinedParticipants)), // Log counts from returned payload
-			)
-		default:
-			// Handle unexpected response status passed to the helper
-			err := fmt.Errorf("unexpected response status passed to handleParticipantUpdate: %s", string(response))
-			h.logger.ErrorContext(ctx, "Unexpected response status in helper",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("response", string(response)),
-			)
-			return nil, err // Return error for unexpected status
-		}
-		// --- End Determine Topic ---
-
-		// Create message to publish using the determined topic and the success payload
-		// The successPayload (ParticipantJoinedPayload with updated lists) is the payload body for both event types.
-		successMsg, err := h.helpers.CreateResultMessage(
-			msg,
-			successPayload, // Use the ParticipantJoinedPayload (with updated lists) as the message body
-			publishTopic,   // Use the determined topic (Joined or Declined)
-		)
-		if err != nil {
-			h.logger.ErrorContext(ctx, fmt.Sprintf("Failed to create %s message in helper", publishEventName),
-				attr.CorrelationIDFromMsg(msg),
-				attr.Error(err),
-			)
-			return nil, fmt.Errorf("failed to create %s message in helper: %w", publishEventName, err)
-		}
-
-		// Log the message being published
-		h.logger.InfoContext(ctx, fmt.Sprintf("Publishing %s message (from helper)", publishEventName),
-			attr.CorrelationIDFromMsg(msg),
-			attr.String("message_id", successMsg.UUID),
-			attr.String("topic", publishTopic),
-		)
-
-		return []*message.Message{successMsg}, nil // Return the message to be published
+		return []*message.Message{failureMsg}, nil
 
 	} else {
-		// If neither Failure nor Success is set in the result, return an error (should not happen if service follows contract)
 		h.logger.ErrorContext(ctx, "UpdateParticipantStatus service returned unexpected nil result in helper",
 			attr.CorrelationIDFromMsg(msg),
-			attr.Any("service_result", result),
+			attr.Any("service_result", updateResult),
 		)
 		return nil, fmt.Errorf("UpdateParticipantStatus service returned unexpected nil result in helper")
 	}
+
+	return messagesToReturn, nil
 }

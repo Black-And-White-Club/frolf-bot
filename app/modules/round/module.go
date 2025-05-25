@@ -13,17 +13,19 @@ import (
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/prometheus/client_golang/prometheus" // Import prometheus
 )
 
 // Module represents the round module.
 type Module struct {
-	EventBus      eventbus.EventBus
-	RoundService  roundservice.Service
-	config        *config.Config
-	RoundRouter   *roundrouter.RoundRouter
-	cancelFunc    context.CancelFunc
-	helper        utils.Helpers
-	observability observability.Observability
+	EventBus           eventbus.EventBus
+	RoundService       roundservice.Service
+	config             *config.Config
+	RoundRouter        *roundrouter.RoundRouter
+	cancelFunc         context.CancelFunc
+	helper             utils.Helpers
+	observability      observability.Observability
+	prometheusRegistry *prometheus.Registry
 }
 
 // NewRoundModule creates a new instance of the Round module.
@@ -35,8 +37,8 @@ func NewRoundModule(
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
+	routerCtx context.Context,
 ) (*Module, error) {
-	// Extract observability components
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.RoundMetrics
 	tracer := obs.Registry.Tracer
@@ -46,21 +48,25 @@ func NewRoundModule(
 	// Initialize round service with observability components
 	roundService := roundservice.NewRoundService(roundDB, logger, metrics, tracer, eventBus)
 
-	// Initialize round router with observability
-	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
+	// Create a Prometheus registry for this module, similar to leaderboard module
+	prometheusRegistry := prometheus.NewRegistry()
 
-	// Configure the router with the round service.
-	if err := roundRouter.Configure(roundService, eventBus, metrics); err != nil {
+	// Initialize round router with observability and prometheusRegistry
+	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
+
+	// Configure the router with the round service, passing routerCtx
+	if err := roundRouter.Configure(routerCtx, roundService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
 
 	module := &Module{
-		EventBus:      eventBus,
-		RoundService:  roundService,
-		config:        cfg,
-		RoundRouter:   roundRouter,
-		helper:        helpers,
-		observability: obs,
+		EventBus:           eventBus,
+		RoundService:       roundService,
+		config:             cfg,
+		RoundRouter:        roundRouter,
+		helper:             helpers,
+		observability:      obs,
+		prometheusRegistry: prometheusRegistry,
 	}
 
 	return module, nil
@@ -94,6 +100,14 @@ func (m *Module) Close() error {
 	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
+	}
+
+	// Close the RoundRouter, similar to LeaderboardRouter
+	if m.RoundRouter != nil {
+		if err := m.RoundRouter.Close(); err != nil {
+			logger.Error("Error closing RoundRouter from module", "error", err)
+			return fmt.Errorf("error closing RoundRouter: %w", err)
+		}
 	}
 
 	logger.Info("Round module stopped")

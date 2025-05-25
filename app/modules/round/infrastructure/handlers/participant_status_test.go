@@ -65,6 +65,13 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 					},
 				)
 
+				// Define the expected payload that CheckParticipantStatus should return on success
+				expectedValidationPayload := &roundevents.ParticipantJoinValidationRequestPayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					// Add other fields relevant to ParticipantJoinValidationRequestPayload if any
+				}
+
 				mockRoundService.EXPECT().CheckParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
@@ -74,24 +81,14 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinRequestPayload{
-							RoundID:  testRoundID,
-							UserID:   testUserID,
-							Response: roundtypes.ResponseAccept,
-						},
+						Success: expectedValidationPayload, // Corrected to validation payload
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.ParticipantJoinRequestPayload{
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Response: roundtypes.ResponseAccept,
-				}
-
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					expectedValidationPayload, // Expect the validation payload here
 					roundevents.RoundParticipantJoinValidationRequest,
 				).Return(testMsg, nil)
 			},
@@ -134,7 +131,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantJoinRequest event: internal service error",
+			expectedErrMsg: "CheckParticipantStatus service failed: internal service error", // Corrected error message
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -146,6 +143,13 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 					},
 				)
 
+				// Define the expected payload that CheckParticipantStatus should return on success
+				expectedValidationPayload := &roundevents.ParticipantJoinValidationRequestPayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					// Add other fields relevant to ParticipantJoinValidationRequestPayload if any
+				}
+
 				mockRoundService.EXPECT().CheckParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
@@ -155,31 +159,21 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinRequestPayload{
-							RoundID:  testRoundID,
-							UserID:   testUserID,
-							Response: roundtypes.ResponseAccept,
-						},
+						Success: expectedValidationPayload, // Corrected to validation payload
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.ParticipantJoinRequestPayload{
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Response: roundtypes.ResponseAccept,
-				}
-
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					expectedValidationPayload, // Expect the validation payload here
 					roundevents.RoundParticipantJoinValidationRequest,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "failed to create validation request message: failed to create result message", // Corrected error message
 		},
 		{
 			name: "Service failure with non-error result",
@@ -251,7 +245,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantJoinRequest event: internal service error",
+			expectedErrMsg: "CheckParticipantStatus service failed: internal service error", // Corrected error message
 		},
 		{
 			name: "Unknown result from CheckParticipantStatus",
@@ -278,7 +272,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "CheckParticipantStatus service returned unexpected nil result", // Corrected error message
 		},
 		{
 			name: "Invalid payload type",
@@ -360,6 +354,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 					},
 				)
 
+				// Corrected: Return TagLookupRequestPayload for non-DECLINE response
 				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
@@ -369,10 +364,11 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinRequestPayload{
+						Success: &roundevents.TagLookupRequestPayload{ // <-- Changed to TagLookupRequestPayload
 							RoundID:  testRoundID,
 							UserID:   testUserID,
 							Response: roundtypes.ResponseAccept,
+							// JoinedLate field might be set by the service, but for the mock, it's fine if nil
 						},
 					},
 					nil,
@@ -386,7 +382,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					&updateResultPayload, // <-- Changed to pass a pointer
 					roundevents.LeaderboardGetTagNumberRequest,
 				).Return(testMsg, nil)
 			},
@@ -429,7 +425,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantJoinValidationRequest event: internal service error",
+			expectedErrMsg: "ValidateParticipantJoinRequest service failed: internal service error", // Corrected error message
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -441,6 +437,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 					},
 				)
 
+				// Corrected: Return TagLookupRequestPayload for non-DECLINE response
 				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
@@ -450,7 +447,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinRequestPayload{
+						Success: &roundevents.TagLookupRequestPayload{
 							RoundID:  testRoundID,
 							UserID:   testUserID,
 							Response: roundtypes.ResponseAccept,
@@ -467,14 +464,14 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					&updateResultPayload,
 					roundevents.LeaderboardGetTagNumberRequest,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "failed to create TagLookupRequest message: failed to create result message",
 		},
 		{
 			name: "Service failure with non-error result",
@@ -546,7 +543,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantJoinValidationRequest event: internal service error",
+			expectedErrMsg: "ValidateParticipantJoinRequest service failed: internal service error", // Corrected error message
 		},
 		{
 			name: "Unknown result from ValidateParticipantJoinRequest",
@@ -573,7 +570,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "ValidateParticipantJoinRequest service returned unexpected nil result", // Corrected error message
 		},
 		{
 			name: "Invalid payload type",
@@ -613,7 +610,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleParticipantJoinValidationRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg { // Added err != nil check
 				t.Errorf("HandleParticipantJoinValidationRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 

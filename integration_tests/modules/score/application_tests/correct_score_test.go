@@ -92,7 +92,7 @@ func TestCorrectScore(t *testing.T) {
 			} else {
 				// Create a fresh round with one user
 				round := generator.GenerateRound(users[tc.userIndex].UserID, 1, []testutils.User{users[tc.userIndex]})
-				parsedUUID, err := uuid.Parse(string(round.ID))
+				parsedUUID, err := uuid.Parse(round.ID.String())
 				if err != nil {
 					t.Fatalf("Failed to parse round UUID: %v", err)
 				}

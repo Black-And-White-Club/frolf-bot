@@ -423,9 +423,6 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 				Response:  payload.Response,
 				TagNumber: payload.TagNumber, // Use the provided TagNumber
 				Score:     nil,               // Assuming score isn't updated in this flow
-				// Other fields like Name, IsBot etc. would typically need to be retrieved from
-				// the existing participant record or provided in the payload if needed for the DB update method.
-				// Assuming RoundDB.UpdateParticipant can update based on UserID and provided fields.
 			}
 
 			// --- Call the DB layer to update the participant ---
@@ -460,7 +457,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 				DeclinedParticipants:  declined,
 				TentativeParticipants: tentative,
 				EventMessageID:        round.EventMessageID, // Use fetched message ID
-				JoinedLate:            payload.JoinedLate,
+				JoinedLate:            &isLateJoin,          // Use the derived isLateJoin
 			}
 			return RoundOperationResult{Success: joinedPayload}, nil // Return success
 
@@ -482,7 +479,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 					RoundID:    payload.RoundID,
 					UserID:     payload.UserID,
 					Response:   payload.Response,
-					JoinedLate: payload.JoinedLate,
+					JoinedLate: payload.JoinedLate, // This is correct, as TagLookupRequestPayload can have nil
 				}
 				return RoundOperationResult{Success: tagLookupPayload}, nil
 
@@ -549,7 +546,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 					DeclinedParticipants:  declined,
 					TentativeParticipants: tentative,
 					EventMessageID:        round.EventMessageID,
-					JoinedLate:            payload.JoinedLate,
+					JoinedLate:            &isLateJoin, // Use the derived isLateJoin
 				}
 				return RoundOperationResult{Success: joinedPayload}, nil // Return success
 

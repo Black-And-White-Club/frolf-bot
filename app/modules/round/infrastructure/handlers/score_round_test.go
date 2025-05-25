@@ -375,7 +375,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ScoreUpdateValidated event: internal service error",
+			expectedErrMsg: "failed to handle ScoreUpdateValidated event during score update: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -445,7 +445,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "unexpected result from service (neither success nor failure)",
 		},
 		{
 			name: "Failure result from UpdateParticipantScore",
@@ -574,7 +574,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.AllScoresSubmittedPayload{
+						Success: &roundevents.AllScoresSubmittedPayload{ // Return a pointer
 							RoundID: testRoundID,
 						},
 					},
@@ -583,7 +583,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					gomock.Any(), // This will be a pointer to AllScoresSubmittedPayload
 					roundevents.RoundAllScoresSubmitted,
 				).Return(testMsg, nil)
 			},
@@ -624,10 +624,11 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					fmt.Errorf("internal service error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantScoreUpdated event: internal service error",
+			msg:     testMsg,
+			want:    nil,
+			wantErr: true,
+			// Corrected expected error message
+			expectedErrMsg: "failed to handle ParticipantScoreUpdated event during score check: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -649,7 +650,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.AllScoresSubmittedPayload{
+						Success: &roundevents.AllScoresSubmittedPayload{ // Return a pointer
 							RoundID: testRoundID,
 						},
 					},
@@ -658,7 +659,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					gomock.Any(), // This will be a pointer to AllScoresSubmittedPayload
 					roundevents.RoundAllScoresSubmitted,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
@@ -690,10 +691,11 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					nil,
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			msg:     testMsg,
+			want:    nil,
+			wantErr: true,
+			// Corrected expected error message
+			expectedErrMsg: "unexpected result from service (neither success nor failure)",
 		},
 		{
 			name: "Failure result from CheckAllScoresSubmitted",
@@ -760,7 +762,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleParticipantScoreUpdated() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg { // Added err != nil check
 				t.Errorf("HandleParticipantScoreUpdated() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 

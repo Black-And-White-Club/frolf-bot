@@ -1,26 +1,21 @@
 package testutils
 
 import (
-	"fmt"
 	"time"
 
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/google/uuid"
 )
 
-// Replace these with your actual import paths
 type (
-	RoundID      string
-	DiscordID    string
-	TagNumber    int
-	Score        float64
-	StartTime    time.Time
-	Title        string
-	Description  string
-	Location     string
-	EventType    string
-	Finalized    bool
-	RoundState   string
+	RoundID      sharedtypes.RoundID
+	DiscordID    sharedtypes.DiscordID
+	TagNumber    sharedtypes.TagNumber
+	Score        sharedtypes.Score
+	StartTime    sharedtypes.StartTime
 	UserRoleEnum string
 )
 
@@ -54,66 +49,21 @@ type User struct {
 	Role   UserRoleEnum `json:"role"`
 }
 
-// Response represents a participant response in a round
-type Response struct {
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Value     string    `json:"value"`
-}
-
-// Participant represents a participant in a round
-type Participant struct {
-	UserID    DiscordID  `json:"user_id"`
-	TagNumber *TagNumber `json:"tag_number,omitempty"`
-	Response  Response   `json:"response"`
-	Score     *Score     `json:"score"`
-}
-
-// Round represents a round in your application
-type Round struct {
-	ID             RoundID       `json:"id"`
-	Title          Title         `json:"title"`
-	Description    Description   `json:"description"`
-	Location       Location      `json:"location"`
-	EventType      *EventType    `json:"event_type"`
-	StartTime      StartTime     `json:"start_time"`
-	Finalized      Finalized     `json:"finalized"`
-	CreatedBy      DiscordID     `json:"created_by"`
-	State          RoundState    `json:"state"`
-	Participants   []Participant `json:"participants"`
-	EventMessageID string        `json:"event_message_id"`
-	CreatedAt      time.Time     `json:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at"`
-}
-
-// ScoreInfo represents score information for a user
-type ScoreInfo struct {
-	UserID    DiscordID  `json:"user_id"`
-	Score     Score      `json:"score"`
-	TagNumber *TagNumber `json:"tag_number"`
-}
-
 // ScoreModel represents the score model in your application
 type ScoreModel struct {
-	RoundID   RoundID     `json:"round_id"`
-	RoundData []ScoreInfo `json:"round_data"`
-	Source    string      `json:"source"`
-}
-
-// LeaderboardEntry represents an entry in the leaderboard
-type LeaderboardEntry struct {
-	TagNumber *TagNumber `json:"tag_number"`
-	UserID    DiscordID  `json:"user_id"`
+	RoundID   RoundID                 `json:"round_id"`
+	RoundData []sharedtypes.ScoreInfo `json:"round_data"`
+	Source    string                  `json:"source"`
 }
 
 // Leaderboard represents the leaderboard model in your application
 type Leaderboard struct {
-	ID                  int64              `json:"id"`
-	LeaderboardData     []LeaderboardEntry `json:"leaderboard_data"`
-	IsActive            bool               `json:"is_active"`
-	UpdateSource        string             `json:"update_source"`
-	UpdateID            RoundID            `json:"update_id"`
-	RequestingDiscordID DiscordID          `json:"requesting_discord_id"`
+	ID                  int64                               `json:"id"`
+	LeaderboardData     []leaderboardtypes.LeaderboardEntry `json:"leaderboard_data"`
+	IsActive            bool                                `json:"is_active"`
+	UpdateSource        string                              `json:"update_source"`
+	UpdateID            RoundID                             `json:"update_id"`
+	RequestingDiscordID DiscordID                           `json:"requesting_discord_id"`
 }
 
 // GenerateUsers creates a specified number of test users
@@ -124,7 +74,7 @@ func (g *TestDataGenerator) GenerateUsers(count int) []User {
 	for i := 0; i < count; i++ {
 		users[i] = User{
 			ID:     int64(i + 1),
-			UserID: DiscordID(fmt.Sprintf("%d", g.faker.Number(100000000, 999999999))),
+			UserID: DiscordID(g.faker.Numerify("#########")),
 			Role:   roles[g.faker.Number(0, len(roles)-1)],
 		}
 	}
@@ -133,14 +83,15 @@ func (g *TestDataGenerator) GenerateUsers(count int) []User {
 }
 
 // GenerateRound creates a test round with the specified number of participants
-func (g *TestDataGenerator) GenerateRound(createdBy DiscordID, participantCount int, users []User) Round {
-	eventTypes := []string{"ONLINE", "IN_PERSON", "HYBRID"}
+// Now returns roundtypes.Round directly
+func (g *TestDataGenerator) GenerateRound(createdBy DiscordID, participantCount int, users []User) roundtypes.Round {
+	eventTypes := []roundtypes.EventType{roundtypes.EventType("ONLINE"), roundtypes.EventType("IN_PERSON"), roundtypes.EventType("HYBRID")}
 	randomEventType := eventTypes[g.faker.Number(0, len(eventTypes)-1)]
-	eventType := EventType(randomEventType)
+	eventType := randomEventType
 
-	stateTypes := []RoundState{"DRAFT", "PUBLISHED", "COMPLETED"}
+	stateTypes := []roundtypes.RoundState{roundtypes.RoundStateUpcoming, roundtypes.RoundStateInProgress, roundtypes.RoundStateFinalized}
 
-	participants := make([]Participant, 0, participantCount)
+	participants := make([]roundtypes.Participant, 0, participantCount)
 
 	// Use provided users or generate random ones
 	usersToUse := users
@@ -156,54 +107,78 @@ func (g *TestDataGenerator) GenerateRound(createdBy DiscordID, participantCount 
 	}
 
 	// Create participants from users
-	for i, user := range usersToUse {
-		var tagNumber *TagNumber
-		var score *Score
+	for i := 0; i < participantCount; i++ { // Changed 'count' to 'participantCount'
+		var tagNumber *sharedtypes.TagNumber
+		var score *sharedtypes.Score
 
 		// Some participants have tag numbers and scores
 		if g.faker.Bool() {
-			tn := TagNumber(i + 1)
+			tn := sharedtypes.TagNumber(i + 1)
 			tagNumber = &tn
-			s := Score(g.faker.Float64Range(0, 1000))
+			s := sharedtypes.Score(g.faker.Float64Range(0, 1000))
 			score = &s
 		}
 
-		participants = append(participants, Participant{
-			UserID:    user.UserID,
+		participants = append(participants, roundtypes.Participant{
+			UserID:    sharedtypes.DiscordID(usersToUse[i].UserID),
 			TagNumber: tagNumber,
-			Response: Response{
-				Status:    g.faker.RandomString([]string{"ACCEPTED", "DECLINED", "PENDING"}),
-				Timestamp: g.faker.Date(),
-				Value:     g.faker.Sentence(g.faker.Number(1, 5)),
-			},
-			Score: score,
+			Response:  roundtypes.Response(g.faker.RandomString([]string{string(roundtypes.ResponseAccept), string(roundtypes.ResponseTentative), string(roundtypes.ResponseDecline)})),
+			Score:     score,
 		})
 	}
 
-	return Round{
-		ID:             RoundID(uuid.New().String()),
-		Title:          Title(g.faker.Sentence(g.faker.Number(2, 5))),
-		Description:    Description(g.faker.Paragraph(1, 3, 3, "\n")),
-		Location:       Location(g.faker.Address().Street),
+	var description *roundtypes.Description
+	descStr := g.faker.Paragraph(1, 3, 3, "\n")
+	if descStr != "" {
+		d := roundtypes.Description(descStr)
+		description = &d
+	}
+
+	var location *roundtypes.Location
+	locStr := g.faker.Address().Street
+	if locStr != "" {
+		l := roundtypes.Location(locStr)
+		location = &l
+	}
+
+	// --- FIX START: Ensure StartTime is always a non-zero value ---
+	var startTimeVal sharedtypes.StartTime
+	// Generate a future time to ensure it's not zero and is valid for upcoming rounds
+	stTime := g.faker.DateRange(time.Now().Add(time.Hour), time.Now().AddDate(0, 1, 0))
+	if stTime.IsZero() {
+		// Fallback: if gofakeit.DateRange somehow returns a zero time, use a default future time
+		startTimeVal = sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
+	} else {
+		startTimeVal = sharedtypes.StartTime(stTime)
+	}
+	// --- FIX END ---
+
+	finalized := roundtypes.Finalized(g.faker.Bool())
+
+	return roundtypes.Round{ // Now returning roundtypes.Round directly
+		ID:             sharedtypes.RoundID(uuid.New()),
+		Title:          roundtypes.Title(g.faker.Sentence(g.faker.Number(2, 5))),
+		Description:    description,
+		Location:       location,
 		EventType:      &eventType,
-		StartTime:      StartTime(g.faker.DateRange(time.Now(), time.Now().AddDate(0, 1, 0))),
-		Finalized:      Finalized(g.faker.Bool()),
-		CreatedBy:      createdBy,
+		StartTime:      &startTimeVal,
+		Finalized:      finalized,
+		CreatedBy:      sharedtypes.DiscordID(createdBy),
 		State:          stateTypes[g.faker.Number(0, len(stateTypes)-1)],
 		Participants:   participants,
 		EventMessageID: g.faker.UUID(),
-		CreatedAt:      g.faker.DateRange(time.Now().AddDate(0, -1, 0), time.Now()),
-		UpdatedAt:      time.Now(),
 	}
 }
 
 // GenerateRoundWithConstraints creates a round with specific constraints
-func (g *TestDataGenerator) GenerateRoundWithConstraints(options RoundOptions) Round {
+// Now returns roundtypes.Round directly
+func (g *TestDataGenerator) GenerateRoundWithConstraints(options RoundOptions) roundtypes.Round {
+	// Generate a base round. GenerateRound now guarantees a non-zero StartTime.
 	round := g.GenerateRound(options.CreatedBy, options.ParticipantCount, options.Users)
 
 	// Apply constraints if provided
 	if options.Title != "" {
-		round.Title = Title(options.Title)
+		round.Title = options.Title
 	}
 
 	if options.State != "" {
@@ -211,11 +186,18 @@ func (g *TestDataGenerator) GenerateRoundWithConstraints(options RoundOptions) R
 	}
 
 	if options.StartTime != nil {
-		round.StartTime = *options.StartTime
+		// If StartTime is provided in options, use its dereferenced value.
+		// This will override the one generated by GenerateRound if `options.StartTime` is non-nil.
+		round.StartTime = options.StartTime
 	}
+	// If options.StartTime is nil, `round.StartTime` will retain the non-zero
+	// value generated by `g.GenerateRound`, which is correct.
 
-	if options.Finalized != nil {
-		round.Finalized = *options.Finalized
+	// Note: ID, EventMessageID, and Participants are not in RoundOptions,
+	// so they are expected to be set manually in the test setup after this call,
+	// as currently done in the test case.
+	if options.ID != sharedtypes.RoundID(uuid.Nil) { // Allow setting ID if provided in options
+		round.ID = sharedtypes.RoundID(options.ID)
 	}
 
 	return round
@@ -223,31 +205,35 @@ func (g *TestDataGenerator) GenerateRoundWithConstraints(options RoundOptions) R
 
 // RoundOptions provides options for creating constrained rounds
 type RoundOptions struct {
+	ID               sharedtypes.RoundID // Added ID field here for consistency in testutils
 	CreatedBy        DiscordID
 	ParticipantCount int
 	Users            []User
-	Title            string
-	State            RoundState
-	StartTime        *StartTime
-	Finalized        *Finalized
+	Title            roundtypes.Title
+	State            roundtypes.RoundState
+	StartTime        *sharedtypes.StartTime
+	Finalized        *roundtypes.Finalized
+	// EventMessageID and Participants are NOT in this struct, as per your previous clarification.
+	// They are set manually in the test setup after GenerateRoundWithConstraints.
 }
 
 // GenerateScore creates a test score for a round
-func (g *TestDataGenerator) GenerateScore(round Round) ScoreModel {
-	scoreInfos := make([]ScoreInfo, 0, len(round.Participants))
+// Now accepts roundtypes.Round
+func (g *TestDataGenerator) GenerateScore(round roundtypes.Round) ScoreModel {
+	scoreInfos := make([]sharedtypes.ScoreInfo, 0, len(round.Participants))
 
 	for _, participant := range round.Participants {
 		// Only include participants with scores
 		if participant.Score != nil {
-			scoreInfos = append(scoreInfos, ScoreInfo{
+			scoreInfos = append(scoreInfos, sharedtypes.ScoreInfo{
 				UserID:    participant.UserID,
 				Score:     *participant.Score,
 				TagNumber: participant.TagNumber,
 			})
 		} else if g.faker.Bool() {
 			// Add some random scores for participants that don't have them
-			score := Score(g.faker.Float64Range(0, 1000))
-			scoreInfos = append(scoreInfos, ScoreInfo{
+			score := sharedtypes.Score(g.faker.Float64Range(0, 1000))
+			scoreInfos = append(scoreInfos, sharedtypes.ScoreInfo{
 				UserID:    participant.UserID,
 				Score:     score,
 				TagNumber: participant.TagNumber,
@@ -256,17 +242,18 @@ func (g *TestDataGenerator) GenerateScore(round Round) ScoreModel {
 	}
 
 	return ScoreModel{
-		RoundID:   round.ID,
+		RoundID:   RoundID(round.ID), // Cast round.ID to testutils.RoundID
 		RoundData: scoreInfos,
 		Source:    g.faker.RandomString([]string{"API", "DISCORD", "MANUAL"}),
 	}
 }
 
 // GenerateLeaderboard creates a test leaderboard based on multiple rounds
-func (g *TestDataGenerator) GenerateLeaderboard(rounds []Round, isActive bool) Leaderboard {
-	entries := make([]LeaderboardEntry, 0)
-	userScores := make(map[DiscordID]float64)
-	userTags := make(map[DiscordID]*TagNumber)
+// Now accepts []roundtypes.Round
+func (g *TestDataGenerator) GenerateLeaderboard(rounds []roundtypes.Round, isActive bool) Leaderboard {
+	entries := make([]leaderboardtypes.LeaderboardEntry, 0)
+	userScores := make(map[sharedtypes.DiscordID]float64)
+	userTags := make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber)
 
 	// Aggregate scores across all rounds
 	for _, round := range rounds {
@@ -283,8 +270,8 @@ func (g *TestDataGenerator) GenerateLeaderboard(rounds []Round, isActive bool) L
 
 	// Convert to leaderboard entries
 	for userID := range userScores {
-		entries = append(entries, LeaderboardEntry{
-			TagNumber: userTags[userID],
+		entries = append(entries, leaderboardtypes.LeaderboardEntry{
+			TagNumber: *userTags[userID],
 			UserID:    userID,
 		})
 	}
@@ -294,15 +281,16 @@ func (g *TestDataGenerator) GenerateLeaderboard(rounds []Round, isActive bool) L
 		LeaderboardData:     entries,
 		IsActive:            isActive,
 		UpdateSource:        g.faker.RandomString([]string{"ROUND_COMPLETION", "MANUAL_UPDATE", "SCHEDULED_UPDATE"}),
-		UpdateID:            rounds[len(rounds)-1].ID, // Last round as update source
-		RequestingDiscordID: DiscordID(fmt.Sprintf("%d", g.faker.Number(100000000, 999999999))),
+		UpdateID:            RoundID(rounds[len(rounds)-1].ID), // Cast round.ID to testutils.RoundID
+		RequestingDiscordID: DiscordID(g.faker.Numerify("#########")),
 	}
 }
 
 // GenerateTestData creates a complete set of test data with interrelated entities
-func (g *TestDataGenerator) GenerateTestData(userCount, roundCount int) ([]User, []Round, []ScoreModel, Leaderboard) {
+// Now returns []roundtypes.Round
+func (g *TestDataGenerator) GenerateTestData(userCount, roundCount int) ([]User, []roundtypes.Round, []ScoreModel, Leaderboard) {
 	users := g.GenerateUsers(userCount)
-	rounds := make([]Round, roundCount)
+	rounds := make([]roundtypes.Round, roundCount) // Changed to roundtypes.Round
 	scores := make([]ScoreModel, roundCount)
 
 	// Create rounds and scores
@@ -331,6 +319,31 @@ func (g *TestDataGenerator) GenerateTestData(userCount, roundCount int) ([]User,
 	return users, rounds, scores, leaderboard
 }
 
+// StartTimePtr is a helper to create a pointer to sharedtypes.StartTime.
+// This is moved here as it's a general utility for creating test data.
+func StartTimePtr(t time.Time) *sharedtypes.StartTime {
+	st := sharedtypes.StartTime(t)
+	return &st
+}
+
+// RoundDescriptionPtr is a helper to create a pointer to roundtypes.Description.
+func RoundDescriptionPtr(s string) *roundtypes.Description {
+	d := roundtypes.Description(s)
+	return &d
+}
+
+// RoundLocationPtr is a helper to create a pointer to roundtypes.Location.
+func RoundLocationPtr(s string) *roundtypes.Location {
+	l := roundtypes.Location(s)
+	return &l
+}
+
+// RoundFinalizedPtr is a helper to create a pointer to roundtypes.Finalized.
+func RoundFinalizedPtr(b bool) *roundtypes.Finalized {
+	f := roundtypes.Finalized(b)
+	return &f
+}
+
 // Example usage:
 func ExampleUsage() {
 	// Create a generator with a fixed seed for reproducibility
@@ -345,7 +358,7 @@ func ExampleUsage() {
 		CreatedBy:        adminUsers[0].UserID,
 		ParticipantCount: 5,
 		Users:            users,
-		State:            "PUBLISHED",
+		State:            roundtypes.RoundState("PUBLISHED"),
 	}
 
 	specialRound := generator.GenerateRoundWithConstraints(roundOptions)

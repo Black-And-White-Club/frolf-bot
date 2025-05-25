@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
@@ -26,11 +27,26 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testTagNumber := sharedtypes.TagNumber(42)
 	testDiscordMessageID := "12345"
+	testOriginalResponse := roundtypes.ResponseAccept
+	testOriginalJoinedLate := true // Example value
 
-	testPayload := &roundevents.RoundTagNumberFoundPayload{
-		RoundID:   testRoundID,
-		UserID:    testUserID,
-		TagNumber: &testTagNumber,
+	// Define the expected ParticipantJoinedPayload once for consistency
+	expectedParticipantJoinedPayload := &roundevents.ParticipantJoinedPayload{
+		RoundID:               testRoundID,
+		AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber, Score: nil}},
+		DeclinedParticipants:  []roundtypes.Participant{},
+		TentativeParticipants: []roundtypes.Participant{},
+		EventMessageID:        testDiscordMessageID,
+		JoinedLate:            nil,
+	}
+
+	// Correct testPayload type to match what HandleTagNumberFound expects
+	testPayload := &sharedevents.RoundTagLookupResultPayload{
+		RoundID:            testRoundID,
+		UserID:             testUserID,
+		TagNumber:          &testTagNumber,
+		OriginalResponse:   testOriginalResponse,
+		OriginalJoinedLate: &testOriginalJoinedLate,
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -55,7 +71,8 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberFoundPayload) = *testPayload
+						// Correct type assertion for the out parameter
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -63,28 +80,22 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:   testRoundID,
-						UserID:    testUserID,
-						Response:  roundtypes.ResponseAccept,
-						TagNumber: &testTagNumber,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  &testTagNumber,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber, Score: nil}},
-							DeclinedParticipants:  []roundtypes.Participant{},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedParticipantJoinedPayload, // Use the consistently defined payload
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					expectedParticipantJoinedPayload, // Use the consistently defined payload
 					roundevents.RoundParticipantJoined,
 				).Return(testMsg, nil)
 			},
@@ -107,7 +118,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -115,10 +126,11 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:   testRoundID,
-						UserID:    testUserID,
-						Response:  roundtypes.ResponseAccept,
-						TagNumber: &testTagNumber,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  &testTagNumber,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -128,14 +140,14 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update participant status: internal service error",
+			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error", // Corrected error message
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -143,28 +155,22 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:   testRoundID,
-						UserID:    testUserID,
-						Response:  roundtypes.ResponseAccept,
-						TagNumber: &testTagNumber,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  &testTagNumber,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber, Score: nil}},
-							DeclinedParticipants:  []roundtypes.Participant{},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedParticipantJoinedPayload, // Use the consistently defined payload
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					expectedParticipantJoinedPayload, // This is now expected to be `expectedParticipantJoinedPayload`
 					roundevents.RoundParticipantJoined,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
@@ -178,7 +184,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -186,10 +192,11 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:   testRoundID,
-						UserID:    testUserID,
-						Response:  roundtypes.ResponseAccept,
-						TagNumber: &testTagNumber,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  &testTagNumber,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{}, // Return empty result
@@ -199,22 +206,23 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper", // Corrected error message
 		},
 		{
 			name: "Invalid payload type",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagNumberFoundPayload"))
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagLookupResultPayload"))
 			},
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundTagNumberFoundPayload",
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundTagLookupResultPayload",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Re-initialize mocks for each subtest to ensure isolation
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
@@ -254,10 +262,27 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testDiscordMessageID := "12345"
+	testOriginalResponse := roundtypes.ResponseAccept // Assuming a default response for not found
+	testOriginalJoinedLate := false                   // Assuming a default joined late for not found
 
-	testPayload := &roundevents.RoundTagNumberNotFoundPayload{
-		RoundID: testRoundID,
-		UserID:  testUserID,
+	// Define the expected ParticipantJoinedPayload once for consistency
+	expectedParticipantJoinedPayload := &roundevents.ParticipantJoinedPayload{
+		RoundID:               testRoundID,
+		AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: testOriginalResponse, TagNumber: nil, Score: nil}},
+		DeclinedParticipants:  []roundtypes.Participant{},
+		TentativeParticipants: []roundtypes.Participant{},
+		EventMessageID:        testDiscordMessageID,
+		JoinedLate:            nil, // Or &testOriginalJoinedLate if the service returns it
+	}
+
+	// Correct testPayload type to match what HandleTagNumberNotFound expects
+	testPayload := &sharedevents.RoundTagLookupResultPayload{
+		RoundID:            testRoundID,
+		UserID:             testUserID,
+		Found:              false, // Explicitly set to false for not found
+		Error:              "tag not found",
+		OriginalResponse:   testOriginalResponse,
+		OriginalJoinedLate: &testOriginalJoinedLate,
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -282,7 +307,8 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberNotFoundPayload) = *testPayload
+						// Correct type assertion for the out parameter
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -290,27 +316,22 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  nil, // Tag number is nil for not found
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: nil, Score: nil}},
-							DeclinedParticipants:  []roundtypes.Participant{},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedParticipantJoinedPayload, // Use the consistently defined payload
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					expectedParticipantJoinedPayload, // Use the consistently defined payload
 					roundevents.RoundParticipantJoined,
 				).Return(testMsg, nil)
 			},
@@ -333,7 +354,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberNotFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -341,9 +362,11 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  nil,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -353,14 +376,14 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update participant status: internal service error",
+			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberNotFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -368,27 +391,22 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  nil,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: nil, Score: nil}},
-							DeclinedParticipants:  []roundtypes.Participant{},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedParticipantJoinedPayload,
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
+					expectedParticipantJoinedPayload,
 					roundevents.RoundParticipantJoined,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
@@ -402,7 +420,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundTagNumberNotFoundPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupResultPayload) = *testPayload
 						return nil
 					},
 				)
@@ -410,29 +428,31 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   testOriginalResponse,
+						TagNumber:  nil,
+						JoinedLate: &testOriginalJoinedLate,
 					},
 				).Return(
-					roundservice.RoundOperationResult{},
+					roundservice.RoundOperationResult{}, // Return empty result
 					nil,
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper",
 		},
 		{
 			name: "Invalid payload type",
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagNumberNotFoundPayload"))
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagLookupResultPayload"))
 			},
 			msg:            invalidMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundTagNumberNotFoundPayload",
+			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected RoundTagLookupResultPayload",
 		},
 	}
 
@@ -510,31 +530,37 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 					},
 				)
 
+				// Define the expected ParticipantJoinedPayload for the mock service return
+				expectedServiceSuccessPayload := &roundevents.ParticipantJoinedPayload{
+					RoundID:               testRoundID,
+					AcceptedParticipants:  []roundtypes.Participant{},
+					DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
+					TentativeParticipants: []roundtypes.Participant{},
+					EventMessageID:        testDiscordMessageID,
+					JoinedLate:            nil,
+				}
+
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseDecline,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   roundtypes.ResponseDecline,
+						TagNumber:  nil,
+						JoinedLate: nil,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{},
-							DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedServiceSuccessPayload,
 					},
 					nil,
 				)
 
+				// Corrected: Expect RoundParticipantDeclined topic for success message
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
-					roundevents.RoundParticipantJoined,
+					expectedServiceSuccessPayload,
+					roundevents.RoundParticipantDeclined, // Corrected to RoundParticipantDeclined topic
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -564,9 +590,11 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseDecline,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   roundtypes.ResponseDecline,
+						TagNumber:  nil,
+						JoinedLate: nil,
 					},
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -576,7 +604,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update participant status: internal service error",
+			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -588,31 +616,37 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 					},
 				)
 
+				// Define the expected ParticipantJoinedPayload for the mock service return
+				expectedServiceSuccessPayload := &roundevents.ParticipantJoinedPayload{
+					RoundID:               testRoundID,
+					AcceptedParticipants:  []roundtypes.Participant{},
+					DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
+					TentativeParticipants: []roundtypes.Participant{},
+					EventMessageID:        testDiscordMessageID,
+					JoinedLate:            nil,
+				}
+
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseDecline,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   roundtypes.ResponseDecline,
+						TagNumber:  nil,
+						JoinedLate: nil,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantJoinedPayload{
-							RoundID:               testRoundID,
-							AcceptedParticipants:  []roundtypes.Participant{},
-							DeclinedParticipants:  []roundtypes.Participant{{UserID: testUserID, Response: roundtypes.ResponseDecline, TagNumber: nil, Score: nil}},
-							TentativeParticipants: []roundtypes.Participant{},
-							EventMessageID:        testDiscordMessageID,
-							JoinedLate:            nil,
-						},
+						Success: expectedServiceSuccessPayload,
 					},
 					nil,
 				)
 
+				// Corrected: Expect RoundParticipantDeclined topic for success message
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					gomock.Any(),
-					roundevents.RoundParticipantJoined,
+					expectedServiceSuccessPayload,
+					roundevents.RoundParticipantDeclined, // Corrected to RoundParticipantDeclined topic
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -633,19 +667,21 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 				mockRoundService.EXPECT().UpdateParticipantStatus(
 					gomock.Any(),
 					roundevents.ParticipantJoinRequestPayload{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseDecline,
+						RoundID:    testRoundID,
+						UserID:     testUserID,
+						Response:   roundtypes.ResponseDecline,
+						TagNumber:  nil,
+						JoinedLate: nil,
 					},
 				).Return(
-					roundservice.RoundOperationResult{},
+					roundservice.RoundOperationResult{}, // Return empty result
 					nil,
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper",
 		},
 		{
 			name: "Invalid payload type",

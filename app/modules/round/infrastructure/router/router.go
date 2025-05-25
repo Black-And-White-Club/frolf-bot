@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os" // Import os for environment variable check
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -22,19 +23,29 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// Constants for environment check.
+const (
+	TestEnvironmentFlag  = "APP_ENV"
+	TestEnvironmentValue = "test"
+)
+
 // RoundRouter handles routing for round module events.
 type RoundRouter struct {
-	logger           *slog.Logger
-	Router           *message.Router
-	subscriber       eventbus.EventBus
-	publisher        eventbus.EventBus
-	config           *config.Config
-	helper           utils.Helpers
-	tracer           trace.Tracer
-	middlewareHelper utils.MiddlewareHelpers
+	logger             *slog.Logger
+	Router             *message.Router
+	subscriber         eventbus.EventBus
+	publisher          eventbus.EventBus
+	config             *config.Config
+	helper             utils.Helpers
+	tracer             trace.Tracer
+	middlewareHelper   utils.MiddlewareHelpers
+	metricsBuilder     *metrics.PrometheusMetricsBuilder
+	prometheusRegistry *prometheus.Registry
+	metricsEnabled     bool
 }
 
 // NewRoundRouter creates a new RoundRouter.
+// It now accepts a prometheusRegistry to conditionally enable metrics.
 func NewRoundRouter(
 	logger *slog.Logger,
 	router *message.Router,
@@ -43,25 +54,68 @@ func NewRoundRouter(
 	config *config.Config,
 	helper utils.Helpers,
 	tracer trace.Tracer,
+	prometheusRegistry *prometheus.Registry,
 ) *RoundRouter {
+	// Add logging to check environment variable and conditions
+	actualAppEnv := os.Getenv(TestEnvironmentFlag)
+	logger.Info("NewRoundRouter: Environment check",
+		"APP_ENV_Actual", actualAppEnv,
+		"TestEnvironmentValue", TestEnvironmentValue,
+		"prometheusRegistryProvided", prometheusRegistry != nil,
+	)
+
+	// Check if the application is running in the test environment
+	inTestEnv := actualAppEnv == TestEnvironmentValue
+	logger.Info("NewRoundRouter: inTestEnv determined", "inTestEnv", inTestEnv)
+
+	var metricsBuilder *metrics.PrometheusMetricsBuilder
+	// Only create the metrics builder if a registry is provided AND we are NOT in the test environment
+	// Add logging for the condition
+	if prometheusRegistry != nil && !inTestEnv {
+		logger.Info("NewRoundRouter: Creating Prometheus metrics builder")
+		builder := metrics.NewPrometheusMetricsBuilder(prometheusRegistry, "", "")
+		metricsBuilder = &builder
+	} else {
+		logger.Info("NewRoundRouter: Skipping Prometheus metrics builder creation",
+			"prometheusRegistryProvided", prometheusRegistry != nil,
+			"inTestEnv", inTestEnv,
+		)
+	}
+
+	// metricsEnabled is true only if a registry is provided AND we are NOT in the test environment
+	metricsEnabled := prometheusRegistry != nil && !inTestEnv
+	logger.Info("NewRoundRouter: metricsEnabled determined", "metricsEnabled", metricsEnabled)
+
 	return &RoundRouter{
-		logger:           logger,
-		Router:           router,
-		subscriber:       subscriber,
-		publisher:        publisher,
-		config:           config,
-		helper:           helper,
-		tracer:           tracer,
-		middlewareHelper: utils.NewMiddlewareHelper(),
+		logger:             logger,
+		Router:             router,
+		subscriber:         subscriber,
+		publisher:          publisher,
+		config:             config,
+		helper:             helper,
+		tracer:             tracer,
+		middlewareHelper:   utils.NewMiddlewareHelper(),
+		metricsBuilder:     metricsBuilder,
+		prometheusRegistry: prometheusRegistry,
+		metricsEnabled:     metricsEnabled,
 	}
 }
 
 // Configure sets up the router with the necessary handlers and dependencies.
-func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus eventbus.EventBus, roundMetrics roundmetrics.RoundMetrics) error {
-	// Create Prometheus metrics builder
-	metricsBuilder := metrics.NewPrometheusMetricsBuilder(prometheus.NewRegistry(), "", "")
-	// Add metrics middleware to the router
-	metricsBuilder.AddPrometheusRouterMetrics(r.Router)
+func (r *RoundRouter) Configure(routerCtx context.Context, roundService roundservice.Service, eventbus eventbus.EventBus, roundMetrics roundmetrics.RoundMetrics) error {
+	r.logger.Info("Configure: Checking metricsEnabled before adding middleware",
+		"metricsEnabled", r.metricsEnabled,
+		"metricsBuilderNil", r.metricsBuilder == nil,
+	)
+
+	// Conditionally add Prometheus metrics middleware based on the metricsEnabled flag
+	if r.metricsEnabled && r.metricsBuilder != nil {
+		r.logger.Info("Adding Prometheus router metrics middleware for Round")
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
+	} else {
+		// This log message confirms that metrics are being skipped in the test environment
+		r.logger.Info("Skipping Prometheus router metrics middleware for Round - either in test environment or metrics not configured")
+	}
 
 	// Create round handlers with logger and tracer
 	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper, roundMetrics)
@@ -73,11 +127,11 @@ func (r *RoundRouter) Configure(roundService roundservice.Service, eventbus even
 		r.middlewareHelper.DiscordMetadataMiddleware(),
 		r.middlewareHelper.RoutingMetadataMiddleware(),
 		middleware.Recoverer,
-		middleware.Retry{MaxRetries: 3}.Middleware,
 		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
-	if err := r.RegisterHandlers(context.Background(), roundHandlers); err != nil {
+	// Pass routerCtx to RegisterHandlers
+	if err := r.RegisterHandlers(routerCtx, roundHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
@@ -123,21 +177,23 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					// Log the error and return it to Watermill for potential retries/dead-lettering.
+					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
-						r.logger.InfoContext(ctx, "🚀 Auto-publishing message", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
+							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 						}
 					} else {
-						r.logger.Warn("⚠️ Message missing topic metadata, dropping", attr.String("message_id", m.UUID))
+						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
 					}
 				}
-				return nil, nil
+				return nil, nil // Return nil, nil to indicate successful processing and publishing
 			},
 		)
 	}
