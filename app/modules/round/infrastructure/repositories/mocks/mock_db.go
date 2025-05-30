@@ -196,11 +196,12 @@ func (mr *MockRoundDBMockRecorder) LogRound(ctx, round any) *gomock.Call {
 }
 
 // RemoveParticipant mocks base method.
-func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+func (m *MockRoundDB) RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveParticipant", ctx, roundID, userID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]roundtypes.Participant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RemoveParticipant indicates an expected call of RemoveParticipant.
@@ -210,17 +211,17 @@ func (mr *MockRoundDBMockRecorder) RemoveParticipant(ctx, roundID, userID any) *
 }
 
 // TagUpdates mocks base method.
-func (m *MockRoundDB) TagUpdates(ctx context.Context, bun bun.IDB, round *roundtypes.Round) error {
+func (m *MockRoundDB) TagUpdates(ctx context.Context, arg1 bun.IDB, round *roundtypes.Round) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagUpdates", ctx, bun, round)
+	ret := m.ctrl.Call(m, "TagUpdates", ctx, arg1, round)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // TagUpdates indicates an expected call of TagUpdates.
-func (mr *MockRoundDBMockRecorder) TagUpdates(ctx, bun, round any) *gomock.Call {
+func (mr *MockRoundDBMockRecorder) TagUpdates(ctx, arg1, round any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagUpdates", reflect.TypeOf((*MockRoundDB)(nil).TagUpdates), ctx, bun, round)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagUpdates", reflect.TypeOf((*MockRoundDB)(nil).TagUpdates), ctx, arg1, round)
 }
 
 // UpdateEventMessageID mocks base method.

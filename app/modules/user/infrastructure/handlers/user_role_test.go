@@ -12,7 +12,8 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -23,26 +24,24 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
-	testRequesterID := sharedtypes.DiscordID("98765432109876543")
 	testNewRole := sharedtypes.UserRoleEnum("admin")
 
 	testPayload := &userevents.UserRoleUpdateRequestPayload{
-		UserID:      testUserID,
-		Role:        testNewRole,
-		RequesterID: testRequesterID,
+		UserID: testUserID,
+		Role:   testNewRole,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := usermetrics.NewNoop() // Use NoOp metrics instead of mocks
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -63,13 +62,64 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				)
 
 				updateResultPayload := &userevents.UserRoleUpdateResultPayload{
-					UserID: testUserID,
-					Role:   testNewRole,
+					Success: true,
+					UserID:  testUserID,
+					Role:    testNewRole,
+					Error:   "",
 				}
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(updateResultPayload, nil, nil)
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+					userservice.UserOperationResult{
+						Success: updateResultPayload,
+						Failure: nil,
+						Error:   nil,
+					},
+					nil,
+				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), updateResultPayload, userevents.UserRoleUpdated).Return(testMsg, nil)
+				// Handler passes the pointer - expect the pointer
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					updateResultPayload, // This is the pointer that the handler passes
+					userevents.DiscordUserRoleUpdated,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "Failed to update user role",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				failurePayload := &userevents.UserRoleUpdateResultPayload{
+					Success: false,
+					UserID:  testUserID,
+					Role:    testNewRole,
+					Error:   "user not found",
+				}
+
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+					userservice.UserOperationResult{
+						Success: nil,
+						Failure: failurePayload,
+						Error:   nil,
+					},
+					nil,
+				)
+
+				// Handler passes the pointer - expect the pointer
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failurePayload, // This is the pointer that the handler passes
+					userevents.DiscordUserRoleUpdateFailed,
+				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -95,86 +145,26 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(nil, &userevents.UserRoleUpdateFailedPayload{
-					UserID: testUserID,
-					Reason: "internal service error",
-				}, nil)
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+					userservice.UserOperationResult{},
+					fmt.Errorf("service error"),
+				)
 
+				// Handler creates a new payload and passes a value - expect the value
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserRoleUpdateFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
+					userevents.UserRoleUpdateResultPayload{
+						Success: false,
+						UserID:  testUserID,
+						Role:    testNewRole,
+						Error:   "internal service error: service error",
 					},
-					userevents.UserRoleUpdateFailed,
+					userevents.DiscordUserRoleUpdateFailed,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
 			wantErr: false,
-		},
-		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				successPayload := &userevents.UserRoleUpdateResultPayload{
-					UserID: testUserID,
-					Role:   testNewRole,
-				}
-
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(successPayload,
-					nil,
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					successPayload,
-					userevents.UserRoleUpdated,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-				// No metrics expectations needed with NoOp
-			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "failed to create result message: failed to create result message",
-		},
-		{
-			name: "Service failure and CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(nil,
-					&userevents.UserRoleUpdateFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
-					},
-					fmt.Errorf("internal service error"),
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.UserRoleUpdateFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
-					},
-					userevents.UserRoleUpdateFailed,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-				// No metrics expectations needed with NoOp
-			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "failed to create result message: failed to create result message",
 		},
 	}
 
@@ -186,10 +176,10 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics, // Use NoOp metrics
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 

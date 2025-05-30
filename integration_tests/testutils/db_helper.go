@@ -18,12 +18,14 @@ import (
 // runMigrations runs all module migrations
 func runMigrations(db *bun.DB) error {
 	ctx := context.Background()
-	migrator := migrate.NewMigrator(db, usermigrations.Migrations)
 
+	// Initialize migration tables only once - use any migrations to create the table
+	migrator := migrate.NewMigrator(db, usermigrations.Migrations)
 	if err := migrator.Init(ctx); err != nil {
 		return fmt.Errorf("failed to initialize migration tables: %w", err)
 	}
 
+	// Run all module migrations
 	for name, m := range map[string]*migrate.Migrations{
 		"user":        usermigrations.Migrations,
 		"round":       roundmigrations.Migrations,
@@ -89,4 +91,10 @@ func CleanScoreIntegrationTables(ctx context.Context, db *bun.DB) error {
 // CleanLeaderboardIntegrationTables truncates leaderboard-related tables
 func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
 	return TruncateTables(ctx, db, "leaderboards")
+}
+
+// CleanRoundIntegrationTables truncates round-related tables
+func CleanRoundIntegrationTables(ctx context.Context, db *bun.DB) error {
+	// Order matters due to foreign keys - participants first, then rounds
+	return TruncateTables(ctx, db, "rounds")
 }

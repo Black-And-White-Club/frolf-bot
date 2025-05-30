@@ -69,8 +69,8 @@ func (db *RoundDBImpl) GetParticipant(ctx context.Context, roundID sharedtypes.R
 	return nil, nil
 }
 
-// RemoveParticipant removes a participant from a round
-func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+// RemoveParticipant removes a participant from a round and returns updated participants
+func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error) {
 	// First, fetch the round
 	var round roundtypes.Round
 	err := db.DB.NewSelect().
@@ -78,7 +78,10 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtype
 		Where("id = ?", roundID).
 		Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch round: %w", err)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("round with ID %s not found", roundID)
+		}
+		return nil, fmt.Errorf("failed to fetch round: %w", err)
 	}
 
 	// Find and remove the participant
@@ -93,8 +96,8 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtype
 	}
 
 	if !found {
-		// Participant wasn't in the round
-		return nil
+		// Participant wasn't in the round - return current participants (graceful handling)
+		return round.Participants, nil
 	}
 
 	// Update the round with the modified participants list
@@ -104,10 +107,10 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtype
 		Where("id = ?", roundID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to remove participant: %w", err)
+		return nil, fmt.Errorf("failed to remove participant: %w", err)
 	}
 
-	return nil
+	return updatedParticipants, nil
 }
 
 // UpdateRound updates an existing round in the database.

@@ -140,7 +140,7 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 	newLeaderboard := &Leaderboard{
 		LeaderboardData: updatedLeaderboardData,
 		IsActive:        true,
-		UpdateSource:    ServiceUpdateSource(source),
+		UpdateSource:    sharedtypes.ServiceUpdateSource(source),
 		UpdateID:        newAssignmentID,
 	}
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
@@ -157,7 +157,7 @@ func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.D
 }
 
 // BatchAssignTags assigns multiple tags in a single transaction
-func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []TagAssignment, source ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []TagAssignment, source sharedtypes.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -250,7 +250,7 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 	newLeaderboard := &Leaderboard{
 		LeaderboardData: leaderboardData,
 		IsActive:        true,
-		UpdateSource:    ServiceUpdateSourceProcessScores,
+		UpdateSource:    sharedtypes.ServiceUpdateSourceProcessScores,
 		UpdateID:        UpdateID,
 	}
 
@@ -340,7 +340,7 @@ func (db *LeaderboardDBImpl) SwapTags(ctx context.Context, requestorID, targetID
 	newLeaderboard := &Leaderboard{
 		LeaderboardData: updatedLeaderboardData,
 		IsActive:        true,
-		UpdateSource:    ServiceUpdateSourceManual,
+		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 	}
 	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
 	if err != nil {

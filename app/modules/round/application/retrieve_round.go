@@ -2,7 +2,6 @@ package roundservice
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -25,18 +24,18 @@ func (s *RoundService) GetRound(ctx context.Context, roundID sharedtypes.RoundID
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
 					RoundID: roundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to retrieve round: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		s.logger.InfoContext(ctx, "Round retrieved from database",
 			attr.RoundID("round_id", roundID),
 		)
 
-		rtRound := roundtypes.Round{
+		rtRound := &roundtypes.Round{ // Make this a pointer for consistency
 			ID:           dbRound.ID,
 			Title:        dbRound.Title,
 			Description:  dbRound.Description,

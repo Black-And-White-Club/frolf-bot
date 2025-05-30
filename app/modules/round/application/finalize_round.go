@@ -12,7 +12,7 @@ import (
 
 // FinalizeRound handles the round finalization process by updating the round state.
 func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "FinalizeRound", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "FinalizeRound", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Update the round state to finalized in the database
 		rounddbState := roundtypes.RoundStateFinalized
 		s.logger.InfoContext(ctx, "Attempting to update round state to finalized",
@@ -28,7 +28,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.Error(err),
 			)
-			return RoundOperationResult{Failure: failurePayload}, fmt.Errorf("failed to update round state: %w", err)
+			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
 		// Fetch the finalized round data
@@ -43,30 +43,41 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 				attr.StringUUID("round_id", payload.RoundID.String()),
 				attr.Error(err),
 			)
-			return RoundOperationResult{Failure: failurePayload}, fmt.Errorf("failed to fetch round %s: %w", payload.RoundID, err)
+			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
 		// Prepare the success payload with round data
 		finalizedPayload := roundevents.RoundFinalizedPayload{
 			RoundID:   payload.RoundID,
-			RoundData: *round, // Include the round data here
+			RoundData: *round,
 		}
 		s.logger.InfoContext(ctx, "Round state updated to finalized successfully",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
 
-		// Return the success payload
-		return RoundOperationResult{Success: finalizedPayload}, nil
+		return RoundOperationResult{Success: &finalizedPayload}, nil
 	})
-
-	return result, err
 }
 
 // NotifyScoreModule prepares the data needed by the Score Module after a round is finalized.
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
-	result, err := s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		// Check if round exists first
+		_, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Round not found for score processing",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Error(err),
+			)
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   fmt.Sprintf("round not found: %v", err),
+			}
+			return RoundOperationResult{Failure: &failurePayload}, nil
+		}
+
 		// Use the round data directly from the payload
-		round := payload.RoundData // Access the round data here
+		round := payload.RoundData
 
 		// Prepare the participant score data for the Score Module
 		scores := make([]roundevents.ParticipantScore, 0, len(round.Participants))
@@ -99,11 +110,8 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 			attr.Int("participant_count_processed", len(scores)),
 		)
 
-		// Return the success payload
-		return RoundOperationResult{Success: processScoresPayload}, nil
+		return RoundOperationResult{Success: &processScoresPayload}, nil
 	})
-
-	return result, err
 }
 
 // ConvertToRoundFinalizedPayload converts the event payload to the finalized payload structure.

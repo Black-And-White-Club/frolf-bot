@@ -69,7 +69,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		payload          roundevents.RoundScheduledPayload
 		discordMessageID string
 		mockEventBus     func(*gomock.Controller, *eventbus.MockEventBus, time.Time, roundevents.RoundScheduledPayload) // Pass ctrl, fixedNow, and the specific payload for dynamic expectations
-		expectedError    error                                                                                          // Changed to expect actual error, not wrapped
+		expectedError    error                                                                                          // Updated to expect nil for handled errors
 		expectedPanicMsg string                                                                                         // Added for panic tests
 		expectedResult   RoundOperationResult
 	}{
@@ -146,7 +146,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -167,9 +167,9 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				dynamicTestStartTime := fixedNow.Add(2 * time.Hour)
 				mockEB.EXPECT().ProcessDelayedMessages(ctx, testRoundID, sharedtypes.StartTime(dynamicTestStartTime)).Return(errors.New("consumer creation error"))
 			},
-			expectedError: errors.New("failed to create consumer for round " + testRoundID.String() + ": consumer creation error"), // No wrapper prefix
+			expectedError: nil, // Changed to nil since error is handled in Failure
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testRoundID,
 					Error:   "consumer creation error", // Matches inner error message
 				},
@@ -185,9 +185,9 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				mockEB.EXPECT().ProcessDelayedMessages(ctx, testRoundID, sharedtypes.StartTime(dynamicTestStartTime)).Return(nil)
 				mockEB.EXPECT().ScheduleDelayedMessage(ctx, roundevents.RoundReminder, testRoundID, sharedtypes.StartTime(dynamicTestReminderTime), gomock.Any(), gomock.Any()).Return(errors.New("reminder scheduling error"))
 			},
-			expectedError: errors.New("failed to schedule reminder: reminder scheduling error"), // No wrapper prefix
+			expectedError: nil, // Changed to nil since error is handled in Failure
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testRoundID,
 					Error:   "reminder scheduling error", // Matches inner error message
 				},
@@ -204,9 +204,9 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				mockEB.EXPECT().ScheduleDelayedMessage(ctx, roundevents.RoundReminder, testRoundID, sharedtypes.StartTime(dynamicTestReminderTime), gomock.Any(), gomock.Any()).Return(nil)
 				mockEB.EXPECT().ScheduleDelayedMessage(ctx, roundevents.RoundStarted, testRoundID, sharedtypes.StartTime(dynamicTestStartTime), gomock.Any(), gomock.Any()).Return(errors.New("round start scheduling error"))
 			},
-			expectedError: errors.New("failed to schedule round start: round start scheduling error"), // No wrapper prefix
+			expectedError: nil, // Changed to nil since error is handled in Failure
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testRoundID,
 					Error:   "round start scheduling error", // Matches inner error message
 				},
@@ -223,7 +223,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -249,7 +249,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -273,7 +273,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -313,7 +313,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -344,7 +344,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -374,7 +374,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -399,7 +399,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -439,7 +439,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -485,7 +485,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			},
 			expectedError: nil,
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundScheduledPayload{
+				Success: &roundevents.RoundScheduledPayload{ // Changed to pointer
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     testRoundID,
 						Title:       testRoundTitle,
@@ -547,35 +547,33 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 			// Dynamically update expectedResult's StartTime based on fixedNow for this test run
 			if tt.expectedResult.Success != nil {
-				if successPayload, ok := tt.expectedResult.Success.(roundevents.RoundScheduledPayload); ok {
-					if successPayload.StartTime != nil {
+				if successPayloadPtr, ok := tt.expectedResult.Success.(*roundevents.RoundScheduledPayload); ok {
+					if successPayloadPtr.StartTime != nil {
 						// Adjust the expected success payload's StartTime relative to fixedNow
 						if tt.name == "past start time" {
-							successPayload.StartTime = startTimePtr(fixedNow.Add(-1 * time.Hour))
+							successPayloadPtr.StartTime = startTimePtr(fixedNow.Add(-1 * time.Hour))
 						} else if tt.name == "far future start time" {
-							successPayload.StartTime = startTimePtr(fixedNow.Add(720 * time.Hour))
+							successPayloadPtr.StartTime = startTimePtr(fixedNow.Add(720 * time.Hour))
 						} else if tt.name == "zero start time" {
-							successPayload.StartTime = startTimePtr(time.Time{})
+							successPayloadPtr.StartTime = startTimePtr(time.Time{})
 						} else if tt.name == "reminder time equals start time" {
-							successPayload.StartTime = startTimePtr(fixedNow)
+							successPayloadPtr.StartTime = startTimePtr(fixedNow)
 						} else {
-							successPayload.StartTime = startTimePtr(fixedNow.Add(2 * time.Hour))
+							successPayloadPtr.StartTime = startTimePtr(fixedNow.Add(2 * time.Hour))
 						}
 					}
 					// Special handling for UserID in the expected result
 					// Based on service code, UserID is NOT copied to the output payload
-					successPayload.UserID = ""
+					successPayloadPtr.UserID = ""
 
 					// Special handling for description in the expected result
 					if tt.name == "nil description in payload" {
-						successPayload.Description = nil
+						successPayloadPtr.Description = nil
 					} else if tt.name == "with description in payload" {
-						successPayload.Description = descriptionPtr(roundtypes.Description("Another Description"))
+						successPayloadPtr.Description = descriptionPtr(roundtypes.Description("Another Description"))
 					} else {
-						successPayload.Description = &testDescription // Default description
+						successPayloadPtr.Description = &testDescription // Default description
 					}
-
-					tt.expectedResult.Success = successPayload
 				}
 			}
 
@@ -618,14 +616,18 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 			// Validate result payload (success/failure)
 			if tt.expectedResult.Success != nil {
-				// Type assertion for Success payload
+				// Type assertion for Success payload - handle pointer
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(roundevents.RoundScheduledPayload); !ok {
-					t.Errorf("expected result.Success to be of type roundevents.RoundScheduledPayload, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(roundevents.RoundScheduledPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type roundevents.RoundScheduledPayload, got %T", tt.expectedResult.Success)
+				} else if successPayloadPtr, ok := result.Success.(*roundevents.RoundScheduledPayload); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundScheduledPayload, got %T", result.Success)
+				} else if expectedSuccessPayloadPtr, ok := tt.expectedResult.Success.(*roundevents.RoundScheduledPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundScheduledPayload, got %T", tt.expectedResult.Success)
 				} else {
+					// Dereference the pointers for comparison
+					successPayload := *successPayloadPtr
+					expectedSuccessPayload := *expectedSuccessPayloadPtr
+
 					// Compare fields directly
 					if successPayload.RoundID != expectedSuccessPayload.RoundID {
 						t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
@@ -657,15 +659,20 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					}
 				}
 			} else if tt.expectedResult.Failure != nil {
-				// Type assertion for Failure payload
+				// Type assertion for Failure payload - handle pointer
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type roundevents.RoundErrorPayload, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(roundevents.RoundErrorPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type roundevents.RoundErrorPayload, got %T", tt.expectedResult.Failure)
-				} else if failurePayload.Error != expectedFailurePayload.Error {
-					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
+				} else if failurePayloadPtr, ok := result.Failure.(*roundevents.RoundErrorPayload); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundErrorPayload, got %T", result.Failure)
+				} else if expectedFailurePayloadPtr, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", tt.expectedResult.Failure)
+				} else {
+					// Dereference the pointers for comparison
+					failurePayload := *failurePayloadPtr
+					expectedFailurePayload := *expectedFailurePayloadPtr
+					if failurePayload.Error != expectedFailurePayload.Error {
+						t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
+					}
 				}
 			}
 		})

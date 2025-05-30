@@ -53,7 +53,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 						{TagNumber: tag2, UserID: "user2"},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddbtypes.ServiceUpdateSourceProcessScores,
+					UpdateSource: sharedtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:     testRoundID,
 				}, nil)
 			},
@@ -98,7 +98,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 					ID:              1,
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{},
 					IsActive:        true,
-					UpdateSource:    leaderboarddbtypes.ServiceUpdateSourceProcessScores,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:        testRoundID,
 				}, nil)
 			},
@@ -119,7 +119,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 						{TagNumber: tag2, UserID: "user2"}, // Mixed tag number
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddbtypes.ServiceUpdateSourceProcessScores,
+					UpdateSource: sharedtypes.ServiceUpdateSourceProcessScores,
 					UpdateID:     testRoundID,
 				}, nil)
 			},

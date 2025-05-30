@@ -1,10 +1,11 @@
-// integration_tests/modules/user/helper.go
 package userintegrationtests
 
 import (
 	"context"
-	"io" // Import io for io.Discard
+	"io"
+	"log"
 	"log/slog"
+	"sync"
 	"testing"
 
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
@@ -13,12 +14,15 @@ import (
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/uptrace/bun"
-
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-// testEnv is the shared test environment managed by TestMain.
-var testEnv *testutils.TestEnvironment
+// Global variables for the test environment, initialized once.
+var (
+	testEnv     *testutils.TestEnvironment
+	testEnvOnce sync.Once
+	testEnvErr  error
+)
 
 // TestDeps holds dependencies needed by individual tests.
 type TestDeps struct {
@@ -29,35 +33,84 @@ type TestDeps struct {
 	Cleanup func()
 }
 
-// SetupTestUserService provides dependencies for individual tests using the shared environment.
-// It no longer creates or cleans up the test environment itself.
-func SetupTestUserService(ctx context.Context, db *bun.DB, t *testing.T) TestDeps {
+func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	t.Helper()
 
-	// Use the provided context and DB
-	realDB := &userdb.UserDBImpl{DB: db}
+	testEnvOnce.Do(func() {
+		log.Println("Initializing user test environment...")
+		env, err := testutils.NewTestEnvironment(t)
+		if err != nil {
+			testEnvErr = err
+			log.Printf("Failed to set up test environment: %v", err)
+		} else {
+			log.Println("User test environment initialized successfully.")
+			testEnv = env
+		}
+	})
 
-	// Create the UserService using the provided DB and mock/no-op dependencies
+	if testEnvErr != nil {
+		t.Fatalf("User test environment initialization failed: %v", testEnvErr)
+	}
+
+	if testEnv == nil {
+		t.Fatalf("User test environment not initialized")
+	}
+
+	return testEnv
+}
+
+func SetupTestUserService(t *testing.T) TestDeps {
+	t.Helper()
+
+	// Get the shared test environment
+	env := GetTestEnv(t)
+
+	// Check if containers should be recreated for stability
+	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
+		t.Fatalf("Failed to handle container recreation: %v", err)
+	}
+
+	// Perform deep cleanup between tests for better isolation
+	if err := env.DeepCleanup(); err != nil {
+		t.Fatalf("Failed to perform deep cleanup: %v", err)
+	}
+
+	// Clean up database tables before each test
+	if err := testutils.TruncateTables(env.Ctx, env.DB, "users"); err != nil {
+		t.Fatalf("Failed to truncate DB tables: %v", err)
+	}
+
+	realDB := &userdb.UserDBImpl{DB: env.DB}
+
+	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	noOpMetrics := &usermetrics.NoOpMetrics{}
+	noOpTracer := noop.NewTracerProvider().Tracer("test_user_service")
+
+	// Create the UserService with no-op dependencies
 	service := userservice.NewUserService(
 		realDB,
-		nil, // Assuming nil for EventBus
-		slog.New(slog.NewTextHandler(io.Discard, nil)), // Silent logger
-		&usermetrics.NoOpMetrics{},                     // No-op metrics
-		noop.NewTracerProvider().Tracer("test"),        // No-op tracer
+		nil, // No EventBus needed for user service
+		testLogger,
+		noOpMetrics,
+		noOpTracer,
 	)
 
-	// Return the dependencies. Cleanup is a no-op for tests using this setup.
+	cleanup := func() {
+		// No special cleanup needed for user service
+	}
+
+	t.Cleanup(cleanup)
+
 	return TestDeps{
-		Ctx:     ctx, // Use the provided context
+		Ctx:     env.Ctx,
 		DB:      realDB,
-		BunDB:   db, // Provide the provided bun.DB
+		BunDB:   env.DB,
 		Service: service,
-		Cleanup: func() {}, // No-op cleanup
+		Cleanup: cleanup,
 	}
 }
 
 // Helper function to create a tag number pointer
-// Assuming this function is defined in this file or another file in this package.
 func tagPtr(val int) *sharedtypes.TagNumber {
 	tag := sharedtypes.TagNumber(val)
 	return &tag

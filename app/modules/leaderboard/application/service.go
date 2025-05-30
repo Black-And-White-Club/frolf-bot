@@ -10,6 +10,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -135,4 +136,8 @@ type LeaderboardOperationResult struct {
 	Success interface{}
 	Failure interface{}
 	Error   error
+}
+
+func ptrTag(t sharedtypes.TagNumber) *sharedtypes.TagNumber {
+	return &t
 }

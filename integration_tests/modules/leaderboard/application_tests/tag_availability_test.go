@@ -19,9 +19,10 @@ import (
 )
 
 func TestCheckTagAvailability(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
+	ctx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
 	tests := []struct {
@@ -98,7 +99,7 @@ func TestCheckTagAvailability(t *testing.T) {
 						{UserID: "user_B", TagNumber: 2},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -159,7 +160,7 @@ func TestCheckTagAvailability(t *testing.T) {
 						{UserID: "user_Y", TagNumber: 60},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -217,7 +218,7 @@ func TestCheckTagAvailability(t *testing.T) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 					IsActive:        true,
-					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -283,10 +284,6 @@ func TestCheckTagAvailability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
@@ -295,8 +292,7 @@ func TestCheckTagAvailability(t *testing.T) {
 					t.Fatalf("Failed to set up test data: %v", setupErr)
 				}
 			}
-
-			successResult, failureResult, err := deps.Service.CheckTagAvailability(sharedCtx, tt.payload)
+			successResult, failureResult, err := deps.Service.CheckTagAvailability(ctx, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

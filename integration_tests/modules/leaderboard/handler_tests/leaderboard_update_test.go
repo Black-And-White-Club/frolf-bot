@@ -55,18 +55,24 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 			name:  "Success - Sorted participant tags apply to new leaderboard",
 			users: generator.GenerateUsers(3),
 			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
-				initial := leaderboardtypes.LeaderboardData{
-					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 1},
-					{UserID: sharedtypes.DiscordID(users[1].UserID), TagNumber: 2},
-					{UserID: sharedtypes.DiscordID(users[2].UserID), TagNumber: 3},
+				// Insert the generated users into the database first
+				_, err := deps.DB.NewInsert().Model(&users).Exec(context.Background())
+				if err != nil {
+					t.Fatalf("Failed to insert users: %v", err)
 				}
-				// SetupLeaderboardWithEntries returns the created leaderboard which is initially active
-				// We store this initial leaderboard object to reference its state before the update.
-				// Assuming SetupLeaderboardWithEntries sets both UpdateID and RoundID to the provided roundID.
+
+				// Create initial assignments with UNUSED tags to avoid conflicts
+				initial := leaderboardtypes.LeaderboardData{
+					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 10}, // User 0 starts with tag 10
+					{UserID: sharedtypes.DiscordID(users[1].UserID), TagNumber: 11}, // User 1 starts with tag 11
+					{UserID: sharedtypes.DiscordID(users[2].UserID), TagNumber: 12}, // User 2 starts with tag 12
+				}
+
 				initialLeaderboard := testutils.SetupLeaderboardWithEntries(t, deps.DB, initial, true, sharedtypes.RoundID(uuid.New()))
-				// Corrected logging to use UpdateID
 				t.Logf("SetupFn: Initial Leaderboard ID: %d, UpdateID: %s, IsActive: %t",
 					initialLeaderboard.ID, initialLeaderboard.UpdateID, initialLeaderboard.IsActive)
+				t.Logf("SetupFn: Created users with IDs: [%s, %s, %s]",
+					users[0].UserID, users[1].UserID, users[2].UserID)
 				return initialLeaderboard
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
@@ -79,16 +85,14 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				payload := leaderboardevents.LeaderboardUpdateRequestedPayload{
 					RoundID:               sharedtypes.RoundID(uuid.New()),
 					SortedParticipantTags: sorted,
-					// Assuming UpdateID in payload is not directly used to identify the new LB in DB
-					// but rather RoundID is used as the UpdateID in the DB.
-					// If UpdateID in payload is used, adjust logic below.
-					// UpdateID:              uuid.New().String(),
 				}
 				payloadBytes, _ := json.Marshal(payload)
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				t.Logf("PublishMsgFn: Publishing message with RoundID: %s, SortedParticipantTags: %v",
 					payload.RoundID, payload.SortedParticipantTags)
+				t.Logf("PublishMsgFn: Using actual user IDs: [%s, %s, %s]",
+					users[0].UserID, users[1].UserID, users[2].UserID)
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequested, msg); err != nil {
 					t.Fatalf("failed publishing message: %v", err)
 				}

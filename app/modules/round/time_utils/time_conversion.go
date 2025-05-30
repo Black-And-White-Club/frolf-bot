@@ -42,6 +42,12 @@ func NewTimeParser() *TimeParser {
 
 // GetTimezoneFromInput extracts a US timezone abbreviation from user input.
 func (tp *TimeParser) GetTimezoneFromInput(input string) (string, bool) {
+	// Handle empty input first
+	if strings.TrimSpace(input) == "" {
+		slog.Warn("Empty timezone input, falling back to default", slog.String("input", input))
+		return "America/Chicago", false
+	}
+
 	// First try as a valid full timezone
 	if _, err := time.LoadLocation(input); err == nil {
 		return input, true
@@ -55,24 +61,27 @@ func (tp *TimeParser) GetTimezoneFromInput(input string) (string, bool) {
 		}
 	}
 
-	// Optional: fallback default
+	// Fallback to default timezone
 	slog.Warn("Unknown timezone, falling back to default", slog.String("input", input))
 	return "America/Chicago", false
 }
 
 // ParseUserTimeInput parses user-provided time and converts it to a UTC timestamp.
 func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
-	// Determine the timezone
-	userTimeZone, found := tp.GetTimezoneFromInput(string(timezone))
-	if !found {
-		return 0, fmt.Errorf("invalid timezone: %s", timezone)
+	// Validate start time string
+	if strings.TrimSpace(startTimeStr) == "" {
+		return 0, fmt.Errorf("start time string cannot be empty")
 	}
+
+	// Determine the timezone (allows fallback)
+	userTimeZone, _ := tp.GetTimezoneFromInput(string(timezone))
+	// Note: We don't check the 'found' boolean since we allow fallback
 	slog.Info("Timezone override", slog.String("user_timezone", userTimeZone))
 
 	// Load the timezone
 	loc, err := time.LoadLocation(userTimeZone)
 	if err != nil {
-		return 0, fmt.Errorf("failed to load timezone: %s", timezone)
+		return 0, fmt.Errorf("failed to load timezone: %s", userTimeZone)
 	}
 
 	// Normalize the input

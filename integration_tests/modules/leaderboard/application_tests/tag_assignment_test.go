@@ -19,7 +19,7 @@ import (
 )
 
 func TestTagAssignmentRequested(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -42,7 +42,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 						{UserID: "existing_user_2", TagNumber: 2},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -155,7 +155,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 						{UserID: "user_B", TagNumber: 20},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -209,7 +209,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 						{UserID: "user_B", TagNumber: 20},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -324,7 +324,7 @@ func TestTagAssignmentRequested(t *testing.T) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 					IsActive:        true,
-					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -403,10 +403,6 @@ func TestTagAssignmentRequested(t *testing.T) {
 		// Capture tt for use in the validateResult closure
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
@@ -416,8 +412,14 @@ func TestTagAssignmentRequested(t *testing.T) {
 				}
 			}
 
-			result, err := deps.Service.TagAssignmentRequested(sharedCtx, tt.payload)
-
+			ctx := context.Background()
+			tagAssignmentRequests := []sharedtypes.TagAssignmentRequest{
+				{
+					UserID:    tt.payload.UserID,
+					TagNumber: *tt.payload.TagNumber,
+				},
+			}
+			result, err := deps.Service.ProcessTagAssignments(ctx, tt.payload, tagAssignmentRequests, nil, tt.payload.UpdateID.UUID(), tt.payload.UpdateID.UUID())
 			// Check for error return value from the service function
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

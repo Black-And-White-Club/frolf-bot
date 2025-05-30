@@ -12,13 +12,8 @@ import (
 
 // TestCorrectScore verifies that the CorrectScore method updates or inserts scores properly.
 func TestCorrectScore(t *testing.T) {
-	// Clean tables before all subtests
-	if err := testutils.CleanScoreIntegrationTables(sharedCtx, sharedDB); err != nil {
-		t.Fatalf("Failed to clean score tables: %v", err)
-	}
-
 	// Set up service dependencies
-	deps := SetupTestScoreService(sharedCtx, sharedDB, t)
+	deps := SetupTestScoreService(t)
 	defer deps.Cleanup()
 
 	// Create test data generator

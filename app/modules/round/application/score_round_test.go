@@ -56,7 +56,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.ScoreUpdateValidatedPayload{
+				Success: &roundevents.ScoreUpdateValidatedPayload{
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
 						RoundID:     testScoreRoundID,
 						Participant: testParticipant,
@@ -77,7 +77,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
 						RoundID:     sharedtypes.RoundID(uuid.Nil),
 						Participant: testParticipant,
@@ -86,7 +86,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 					Error: "validation errors: round ID cannot be zero",
 				},
 			},
-			expectedError: errors.New("validation errors: round ID cannot be zero"),
+			expectedError: nil, // Changed from error to nil
 		},
 		{
 			name: "empty participant",
@@ -99,7 +99,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
 						RoundID:     testScoreRoundID,
 						Participant: "",
@@ -108,7 +108,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 					Error: "validation errors: participant Discord ID cannot be empty",
 				},
 			},
-			expectedError: errors.New("validation errors: participant Discord ID cannot be empty"),
+			expectedError: nil, // Changed from error to nil
 		},
 		{
 			name: "nil score",
@@ -121,7 +121,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				Score:       nil,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
 						RoundID:     testScoreRoundID,
 						Participant: testParticipant,
@@ -130,7 +130,29 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 					Error: "validation errors: score cannot be empty",
 				},
 			},
-			expectedError: errors.New("validation errors: score cannot be empty"),
+			expectedError: nil, // Changed from error to nil
+		},
+		{
+			name: "multiple validation errors",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// No DB interactions expected for validation
+			},
+			payload: roundevents.ScoreUpdateRequestPayload{
+				RoundID:     sharedtypes.RoundID(uuid.Nil),
+				Participant: "",
+				Score:       nil,
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
+						RoundID:     sharedtypes.RoundID(uuid.Nil),
+						Participant: "",
+						Score:       nil,
+					},
+					Error: "validation errors: round ID cannot be zero; participant Discord ID cannot be empty; score cannot be empty",
+				},
+			},
+			expectedError: nil,
 		},
 	}
 
@@ -150,11 +172,9 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				},
 			}
 
-			_, err := s.ValidateScoreUpdateRequest(ctx, tt.payload)
-			if (err != nil) && (tt.expectedError == nil || err.Error() != tt.expectedError.Error()) {
-				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
-			}
+			result, err := s.ValidateScoreUpdateRequest(ctx, tt.payload)
 
+			// Check error expectation
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
@@ -163,6 +183,37 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				}
 			} else if err != nil {
 				t.Errorf("expected no error, got: %v", err)
+			}
+
+			// Check result structure
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				} else if successPayload, ok := result.Success.(*roundevents.ScoreUpdateValidatedPayload); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.ScoreUpdateValidatedPayload, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.ScoreUpdateValidatedPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.ScoreUpdateValidatedPayload, got %T", tt.expectedResult.Success)
+				} else {
+					// Compare the payload contents
+					if successPayload.ScoreUpdateRequestPayload.RoundID != expectedSuccessPayload.ScoreUpdateRequestPayload.RoundID {
+						t.Errorf("expected RoundID %v, got %v", expectedSuccessPayload.ScoreUpdateRequestPayload.RoundID, successPayload.ScoreUpdateRequestPayload.RoundID)
+					}
+				}
+			}
+
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundScoreUpdateErrorPayload); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundScoreUpdateErrorPayload, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundScoreUpdateErrorPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundScoreUpdateErrorPayload, got %T", tt.expectedResult.Failure)
+				} else {
+					// Compare the error message
+					if failurePayload.Error != expectedFailurePayload.Error {
+						t.Errorf("expected error message %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
+					}
+				}
 			}
 		})
 	}
@@ -192,7 +243,6 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			name: "successful update",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				mockDB.EXPECT().UpdateParticipantScore(ctx, testScoreRoundID, testParticipant, testScore).Return(nil)
-				// Expect GetParticipants to be called after updating score
 				mockDB.EXPECT().GetParticipants(ctx, testScoreRoundID).Return([]roundtypes.Participant{
 					{UserID: testParticipant, Score: &testScore},
 				}, nil)
@@ -208,12 +258,12 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.ParticipantScoreUpdatedPayload{ // Note: this is a pointer in the actual code
+				Success: &roundevents.ParticipantScoreUpdatedPayload{
 					RoundID:        testScoreRoundID,
 					Participant:    testParticipant,
 					Score:          testScore,
 					EventMessageID: testDiscordMessageID,
-					Participants: []roundtypes.Participant{ // Expect participants in the success payload
+					Participants: []roundtypes.Participant{
 						{UserID: testParticipant, Score: &testScore},
 					},
 				},
@@ -233,19 +283,19 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
 						RoundID:     testScoreRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
 					},
-					Error: "Failed to update score in database: database error", // Updated expected error message
+					Error: "Failed to update score in database: database error",
 				},
 			},
-			expectedError: errors.New("failed to update participant score in DB: database error"), // Updated expected error message
+			expectedError: nil, // Changed from error to nil
 		},
 		{
-			name: "error getting participants after update", // New test case for GetParticipants error
+			name: "error getting participants after update",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				mockDB.EXPECT().UpdateParticipantScore(ctx, testScoreRoundID, testParticipant, testScore).Return(nil)
 				mockDB.EXPECT().GetParticipants(ctx, testScoreRoundID).Return(nil, errors.New("participants fetch error"))
@@ -258,12 +308,12 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: testScoreRoundID,
 					Error:   "Failed to retrieve updated participants list after score update: participants fetch error",
 				},
 			},
-			expectedError: errors.New("failed to get updated participants list: participants fetch error"),
+			expectedError: nil, // Changed from error to nil
 		},
 		{
 			name: "error getting round",
@@ -271,7 +321,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				mockDB.EXPECT().UpdateParticipantScore(ctx, testScoreRoundID, testParticipant, testScore).Return(nil)
 				mockDB.EXPECT().GetParticipants(ctx, testScoreRoundID).Return([]roundtypes.Participant{
 					{UserID: testParticipant, Score: &testScore},
-				}, nil) // Mock GetParticipants as it's called before GetRound
+				}, nil)
 				mockDB.EXPECT().GetRound(ctx, testScoreRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
 			payload: roundevents.ScoreUpdateValidatedPayload{
@@ -282,12 +332,12 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: testScoreRoundID,
-					Error:   "Failed to retrieve round details for event payload: database error", // Updated expected error message
+					Error:   "Failed to retrieve round details for event payload: database error",
 				},
 			},
-			expectedError: errors.New("failed to get round details for event payload: database error"), // Updated expected error message
+			expectedError: nil, // Changed from error to nil
 		},
 	}
 
@@ -309,22 +359,29 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 
 			result, err := s.UpdateParticipantScore(ctx, tt.payload)
 
-			// Compare errors
-			if (err != nil) != (tt.expectedError != nil) {
-				t.Fatalf("expected error presence %v, got %v (error: %v)", tt.expectedError != nil, err != nil, err)
-			}
-			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
-				t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Check error expectation
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
 			}
 
-			// Compare results (simplified for success/failure check, full comparison can be more complex)
-			if tt.expectedResult.Success != nil && result.Success == nil {
-				t.Errorf("expected success result, got failure")
+			// Check result structure
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				}
 			}
-			if tt.expectedResult.Failure != nil && result.Failure == nil {
-				t.Errorf("expected failure result, got success")
+
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				}
 			}
-			// Add more detailed comparison for success/failure payloads if needed
 		})
 	}
 }
@@ -358,10 +415,10 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.AllScoresSubmittedPayload{
+				Success: &roundevents.AllScoresSubmittedPayload{ // Changed to pointer
 					RoundID:        testScoreRoundID,
 					EventMessageID: testDiscordMessageID,
-					Participants: []roundtypes.Participant{ // Expected participants in the payload
+					Participants: []roundtypes.Participant{
 						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
 						{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
 					},
@@ -390,12 +447,12 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.NotAllScoresSubmittedPayload{
+				Success: &roundevents.NotAllScoresSubmittedPayload{ // Changed to pointer
 					RoundID:        testScoreRoundID,
 					Participant:    testParticipant,
 					Score:          testScore,
-					EventMessageID: testDiscordMessageID, // Include EventMessageID
-					Participants: []roundtypes.Participant{ // Expected participants in the payload
+					EventMessageID: testDiscordMessageID,
+					Participants: []roundtypes.Participant{
 						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
 						{UserID: sharedtypes.DiscordID("user2"), Score: nil},
 					},
@@ -417,12 +474,12 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testScoreRoundID,
-					Error:   "database error from checkIfAllScoresSubmitted", // This is the error from checkIfAllScoresSubmitted
+					Error:   "database error from checkIfAllScoresSubmitted",
 				},
 			},
-			expectedError: errors.New("failed to check if all scores have been submitted: database error from checkIfAllScoresSubmitted"), // Wrapped error
+			expectedError: nil, // Changed from error to nil
 		},
 		{
 			name: "error getting participants for success payload (GetParticipants fails after checkIfAllScoresSubmitted)",
@@ -441,12 +498,12 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testScoreRoundID,
 					Error:   "Failed to retrieve updated participants list for score check: database error from main func GetParticipants",
 				},
 			},
-			expectedError: errors.New("failed to get updated participants list for score check: database error from main func GetParticipants"), // Wrapped error
+			expectedError: nil, // Changed from error to nil
 		},
 	}
 
@@ -480,15 +537,18 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			ctx := context.Background()
 			result, err := s.CheckAllScoresSubmitted(ctx, tt.payload)
 
-			// Compare errors
-			if (err != nil) != (tt.expectedError != nil) {
-				t.Fatalf("expected error presence %v, got %v (error: %v)", tt.expectedError != nil, err != nil, err)
-			}
-			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
-				t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Check error expectation
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
 			}
 
-			// Compare results (simplified for success/failure check, full comparison can be more complex)
+			// Check result structure
 			if tt.expectedResult.Success != nil && result.Success == nil {
 				t.Errorf("expected success result, got failure")
 			}

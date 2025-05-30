@@ -23,9 +23,10 @@ import (
 
 // TestGetLeaderboard tests the GetLeaderboard service function.
 func TestGetLeaderboard(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
+	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
 	tests := []struct {
@@ -48,7 +49,7 @@ func TestGetLeaderboard(t *testing.T) {
 						{UserID: "user_C", TagNumber: 3},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -61,7 +62,7 @@ func TestGetLeaderboard(t *testing.T) {
 						{UserID: "user_Z", TagNumber: 99},
 					},
 					IsActive:     false,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(inactiveLeaderboard).Exec(context.Background())
@@ -225,7 +226,7 @@ func TestGetLeaderboard(t *testing.T) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{}, // Empty data
 					IsActive:        true,
-					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -281,12 +282,6 @@ func TestGetLeaderboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clean the database before each test case
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-			// No user tables cleanup needed for GetLeaderboard tests
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
@@ -335,9 +330,10 @@ func TestGetLeaderboard(t *testing.T) {
 
 // TestRoundGetTagByUserID tests the RoundGetTagByUserID service function.
 func TestRoundGetTagByUserID(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
+	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
 	tests := []struct {
@@ -359,7 +355,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 						{UserID: "user_456", TagNumber: 10},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -439,7 +435,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 						{UserID: "user_with_tag", TagNumber: 5},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -516,7 +512,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 						{UserID: "user_abc", TagNumber: 11},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -589,10 +585,6 @@ func TestRoundGetTagByUserID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
@@ -637,9 +629,10 @@ func TestRoundGetTagByUserID(t *testing.T) {
 }
 
 func TestGetTagByUserID(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
+	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
 	tests := []struct {
@@ -660,7 +653,7 @@ func TestGetTagByUserID(t *testing.T) {
 						{UserID: "user_B", TagNumber: 88},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -725,7 +718,7 @@ func TestGetTagByUserID(t *testing.T) {
 						{UserID: "user_D", TagNumber: 77},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -785,7 +778,7 @@ func TestGetTagByUserID(t *testing.T) {
 						{UserID: "user_E", TagNumber: 66}, // User E exists, but not the target user
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -837,16 +830,10 @@ func TestGetTagByUserID(t *testing.T) {
 				}
 			},
 		},
-		// Add more test cases for other scenarios handled by the service method
-		// e.g., No active leaderboard, database errors, etc.
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {

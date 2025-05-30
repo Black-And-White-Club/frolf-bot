@@ -6,7 +6,7 @@ require (
 	github.com/Black-And-White-Club/frolf-bot-shared v0.40.0
 	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/brianvoe/gofakeit/v7 v7.2.1
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/docker v28.0.1+incompatible
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.4
@@ -44,7 +44,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/docker v28.0.1+incompatible // indirect
+	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect

@@ -51,13 +51,14 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Scheduled round tag update successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Scheduled round tag update successful",
+					attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				discordUpdatePayload := result.Success.(*roundevents.DiscordRoundUpdatePayload)
+				// Remove the type assertion since result.Success is already the correct type
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
-					discordUpdatePayload,
+					result.Success, // This is already a pointer to the correct type
 					roundevents.TagsUpdatedForScheduledRounds,
 				)
 				if err != nil {
@@ -67,11 +68,11 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 				return []*message.Message{successMsg}, nil
 			}
 
-			// If neither Failure nor Success is set, return an error
+			// This should never happen now that service always returns Success
 			h.logger.ErrorContext(ctx, "Unexpected result from UpdateScheduledRoundsWithNewTags service",
 				attr.CorrelationIDFromMsg(msg),
 			)
-			return nil, fmt.Errorf("unexpected result from service")
+			return nil, fmt.Errorf("service returned neither success nor failure")
 		},
 	)
 

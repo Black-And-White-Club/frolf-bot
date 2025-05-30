@@ -13,6 +13,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	eventbusmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/eventbus"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
@@ -26,6 +27,18 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel/trace/noop"
 )
+
+func init() {
+	// Initialize the global test environment once
+	testEnvOnce.Do(func() {
+		env, err := testutils.NewTestEnvironment(&testing.T{}) // This will need adjustment
+		if err != nil {
+			testEnvErr = fmt.Errorf("failed to initialize global test environment: %w", err)
+			return
+		}
+		testEnv = env
+	})
+}
 
 // Global variables for the test environment, initialized once.
 var (
@@ -43,33 +56,95 @@ type RoundHandlerTestDeps struct {
 	MessageCapture    *testutils.MessageCapture
 	TestObservability observability.Observability
 	TestHelpers       utils.Helpers
+	testID            string
 	cleanup           func()
 }
 
 // GetTestEnv creates a new test environment for the test.
+// GetTestEnv creates or returns the shared test environment for the test.
 func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	t.Helper()
-	if testEnv == nil {
-		t.Fatalf("RoundHandlers Global test environment not initialized")
+
+	// Initialize if not already done
+	testEnvOnce.Do(func() {
+		env, err := testutils.NewTestEnvironment(t)
+		if err != nil {
+			testEnvErr = fmt.Errorf("failed to initialize global test environment: %w", err)
+			return
+		}
+		testEnv = env
+
+		// Set up cleanup for the entire test suite
+		t.Cleanup(func() {
+			if testEnv != nil {
+				testEnv.Cleanup()
+				testEnv = nil
+			}
+		})
+	})
+
+	if testEnvErr != nil {
+		t.Fatalf("Test environment initialization failed: %v", testEnvErr)
 	}
+
+	if testEnv == nil {
+		t.Fatalf("Test environment not initialized")
+	}
+
 	return testEnv
 }
 
 // streamTopicMap defines which stream each topic belongs to for faster lookup
 var streamTopicMap = map[string]string{
-	roundevents.RoundEntityCreated:    "round",
-	roundevents.RoundValidationFailed: "discord", // This goes to discord stream
-	roundevents.RoundCreated:          "discord", // This goes to discord stream
-	roundevents.RoundCreationFailed:   "discord", // This goes to discord stream
+	roundevents.RoundEntityCreated:                    "round",
+	roundevents.RoundValidationFailed:                 "discord", // This goes to discord stream
+	roundevents.RoundCreated:                          "discord", // This goes to discord stream
+	roundevents.RoundCreationFailed:                   "discord", // This goes to discord stream
+	roundevents.RoundEventMessageIDUpdated:            "round",   // This should go to round stream since it starts with "round."
+	roundevents.RoundDeleteAuthorized:                 "round",   // ✅ Correct - "round.delete.authorized"
+	roundevents.RoundDeleteError:                      "round",   // 🔧 FIX: Change from "discord" to "round" - because "round.delete.error"
+	roundevents.RoundDeleted:                          "discord", // ✅ Correct - "discord.round.deleted"
+	roundevents.RoundAllScoresSubmitted:               "round",
+	roundevents.RoundFinalized:                        "round",
+	roundevents.DiscordRoundFinalized:                 "discord",
+	roundevents.ProcessRoundScoresRequest:             "score",
+	roundevents.RoundFinalizationError:                "round",
+	roundevents.RoundParticipantJoinRequest:           "round",
+	roundevents.RoundParticipantRemovalRequest:        "round",
+	roundevents.RoundParticipantJoinValidationRequest: "round",
+	roundevents.RoundParticipantStatusCheckError:      "discord",
+	roundevents.RoundParticipantJoinError:             "round",
+	roundevents.RoundParticipantJoined:                "discord",
+	roundevents.RoundParticipantRemoved:               "discord",
+	roundevents.RoundParticipantDeclined:              "discord",
+	roundevents.LeaderboardGetTagNumberRequest:        "leaderboard",
+	roundevents.RoundParticipantStatusUpdateRequest:   "round",
+	roundevents.RoundParticipantRemovalError:          "round",
+	sharedevents.RoundTagLookupFound:                  "round",
+	sharedevents.RoundTagLookupNotFound:               "round",
+	roundevents.TagUpdateForScheduledRounds:           "round",
+	roundevents.TagsUpdatedForScheduledRounds:         "discord",
+	roundevents.RoundUpdateError:                      "round",
+	roundevents.DiscordRoundReminder:                  "discord",
+	roundevents.RoundError:                            "round",
+	roundevents.RoundRetrieved:                        "discord",
+	roundevents.RoundScoreUpdateError:                 "discord",
+	roundevents.RoundScoreUpdateValidated:             "round",
+	roundevents.RoundParticipantScoreUpdated:          "round",
+	roundevents.RoundNotAllScoresSubmitted:            "discord",
+	roundevents.DiscordRoundStarted:                   "discord",
+	roundevents.RoundUpdateValidated:                  "round",
+	roundevents.RoundUpdated:                          "round",
+	roundevents.RoundScheduleUpdate:                   "discord",
 }
 
-// getStreamForTopic returns the appropriate stream name for a topic
+// getStreamForTopic returns the appropriate standard stream name for a topic
 func getStreamForTopic(topic string) string {
 	if stream, exists := streamTopicMap[topic]; exists {
 		return stream
 	}
 
-	// Fallback logic for dynamic topics
+	// Fallback logic for dynamic topics - return standard stream names
 	switch {
 	case strings.HasPrefix(topic, "discord."):
 		return "discord"
@@ -91,18 +166,30 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	t.Helper()
 
 	env := GetTestEnv(t)
+
+	// Check if containers should be recreated for stability
+	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
+		t.Fatalf("Failed to handle container recreation: %v", err)
+	}
+
+	// Perform deep cleanup between tests for better isolation
+	if err := env.DeepCleanup(); err != nil {
+		t.Fatalf("Failed to perform deep cleanup: %v", err)
+	}
+
 	oldEnv := os.Getenv("APP_ENV")
 	os.Setenv("APP_ENV", "test")
 
 	testCtx, testCancel := context.WithCancel(env.Ctx)
 
-	// Clean up NATS consumers for all streams before starting the test
-	streamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
-	if err := env.ResetJetStreamState(testCtx, streamNames...); err != nil {
+	// Use standard stream names that the EventBus recognizes
+	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
+
+	// Additional cleanup after DeepCleanup
+	if err := env.ResetJetStreamState(testCtx, standardStreamNames...); err != nil {
 		testCancel()
 		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
 	}
-
 	if err := testutils.TruncateTables(testCtx, env.DB, "users", "scores", "leaderboards", "rounds"); err != nil {
 		testCancel()
 		t.Fatalf("Failed to truncate DB tables: %v", err)
@@ -112,12 +199,12 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	discardLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	watermillLogger := watermill.NopLogger{}
 
-	// Create main EventBus for business logic
+	// Use standard "backend" app type - this will create the standard streams
 	eventBusImpl, err := eventbus.NewEventBus(
 		testCtx,
 		env.Config.NATS.URL,
 		discardLogger,
-		"backend",
+		"backend", // Use standard app type that EventBus recognizes
 		eventbusmetrics.NewNoop(),
 		noop.NewTracerProvider().Tracer("test"),
 	)
@@ -126,21 +213,13 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	// Ensure required streams exist with proper subjects
-	streamSubjects := map[string][]string{
-		"discord":     {"discord.>"},
-		"round":       {"round.>"},
-		"user":        {"user.>"},
-		"leaderboard": {"leaderboard.>"},
-		"score":       {"score.>"},
-		"delayed":     {"delayed.>"},
-	}
-
-	for streamName, subjects := range streamSubjects {
-		if err := ensureStreamExistsWithSubjects(testCtx, eventBusImpl, streamName, subjects); err != nil {
+	// Ensure all required streams exist after EventBus creation
+	// Assumes eventBusImpl.CreateStream is a synchronous operation.
+	for _, streamName := range standardStreamNames {
+		if err := eventBusImpl.CreateStream(testCtx, streamName); err != nil {
 			eventBusImpl.Close()
 			testCancel()
-			t.Fatalf("Failed to ensure stream %q exists: %v", streamName, err)
+			t.Fatalf("Failed to create stream %s: %v", streamName, err)
 		}
 	}
 
@@ -153,13 +232,51 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		t.Fatalf("Failed to create Watermill router: %v", err)
 	}
 
-	// Create message capture for test verification - Remove debug logging
+	// Create message capture for test verification
 	captureTopics := []string{
 		roundevents.RoundEntityCreated,
 		roundevents.RoundValidationFailed,
 		roundevents.RoundCreated,
 		roundevents.RoundCreationFailed,
+		roundevents.RoundEventMessageIDUpdated,
+		roundevents.RoundDeleteAuthorized,
+		roundevents.RoundDeleteError,
+		roundevents.RoundDeleted,
+		roundevents.RoundAllScoresSubmitted,
+		roundevents.RoundFinalized,
+		roundevents.DiscordRoundFinalized,
+		roundevents.ProcessRoundScoresRequest,
+		roundevents.RoundFinalizationError,
+		roundevents.RoundParticipantJoinRequest,
+		roundevents.RoundParticipantRemovalRequest,
+		roundevents.RoundParticipantJoinValidationRequest,
+		roundevents.RoundParticipantStatusCheckError,
+		roundevents.RoundParticipantJoinError,
+		roundevents.RoundParticipantJoined,
+		roundevents.RoundParticipantRemoved,
+		roundevents.RoundParticipantDeclined,
+		roundevents.LeaderboardGetTagNumberRequest,
+		roundevents.RoundParticipantStatusUpdateRequest,
+		roundevents.RoundParticipantRemovalError,
+		sharedevents.RoundTagLookupFound,
+		sharedevents.RoundTagLookupNotFound,
+		roundevents.TagUpdateForScheduledRounds,
+		roundevents.TagsUpdatedForScheduledRounds,
+		roundevents.RoundUpdateError,
+		roundevents.DiscordRoundReminder,
+		roundevents.RoundError,
+		roundevents.RoundRetrieved,
+		roundevents.RoundScoreUpdateError,
+		roundevents.RoundScoreUpdateValidated,
+		roundevents.RoundParticipantScoreUpdated,
+		roundevents.RoundAllScoresSubmitted,
+		roundevents.RoundNotAllScoresSubmitted,
+		roundevents.DiscordRoundStarted,
+		roundevents.RoundUpdateValidated,
+		roundevents.RoundUpdated,
+		roundevents.RoundScheduleUpdate,
 	}
+
 	messageCapture := createSilentMessageCapture(captureTopics...)
 
 	testObservability := observability.Observability{
@@ -176,6 +293,8 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	roundDB := &rounddb.RoundDBImpl{DB: env.DB}
 
 	// Create round module
+	// Assumes round.NewRoundModule synchronously sets up its handlers
+	// with the watermillRouter.
 	roundModule, err := round.NewRoundModule(
 		testCtx,
 		env.Config,
@@ -192,8 +311,14 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		t.Fatalf("Failed to create round module: %v", err)
 	}
 
-	// Start optimized message capture consumers
-	consumerWg := startOptimizedMessageCapture(t, testCtx, eventBusImpl, messageCapture, captureTopics)
+	// Generate unique test ID for consumer names to avoid conflicts
+	testID := fmt.Sprintf("%s-%d",
+		strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "-"), " ", "-"),
+		time.Now().UnixNano())
+
+	// Start message capture consumers with standard streams
+	// startOptimizedMessageCapture includes its own logic for ensuring consumers are created.
+	consumerWg := startOptimizedMessageCapture(t, testCtx, eventBusImpl, messageCapture, captureTopics, testID)
 
 	// Start the router
 	routerWg := &sync.WaitGroup{}
@@ -208,15 +333,17 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		}
 	}()
 
-	// Minimal startup time
-	time.Sleep(50 * time.Millisecond)
-
 	// Optimized cleanup function
 	cleanup := func() {
-		os.Setenv("APP_ENV", oldEnv)
+		// 1. Cancel context first to stop all operations
 		testCancel()
 
-		// Fast cleanup with shorter timeout
+		// 2. Stop router to prevent new message processing
+		if watermillRouter != nil {
+			watermillRouter.Close()
+		}
+
+		// 3. Wait for consumers to finish with timeout
 		done := make(chan struct{})
 		go func() {
 			consumerWg.Wait()
@@ -226,26 +353,19 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 
 		select {
 		case <-done:
-		case <-time.After(500 * time.Millisecond): // Reduced timeout
+		case <-time.After(2 * time.Second): // Reduced timeout for faster feedback
+			t.Logf("Warning: Test cleanup (consumers/router) timed out for %s", t.Name())
 		}
 
-		// Parallel resource cleanup
+		// 4. Close remaining resources in parallel
 		var wg sync.WaitGroup
-		if watermillRouter != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				watermillRouter.Close()
-			}()
-		}
-
 		if roundModule != nil {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				roundModule.Close()
 			}()
-		} else if eventBusImpl != nil {
+		} else if eventBusImpl != nil { // Ensure eventBusImpl is closed if roundModule creation failed
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -262,8 +382,12 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 
 		select {
 		case <-cleanupDone:
-		case <-time.After(1 * time.Second):
+		case <-time.After(2 * time.Second): // Reduced timeout
+			t.Logf("Warning: Resource cleanup (module/eventbus) timed out for %s", t.Name())
 		}
+
+		// 5. Reset environment
+		os.Setenv("APP_ENV", oldEnv)
 	}
 
 	t.Cleanup(cleanup)
@@ -276,25 +400,26 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		MessageCapture:    messageCapture,
 		TestObservability: testObservability,
 		TestHelpers:       realHelpers,
+		testID:            testID,
 		cleanup:           cleanup,
 	}
 }
 
 // ensureStreamExistsWithSubjects checks if a stream exists and creates it with proper subjects if not
-func ensureStreamExistsWithSubjects(ctx context.Context, eventBus eventbus.EventBus, streamName string, subjects []string) error {
-	js := eventBus.GetJetStream()
-	_, err := js.Stream(ctx, streamName)
-	if err != nil && strings.Contains(err.Error(), "stream not found") {
-		// Stream doesn't exist, create it with proper subjects
-		cfg := jetstream.StreamConfig{
-			Name:     streamName,
-			Subjects: subjects,
-		}
-		_, err = js.CreateStream(ctx, cfg)
-		return err
-	}
-	return err
-}
+// func ensureStreamExistsWithSubjects(ctx context.Context, eventBus eventbus.EventBus, streamName string, subjects []string) error {
+// 	js := eventBus.GetJetStream()
+// 	_, err := js.Stream(ctx, streamName)
+// 	if err != nil && strings.Contains(err.Error(), "stream not found") {
+// 		// Stream doesn't exist, create it with proper subjects
+// 		cfg := jetstream.StreamConfig{
+// 			Name:     streamName,
+// 			Subjects: subjects,
+// 		}
+// 		_, err = js.CreateStream(ctx, cfg)
+// 		return err
+// 	}
+// 	return err
+// }
 
 // createSilentMessageCapture creates MessageCapture without debug logging
 func createSilentMessageCapture(topicsToCapture ...string) *testutils.MessageCapture {
@@ -302,8 +427,8 @@ func createSilentMessageCapture(topicsToCapture ...string) *testutils.MessageCap
 	return testutils.NewMessageCapture(topicsToCapture...)
 }
 
-// startOptimizedMessageCapture starts consumer goroutines with better error handling
-func startOptimizedMessageCapture(t *testing.T, ctx context.Context, eventBusImpl eventbus.EventBus, messageCapture *testutils.MessageCapture, captureTopics []string) *sync.WaitGroup {
+// startOptimizedMessageCapture starts consumer goroutines with better error handling and test isolation
+func startOptimizedMessageCapture(t *testing.T, ctx context.Context, eventBusImpl eventbus.EventBus, messageCapture *testutils.MessageCapture, captureTopics []string, testID string) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 
 	for i, topic := range captureTopics {
@@ -312,8 +437,9 @@ func startOptimizedMessageCapture(t *testing.T, ctx context.Context, eventBusImp
 		go func(topicName string, index int) {
 			defer wg.Done()
 
-			consumerName := fmt.Sprintf("test-capture-%s-%d-%d",
+			consumerName := fmt.Sprintf("test-capture-%s-%s-%d-%d",
 				strings.ReplaceAll(topicName, ".", "-"),
+				testID,
 				index,
 				time.Now().UnixNano())
 
@@ -335,7 +461,7 @@ func startOptimizedMessageCapture(t *testing.T, ctx context.Context, eventBusImp
 
 				// Only log non-cancellation errors
 				if !strings.Contains(err.Error(), "context canceled") {
-					t.Logf("Attempt %d: Failed to create consumer for %s: %v", attempts+1, topicName, err)
+					t.Logf("Attempt %d: Failed to create consumer for %s on stream %s: %v", attempts+1, topicName, streamName, err)
 				}
 
 				if attempts < 2 {

@@ -21,7 +21,7 @@ func InsertLeaderboard(t *testing.T, db *bun.DB, data leaderboardtypes.Leaderboa
 	leaderboard := &leaderboarddb.Leaderboard{
 		LeaderboardData: data,
 		IsActive:        isActive,
-		UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 		UpdateID:        updateID,
 	}
 	_, err := db.NewInsert().Model(leaderboard).Exec(context.Background())

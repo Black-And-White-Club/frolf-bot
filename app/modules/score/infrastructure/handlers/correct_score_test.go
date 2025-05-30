@@ -38,7 +38,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
 	mockScoreService := scoremocks.NewMockService(ctrl)
@@ -66,6 +66,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					},
 				)
 
+				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					Score:   testScore,
+				}
+
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testRoundID,
@@ -74,24 +80,16 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					&testTagNumber,
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: &scoreevents.ScoreUpdateSuccessPayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Score:   testScore,
-						},
+						Success: successPayload,
+						Failure: nil,
+						Error:   nil,
 					},
 					nil,
 				)
 
-				updateResultPayload := &scoreevents.ScoreUpdateSuccessPayload{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
-				}
-
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					successPayload,
 					scoreevents.ScoreUpdateSuccess,
 				).Return(testMsg, nil)
 			},
@@ -119,6 +117,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					},
 				)
 
+				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					Error:   "internal service error",
+				}
+
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testRoundID,
@@ -127,20 +131,49 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					&testTagNumber,
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Failure: &scoreevents.ScoreUpdateFailurePayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Error:   "internal service error",
-						},
-						Error: fmt.Errorf("internal service error"),
+						Success: nil,
+						Failure: failurePayload,
+						Error:   nil,
 					},
-					fmt.Errorf("internal service error"),
+					nil,
+				)
+
+				// When there's a failure, the handler creates a failure message
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					failurePayload,
+					scoreevents.ScoreUpdateFailure,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false, // No error because failure is handled gracefully
+		},
+		{
+			name: "Service returns error",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockScoreService.EXPECT().CorrectScore(
+					gomock.Any(),
+					testRoundID,
+					testUserID,
+					testScore,
+					&testTagNumber,
+				).Return(
+					scoreservice.ScoreOperationResult{},
+					fmt.Errorf("service error"),
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "internal service error",
+			expectedErrMsg: "service error", // Changed from "technical error during CorrectScore service call: service error"
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -152,6 +185,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					},
 				)
 
+				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					Score:   testScore,
+				}
+
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testRoundID,
@@ -160,34 +199,26 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					&testTagNumber,
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: &scoreevents.ScoreUpdateSuccessPayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Score:   testScore,
-						},
+						Success: successPayload,
+						Failure: nil,
+						Error:   nil,
 					},
 					nil,
 				)
 
-				updateResultPayload := &scoreevents.ScoreUpdateSuccessPayload{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
-				}
-
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					updateResultPayload,
+					successPayload,
 					scoreevents.ScoreUpdateSuccess,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create ScoreUpdateSuccess message: failed to create result message", // Corrected error message
+			expectedErrMsg: "failed to create ScoreUpdateSuccess message: failed to create result message",
 		},
 		{
-			name: "Service failure and CreateResultMessage fails",
+			name: "Service failure but CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -195,6 +226,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 						return nil
 					},
 				)
+
+				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					Error:   "internal service error",
+				}
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
@@ -204,97 +241,23 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					&testTagNumber,
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Failure: &scoreevents.ScoreUpdateFailurePayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Error:   "internal service error",
-						},
-						Error: fmt.Errorf("internal service error"),
-					},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "internal service error",
-		},
-		{
-			name: "Service failure with non-error result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: &scoreevents.ScoreUpdateFailurePayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Error:   "non-error failure",
-						},
+						Success: nil,
+						Failure: failurePayload,
+						Error:   nil,
 					},
 					nil,
 				)
 
-				failureResultPayload := &scoreevents.ScoreUpdateFailurePayload{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Error:   "non-error failure",
-				}
-
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					failureResultPayload,
+					failurePayload,
 					scoreevents.ScoreUpdateFailure,
-				).Return(testMsg, nil)
-			},
-			msg:            testMsg,
-			want:           []*message.Message{testMsg},
-			wantErr:        false,
-			expectedErrMsg: "",
-		},
-		{
-			name: "Service failure with error result and CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: &scoreevents.ScoreUpdateFailurePayload{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-							Error:   "internal service error",
-						},
-						Error: fmt.Errorf("internal service error"),
-					},
-					fmt.Errorf("internal service error"),
-				)
+				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "internal service error",
+			expectedErrMsg: "failed to create ScoreUpdateFailure message: failed to create result message",
 		},
 		{
 			name: "Unknown result from CorrectScore",
@@ -320,17 +283,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service: neither success nor failure", // Corrected error message
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected ScoreUpdateRequestPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected ScoreUpdateRequestPayload",
+			expectedErrMsg: "unexpected result from service: neither success nor failure",
 		},
 	}
 

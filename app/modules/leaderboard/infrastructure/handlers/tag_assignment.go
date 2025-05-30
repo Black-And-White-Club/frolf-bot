@@ -6,11 +6,31 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
+// mapSourceToServiceUpdateSource converts string sources to ServiceUpdateSource enum
+func mapSourceToServiceUpdateSource(source string) sharedtypes.ServiceUpdateSource {
+	switch source {
+	case "user_creation":
+		return sharedtypes.ServiceUpdateSourceCreateUser
+	case "manual":
+		return sharedtypes.ServiceUpdateSourceManual
+	case "round":
+		return sharedtypes.ServiceUpdateSourceProcessScores
+	case "admin_batch":
+		return sharedtypes.ServiceUpdateSourceAdminBatch
+	case "tag_swap":
+		return sharedtypes.ServiceUpdateSourceTagSwap
+	default:
+		return sharedtypes.ServiceUpdateSourceManual // Default fallback
+	}
+}
+
 // HandleTagAssignment handles the TagAssignmentRequested event.
+// This can trigger tag assignments or tag swaps depending on the service logic.
 func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagAssignment",
@@ -25,21 +45,37 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 				attr.String("source", tagAssignmentRequestedPayload.Source),
 			)
 
-			result, err := h.leaderboardService.TagAssignmentRequested(ctx, *tagAssignmentRequestedPayload)
+			// Convert to the unified format
+			assignments := []sharedtypes.TagAssignmentRequest{
+				{
+					UserID:    tagAssignmentRequestedPayload.UserID,
+					TagNumber: *tagAssignmentRequestedPayload.TagNumber,
+				},
+			}
+
+			// Convert string source to ServiceUpdateSource enum
+			serviceSource := mapSourceToServiceUpdateSource(tagAssignmentRequestedPayload.Source)
+
+			// Use the public interface method
+			result, err := h.leaderboardService.ProcessTagAssignments(
+				ctx,
+				serviceSource, // Use the proper enum type
+				assignments,
+				nil, // Individual assignments don't have requesting user
+				uuid.UUID(tagAssignmentRequestedPayload.UpdateID),
+				uuid.New(), // Generate batch ID for single assignment
+			)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "TagAssignmentRequested failed", attr.CorrelationIDFromMsg(msg), attr.Error(err))
-				return nil, fmt.Errorf("failed to handle TagAssignmentRequested event: %w", err)
+				h.logger.ErrorContext(ctx, "ProcessTagAssignments failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to process tag assignment: %w", err)
 			}
 
-			if result == (leaderboardservice.LeaderboardOperationResult{}) {
-				h.logger.ErrorContext(ctx, "Service returned empty result", attr.CorrelationIDFromMsg(msg))
-				return nil, fmt.Errorf("unexpected result from service")
-			}
-
-			var outMsgs []*message.Message
-
+			// Handle failure response
 			if result.Failure != nil {
-				// Always publish failure to leaderboard stream
 				failureMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
@@ -48,13 +84,19 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 				if err != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
-				outMsgs = append(outMsgs, failureMsg)
-				return outMsgs, nil
+				return []*message.Message{failureMsg}, nil
 			}
 
+			// Handle success response
 			if result.Success != nil {
 				// Handle tag swap flow
 				if swap, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayload); ok {
+					h.logger.InfoContext(ctx, "Tag assignment resulted in swap request",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("requestor_id", string(swap.RequestorID)),
+						attr.String("target_id", string(swap.TargetID)),
+					)
+
 					swapMsg, err := h.Helpers.CreateResultMessage(
 						msg,
 						swap,
@@ -63,39 +105,26 @@ func (h *LeaderboardHandlers) HandleTagAssignment(msg *message.Message) ([]*mess
 					if err != nil {
 						return nil, fmt.Errorf("failed to create tag swap message: %w", err)
 					}
-					outMsgs = append(outMsgs, swapMsg)
-					return outMsgs, nil
+					return []*message.Message{swapMsg}, nil
 				}
 
-				// Route success based on Source field
-				switch tagAssignmentRequestedPayload.Source {
-				case "user_creation":
-					userMsg, err := h.Helpers.CreateResultMessage(
-						msg,
-						result.Success,
-						leaderboardevents.LeaderboardTagAssignmentSuccess,
-					)
-					if err != nil {
-						return nil, fmt.Errorf("failed to create user creation message: %w", err)
-					}
-					outMsgs = append(outMsgs, userMsg)
-				default:
-					successMsg, err := h.Helpers.CreateResultMessage(
-						msg,
-						result.Success,
-						leaderboardevents.LeaderboardTagAssignmentSuccess,
-					)
-					if err != nil {
-						return nil, fmt.Errorf("failed to create success message: %w", err)
-					}
-					outMsgs = append(outMsgs, successMsg)
+				// Handle regular success
+				h.logger.InfoContext(ctx, "Tag assignment successful",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(tagAssignmentRequestedPayload.UserID)),
+				)
+
+				successMsg, err := h.Helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					leaderboardevents.LeaderboardTagAssignmentSuccess,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
-				return outMsgs, nil
+				return []*message.Message{successMsg}, nil
 			}
 
-			h.logger.ErrorContext(ctx, "Service returned result with neither Success nor Failure payload set, and no error",
-				attr.CorrelationIDFromMsg(msg),
-			)
 			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)

@@ -16,18 +16,33 @@ import (
 func TestValidateRoundDeleteRequest(t *testing.T) {
 	tests := []struct {
 		name                     string
-		payload                  roundevents.RoundDeleteRequestPayload
-		expectedError            bool
+		setupRound               func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload // Add setup function
+		expectedFailure          bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful validation of delete request",
-			payload: roundevents.RoundDeleteRequestPayload{
-				RoundID:              sharedtypes.RoundID(uuid.New()),
-				RequestingUserUserID: "user123",
+			setupRound: func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload {
+				// Create a round in the database first
+				generator := testutils.NewTestDataGenerator()
+				userID := "user123"
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID(userID),
+					Title:     "Test Round for Validation",
+					State:     roundtypes.RoundStateUpcoming,
+				})
+				err := deps.DB.CreateRound(deps.Ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
+				}
+
+				return roundevents.RoundDeleteRequestPayload{
+					RoundID:              roundForDB.ID,
+					RequestingUserUserID: roundForDB.CreatedBy,
+				}
 			},
-			expectedError: false,
+			expectedFailure: false,
 			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -40,11 +55,13 @@ func TestValidateRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "Validation fails with zero RoundID",
-			payload: roundevents.RoundDeleteRequestPayload{
-				RoundID:              sharedtypes.RoundID(uuid.Nil), // Zero UUID
-				RequestingUserUserID: "user123",
+			setupRound: func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload {
+				return roundevents.RoundDeleteRequestPayload{
+					RoundID:              sharedtypes.RoundID(uuid.Nil), // Zero UUID
+					RequestingUserUserID: "user123",
+				}
 			},
-			expectedError:            true,
+			expectedFailure:          true,
 			expectedErrorMessagePart: "round ID cannot be zero",
 			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Failure == nil {
@@ -61,13 +78,14 @@ func TestValidateRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "Validation fails with empty RequestingUserUserID",
-			// Corrected payload type to match expected input for ValidateRoundDeleteRequest
-			payload: roundevents.RoundDeleteRequestPayload{
-				RoundID:              sharedtypes.RoundID(uuid.New()),
-				RequestingUserUserID: "", // Empty user ID
+			setupRound: func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload {
+				return roundevents.RoundDeleteRequestPayload{
+					RoundID:              sharedtypes.RoundID(uuid.New()),
+					RequestingUserUserID: "", // Empty user ID
+				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "requesting user's Discord ID cannot be empty", // This error comes from ValidateRoundDeleteRequest
+			expectedFailure:          true,
+			expectedErrorMessagePart: "requesting user's Discord ID cannot be empty",
 			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
@@ -81,23 +99,96 @@ func TestValidateRoundDeleteRequest(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "Validation fails when round does not exist",
+			setupRound: func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload {
+				return roundevents.RoundDeleteRequestPayload{
+					RoundID:              sharedtypes.RoundID(uuid.New()), // Non-existent round
+					RequestingUserUserID: "user123",
+				}
+			},
+			expectedFailure:          true,
+			expectedErrorMessagePart: "round with ID",
+			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+				if returnedResult.Failure == nil {
+					t.Fatalf("Expected failure result, but got nil")
+				}
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundDeleteErrorPayload)
+				if !ok {
+					t.Errorf("Expected RoundDeleteErrorPayload, got %T", returnedResult.Failure)
+				}
+				if !strings.Contains(failurePayload.Error, "round with ID") {
+					t.Errorf("Expected error to contain 'round with ID', got '%s'", failurePayload.Error)
+				}
+			},
+		},
+		{
+			name: "Validation fails when user is not the creator",
+			setupRound: func(deps RoundTestDeps) roundevents.RoundDeleteRequestPayload {
+				// Create a round with one user
+				generator := testutils.NewTestDataGenerator()
+				creatorUserID := "creator123"
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID(creatorUserID),
+					Title:     "Test Round for Ownership Test",
+					State:     roundtypes.RoundStateUpcoming,
+				})
+				err := deps.DB.CreateRound(deps.Ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
+				}
+
+				return roundevents.RoundDeleteRequestPayload{
+					RoundID:              roundForDB.ID,
+					RequestingUserUserID: "different_user123", // Different user trying to delete
+				}
+			},
+			expectedFailure:          true,
+			expectedErrorMessagePart: "unauthorized: only the round creator can delete the round", // Removed the extra quote
+			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+				if returnedResult.Failure == nil {
+					t.Fatalf("Expected failure result, but got nil")
+				}
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundDeleteErrorPayload)
+				if !ok {
+					t.Errorf("Expected RoundDeleteErrorPayload, got %T", returnedResult.Failure)
+				}
+				if !strings.Contains(failurePayload.Error, "unauthorized: only the round creator can delete the round") { // Removed the extra quote
+					t.Errorf("Expected error to contain 'unauthorized: only the round creator can delete the round', got '%s'", failurePayload.Error)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
-			// Call the actual service method
-			result, err := deps.Service.ValidateRoundDeleteRequest(deps.Ctx, tt.payload)
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Get the payload from the setup function
+			payload := tt.setupRound(deps)
+
+			// Call the actual service method
+			result, err := deps.Service.ValidateRoundDeleteRequest(deps.Ctx, payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
+
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload)
+					if !ok {
+						t.Errorf("Expected RoundDeleteErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 
@@ -112,7 +203,7 @@ func TestDeleteRound(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundDeleteAuthorizedPayload)
-		expectedError            bool
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -133,7 +224,7 @@ func TestDeleteRound(t *testing.T) {
 					RoundID: roundForDBInsertion.ID,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -163,11 +254,11 @@ func TestDeleteRound(t *testing.T) {
 					RoundID: sharedtypes.RoundID(uuid.New()), // A non-existent UUID
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "round with ID", // Expected error from TestRoundDB matching RoundDBImpl
+			expectedFailure:          true,              // Changed from expectedError
+			expectedErrorMessagePart: "round not found", // Updated to match implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
@@ -176,8 +267,8 @@ func TestDeleteRound(t *testing.T) {
 				if !ok {
 					t.Errorf("Expected RoundDeleteErrorPayload, got %T", returnedResult.Failure)
 				}
-				if !strings.Contains(failurePayload.Error, "round with ID") {
-					t.Errorf("Expected failure error to contain 'round with ID', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "round not found") {
+					t.Errorf("Expected failure error to contain 'round not found', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -198,7 +289,7 @@ func TestDeleteRound(t *testing.T) {
 					RoundID: roundForDBInsertion.ID,
 				}
 			},
-			expectedError: false, // Service should still return success for round deletion
+			expectedFailure: false, // Changed from expectedError - Service should still return success for round deletion
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -228,11 +319,11 @@ func TestDeleteRound(t *testing.T) {
 					RoundID: sharedtypes.RoundID(uuid.Nil), // Nil UUID
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "cannot delete round: nil UUID provided",
+			expectedFailure:          true,                     // Changed from expectedError
+			expectedErrorMessagePart: "round ID cannot be nil", // Updated to match implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
@@ -263,16 +354,26 @@ func TestDeleteRound(t *testing.T) {
 
 			// Call the actual service method
 			result, err := deps.Service.DeleteRound(deps.Ctx, *payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload)
+					if !ok {
+						t.Errorf("Expected RoundDeleteErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 

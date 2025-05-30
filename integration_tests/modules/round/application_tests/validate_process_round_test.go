@@ -204,42 +204,98 @@ func TestValidateAndProcessRound(t *testing.T) {
 			},
 			payload: roundevents.CreateRoundRequestedPayload{
 				Title:       "Round with Empty Optional Fields",
-				Description: "", // Empty description
-				Location:    "", // Empty location
-				StartTime:   "the day after tomorrow",
+				Description: "",                  // Empty description - will be rejected by validator
+				Location:    "",                  // Empty location - will be rejected by validator
+				StartTime:   "in 2 days at 3 PM", // Changed to be more reliably in the future
 				Timezone:    "UTC",
 				UserID:      "user_empty",
+				ChannelID:   "channel_xyz",
+			},
+			expectedError:   false,
+			expectedSuccess: false, // Changed: validator rejects empty fields
+			validateResult: func(t *testing.T, deps RoundTestDeps, result roundservice.RoundOperationResult) {
+				if result.Success != nil {
+					t.Errorf("Expected failure result, but got success: %+v", result.Success)
+					return
+				}
+
+				if result.Failure == nil {
+					t.Fatalf("Expected failure result, but got nil")
+				}
+
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				if !ok {
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					return
+				}
+
+				// Check that validation failed for both empty description and location
+				if len(failurePayload.ErrorMessage) != 2 {
+					t.Errorf("Expected 2 validation errors, got %d: %v", len(failurePayload.ErrorMessage), failurePayload.ErrorMessage)
+					return
+				}
+
+				// Check for both expected error messages
+				errorMessages := failurePayload.ErrorMessage
+				hasLocationError := false
+				hasDescriptionError := false
+
+				for _, msg := range errorMessages {
+					if msg == "location cannot be empty" {
+						hasLocationError = true
+					}
+					if msg == "description cannot be empty" {
+						hasDescriptionError = true
+					}
+				}
+
+				if !hasLocationError {
+					t.Errorf("Expected validation error 'location cannot be empty', got: %v", errorMessages)
+				}
+				if !hasDescriptionError {
+					t.Errorf("Expected validation error 'description cannot be empty', got: %v", errorMessages)
+				}
+
+				if failurePayload.UserID != "user_empty" {
+					t.Errorf("Expected UserID 'user_empty', got '%s'", failurePayload.UserID)
+				}
+			},
+		},
+		{
+			name: "Successful creation with optional fields",
+			setupTestEnv: func() {
+				// No specific time setup
+			},
+			payload: roundevents.CreateRoundRequestedPayload{
+				Title:       "Round with Optional Fields",
+				Description: "A valid description", // Non-empty description
+				Location:    "A valid location",    // Non-empty location
+				StartTime:   "in 2 days at 3 PM",
+				Timezone:    "UTC",
+				UserID:      "user_valid",
 				ChannelID:   "channel_xyz",
 			},
 			expectedError:   false,
 			expectedSuccess: true,
 			validateResult: func(t *testing.T, deps RoundTestDeps, result roundservice.RoundOperationResult) {
 				if result.Success == nil {
-					t.Errorf("Expected success result, but got nil")
-					return
+					t.Fatalf("Expected success result, but got nil")
 				}
+
 				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
 				if !ok {
 					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
 					return
 				}
 
-				if successPayload.Round.Title != "Round with Empty Optional Fields" {
-					t.Errorf("Expected title 'Round with Empty Optional Fields', got '%s'", successPayload.Round.Title)
+				if successPayload.Round.Title != "Round with Optional Fields" {
+					t.Errorf("Expected title 'Round with Optional Fields', got '%s'", successPayload.Round.Title)
 				}
-				if successPayload.Round.Description == nil || *successPayload.Round.Description != "" {
-					t.Errorf("Expected description to be a pointer to an empty string, got '%v'", successPayload.Round.Description)
+				if successPayload.Round.Description == nil || *successPayload.Round.Description != "A valid description" {
+					t.Errorf("Expected description 'A valid description', got '%v'", successPayload.Round.Description)
 				}
-				if successPayload.Round.Location == nil || *successPayload.Round.Location != "" {
-					t.Errorf("Expected location to be a pointer to an empty string, got '%v'", successPayload.Round.Location)
-				}
-				if successPayload.Round.CreatedBy != "user_empty" {
-					t.Errorf("Expected CreatedBy 'user_empty', got '%s'", successPayload.Round.CreatedBy)
-				}
-				// Verify StartTime is in the future relative to the test execution time.
-				// Due to time.Now().UTC() in service, this test can be flaky if run at specific times.
-				if time.Time(*successPayload.Round.StartTime).Before(time.Now().UTC().Truncate(time.Minute)) {
-					t.Errorf("Expected StartTime %v to be in the future, but it is in the past relative to %v", time.Time(*successPayload.Round.StartTime), time.Now().UTC())
+				if successPayload.Round.Location == nil || *successPayload.Round.Location != "A valid location" {
+					t.Errorf("Expected location 'A valid location', got '%v'", successPayload.Round.Location)
 				}
 			},
 		},

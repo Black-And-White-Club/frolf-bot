@@ -10,25 +10,13 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// ServiceUpdateSource defines where an update originated from
-type ServiceUpdateSource string
-
-// Constants for ServiceUpdateSource
-const (
-	ServiceUpdateSourceProcessScores ServiceUpdateSource = "process_scores"
-	ServiceUpdateSourceManual        ServiceUpdateSource = "manual"
-	ServiceUpdateSourceCreateUser    ServiceUpdateSource = "create_user"
-	ServiceUpdateSourceAdminBatch    ServiceUpdateSource = "admin_batch"
-	ServiceUpdateSourceTagSwap       ServiceUpdateSource = "tag_swap"
-)
-
 // Leaderboard represents a leaderboard with entries
 type Leaderboard struct {
 	bun.BaseModel   `bun:"table:leaderboards,alias:l"`
 	ID              int64                            `bun:"id,pk,autoincrement"`
 	LeaderboardData leaderboardtypes.LeaderboardData `bun:"leaderboard_data,type:jsonb,notnull"`
 	IsActive        bool                             `bun:"is_active,notnull"`
-	UpdateSource    ServiceUpdateSource              `bun:"update_source"`
+	UpdateSource    sharedtypes.ServiceUpdateSource  `bun:"update_source"`
 	UpdateID        sharedtypes.RoundID              `bun:"update_id,type:uuid"`
 }
 
@@ -40,7 +28,7 @@ func (l *Leaderboard) BeforeInsert(ctx context.Context) error {
 	return nil
 }
 
-// TagAssignment represents a single tag assignment
+// TagAssignment represents a single tag assignment for database operations
 type TagAssignment struct {
 	UserID    sharedtypes.DiscordID
 	TagNumber sharedtypes.TagNumber

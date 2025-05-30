@@ -86,7 +86,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				// No CreateResultMessage mock here, as HandleDiscordMessageIDUpdated returns nil on success
 			},
 			msg:     testScheduledMsg,
-			want:    nil, // Expect nil on success
+			want:    []*message.Message{}, // Changed from nil to empty slice to match handler
 			wantErr: false,
 		},
 		{
@@ -145,7 +145,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 			msg:            testScheduledMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "service returned neither success nor failure", // Changed to match handler
 		},
 		{
 			name: "Failure result from ScheduleRoundEvents",

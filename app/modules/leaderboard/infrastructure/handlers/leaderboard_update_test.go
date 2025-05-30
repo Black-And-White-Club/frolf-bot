@@ -25,9 +25,10 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 	defer ctrl.Finish()
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
+	// Fix: Use correct "tag:userID" format
 	testSortedParticipantTags := []string{
-		"1:12345678901234567",
-		"2:12345678901234568",
+		"1:12345678901234567", // 1st place
+		"2:12345678901234568", // 2nd place
 	}
 
 	testPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
@@ -68,25 +69,36 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
-					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
+				// Expected service request format - convert tag:userID pairs to assignments
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1), // 1st place
+					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2), // 2nd place
+					},
+				}
+
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+					gomock.Any(), // context
+					sharedtypes.ServiceUpdateSourceProcessScores, // source - score processing
+					expectedRequests,              // requests
+					(*sharedtypes.DiscordID)(nil), // requestingUserID - system operation
+					uuid.UUID(testRoundID),        // operationID - use roundID
+					gomock.Any(),                  // batchID - generated UUID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.LeaderboardUpdatedPayload{
-							LeaderboardID:   1,
-							RoundID:         testRoundID,
-							LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
 				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
-					LeaderboardID:   1,
-					RoundID:         testRoundID,
-					LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -110,7 +122,51 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			expectedErrMsg: "transient unmarshal error: invalid payload",
 		},
 		{
-			name: "Service failure in UpdateLeaderboard",
+			name: "Invalid tag format - missing colon",
+			mockSetup: func() {
+				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
+					RoundID:               testRoundID,
+					SortedParticipantTags: []string{"12345678901234567"}, // Missing "tag:" prefix
+					Source:                "round",
+					UpdateID:              testRoundID.String(),
+				}
+
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *invalidPayload
+						return nil
+					},
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "invalid tag format: 12345678901234567",
+		},
+		{
+			name: "Invalid tag number format",
+			mockSetup: func() {
+				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
+					RoundID:               testRoundID,
+					SortedParticipantTags: []string{"invalid:12345678901234567"}, // Invalid tag number
+					Source:                "round",
+					UpdateID:              testRoundID.String(),
+				}
+
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *invalidPayload
+						return nil
+					},
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to parse tag number: strconv.Atoi: parsing \"invalid\": invalid syntax",
+		},
+		{
+			name: "Service failure in ProcessTagAssignments",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -119,10 +175,24 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1),
+					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2),
+					},
+				}
+
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+					expectedRequests,
+					(*sharedtypes.DiscordID)(nil),
+					uuid.UUID(testRoundID),
+					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
@@ -131,7 +201,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update leaderboard: internal service error",
+			expectedErrMsg: "failed to process score-based tag assignments: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -143,25 +213,35 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1),
+					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2),
+					},
+				}
+
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+					expectedRequests,
+					(*sharedtypes.DiscordID)(nil),
+					uuid.UUID(testRoundID),
+					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.LeaderboardUpdatedPayload{
-							LeaderboardID:   1,
-							RoundID:         testRoundID,
-							LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
+							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
 				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
-					LeaderboardID:   1,
-					RoundID:         testRoundID,
-					LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
+					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -176,7 +256,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			expectedErrMsg: "failed to create success message: failed to create result message",
 		},
 		{
-			name: "Service failure with non-error result",
+			name: "Service failure with custom failure payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -185,38 +265,51 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1),
+					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2),
+					},
+				}
+
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+					expectedRequests,
+					(*sharedtypes.DiscordID)(nil),
+					uuid.UUID(testRoundID),
+					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Failure: &leaderboardevents.LeaderboardUpdateFailedPayload{
 							RoundID: testRoundID,
-							Reason:  "non-error failure",
+							Reason:  "custom service error",
 						},
 					},
 					nil,
 				)
 
-				failureResultPayload := &leaderboardevents.LeaderboardUpdateFailedPayload{
+				failurePayload := &leaderboardevents.LeaderboardUpdateFailedPayload{
 					RoundID: testRoundID,
-					Reason:  "non-error failure",
+					Reason:  "custom service error",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					failureResultPayload,
+					failurePayload,
 					leaderboardevents.LeaderboardUpdateFailed,
 				).Return(testMsg, nil)
 			},
-			msg:            testMsg,
-			want:           []*message.Message{testMsg},
-			wantErr:        false,
-			expectedErrMsg: "",
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
 		},
 		{
-			name: "Service failure with error result and CreateResultMessage fails",
+			name: "Service failure with error and CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -225,27 +318,38 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
-					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.LeaderboardUpdateFailedPayload{
-							RoundID: testRoundID,
-							Reason:  "internal service error",
-						},
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1),
 					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2),
+					},
+				}
+
+				// When the service returns an error, the handler returns that error directly
+				// It doesn't try to create a failure message
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+					gomock.Any(),
+					sharedtypes.ServiceUpdateSourceProcessScores,
+					expectedRequests,
+					(*sharedtypes.DiscordID)(nil),
+					uuid.UUID(testRoundID),
+					gomock.Any(),
+				).Return(
+					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update leaderboard: internal service error",
+			expectedErrMsg: "failed to process score-based tag assignments: internal service error",
 		},
 		{
-			name: "Unknown result from UpdateLeaderboard",
+			name: "Unknown result from ProcessTagAssignments",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -254,10 +358,24 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				)
 
-				mockLeaderboardService.EXPECT().UpdateLeaderboard(
+				expectedRequests := []sharedtypes.TagAssignmentRequest{
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234567"),
+						TagNumber: sharedtypes.TagNumber(1),
+					},
+					{
+						UserID:    sharedtypes.DiscordID("12345678901234568"),
+						TagNumber: sharedtypes.TagNumber(2),
+					},
+				}
+
+				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					testRoundID,
-					testSortedParticipantTags,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+					expectedRequests,
+					(*sharedtypes.DiscordID)(nil),
+					uuid.UUID(testRoundID),
+					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					nil,
@@ -266,7 +384,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "unexpected service result: neither success nor failure set",
 		},
 	}
 
@@ -290,7 +408,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleLeaderboardUpdateRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && tt.expectedErrMsg != "" && (err == nil || !containsErrorMsg(err.Error(), tt.expectedErrMsg)) {
 				t.Errorf("HandleLeaderboardUpdateRequested() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 

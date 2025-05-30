@@ -59,7 +59,7 @@ func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, userID, tagNumber, sourc
 }
 
 // BatchAssignTags mocks base method.
-func (m *MockLeaderboardDB) BatchAssignTags(ctx context.Context, assignments []leaderboarddb.TagAssignment, source leaderboarddb.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+func (m *MockLeaderboardDB) BatchAssignTags(ctx context.Context, assignments []leaderboarddb.TagAssignment, source sharedtypes.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchAssignTags", ctx, assignments, source, updateID, userID)
 	ret0, _ := ret[0].(error)

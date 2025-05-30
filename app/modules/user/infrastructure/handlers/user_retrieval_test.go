@@ -13,7 +13,8 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -25,9 +26,8 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testUserData := &usertypes.UserData{
-		ID:     1,
 		UserID: testUserID,
-		Role:   sharedtypes.UserRoleEnum("admin"),
+		Role:   "member",
 	}
 
 	testPayload := &userevents.GetUserRequestPayload{
@@ -36,15 +36,15 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := usermetrics.NewNoop() // Use no-op metrics
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -55,21 +55,61 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle GetUser Request", // Changed from Role to Request
+			name: "Successfully handle GetUser Request",
 			mockSetup: func() {
-				// Expect the payload to be unmarshalled correctly
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload // Use testPayload, not testRolePayload
+						*out.(*userevents.GetUserRequestPayload) = *testPayload
 						return nil
 					},
 				)
 
-				// Expect GetUser (not GetUserRole)
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(&userevents.GetUserResponsePayload{User: testUserData}, nil, nil)
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{
+						Success: &userevents.GetUserResponsePayload{User: testUserData},
+						Failure: nil,
+						Error:   nil,
+					},
+					nil,
+				)
 
-				// Expect CreateResultMessage for user response
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.GetUserResponsePayload{User: testUserData}, userevents.GetUserResponse).Return(testMsg, nil)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.GetUserResponsePayload{User: testUserData},
+					userevents.GetUserResponse,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "User not found",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.GetUserRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{
+						Success: nil,
+						Failure: &userevents.GetUserFailedPayload{
+							UserID: testUserID,
+							Reason: "user not found",
+						},
+						Error: nil,
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.GetUserFailedPayload{UserID: testUserID, Reason: "user not found"},
+					userevents.GetUserFailed,
+				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -86,7 +126,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
-			name: "Service failure in GetUser ",
+			name: "Service failure in GetUser",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -95,47 +135,14 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(nil, &userevents.GetUserFailedPayload{UserID: testUserID, Reason: "internal service error"}, nil)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
-					},
-					userevents.GetUserFailed,
-				).Return(testMsg, nil)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Failure to create success message",
-			mockSetup: func() {
-				// Expect the payload to be unmarshalled correctly
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload
-						return nil
-					},
+				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{},
+					fmt.Errorf("service error"),
 				)
-
-				// Expect the GetUser  method to be called with the correct parameters
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(&userevents.GetUserResponsePayload{User: testUserData}, nil, nil)
-
-				// Expect the CreateResultMessage method to be called with the correct parameters
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserResponsePayload{
-						User: testUserData, // Pass the correct user data
-					},
-					userevents.GetUserResponse,
-				).Return(nil, fmt.Errorf("failed to create success message")) // Simulate failure
 			},
 			msg:            testMsg,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create success message",
+			expectedErrMsg: "technical error during GetUser service call: service error",
 		},
 	}
 
@@ -147,10 +154,10 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics,
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 
@@ -182,15 +189,15 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := usermetrics.NewNoop() // Use no-op metrics
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -210,12 +217,51 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"}, nil, nil)
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{
+						Success: &userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
+						Failure: nil,
+						Error:   nil,
+					},
+					nil,
+				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
 					userevents.GetUserRoleResponse,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "User role not found",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.GetUserRoleRequestPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{
+						Success: nil,
+						Failure: &userevents.GetUserRoleFailedPayload{
+							UserID: testUserID,
+							Reason: "user role not found",
+						},
+						Error: nil,
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&userevents.GetUserRoleFailedPayload{UserID: testUserID, Reason: "user role not found"},
+					userevents.GetUserRoleFailed,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -242,41 +288,14 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(nil, nil, fmt.Errorf("internal service error"))
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserRoleFailedPayload{
-						UserID: testUserID,
-						Reason: "internal service error",
-					},
-					userevents.GetUserRoleFailed,
-				).Return(testMsg, nil)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Failure to create success message",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestPayload) = *testPayload
-						return nil
-					},
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+					userservice.UserOperationResult{},
+					fmt.Errorf("service error"),
 				)
-
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"}, nil, nil)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
-					userevents.GetUserRoleResponse,
-				).Return(nil, fmt.Errorf("failed to create success message"))
 			},
 			msg:            testMsg,
 			wantErr:        true,
-			expectedErrMsg: "failed to create GetUserRoleResponse message: failed to create success message",
+			expectedErrMsg: "technical error during GetUserRole service call: service error",
 		},
 	}
 
@@ -288,10 +307,10 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics,
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 

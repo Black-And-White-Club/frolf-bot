@@ -10,8 +10,9 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
+	rounddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -33,7 +34,7 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 
 	tests := []struct {
 		name                    string
-		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockDBSetup             func(*rounddbmocks.MockRoundDB)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
 		mockEventBusSetup       func(*eventbus.MockEventBus)
 		payload                 roundevents.RoundDeleteRequestPayload
@@ -42,8 +43,13 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 	}{
 		{
 			name: "valid round delete request",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// No specific DB mocks needed for validation
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// Mock GetRound call that happens during validation
+				testRoundID := sharedtypes.RoundID(uuid.New())
+				mockDB.EXPECT().GetRound(ctx, gomock.Any()).Return(&roundtypes.Round{
+					ID:        testRoundID,
+					CreatedBy: "Test User",
+				}, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No specific validator mocks needed for validation
@@ -67,7 +73,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "invalid round delete request - zero round ID",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// No DB calls expected for invalid round ID
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
@@ -90,7 +97,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "invalid round delete request - empty requesting user ID",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// No DB calls expected for empty user ID
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
@@ -118,7 +126,7 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			// Reset mocks for each subtest
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 			mockEventBus := eventbus.NewMockEventBus(ctrl)
 
 			tt.mockDBSetup(mockDB)
@@ -138,11 +146,17 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 						// Mimic the actual serviceWrapper's error wrapping
 						return result, fmt.Errorf("%s operation failed: %w", operationName, err)
 					}
+					// For validation errors that return failure payloads, we need to simulate the serviceWrapper behavior
+					if result.Failure != nil {
+						if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload); ok {
+							return result, fmt.Errorf("%s operation failed: %s", operationName, failurePayload.Error)
+						}
+					}
 					return result, nil
 				},
 			}
 
-			_, err := s.ValidateRoundDeleteRequest(ctx, tt.payload)
+			result, err := s.ValidateRoundDeleteRequest(ctx, tt.payload)
 
 			// Validate error presence and message
 			if tt.expectedError != nil {
@@ -154,6 +168,32 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			} else {
 				if err != nil {
 					t.Errorf("expected no error, got: %v", err)
+				}
+			}
+
+			// Validate result payload (success/failure)
+			if tt.expectedResult.Success != nil {
+				// Type assertion for Success payload
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				} else if successPayload, ok := result.Success.(*roundevents.RoundDeleteValidatedPayload); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundDeleteValidatedPayload, got %T", result.Success)
+				} else {
+					// Validate the payload content
+					if successPayload.RoundDeleteRequestPayload.RequestingUserUserID != tt.payload.RequestingUserUserID {
+						t.Errorf("expected RequestingUserUserID %s, got %s", tt.payload.RequestingUserUserID, successPayload.RoundDeleteRequestPayload.RequestingUserUserID)
+					}
+				}
+			} else if tt.expectedResult.Failure != nil {
+				// Type assertion for Failure payload
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload.Error != expectedFailurePayload.Error {
+					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}
 			}
 		})
@@ -177,7 +217,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		mockDBSetup       func(*rounddb.MockRoundDB)
+		mockDBSetup       func(*rounddbmocks.MockRoundDB)
 		mockEventBusSetup func(*eventbus.MockEventBus)
 		payload           roundevents.RoundDeleteAuthorizedPayload
 		expectedResult    RoundOperationResult
@@ -185,8 +225,9 @@ func TestRoundService_DeleteRound(t *testing.T) {
 	}{
 		{
 			name: "delete round successfully",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// No GetEventMessageID call in service, so no mock needed
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// Mock GetRound call to verify round exists
+				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{ID: id}, nil)
 				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(nil)
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
@@ -204,8 +245,9 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		},
 		{
 			name: "delete round fails - delete round error",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// No GetEventMessageID call in service, so no mock needed
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// Mock GetRound call to verify round exists
+				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{ID: id}, nil)
 				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(errors.New("delete round error"))
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
@@ -224,12 +266,13 @@ func TestRoundService_DeleteRound(t *testing.T) {
 					Error: fmt.Sprintf("failed to delete round from database: %v", errors.New("delete round error")),
 				},
 			},
-			expectedError: fmt.Errorf("failed to delete round %s from DB: %w", id.String(), errors.New("delete round error")),
+			expectedError: nil, // DeleteRound returns failure payload with nil error
 		},
 		{
 			name: "delete round succeeds despite cancel scheduled message error",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// No GetEventMessageID call in service, so no mock needed
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				// Mock GetRound call to verify round exists
+				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{ID: id}, nil)
 				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(nil)
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
@@ -247,7 +290,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		},
 		{
 			name: "delete round fails - nil UUID provided",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
 				// No DB calls expected if UUID is nil
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
@@ -264,7 +307,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 					Error: "round ID cannot be nil",
 				},
 			},
-			expectedError: errors.New("cannot delete round: nil UUID provided"),
+			expectedError: nil, // DeleteRound returns failure payload with nil error
 		},
 	}
 
@@ -273,7 +316,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			// Reset mocks for each subtest
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 			mockEventBus := eventbus.NewMockEventBus(ctrl)
 
 			tt.mockDBSetup(mockDB)

@@ -7,104 +7,91 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 // HandleBatchTagAssignmentRequested handles the BatchTagAssignmentRequested event.
-// It consumes the sharedevents.LeaderboardBatchTagAssignmentRequested event,
-// calls the LeaderboardService to perform the batch assignment,
-// and publishes either a leaderboardevents.BatchTagAssigned or leaderboardevents.BatchTagAssignmentFailed event.
+// This is for admin/manual batch operations outside of rounds - multiple tags assigned at once.
 func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
-	// Use the handler wrapper for common logic
 	wrappedHandler := h.handlerWrapper(
 		"HandleBatchTagAssignmentRequested",
-		&sharedevents.BatchTagAssignmentRequestedPayload{}, // Expecting sharedevents.BatchTagAssignmentRequestedPayload
+		&sharedevents.BatchTagAssignmentRequestedPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			batchTagAssignmentRequestedPayload := payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
+			batchPayload := payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
 
 			h.logger.InfoContext(ctx, "Received BatchTagAssignmentRequested event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("batch_id", batchTagAssignmentRequestedPayload.BatchID),
-				attr.String("requesting_user", string(batchTagAssignmentRequestedPayload.RequestingUserID)),
-				attr.Int("assignment_count", len(batchTagAssignmentRequestedPayload.Assignments)),
+				attr.String("batch_id", batchPayload.BatchID),
+				attr.String("requesting_user", string(batchPayload.RequestingUserID)),
+				attr.Int("assignment_count", len(batchPayload.Assignments)),
 			)
 
-			result, err := h.leaderboardService.BatchTagAssignmentRequested(ctx, *batchTagAssignmentRequestedPayload)
+			// Convert assignments to the expected format
+			assignments := make([]sharedtypes.TagAssignmentRequest, len(batchPayload.Assignments))
+			for i, assignment := range batchPayload.Assignments {
+				assignments[i] = sharedtypes.TagAssignmentRequest{
+					UserID:    assignment.UserID,
+					TagNumber: assignment.TagNumber,
+				}
+			}
+
+			// Parse batch ID
+			batchID, err := uuid.Parse(batchPayload.BatchID)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Service failed to handle BatchTagAssignmentRequested event",
+				h.logger.ErrorContext(ctx, "Invalid batch ID format",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("batch_id", batchPayload.BatchID),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("invalid batch ID format: %w", err)
+			}
+
+			// Use the public interface method
+			result, err := h.leaderboardService.ProcessTagAssignments(
+				ctx,
+				sharedtypes.ServiceUpdateSourceAdminBatch,
+				assignments,
+				&batchPayload.RequestingUserID,
+				uuid.New(), // Generate operation ID
+				batchID,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Service failed to handle batch assignment",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-
-				// Create a failure payload struct.
-				failurePayload := leaderboardevents.BatchTagAssignmentFailedPayload{
-					RequestingUserID: batchTagAssignmentRequestedPayload.RequestingUserID,
-					BatchID:          batchTagAssignmentRequestedPayload.BatchID,
-					Reason:           err.Error(), // Default reason is the error message from the service call
-				}
-
-				if result.Failure != nil {
-					if serviceFailurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload); ok {
-						failurePayload.Reason = serviceFailurePayload.Reason
-					} else {
-						h.logger.WarnContext(ctx, "Service returned non-nil result.Failure, but it was not the expected type",
-							attr.CorrelationIDFromMsg(msg),
-							attr.Any("actual_type", fmt.Sprintf("%T", result.Failure)),
-						)
-					}
-				}
-
-				failureMsg, errMsg := h.Helpers.CreateResultMessage(
-					msg,
-					&failurePayload, // Pass the address of the struct
-					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message after service error: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
+				return nil, fmt.Errorf("failed to process batch tag assignments: %w", err)
 			}
 
+			// Handle failure response
 			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Batch tag assignment failed according to service (no service error returned)",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
-
-				failureMsg, errMsg := h.Helpers.CreateResultMessage(
+				failureMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+					leaderboardevents.LeaderboardBatchTagAssignmentFailed, // Fixed: Use correct event constant
 				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
-
 				return []*message.Message{failureMsg}, nil
 			}
 
+			// Handle success response
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Batch tag assignment successful according to service", attr.CorrelationIDFromMsg(msg))
-
 				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					leaderboardevents.LeaderboardBatchTagAssigned, // Publish to the leaderboardevents success topic
+					leaderboardevents.LeaderboardBatchTagAssigned, // Fixed: Use correct event constant
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
-
 				return []*message.Message{successMsg}, nil
 			}
 
-			// This case should ideally not happen if the service always returns Success or Failure when err is nil.
-			h.logger.ErrorContext(ctx, "Service returned result with neither Success nor Failure payload set, and no error",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			// Return an error to Watermill so it might retry or move to dead-letter queue.
-			return nil, fmt.Errorf("unexpected result from service: neither success nor failure payload set and no error")
+			return nil, fmt.Errorf("unexpected result from service")
 		},
 	)
 

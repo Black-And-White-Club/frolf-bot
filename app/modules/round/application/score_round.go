@@ -11,9 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// RoundOperationResult represents the result of a round service operation.
-// Assuming this struct is defined elsewhere and includes Success interface{} and Failure interface{}
-
 // ValidateScoreUpdateRequest validates the score update request.
 func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ValidateScoreUpdateRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
@@ -36,11 +33,11 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{ // Add pointer here
 					ScoreUpdateRequest: &payload,
 					Error:              err.Error(),
 				},
-			}, err
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		s.logger.InfoContext(ctx, "Score update request validated",
@@ -48,7 +45,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.ScoreUpdateValidatedPayload{ // Return POINTER here
+			Success: &roundevents.ScoreUpdateValidatedPayload{
 				ScoreUpdateRequestPayload: payload,
 			},
 		}, nil
@@ -61,16 +58,16 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 		// Update the participant's score in the database
 		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.Participant, *payload.ScoreUpdateRequestPayload.Score)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to update participant score in DB", // Added context to log
+			s.logger.ErrorContext(ctx, "Failed to update participant score in DB",
 				attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayload{ // Add pointer here
 					ScoreUpdateRequest: &payload.ScoreUpdateRequestPayload,
 					Error:              "Failed to update score in database: " + err.Error(),
 				},
-			}, fmt.Errorf("failed to update participant score in DB: %w", err) // Return error to handler
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		// Fetch the full, updated list of participants for this round
@@ -80,14 +77,12 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
-			// This is a critical failure for updating the Discord embed. Decide how to handle.
-			// Returning a failure is appropriate as the Discord embed won't have the latest info.
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{ // Using a general error payload or a specific one
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
 					RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 					Error:   "Failed to retrieve updated participants list after score update: " + err.Error(),
 				},
-			}, fmt.Errorf("failed to get updated participants list: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		// Fetch round details to get ChannelID and EventMessageID
@@ -98,23 +93,23 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
 					RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 					Error:   "Failed to retrieve round details for event payload: " + err.Error(),
 				},
-			}, fmt.Errorf("failed to get round details for event payload: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		s.logger.InfoContext(ctx, "Participant score updated in database and fetched updated participants",
 			attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 			attr.String("participant_id", string(payload.ScoreUpdateRequestPayload.Participant)),
 			attr.Int("score", int(*payload.ScoreUpdateRequestPayload.Score)),
-			attr.Int("updated_participant_count", len(updatedParticipants)), // Log count
+			attr.Int("updated_participant_count", len(updatedParticipants)),
 		)
 
 		// Publish the event with the full list of updated participants
 		return RoundOperationResult{
-			Success: &roundevents.ParticipantScoreUpdatedPayload{ // Return POINTER
+			Success: &roundevents.ParticipantScoreUpdatedPayload{
 				RoundID:        payload.ScoreUpdateRequestPayload.RoundID,
 				Participant:    payload.ScoreUpdateRequestPayload.Participant,
 				Score:          *payload.ScoreUpdateRequestPayload.Score,
@@ -133,69 +128,61 @@ type CheckAllScoresSubmittedResult struct {
 }
 
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
-// It now *returns* data instead of publishing events.
 func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) { // Use payload.RoundID
-		allScoresSubmitted, err := s.checkIfAllScoresSubmitted(ctx, payload.RoundID) // Pass payload.RoundID
+	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		allScoresSubmitted, err := s.checkIfAllScoresSubmitted(ctx, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to check if all scores have been submitted",
-				attr.RoundID("round_id", payload.RoundID), // Use payload.RoundID
+				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			// Return a failure result if the check itself fails
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
-					RoundID: payload.RoundID, // Use payload.RoundID
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
+					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to check if all scores have been submitted: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		// Fetch the full, updated list of participants for this round
-		// This is needed for both success payloads (AllScoresSubmittedPayload/NotAllScoresSubmittedPayload)
-		updatedParticipants, err := s.RoundDB.GetParticipants(ctx, payload.RoundID) // Pass payload.RoundID
+		updatedParticipants, err := s.RoundDB.GetParticipants(ctx, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get updated participants list for score check",
-				attr.RoundID("round_id", payload.RoundID), // Use payload.RoundID
+				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			// Return a failure result if fetching participants fails
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
-					RoundID: payload.RoundID, // Use payload.RoundID
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
+					RoundID: payload.RoundID,
 					Error:   "Failed to retrieve updated participants list for score check: " + err.Error(),
 				},
-			}, fmt.Errorf("failed to get updated participants list for score check: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		if allScoresSubmitted {
 			s.logger.InfoContext(ctx, "All scores submitted for round",
-				attr.RoundID("round_id", payload.RoundID), // Use payload.RoundID
+				attr.RoundID("round_id", payload.RoundID),
 			)
-			// Return the payload data for AllScoresSubmitted as a struct
 			return RoundOperationResult{
-				Success: roundevents.AllScoresSubmittedPayload{ // Return VALUE here
-					RoundID:        payload.RoundID,        // Use payload.RoundID
-					EventMessageID: payload.EventMessageID, // Get from incoming payload
-					Participants:   updatedParticipants,    // Include participants
-					// Include other necessary round details for FinalizeRound service payload if needed
-					// RoundData: ...,
+				Success: &roundevents.AllScoresSubmittedPayload{ // Return POINTER here
+					RoundID:        payload.RoundID,
+					EventMessageID: payload.EventMessageID,
+					Participants:   updatedParticipants,
 				},
 			}, nil
 		} else {
 			s.logger.InfoContext(ctx, "Not all scores submitted yet",
-				attr.RoundID("round_id", payload.RoundID),                  // Use payload.RoundID
-				attr.String("participant_id", string(payload.Participant)), // Use payload.Participant
-				attr.Int("score", int(payload.Score)),                      // Use payload.Score
+				attr.RoundID("round_id", payload.RoundID),
+				attr.String("participant_id", string(payload.Participant)),
+				attr.Int("score", int(payload.Score)),
 			)
-			// Return the payload data for NotAllScoresSubmitted as a struct
 			return RoundOperationResult{
-				Success: roundevents.NotAllScoresSubmittedPayload{ // Return VALUE here
-					RoundID:        payload.RoundID,        // Use payload.RoundID
-					Participant:    payload.Participant,    // Get from incoming payload
-					Score:          payload.Score,          // Get from incoming payload
-					EventMessageID: payload.EventMessageID, // Get from incoming payload
-					Participants:   updatedParticipants,    // Include participants
+				Success: &roundevents.NotAllScoresSubmittedPayload{ // Return POINTER here
+					RoundID:        payload.RoundID,
+					Participant:    payload.Participant,
+					Score:          payload.Score,
+					EventMessageID: payload.EventMessageID,
+					Participants:   updatedParticipants,
 				},
 			}, nil
 		}

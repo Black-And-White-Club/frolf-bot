@@ -68,7 +68,7 @@ func TestRoundService_GetRound(t *testing.T) {
 				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&testRound, nil)
 			},
 			expectedResult: RoundOperationResult{
-				Success: testRound,
+				Success: &testRound, // Make this a pointer to match your implementation
 			},
 			expectedError: nil,
 		},
@@ -78,12 +78,12 @@ func TestRoundService_GetRound(t *testing.T) {
 				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer to match your implementation
 					RoundID: testRoundID,
 					Error:   "database error",
 				},
 			},
-			expectedError: errors.New("failed to retrieve round: database error"),
+			expectedError: nil, // Change this to nil since you're handling errors in Failure
 		},
 	}
 
@@ -103,11 +103,9 @@ func TestRoundService_GetRound(t *testing.T) {
 				},
 			}
 
-			_, err := s.GetRound(ctx, testRoundID)
-			if (err != nil) && (tt.expectedError == nil || err.Error() != tt.expectedError.Error()) {
-				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
-			}
+			result, err := s.GetRound(ctx, testRoundID)
 
+			// Check error expectations
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
@@ -118,14 +116,34 @@ func TestRoundService_GetRound(t *testing.T) {
 				t.Errorf("expected no error, got: %v", err)
 			}
 
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Check result expectations
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got nil")
+				} else {
+					// Compare the actual round data
+					expectedRound := tt.expectedResult.Success.(*roundtypes.Round)
+					actualRound := result.Success.(*roundtypes.Round)
+					if expectedRound.ID != actualRound.ID {
+						t.Errorf("expected RoundID: %v, got: %v", expectedRound.ID, actualRound.ID)
+					}
+					// Add more field comparisons as needed
 				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+			}
+
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got nil")
+				} else {
+					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload)
+					actualFailure := result.Failure.(*roundevents.RoundErrorPayload)
+					if expectedFailure.RoundID != actualFailure.RoundID {
+						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
+					}
+					if expectedFailure.Error != actualFailure.Error {
+						t.Errorf("expected Error: %v, got: %v", expectedFailure.Error, actualFailure.Error)
+					}
+				}
 			}
 		})
 	}

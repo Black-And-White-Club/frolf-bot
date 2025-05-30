@@ -2,7 +2,6 @@ package roundservice
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -26,11 +25,11 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to get round from database: %w", err)
+			}, nil
 		}
 
 		// Update the round state to "in progress"
@@ -43,11 +42,11 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to update round: %w", err)
+			}, nil
 		}
 
 		// Convert []roundtypes.Participant to []roundevents.RoundParticipant
@@ -57,22 +56,23 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 				UserID:    sharedtypes.DiscordID(p.UserID),
 				TagNumber: p.TagNumber,
 				Response:  roundtypes.Response(p.Response),
-				Score:     nil,
+				Score:     p.Score,
 			}
 		}
 
-		// Include in event payload
-		discordPayload := roundevents.DiscordRoundStartPayload{
+		// Use the payload data for the Discord event (not the DB data)
+		discordPayload := &roundevents.DiscordRoundStartPayload{
 			RoundID:        round.ID,
-			Title:          round.Title,
-			Location:       round.Location,
-			StartTime:      round.StartTime,
-			Participants:   participants,
-			EventMessageID: round.EventMessageID,
+			Title:          payload.Title,        // Use payload title
+			Location:       payload.Location,     // Use payload location
+			StartTime:      payload.StartTime,    // Use payload start time
+			Participants:   participants,         // Use DB participants (current state)
+			EventMessageID: round.EventMessageID, // Use DB event message ID
 		}
 
 		s.logger.InfoContext(ctx, "Round start processed",
 			attr.RoundID("round_id", payload.RoundID),
+			attr.Int("participant_count", len(participants)),
 		)
 
 		return RoundOperationResult{

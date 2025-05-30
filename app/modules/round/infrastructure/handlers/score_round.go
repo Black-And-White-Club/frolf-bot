@@ -16,11 +16,17 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			scoreUpdateRequestPayload := payload.(*roundevents.ScoreUpdateRequestPayload)
 
+			// Safely log the score - handle nil case
+			scoreValue := "nil"
+			if scoreUpdateRequestPayload.Score != nil {
+				scoreValue = fmt.Sprintf("%d", int(*scoreUpdateRequestPayload.Score))
+			}
+
 			h.logger.InfoContext(ctx, "Received ScoreUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", scoreUpdateRequestPayload.RoundID),
 				attr.String("participant_id", string(scoreUpdateRequestPayload.Participant)),
-				attr.Int("score", int(*scoreUpdateRequestPayload.Score)),
+				attr.String("score", scoreValue), // Use String instead of Int for nil handling
 			)
 
 			// Call the service function to handle the event
@@ -248,7 +254,6 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 
 			// Based on the check result (Success payload), decide which event to publish
 			if result.Success != nil {
-				// CORRECTED: Check for pointer type instead of struct value
 				if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayload); ok {
 					// --- All scores submitted ---
 					h.logger.InfoContext(ctx, "All scores submitted, publishing RoundAllScoresSubmitted", attr.CorrelationIDFromMsg(msg))
@@ -257,15 +262,14 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 					// allScoresData is already a pointer, pass it directly
 					allScoresSubmittedMsg, err := h.helpers.CreateResultMessage(
 						msg,
-						allScoresData,                       // Pass the pointer directly
-						roundevents.RoundAllScoresSubmitted, // Publish this topic
+						allScoresData,
+						roundevents.RoundAllScoresSubmitted,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
 					}
 					return []*message.Message{allScoresSubmittedMsg}, nil
 
-					// CORRECTED: Check for pointer type instead of struct value
 				} else if notAllScoresData, ok := result.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
 					// --- Not all scores submitted ---
 					h.logger.InfoContext(ctx, "Not all scores submitted, publishing RoundNotAllScoresSubmitted", attr.CorrelationIDFromMsg(msg))
@@ -274,8 +278,8 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 					// notAllScoresData is already a pointer, pass it directly
 					notAllScoresSubmittedMsg, err := h.helpers.CreateResultMessage(
 						msg,
-						notAllScoresData,                       // Pass the pointer directly
-						roundevents.RoundNotAllScoresSubmitted, // Publish this topic
+						notAllScoresData,
+						roundevents.RoundNotAllScoresSubmitted,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create not all scores submitted message: %w", err)

@@ -586,7 +586,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	ctx context.Context,
 	msg *message.Message,
 	updatePayload *roundevents.ParticipantJoinRequestPayload,
-	originalResponse roundtypes.Response, // Added to determine the correct success topic
+	originalResponse roundtypes.Response,
 ) ([]*message.Message, error) {
 	// Call the service function to update participant status
 	updateResult, updateErr := h.roundService.UpdateParticipantStatus(ctx, *updatePayload)
@@ -601,13 +601,9 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	var messagesToReturn []*message.Message
 
 	if updateResult.Success != nil {
-		// Determine the correct topic for the success message based on the original response
-		var successTopic string
-		if originalResponse == roundtypes.ResponseDecline {
-			successTopic = roundevents.RoundParticipantDeclined
-		} else {
-			successTopic = roundevents.RoundParticipantJoined // Default for other join-like events
-		}
+		// ALWAYS use RoundParticipantJoined for success, regardless of response type
+		// This notifies Discord to update the participant list/status
+		successTopic := roundevents.RoundParticipantJoined
 
 		// Perform type assertion to get the concrete *roundevents.ParticipantJoinedPayload
 		participantJoinedPayload, ok := updateResult.Success.(*roundevents.ParticipantJoinedPayload)
@@ -623,7 +619,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 		discordUpdateMsg, err := h.helpers.CreateResultMessage(
 			msg,
 			participantJoinedPayload,
-			successTopic, // Use the dynamically determined topic
+			successTopic,
 		)
 		if err != nil {
 			h.logger.ErrorContext(ctx, "Failed to create success message",
@@ -639,7 +635,8 @@ func (h *RoundHandlers) handleParticipantUpdate(
 			attr.CorrelationIDFromMsg(msg),
 			attr.Any("failure_payload", updateResult.Failure),
 		)
-		// Corrected: Assert to pointer type *roundevents.RoundParticipantJoinErrorPayload
+		// ALWAYS use RoundParticipantJoinError for failures, regardless of response type
+		// This notifies Discord that there was an error processing the request
 		failurePayload, ok := updateResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 		if !ok {
 			h.logger.ErrorContext(ctx, "Unexpected failure payload type from UpdateParticipantStatus in helper",
@@ -652,7 +649,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 		failureMsg, errMsg := h.helpers.CreateResultMessage(
 			msg,
 			failurePayload,
-			roundevents.RoundParticipantJoinError, // Publish a join error event
+			roundevents.RoundParticipantJoinError, // ALWAYS use this for errors
 		)
 		if errMsg != nil {
 			h.logger.ErrorContext(ctx, "Failed to create failure message after status update in helper",

@@ -17,7 +17,7 @@ func TestFinalizeRound(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload)
-		expectedError            bool
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -39,14 +39,16 @@ func TestFinalizeRound(t *testing.T) {
 					RoundData: roundForDBInsertion,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				finalizedPayload, ok := returnedResult.Success.(roundevents.RoundFinalizedPayload)
+				// Fixed: expecting pointer type
+				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
-					t.Errorf("Expected RoundFinalizedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify the round's state is FINALIZED in the DB
@@ -82,21 +84,23 @@ func TestFinalizeRound(t *testing.T) {
 					RoundData: dummyRound,
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to fetch round",
+			expectedFailure:          true,
+			expectedErrorMessagePart: "failed to fetch round data", // Updated to match actual implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundFinalizationErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
-				if !strings.Contains(failurePayload.Error, "failed to fetch round") {
-					t.Errorf("Expected failure error to contain 'failed to fetch round', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "failed to fetch round data") {
+					t.Errorf("Expected failure error to contain 'failed to fetch round data', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -114,21 +118,23 @@ func TestFinalizeRound(t *testing.T) {
 					RoundData: dummyRound,
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to fetch round",
+			expectedFailure:          true,
+			expectedErrorMessagePart: "failed to fetch round data", // Updated to match actual implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundFinalizationErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
-				if !strings.Contains(failurePayload.Error, "failed to fetch round") {
-					t.Errorf("Expected failure error to contain 'failed to fetch round', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "failed to fetch round data") {
+					t.Errorf("Expected failure error to contain 'failed to fetch round data', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -153,14 +159,16 @@ func TestFinalizeRound(t *testing.T) {
 					RoundData: roundForDBInsertion,
 				}
 			},
-			expectedError: false, // This test assumes normal operation since we can't easily mock partial failure
+			expectedFailure: false, // This test assumes normal operation since we can't easily mock partial failure
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				finalizedPayload, ok := returnedResult.Success.(roundevents.RoundFinalizedPayload)
+				// Fixed: expecting pointer type
+				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
-					t.Errorf("Expected RoundFinalizedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify the round's state is FINALIZED in the DB
@@ -197,16 +205,26 @@ func TestFinalizeRound(t *testing.T) {
 
 			// Call the actual service method
 			result, err := deps.Service.FinalizeRound(deps.Ctx, *payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload)
+					if !ok {
+						t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 
@@ -221,20 +239,23 @@ func TestNotifyScoreModule(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload)
-		expectedError            bool
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful notification with participants having scores and tag numbers",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
-				// Create a round with empty participants first
-				round := roundtypes.Round{
-					ID:           sharedtypes.RoundID(uuid.New()),
-					Title:        roundtypes.Title("Round for score notification"),
-					CreatedBy:    sharedtypes.DiscordID("test_user_notify_1"),
-					State:        roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{},
+				// Create a round in the database first
+				generator := testutils.NewTestDataGenerator()
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID("test_user_notify_1"),
+					Title:     "Round for score notification",
+					State:     roundtypes.RoundStateFinalized,
+				})
+				err := deps.DB.CreateRound(ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
 				// Create participants with scores and tag numbers
@@ -242,32 +263,34 @@ func TestNotifyScoreModule(t *testing.T) {
 					UserID:    sharedtypes.DiscordID("user1"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(42); return &tn }(),
 					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(85); return &s }(),
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 				participant2 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user2"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(13); return &tn }(),
 					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(92); return &s }(),
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 
-				// Add participants to the round
-				round.AddParticipant(participant1)
-				round.AddParticipant(participant2)
+				// Add participants to the round data for the payload
+				roundForDB.AddParticipant(participant1)
+				roundForDB.AddParticipant(participant2)
 
-				return round.ID, &roundevents.RoundFinalizedPayload{
-					RoundID:   round.ID,
-					RoundData: round,
+				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+					RoundID:   roundForDB.ID,
+					RoundData: roundForDB,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(roundevents.ProcessRoundScoresRequestPayload)
+				// Fixed: expecting pointer type
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
-					t.Errorf("Expected ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify the payload contains the correct number of participants
@@ -308,13 +331,16 @@ func TestNotifyScoreModule(t *testing.T) {
 		{
 			name: "Successful notification with participants having nil scores and tag numbers",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
-				// Create a round with empty participants first
-				round := roundtypes.Round{
-					ID:           sharedtypes.RoundID(uuid.New()),
-					Title:        roundtypes.Title("Round with nil scores"),
-					CreatedBy:    sharedtypes.DiscordID("test_user_notify_2"),
-					State:        roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{},
+				// Create a round in the database first
+				generator := testutils.NewTestDataGenerator()
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID("test_user_notify_2"),
+					Title:     "Round with nil scores",
+					State:     roundtypes.RoundStateFinalized,
+				})
+				err := deps.DB.CreateRound(ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
 				// Create participants with nil scores and tag numbers
@@ -322,32 +348,34 @@ func TestNotifyScoreModule(t *testing.T) {
 					UserID:    sharedtypes.DiscordID("user3"),
 					TagNumber: nil,
 					Score:     nil,
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 				participant2 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user4"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(0); return &tn }(), // Zero tag number
 					Score:     nil,
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 
-				// Add participants to the round
-				round.AddParticipant(participant1)
-				round.AddParticipant(participant2)
+				// Add participants to the round data for the payload
+				roundForDB.AddParticipant(participant1)
+				roundForDB.AddParticipant(participant2)
 
-				return round.ID, &roundevents.RoundFinalizedPayload{
-					RoundID:   round.ID,
-					RoundData: round,
+				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+					RoundID:   roundForDB.ID,
+					RoundData: roundForDB,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(roundevents.ProcessRoundScoresRequestPayload)
+				// Fixed: expecting pointer type
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
-					t.Errorf("Expected ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify the payload contains the correct number of participants
@@ -372,27 +400,33 @@ func TestNotifyScoreModule(t *testing.T) {
 		{
 			name: "Successful notification with empty participants list",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
-				round := roundtypes.Round{
-					ID:           sharedtypes.RoundID(uuid.New()),
-					Title:        roundtypes.Title("Round with no participants"),
-					CreatedBy:    sharedtypes.DiscordID("test_user_notify_3"),
-					State:        roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{}, // Empty participants
+				// Create a round in the database first
+				generator := testutils.NewTestDataGenerator()
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID("test_user_notify_3"),
+					Title:     "Round with no participants",
+					State:     roundtypes.RoundStateFinalized,
+				})
+				err := deps.DB.CreateRound(ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
-				return round.ID, &roundevents.RoundFinalizedPayload{
-					RoundID:   round.ID,
-					RoundData: round,
+				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+					RoundID:   roundForDB.ID,
+					RoundData: roundForDB, // Empty participants from generator
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(roundevents.ProcessRoundScoresRequestPayload)
+				// Fixed: expecting pointer type
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
-					t.Errorf("Expected ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify empty scores list
@@ -409,13 +443,16 @@ func TestNotifyScoreModule(t *testing.T) {
 		{
 			name: "Notification with mixed participant data",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
-				// Create a round with empty participants first
-				round := roundtypes.Round{
-					ID:           sharedtypes.RoundID(uuid.New()),
-					Title:        roundtypes.Title("Round with mixed participant data"),
-					CreatedBy:    sharedtypes.DiscordID("test_user_notify_4"),
-					State:        roundtypes.RoundStateFinalized,
-					Participants: []roundtypes.Participant{},
+				// Create a round in the database first
+				generator := testutils.NewTestDataGenerator()
+				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					CreatedBy: testutils.DiscordID("test_user_notify_4"),
+					Title:     "Round with mixed participant data",
+					State:     roundtypes.RoundStateFinalized,
+				})
+				err := deps.DB.CreateRound(ctx, &roundForDB)
+				if err != nil {
+					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
 				// Mix of participants with complete data, partial data, and nil data
@@ -423,39 +460,41 @@ func TestNotifyScoreModule(t *testing.T) {
 					UserID:    sharedtypes.DiscordID("user5"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(25); return &tn }(),
 					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(78); return &s }(),
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 				participant2 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user6"),
 					TagNumber: nil,
 					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(65); return &s }(),
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 				participant3 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user7"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(33); return &tn }(),
 					Score:     nil,
-					Response:  roundtypes.Response(roundtypes.RoundStateInProgress),
+					Response:  roundtypes.ResponseAccept,
 				}
 
-				// Add participants to the round
-				round.AddParticipant(participant1)
-				round.AddParticipant(participant2)
-				round.AddParticipant(participant3)
+				// Add participants to the round data for the payload
+				roundForDB.AddParticipant(participant1)
+				roundForDB.AddParticipant(participant2)
+				roundForDB.AddParticipant(participant3)
 
-				return round.ID, &roundevents.RoundFinalizedPayload{
-					RoundID:   round.ID,
-					RoundData: round,
+				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+					RoundID:   roundForDB.ID,
+					RoundData: roundForDB,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(roundevents.ProcessRoundScoresRequestPayload)
+				// Fixed: expecting pointer type
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
-					t.Errorf("Expected ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				// Verify the payload contains the correct number of participants
@@ -530,73 +569,31 @@ func TestNotifyScoreModule(t *testing.T) {
 
 			// Call the actual service method
 			result, err := deps.Service.NotifyScoreModule(deps.Ctx, *payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload)
+					if !ok {
+						t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 
 			if tt.validateResult != nil {
 				tt.validateResult(t, deps.Ctx, deps, result)
-			}
-		})
-	}
-}
-
-func TestConvertToRoundFinalizedPayload(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    roundevents.AllScoresSubmittedPayload
-		expected roundevents.RoundFinalizedPayload
-	}{
-		{
-			name: "Successful conversion with valid payload",
-			input: roundevents.AllScoresSubmittedPayload{
-				RoundID: sharedtypes.RoundID(uuid.New()),
-				RoundData: roundtypes.Round{
-					ID:    sharedtypes.RoundID(uuid.New()),
-					Title: "Test Round",
-					State: roundtypes.RoundStateInProgress,
-				},
-			},
-			expected: roundevents.RoundFinalizedPayload{}, // Will be set dynamically in test
-		},
-		{
-			name: "Conversion with empty round data",
-			input: roundevents.AllScoresSubmittedPayload{
-				RoundID:   sharedtypes.RoundID(uuid.Nil),
-				RoundData: roundtypes.Round{},
-			},
-			expected: roundevents.RoundFinalizedPayload{}, // Will be set dynamically in test
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := roundservice.ConvertToRoundFinalizedPayload(tt.input)
-
-			// Verify the conversion preserves data correctly
-			if result.RoundID != tt.input.RoundID {
-				t.Errorf("Expected RoundID %s, got %s", tt.input.RoundID, result.RoundID)
-			}
-
-			if result.RoundData.ID != tt.input.RoundData.ID {
-				t.Errorf("Expected RoundData.ID %s, got %s", tt.input.RoundData.ID, result.RoundData.ID)
-			}
-
-			if result.RoundData.Title != tt.input.RoundData.Title {
-				t.Errorf("Expected RoundData.Title %s, got %s", tt.input.RoundData.Title, result.RoundData.Title)
-			}
-
-			if result.RoundData.State != tt.input.RoundData.State {
-				t.Errorf("Expected RoundData.State %s, got %s", tt.input.RoundData.State, result.RoundData.State)
 			}
 		})
 	}

@@ -25,11 +25,11 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			// Call the service function to handle the event
 			result, err := h.roundService.ProcessRoundReminder(ctx, *discordReminderPayload)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle RoundReminder event",
+				h.logger.ErrorContext(ctx, "Failed to process round reminder",
 					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
+					attr.Error(err),
 				)
-				return nil, fmt.Errorf("failed to handle RoundReminder event: %w", err)
+				return nil, fmt.Errorf("failed to process round reminder: %w", err)
 			}
 
 			if result.Failure != nil {
@@ -52,26 +52,40 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Round reminder processed successfully", attr.CorrelationIDFromMsg(msg))
+				discordPayload := result.Success.(*roundevents.DiscordReminderPayload)
 
-				// Create success message to publish
-				reminderProcessedPayload := result.Success.(*roundevents.RoundReminderProcessedPayload)
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					reminderProcessedPayload,
-					roundevents.DiscordRoundReminder,
+				h.logger.InfoContext(ctx, "Round reminder processed successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", discordPayload.RoundID),
 				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
 
-				return []*message.Message{successMsg}, nil
+				// Only publish Discord reminder if there are participants to notify
+				if len(discordPayload.UserIDs) > 0 {
+					successMsg, err := h.helpers.CreateResultMessage(
+						msg,
+						discordPayload,
+						roundevents.DiscordRoundReminder,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create Discord reminder message: %w", err)
+					}
+					return []*message.Message{successMsg}, nil
+				} else {
+					// No participants to notify, but processing was successful
+					// Optionally publish a "processed" event or just return empty
+					h.logger.InfoContext(ctx, "Round reminder processed but no participants to notify",
+						attr.CorrelationIDFromMsg(msg),
+						attr.RoundID("round_id", discordPayload.RoundID),
+					)
+					return []*message.Message{}, nil // Return empty slice, not nil
+				}
 			}
-			// If neither Failure nor Success is set, return an error
+
+			// This should never happen now that service always returns Success or Failure
 			h.logger.ErrorContext(ctx, "Unexpected result from ProcessRoundReminder service",
 				attr.CorrelationIDFromMsg(msg),
 			)
-			return nil, fmt.Errorf("unexpected result from service")
+			return nil, fmt.Errorf("service returned neither success nor failure")
 		},
 	)
 

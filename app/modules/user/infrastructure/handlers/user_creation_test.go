@@ -12,7 +12,8 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -36,11 +37,11 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	}
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := usermetrics.NewNoop()
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -85,9 +86,13 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				// CreateUser
+				// Fix: CreateUser returns UserOperationResult and error (2 values)
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
-					Return(&userevents.UserCreatedPayload{UserID: testUserID}, nil, nil)
+					Return(userservice.UserOperationResult{
+						Success: &userevents.UserCreatedPayload{UserID: testUserID},
+						Failure: nil,
+						Error:   nil,
+					}, nil)
 
 				// CreateResultMessage for UserCreated
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreated).
@@ -110,9 +115,13 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				// CreateUser
+				// Fix: CreateUser returns UserOperationResult with failure
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
-					Return(nil, &userevents.UserCreationFailedPayload{UserID: testUserID, Reason: "failed"}, nil)
+					Return(userservice.UserOperationResult{
+						Success: nil,
+						Failure: &userevents.UserCreationFailedPayload{UserID: testUserID, Reason: "failed"},
+						Error:   nil,
+					}, nil)
 
 				// CreateResultMessage for UserCreationFailed
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreationFailed).
@@ -135,12 +144,12 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				// CreateUser
+				// Fix: CreateUser returns empty result and error
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
-					Return(nil, nil, fmt.Errorf("service error"))
+					Return(userservice.UserOperationResult{}, fmt.Errorf("service error"))
 			},
 			wantErr:        true,
-			expectedErrMsg: "failed to process UserSignupRequest: service error",
+			expectedErrMsg: "failed to process UserSignupRequest service call: service error",
 		},
 		{
 			name: "Error creating result message",
@@ -156,11 +165,15 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				// CreateUser
+				// Fix: CreateUser returns success result
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
-					Return(&userevents.UserCreatedPayload{UserID: testUserID}, nil, nil)
+					Return(userservice.UserOperationResult{
+						Success: &userevents.UserCreatedPayload{UserID: testUserID},
+						Failure: nil,
+						Error:   nil,
+					}, nil)
 
-				// CreateResultMessage  error
+				// CreateResultMessage error
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).
 					Return(nil, fmt.Errorf("message error"))
 			},
@@ -176,10 +189,10 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics,
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 

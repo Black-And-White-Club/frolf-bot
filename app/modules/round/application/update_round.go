@@ -7,7 +7,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
 )
@@ -31,11 +30,11 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &payload,
 					Error:              err.Error(),
 				},
-			}, err
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		s.logger.InfoContext(ctx, "Round update request validated",
@@ -43,7 +42,7 @@ func (s *RoundService) ValidateRoundUpdateRequest(ctx context.Context, payload r
 		)
 
 		return RoundOperationResult{
-			Success: roundevents.RoundUpdateValidatedPayload{
+			Success: &roundevents.RoundUpdateValidatedPayload{
 				RoundUpdateRequestPayload: payload,
 			},
 		}, nil
@@ -64,12 +63,13 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
-				Failure: roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              err.Error(),
 				},
-			}, err
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		// Apply updates
@@ -83,8 +83,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			existingRound.Location = payload.RoundUpdateRequestPayload.Location
 		}
 		if payload.RoundUpdateRequestPayload.StartTime != nil {
-			startTime := sharedtypes.StartTime(*payload.RoundUpdateRequestPayload.StartTime)
-			existingRound.StartTime = &startTime
+			existingRound.StartTime = payload.RoundUpdateRequestPayload.StartTime
 		}
 		if payload.RoundUpdateRequestPayload.EventType != nil {
 			existingRound.EventType = payload.RoundUpdateRequestPayload.EventType
@@ -96,12 +95,13 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 				attr.Error(err),
 			)
+			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
 			return RoundOperationResult{
-				Failure: roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              err.Error(),
 				},
-			}, err
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		s.logger.InfoContext(ctx, "Round entity updated successfully",
@@ -109,19 +109,8 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 		)
 
 		return RoundOperationResult{
-			Success: roundevents.RoundEntityUpdatedPayload{
-				Round: roundtypes.Round{
-					ID:           existingRound.ID,
-					Title:        existingRound.Title,
-					Description:  existingRound.Description,
-					Location:     existingRound.Location,
-					EventType:    existingRound.EventType,
-					StartTime:    existingRound.StartTime,
-					Finalized:    existingRound.Finalized,
-					CreatedBy:    existingRound.CreatedBy,
-					State:        existingRound.State,
-					Participants: existingRound.Participants,
-				},
+			Success: &roundevents.RoundEntityUpdatedPayload{
+				Round: *existingRound, // Dereference the existing round
 			},
 		}, nil
 	})
@@ -136,39 +125,79 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 
 		// Step 1: Attempt to cancel existing scheduled events
 		if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
-			s.logger.Warn("Failed to cancel existing scheduled events, proceeding anyway",
+			s.logger.WarnContext(ctx, "Failed to cancel existing scheduled events, proceeding anyway",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
 		}
 
 		// Step 2: Fetch the complete round information from the database
+		s.logger.InfoContext(ctx, "DEBUG: About to fetch round from database",
+			attr.RoundID("round_id", payload.RoundID),
+		)
+
 		round, fetchErr := s.RoundDB.GetRound(ctx, payload.RoundID)
 		if fetchErr != nil {
 			s.logger.ErrorContext(ctx, "Failed to fetch round for rescheduling",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(fetchErr),
 			)
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
 
 			// Create a new error payload for the failure
-			errorPayload := roundevents.RoundUpdateErrorPayload{
-				RoundUpdateRequest: nil, // No valid request to return
-				Error:              fetchErr.Error(),
-			}
-
 			return RoundOperationResult{
-				Failure: errorPayload,
-			}, fetchErr
+				Failure: &roundevents.RoundUpdateErrorPayload{
+					RoundUpdateRequest: nil, // No valid request to return
+					Error:              fetchErr.Error(),
+				},
+			}, nil // Return nil error since we're handling it in Failure
 		}
+
+		// Add debugging to see what we fetched
+		if round == nil {
+			s.logger.ErrorContext(ctx, "DEBUG: Round fetch returned nil pointer",
+				attr.RoundID("round_id", payload.RoundID),
+			)
+			return RoundOperationResult{
+				Failure: &roundevents.RoundUpdateErrorPayload{
+					RoundUpdateRequest: nil,
+					Error:              "round not found or is nil",
+				},
+			}, nil
+		}
+
+		s.logger.InfoContext(ctx, "DEBUG: Fetched round from database",
+			attr.RoundID("round_id", round.ID),
+			attr.String("title", string(round.Title)),
+			attr.String("created_by", string(round.CreatedBy)),
+			attr.Int("participants_count", len(round.Participants)),
+		)
+
+		// Validate the round has proper data
+		if round.ID == (sharedtypes.RoundID{}) || round.ID.String() == "00000000-0000-0000-0000-000000000000" {
+			s.logger.ErrorContext(ctx, "DEBUG: Round has zero-value ID",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.RoundID("fetched_round_id", round.ID),
+			)
+			return RoundOperationResult{
+				Failure: &roundevents.RoundUpdateErrorPayload{
+					RoundUpdateRequest: nil,
+					Error:              "round has invalid ID",
+				},
+			}, nil
+		}
+
+		s.logger.InfoContext(ctx, "Scheduled round update processed successfully",
+			attr.RoundID("round_id", payload.RoundID),
+		)
 
 		// Step 3: Prepare the payload for the handler to publish
-		storedPayload := roundevents.RoundStoredPayload{
-			Round: *round,
-		}
-
-		// Return the payload for the handler to use for rescheduling
+		// Since round is *roundtypes.Round, we need to dereference it
+		roundValue := *round
 		return RoundOperationResult{
-			Success: storedPayload,
+			Success: &roundevents.RoundStoredPayload{
+				Round: roundValue,
+			},
 		}, nil
 	})
 }

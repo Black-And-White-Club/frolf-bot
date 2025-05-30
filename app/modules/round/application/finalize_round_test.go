@@ -29,13 +29,11 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	mockDB := rounddb.NewMockRoundDB(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-	mockEventBus := eventbus.NewMockEventBus(ctrl)
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testFinalizedRound := &roundtypes.Round{
@@ -70,7 +68,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				RoundID: testRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundFinalizedPayload{
+				Success: &roundevents.RoundFinalizedPayload{
 					RoundID:   testRoundID,
 					RoundData: *testFinalizedRound,
 				},
@@ -91,12 +89,12 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				RoundID: testRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayload{
 					RoundID: testRoundID,
 					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
 				},
 			},
-			expectedError: fmt.Errorf("failed to update round state: %w", dbUpdateError),
+			expectedError: nil, // Service returns failure payload with nil error
 		},
 		{
 			name: "failure fetching round after update",
@@ -113,17 +111,23 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				RoundID: testRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayload{
 					RoundID: testRoundID,
 					Error:   fmt.Sprintf("failed to fetch round data: %v", dbGetError),
 				},
 			},
-			expectedError: fmt.Errorf("failed to fetch round %s: %w", testRoundID, dbGetError),
+			expectedError: nil, // Service returns failure payload with nil error
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset mocks for each subtest
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockEventBus := eventbus.NewMockEventBus(ctrl)
+
 			tt.mockDBSetup(mockDB)
 			tt.mockRoundValidatorSetup(mockRoundValidator)
 			tt.mockEventBusSetup(mockEventBus)
@@ -140,12 +144,14 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				},
 			}
 
-			_, err := s.FinalizeRound(ctx, tt.payload)
+			result, err := s.FinalizeRound(ctx, tt.payload)
 
 			// Validate error
 			if tt.expectedError != nil {
-				if err == nil || err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
 				}
 			} else {
 				if err != nil {
@@ -153,15 +159,27 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				}
 			}
 
-			// Validate result
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Validate result payload
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				} else if successPayload, ok := result.Success.(*roundevents.RoundFinalizedPayload); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundFinalizedPayload, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundFinalizedPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundFinalizedPayload, got %T", tt.expectedResult.Success)
+				} else if successPayload.RoundID != expectedSuccessPayload.RoundID {
+					t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
 				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+			} else if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload.Error != expectedFailurePayload.Error {
+					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
+				}
 			}
 		})
 	}
@@ -194,12 +212,17 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		mockDBSetup    func(*rounddb.MockRoundDB)
 		payload        roundevents.RoundFinalizedPayload
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
 		{
 			name: "success notifying score module with various participants",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// Mock GetRound call that happens in NotifyScoreModule
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+			},
 			payload: roundevents.RoundFinalizedPayload{
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -213,7 +236,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.ProcessRoundScoresRequestPayload{
+				Success: &roundevents.ProcessRoundScoresRequestPayload{
 					RoundID: testRoundID,
 					Scores: []roundevents.ParticipantScore{
 						{UserID: user1ID, TagNumber: &tag1, Score: score1},
@@ -227,6 +250,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "success notifying score module with no participants",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// Mock GetRound call that happens in NotifyScoreModule
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+			},
 			payload: roundevents.RoundFinalizedPayload{
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -235,7 +262,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.ProcessRoundScoresRequestPayload{
+				Success: &roundevents.ProcessRoundScoresRequestPayload{
 					RoundID: testRoundID,
 					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
 				},
@@ -244,6 +271,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "success notifying score module with nil participants",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// Mock GetRound call that happens in NotifyScoreModule
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+			},
 			payload: roundevents.RoundFinalizedPayload{
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -252,7 +283,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.ProcessRoundScoresRequestPayload{
+				Success: &roundevents.ProcessRoundScoresRequestPayload{
 					RoundID: testRoundID,
 					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
 				},
@@ -263,7 +294,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset mocks for each subtest
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockDB := rounddb.NewMockRoundDB(ctrl)
+
+			tt.mockDBSetup(mockDB)
+
 			s := &RoundService{
+				RoundDB:        mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
@@ -273,12 +312,14 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			}
 
-			_, err := s.NotifyScoreModule(ctx, tt.payload)
+			result, err := s.NotifyScoreModule(ctx, tt.payload)
 
 			// Validate error
 			if tt.expectedError != nil {
-				if err == nil || err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
 				}
 			} else {
 				if err != nil {
@@ -286,15 +327,43 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				}
 			}
 
-			// Validate result
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Validate result payload
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				} else if successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayload); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.ProcessRoundScoresRequestPayload, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.ProcessRoundScoresRequestPayload, got %T", tt.expectedResult.Success)
+				} else {
+					// Validate RoundID
+					if successPayload.RoundID != expectedSuccessPayload.RoundID {
+						t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
+					}
+					// Validate scores length
+					if len(successPayload.Scores) != len(expectedSuccessPayload.Scores) {
+						t.Errorf("expected %d scores, got %d", len(expectedSuccessPayload.Scores), len(successPayload.Scores))
+					}
+					// Validate individual scores
+					for i, expectedScore := range expectedSuccessPayload.Scores {
+						if i < len(successPayload.Scores) {
+							actualScore := successPayload.Scores[i]
+							if actualScore.UserID != expectedScore.UserID {
+								t.Errorf("score %d: expected UserID %s, got %s", i, expectedScore.UserID, actualScore.UserID)
+							}
+							if *actualScore.TagNumber != *expectedScore.TagNumber {
+								t.Errorf("score %d: expected TagNumber %d, got %d", i, *expectedScore.TagNumber, *actualScore.TagNumber)
+							}
+							if actualScore.Score != expectedScore.Score {
+								t.Errorf("score %d: expected Score %d, got %d", i, expectedScore.Score, actualScore.Score)
+							}
+						}
+					}
 				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+			} else if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				}
 			}
 		})
 	}

@@ -13,7 +13,6 @@ import (
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -104,7 +103,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 						t.Errorf("TagAssignmentRequestedPayload has wrong UserID or TagNumber")
 					}
 
-					if assignPayload.Source != string(leaderboarddb.ServiceUpdateSourceCreateUser) {
+					if assignPayload.Source != string(sharedtypes.ServiceUpdateSourceCreateUser) {
 						t.Errorf("TagAssignmentRequestedPayload has wrong Source")
 					}
 

@@ -1,12 +1,11 @@
 package userhandler_integration_tests
 
 import (
-	"context" // Import fmt for error wrapping
+	"context"
 	"io"
 	"log"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,15 +24,14 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-// Global variables for the test environment, initialized once (e.g., in TestMain).
-// These are assumed to be set up in a TestMain function in this package's test file.
+// Global variables for the test environment, initialized once.
 var (
 	testEnv     *testutils.TestEnvironment
 	testEnvOnce sync.Once
 	testEnvErr  error
 )
 
-// LeaderboardHandlerTestDeps holds shared dependencies for leaderboard handler tests.
+// HandlerTestDeps holds shared dependencies for user handler tests.
 type HandlerTestDeps struct {
 	*testutils.TestEnvironment
 	UserModule         *user.Module
@@ -46,37 +44,58 @@ type HandlerTestDeps struct {
 	TestHelpers        utils.Helpers
 }
 
-// GetTestEnv creates a new test environment for the test.
-// This ensures each test gets a clean environment.
-// This function assumes that the global testEnv is initialized in TestMain.
 func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	t.Helper()
-	if testEnv == nil {
-		// This indicates TestMain was not run or failed.
-		t.Fatalf("Global test environment not initialized. Ensure TestMain is correctly set up.")
+
+	testEnvOnce.Do(func() {
+		log.Println("Initializing user handler test environment...")
+		env, err := testutils.NewTestEnvironment(t)
+		if err != nil {
+			testEnvErr = err
+			log.Printf("Failed to set up test environment: %v", err)
+		} else {
+			log.Println("User handler test environment initialized successfully.")
+			testEnv = env
+		}
+	})
+
+	if testEnvErr != nil {
+		t.Fatalf("User handler test environment initialization failed: %v", testEnvErr)
 	}
+
+	if testEnv == nil {
+		t.Fatalf("User handler test environment not initialized")
+	}
+
 	return testEnv
 }
 
 // SetupTestUserHandler sets up the environment and dependencies for user handler tests.
-// It creates a new router and event bus instance for each test function's scope.
 func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 	t.Helper()
 
-	// Get a fresh test environment for this test from the global instance
+	// Get the shared test environment
 	env := GetTestEnv(t)
+
+	// Check if containers should be recreated for stability
+	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
+		t.Fatalf("Failed to handle container recreation: %v", err)
+	}
+
+	// Perform deep cleanup between tests for better isolation
+	if err := env.DeepCleanup(); err != nil {
+		t.Fatalf("Failed to perform deep cleanup: %v", err)
+	}
 
 	// Set the APP_ENV to "test" for the duration of the test run
 	oldEnv := os.Getenv("APP_ENV")
 	os.Setenv("APP_ENV", "test")
-	t.Cleanup(func() {
-		os.Setenv("APP_ENV", oldEnv)
-	})
+
+	// Use standard stream names that the EventBus recognizes
+	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
 
 	// Clean up NATS consumers for all streams before starting the test
-	// These are the streams the user handler might interact with.
-	streamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
-	if err := env.ResetJetStreamState(env.Ctx, streamNames...); err != nil {
+	if err := env.ResetJetStreamState(env.Ctx, standardStreamNames...); err != nil {
 		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
 	}
 	log.Println("Cleaned up NATS JetStream state for user handler streams before test")
@@ -88,7 +107,7 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 	log.Println("Truncated 'users' table before test")
 
 	userDB := &userdb.UserDBImpl{DB: env.DB}
-	// Use NopLogger for quieter test logs, matching leaderboard helper
+	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
 	// Create contexts for the event bus and router, managed by t.Cleanup
@@ -97,37 +116,24 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 
 	// Create the actual EventBus implementation for this test
 	eventBusImpl, err := eventbus.NewEventBus(
-		eventBusCtx, // Use the test-scoped context
+		eventBusCtx,
 		env.Config.NATS.URL,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), // Discard logs in tests
-		"backend",                               // Use a dummy appType
-		&eventbusmetrics.NoOpMetrics{},          // Use NoOpMetrics
-		noop.NewTracerProvider().Tracer("test"), // Use NoOpTracer
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		"backend", // Use standard app type that EventBus recognizes
+		&eventbusmetrics.NoOpMetrics{},
+		noop.NewTracerProvider().Tracer("test"),
 	)
 	if err != nil {
 		eventBusCancel()
 		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	// Explicitly create the streams needed for user handler tests if they don't exist
-	for _, streamName := range streamNames {
-		// Check if the stream exists before attempting to create it
-		_, err := eventBusImpl.GetJetStream().Stream(env.Ctx, streamName)
-		if err != nil && strings.Contains(err.Error(), "stream not found") {
-			log.Printf("Stream %q not found, creating it.", streamName)
-			if err := eventBusImpl.CreateStream(env.Ctx, streamName); err != nil {
-				// Ensure cleanup on failure
-				eventBusImpl.Close()
-				eventBusCancel()
-				t.Fatalf("Failed to create required NATS stream %q: %v", streamName, err)
-			}
-		} else if err != nil {
-			// Handle other potential errors when checking for stream existence
+	// Ensure all required streams exist after EventBus creation
+	for _, streamName := range standardStreamNames {
+		if err := eventBusImpl.CreateStream(env.Ctx, streamName); err != nil {
 			eventBusImpl.Close()
 			eventBusCancel()
-			t.Fatalf("Failed to check existence of NATS stream %q: %v", streamName, err)
-		} else {
-			log.Printf("Stream %q already exists, skipping creation.", streamName)
+			t.Fatalf("Failed to create required NATS stream %q: %v", streamName, err)
 		}
 	}
 
@@ -144,12 +150,12 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 	// Use NoOpMetrics and TracerProvider for test observability
 	testObservability := observability.Observability{
 		Provider: &observability.Provider{
-			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), // Discard logs
+			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		},
 		Registry: &observability.Registry{
-			UserMetrics: &usermetrics.NoOpMetrics{},                     // Use NoOpMetrics
-			Tracer:      noop.NewTracerProvider().Tracer("test"),        // Use NoOpTracer
-			Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)), // Discard logs
+			UserMetrics: &usermetrics.NoOpMetrics{},
+			Tracer:      noop.NewTracerProvider().Tracer("test"),
+			Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		},
 	}
 
@@ -158,7 +164,7 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 
 	// Create the user module
 	userModule, err := user.NewUserModule(
-		env.Ctx, // Use the test environment's context
+		env.Ctx,
 		env.Config,
 		testObservability,
 		userDB,
@@ -184,17 +190,17 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 		}
 	}()
 
-	// Wait a moment for the router to initialize, adjust duration if needed
+	// Wait a moment for the router to initialize
 	time.Sleep(500 * time.Millisecond)
 
-	// Add comprehensive cleanup function to test context to ensure proper shutdown
-	t.Cleanup(func() {
+	// Add comprehensive cleanup function to test context
+	cleanup := func() {
 		log.Println("Running user handler test cleanup...")
 		// Cancel the router and event bus contexts first
 		routerRunCancel()
 		eventBusCancel()
 
-		// Close the user module, which should also handle its internal dependencies
+		// Close the user module
 		if userModule != nil {
 			if err := userModule.Close(); err != nil {
 				log.Printf("Error closing User module in test cleanup: %v", err)
@@ -223,11 +229,17 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 		select {
 		case <-waitCh:
 			log.Println("User handler router goroutine finished.")
-		case <-time.After(2 * time.Second): // Use a reasonable timeout
+		case <-time.After(2 * time.Second):
 			log.Println("WARNING: User handler router goroutine wait timed out")
 		}
+
+		// Restore environment
+		os.Setenv("APP_ENV", oldEnv)
+
 		log.Println("User handler test cleanup finished.")
-	})
+	}
+
+	t.Cleanup(cleanup)
 
 	return HandlerTestDeps{
 		TestEnvironment:   env,

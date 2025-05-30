@@ -20,7 +20,7 @@ import (
 )
 
 func TestTagSwapRequested(t *testing.T) {
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -44,7 +44,7 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -141,7 +141,7 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -210,7 +210,7 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -278,7 +278,7 @@ func TestTagSwapRequested(t *testing.T) {
 						{UserID: "other_user", TagNumber: 30},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -398,10 +398,6 @@ func TestTagSwapRequested(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
@@ -411,7 +407,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 			}
 
-			result, err := deps.Service.TagSwapRequested(sharedCtx, tt.payload)
+			ctx := context.Background()
+			result, err := deps.Service.TagSwapRequested(ctx, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

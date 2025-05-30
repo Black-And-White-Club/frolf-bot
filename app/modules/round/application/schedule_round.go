@@ -3,7 +3,6 @@ package roundservice
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -26,11 +25,11 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to create consumer for round %s: %w", payload.RoundID, err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		// Get current time to evaluate which events to schedule
@@ -60,11 +59,11 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayload{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
-				}, fmt.Errorf("failed to encode reminder payload: %w", err)
+				}, nil
 			}
 
 			// Schedule reminder with empty additional metadata map
@@ -75,11 +74,11 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayload{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
-				}, fmt.Errorf("failed to schedule reminder: %w", err)
+				}, nil
 			}
 		} else {
 			s.logger.InfoContext(ctx, "Skipping 1-hour reminder - not enough time before round start",
@@ -112,11 +111,11 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayload{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
-				}, fmt.Errorf("failed to encode round start payload: %w", err)
+				}, nil
 			}
 
 			// Schedule start event with empty additional metadata map
@@ -127,11 +126,11 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayload{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
-				}, fmt.Errorf("failed to schedule round start: %w", err)
+				}, nil
 			}
 		} else {
 			s.logger.WarnContext(ctx, "Round start time is in the past, not scheduling start event",
@@ -145,7 +144,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
-		scheduledPayload := roundevents.RoundScheduledPayload{
+		scheduledPayload := &roundevents.RoundScheduledPayload{
 			BaseRoundPayload: roundtypes.BaseRoundPayload{
 				RoundID:     payload.RoundID,
 				Title:       payload.Title,

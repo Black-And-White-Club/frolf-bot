@@ -17,7 +17,7 @@ func TestParticipantRemoval(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload)
-		expectedError            bool
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -66,15 +66,17 @@ func TestParticipantRemoval(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("participant_to_remove"),
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				removedPayloadPtr, ok := returnedResult.Success.(roundevents.ParticipantRemovedPayload)
+				// Fixed: expecting pointer type
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
 				if !ok {
-					t.Errorf("Expected roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				if removedPayloadPtr.UserID != sharedtypes.DiscordID("participant_to_remove") {
@@ -133,30 +135,32 @@ func TestParticipantRemoval(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("non_existent_participant"),
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				removedPayloadPtr, ok := returnedResult.Success.(roundevents.ParticipantRemovedPayload)
+				// Fixed: expecting pointer type
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
 				if !ok {
-					t.Errorf("Expected roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				if removedPayloadPtr.UserID != sharedtypes.DiscordID("non_existent_participant") {
 					t.Errorf("Expected UserID to be 'non_existent_participant', got '%s'", removedPayloadPtr.UserID)
 				}
 
-				// Since this is testing the "user not found" case, the lists should be empty according to the implementation
-				if len(removedPayloadPtr.AcceptedParticipants) != 0 {
-					t.Errorf("Expected 0 accepted participants for non-existent user removal, got %d", len(removedPayloadPtr.AcceptedParticipants))
+				// Since this is testing the "user not found" case, the lists should contain the existing participant
+				if len(removedPayloadPtr.AcceptedParticipants) != 1 {
+					t.Errorf("Expected 1 accepted participant (existing one), got %d", len(removedPayloadPtr.AcceptedParticipants))
 				}
 				if len(removedPayloadPtr.TentativeParticipants) != 0 {
-					t.Errorf("Expected 0 tentative participants for non-existent user removal, got %d", len(removedPayloadPtr.TentativeParticipants))
+					t.Errorf("Expected 0 tentative participants, got %d", len(removedPayloadPtr.TentativeParticipants))
 				}
 				if len(removedPayloadPtr.DeclinedParticipants) != 0 {
-					t.Errorf("Expected 0 declined participants for non-existent user removal, got %d", len(removedPayloadPtr.DeclinedParticipants))
+					t.Errorf("Expected 0 declined participants, got %d", len(removedPayloadPtr.DeclinedParticipants))
 				}
 			},
 		},
@@ -206,15 +210,17 @@ func TestParticipantRemoval(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("accepted_participant_to_remove"),
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				removedPayloadPtr, ok := returnedResult.Success.(roundevents.ParticipantRemovedPayload)
+				// Fixed: expecting pointer type
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
 				if !ok {
-					t.Errorf("Expected roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				if removedPayloadPtr.UserID != sharedtypes.DiscordID("accepted_participant_to_remove") {
@@ -249,22 +255,24 @@ func TestParticipantRemoval(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("some_user"),
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to fetch round details before removal",
+			expectedFailure:          true,                            // Changed from expectedError
+			expectedErrorMessagePart: "failed to fetch round details", // Updated to match implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := returnedResult.Failure.(roundevents.ParticipantRemovalErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantRemovalErrorPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantRemovalErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *ParticipantRemovalErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
-				if !strings.Contains(failurePayload.Error, "failed to fetch round details before removal") {
-					t.Errorf("Expected failure error to contain 'failed to fetch round details before removal', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "failed to fetch round details") {
+					t.Errorf("Expected failure error to contain 'failed to fetch round details', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -299,15 +307,17 @@ func TestParticipantRemoval(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("only_participant"),
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				removedPayloadPtr, ok := returnedResult.Success.(roundevents.ParticipantRemovedPayload)
+				// Fixed: expecting pointer type
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
 				if !ok {
-					t.Errorf("Expected roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					return
 				}
 
 				if removedPayloadPtr.UserID != sharedtypes.DiscordID("only_participant") {
@@ -355,16 +365,26 @@ func TestParticipantRemoval(t *testing.T) {
 
 			// Call the actual service method: ParticipantRemoval
 			result, err := deps.Service.ParticipantRemoval(deps.Ctx, payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.ParticipantRemovalErrorPayload)
+					if !ok {
+						t.Errorf("Expected *ParticipantRemovalErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 

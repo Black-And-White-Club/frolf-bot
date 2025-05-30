@@ -23,6 +23,7 @@ import (
 func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testReminderType := "test-reminder-type"
+	testUserIDs := []sharedtypes.DiscordID{"user1", "user2"}
 
 	testPayload := &roundevents.DiscordReminderPayload{
 		RoundID:      testRoundID,
@@ -64,8 +65,10 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundReminderProcessedPayload{
-							RoundID: testRoundID,
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      testUserIDs, // Added UserIDs so len > 0
 						},
 					},
 					nil,
@@ -79,6 +82,39 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "Successfully handle RoundReminder with no participants",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      []sharedtypes.DiscordID{}, // Empty UserIDs
+						},
+					},
+					nil,
+				)
+
+				// No CreateResultMessage call expected when UserIDs is empty
+			},
+			msg:     testMsg,
+			want:    []*message.Message{}, // Empty slice, not nil
 			wantErr: false,
 		},
 		{
@@ -115,7 +151,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle RoundReminder event: internal service error",
+			expectedErrMsg: "failed to process round reminder: internal service error", // Updated to match handler
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -135,8 +171,10 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundReminderProcessedPayload{
-							RoundID: testRoundID,
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      testUserIDs, // Added UserIDs so len > 0
 						},
 					},
 					nil,
@@ -151,7 +189,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "failed to create Discord reminder message: failed to create result message", // Updated to match handler
 		},
 		{
 			name: "Unknown result from ProcessRoundReminder",
@@ -177,7 +215,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "service returned neither success nor failure", // Updated to match handler
 		},
 		{
 			name: "Failure result from ProcessRoundReminder",

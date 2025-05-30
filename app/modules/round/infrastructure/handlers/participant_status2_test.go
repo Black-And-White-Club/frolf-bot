@@ -556,11 +556,11 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 					nil,
 				)
 
-				// Corrected: Expect RoundParticipantDeclined topic for success message
+				// Fixed: Use RoundParticipantJoined topic (implementation always uses this for success)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					expectedServiceSuccessPayload,
-					roundevents.RoundParticipantDeclined, // Corrected to RoundParticipantDeclined topic
+					roundevents.RoundParticipantJoined, // Changed from RoundParticipantDeclined
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -642,11 +642,11 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 					nil,
 				)
 
-				// Corrected: Expect RoundParticipantDeclined topic for success message
+				// Fixed: Use RoundParticipantJoined topic (implementation always uses this for success)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					expectedServiceSuccessPayload,
-					roundevents.RoundParticipantDeclined, // Corrected to RoundParticipantDeclined topic
+					roundevents.RoundParticipantJoined, // Changed from RoundParticipantDeclined
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,

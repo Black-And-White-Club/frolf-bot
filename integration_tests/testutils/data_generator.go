@@ -319,6 +319,12 @@ func (g *TestDataGenerator) GenerateTestData(userCount, roundCount int) ([]User,
 	return users, rounds, scores, leaderboard
 }
 
+// GenerateTagNumber creates a random tag number for testing
+func (g *TestDataGenerator) GenerateTagNumber() int {
+	// Generate a tag number between 1 and 100 (typical disc golf tag range)
+	return g.faker.Number(1, 100)
+}
+
 // StartTimePtr is a helper to create a pointer to sharedtypes.StartTime.
 // This is moved here as it's a general utility for creating test data.
 func StartTimePtr(t time.Time) *sharedtypes.StartTime {

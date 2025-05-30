@@ -9,10 +9,11 @@ import (
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -32,15 +33,16 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json")) // Corrupted payload
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl) // Use the mock
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
+
 	tests := []struct {
 		name           string
 		mockSetup      func()
@@ -60,8 +62,11 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				)
 
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
-					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
-					nil,
+					userservice.UserOperationResult{
+						Success: &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+						Failure: nil,
+						Error:   nil,
+					},
 					nil,
 				)
 
@@ -70,10 +75,6 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
 					userevents.UserCreated,
 				).Return(testMsg, nil)
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerSuccess(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordTagAvailabilityCheck(gomock.Any(), true, sharedtypes.TagNumber(testTagNumber)).Times(1) // Corrected here
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -90,11 +91,14 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				)
 
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
-					nil,
-					&userevents.UserCreationFailedPayload{
-						UserID:    testUserID,
-						TagNumber: &testTagNumber,
-						Reason:    "failed",
+					userservice.UserOperationResult{
+						Success: nil,
+						Failure: &userevents.UserCreationFailedPayload{
+							UserID:    testUserID,
+							TagNumber: &testTagNumber,
+							Reason:    "failed",
+						},
+						Error: nil,
 					},
 					nil,
 				)
@@ -104,10 +108,6 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					&userevents.UserCreationFailedPayload{UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
 					userevents.UserCreationFailed,
 				).Return(testMsg, nil)
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerSuccess(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordTagAvailabilityCheck(gomock.Any(), false, sharedtypes.TagNumber(testTagNumber)).Times(1)
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -117,9 +117,6 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			name: "Fail to unmarshal payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
 			},
 			msg:            invalidMsg,
 			want:           nil,
@@ -136,14 +133,14 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(nil, nil, fmt.Errorf("internal service error"))
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+					userservice.UserOperationResult{},
+					fmt.Errorf("internal service error"),
+				)
 			},
 			msg:            testMsg,
 			wantErr:        true,
-			expectedErrMsg: "failed to create user: internal service error",
+			expectedErrMsg: "failed to create user with tag: internal service error",
 		},
 		{
 			name: "Failure to create success message",
@@ -156,19 +153,39 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				)
 
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
-					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
-					nil,
+					userservice.UserOperationResult{
+						Success: &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+						Failure: nil,
+						Error:   nil,
+					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreated).Return(nil, fmt.Errorf("failed to create success message"))
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagAvailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagAvailable", gomock.Any()).Times(1)
 			},
 			msg:            testMsg,
 			wantErr:        true,
 			expectedErrMsg: "failed to create success message: failed to create success message",
+		},
+		{
+			name: "Unknown result from CreateUser",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.TagAvailablePayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+					userservice.UserOperationResult{},
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "user creation service returned unexpected result",
 		},
 	}
 
@@ -180,10 +197,10 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics, // Use the mock
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers) // Pass mockMetrics
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 
@@ -220,11 +237,12 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
-	mockUserService := userservice.NewMockService(ctrl)
+	mockUserService := usermocks.NewMockService(ctrl)
 	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl)
+
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -248,10 +266,6 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 					&userevents.UserCreationFailedPayload{UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
 					userevents.UserCreationFailed,
 				).Return(testMsg, nil)
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagUnavailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerSuccess(gomock.Any(), "HandleTagUnavailable").Times(1)
-				mockMetrics.EXPECT().RecordTagAvailabilityCheck(gomock.Any(), false, sharedtypes.TagNumber(testTagNumber)).Times(1) // Corrected here
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagUnavailable", gomock.Any()).Times(1)
 			},
 			msg:     testMsg,
 			want:    []*message.Message{testMsg},
@@ -261,9 +275,6 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 			name: "Fail to unmarshal payload",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-				mockMetrics.EXPECT().RecordHandlerAttempt(gomock.Any(), "HandleTagUnavailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerFailure(gomock.Any(), "HandleTagUnavailable").Times(1)
-				mockMetrics.EXPECT().RecordHandlerDuration(gomock.Any(), "HandleTagUnavailable", gomock.Any()).Times(1)
 			},
 			msg:            invalidMsg,
 			want:           nil,
@@ -280,10 +291,10 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 				userService: mockUserService,
 				logger:      logger,
 				tracer:      tracer,
-				metrics:     mockMetrics,
+				metrics:     metrics,
 				helpers:     mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, mockMetrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
 				},
 			}
 

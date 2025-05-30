@@ -54,44 +54,56 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		updates, err := s.getRoundsAndParticipantsToUpdate(ctx, payload.ChangedTags)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayload{
 					Error: err.Error(),
 				},
-			}, fmt.Errorf("failed to get rounds and participants: %w", err)
+			}, nil
 		}
 
-		s.logger.InfoContext(ctx, "Round updates created",
-			attr.Int("num_updates", len(updates)),
+		s.logger.InfoContext(ctx, "Round updates determined",
+			attr.Int("updates_needed", len(updates)),
+			attr.Int("tags_changed", len(payload.ChangedTags)),
 		)
 
-		// Update the rounds and participants in the DB
-		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, updates); err != nil {
-			return RoundOperationResult{
-				Failure: roundevents.RoundUpdateErrorPayload{
-					Error: err.Error(),
-				},
-			}, fmt.Errorf("failed to update rounds: %w", err)
-		}
-
-		s.logger.InfoContext(ctx, "Rounds updated successfully",
-			attr.Int("num_updates", len(updates)),
-		)
-
-		// Create the Discord round update payload
+		// Create the Discord round update payload first
 		discordUpdatePayload := roundevents.DiscordRoundUpdatePayload{
 			Participants:    make([]roundtypes.Participant, 0),
-			RoundIDs:        make([]sharedtypes.RoundID, 0),
-			EventMessageIDs: make([]string, 0),
+			RoundIDs:        make([]sharedtypes.RoundID, 0, len(updates)),
+			EventMessageIDs: make([]string, 0, len(updates)),
 		}
 
-		// Iterate over the updates and add the updated participants to the payload
-		for _, update := range updates {
-			discordUpdatePayload.Participants = append(discordUpdatePayload.Participants, update.Participants...)
-			discordUpdatePayload.RoundIDs = append(discordUpdatePayload.RoundIDs, update.RoundID)
-			discordUpdatePayload.EventMessageIDs = append(discordUpdatePayload.EventMessageIDs, update.EventMessageID)
+		// Only update DB if there are actual updates
+		if len(updates) > 0 {
+			// Update the rounds and participants in the DB
+			if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, updates); err != nil {
+				return RoundOperationResult{
+					Failure: &roundevents.RoundUpdateErrorPayload{
+						Error: err.Error(),
+					},
+				}, nil
+			}
+
+			// Populate the discord update payload
+			for _, update := range updates {
+				// Fix: Use .Participants, not .UpdatedParticipants
+				for _, participant := range update.Participants {
+					discordUpdatePayload.Participants = append(discordUpdatePayload.Participants, participant)
+				}
+				discordUpdatePayload.RoundIDs = append(discordUpdatePayload.RoundIDs, update.RoundID)
+				// Fix: EventMessageID is already a string in RoundUpdate
+				discordUpdatePayload.EventMessageIDs = append(discordUpdatePayload.EventMessageIDs, update.EventMessageID)
+			}
+
+			s.logger.InfoContext(ctx, "Rounds updated successfully",
+				attr.Int("rounds_updated", len(updates)),
+				attr.Int("participants_updated", len(discordUpdatePayload.Participants)),
+			)
+		} else {
+			s.logger.InfoContext(ctx, "No rounds required updates - operation completed successfully")
 		}
 
-		return RoundOperationResult{Success: discordUpdatePayload}, nil
+		// Always return success with the payload (empty arrays if no updates)
+		return RoundOperationResult{Success: &discordUpdatePayload}, nil
 	})
 
 	return result, err

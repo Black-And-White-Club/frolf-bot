@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // PurgeJetStreamStreams purges all messages from given streams.
@@ -57,13 +59,39 @@ func (env *TestEnvironment) DeleteJetStreamConsumers(ctx context.Context, stream
 	return nil
 }
 
-// ResetJetStreamState cleans both consumers and messages in one call.
+// ResetJetStreamState clears all JetStream streams and consumers
 func (env *TestEnvironment) ResetJetStreamState(ctx context.Context, streamNames ...string) error {
-	if err := env.DeleteJetStreamConsumers(ctx, streamNames...); err != nil {
-		log.Printf("Error cleaning consumers: %v", err)
+	if env.JetStream == nil {
+		return fmt.Errorf("JetStream context is nil")
 	}
-	if err := env.PurgeJetStreamStreams(ctx, streamNames...); err != nil {
-		return fmt.Errorf("failed to purge streams: %w", err)
+
+	for _, streamName := range streamNames {
+		// Delete the stream if it exists (this also deletes all consumers)
+		if err := env.JetStream.DeleteStream(ctx, streamName); err != nil {
+			// Ignore "stream not found" errors
+			if !isStreamNotFoundError(err) {
+				log.Printf("Warning: failed to delete stream %s: %v", streamName, err)
+			}
+		}
 	}
+
 	return nil
+}
+
+// isStreamNotFoundError checks if the error indicates a stream was not found
+func isStreamNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for JetStream API error codes
+	if jsErr, ok := err.(jetstream.JetStreamError); ok {
+		return jsErr.APIError().ErrorCode == 10059 // Stream not found error code
+	}
+
+	// Check for common error messages
+	errMsg := err.Error()
+	return errMsg == "stream not found" ||
+		errMsg == "nats: stream not found" ||
+		errMsg == "stream does not exist"
 }

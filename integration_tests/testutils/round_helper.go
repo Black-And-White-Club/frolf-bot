@@ -29,63 +29,14 @@ func NewRoundTestHelper(eventBus eventbus.EventBus, capture *MessageCapture) *Ro
 	}
 }
 
-// RoundRequest represents a round creation request
+// RoundRequest represents a round creation request - generic structure
 type RoundRequest struct {
 	UserID      sharedtypes.DiscordID
-	Title       roundtypes.Title
-	Description roundtypes.Description
-	Location    roundtypes.Location
+	Title       string
+	Description string
+	Location    string
 	StartTime   string
-	Timezone    roundtypes.Timezone
-}
-
-// CreateValidRequest creates a valid round request with sensible defaults
-func (h *RoundTestHelper) CreateValidRequest(userID sharedtypes.DiscordID) RoundRequest {
-	return RoundRequest{
-		UserID:      userID,
-		Title:       "Weekly Frolf Championship",
-		Description: "Join us for our weekly championship round!",
-		Location:    "Central Park Course",
-		StartTime:   "tomorrow at 3:00 PM",
-		Timezone:    "UTC",
-	}
-}
-
-// CreateMinimalRequest creates a minimal but valid round request
-func (h *RoundTestHelper) CreateMinimalRequest(userID sharedtypes.DiscordID) RoundRequest {
-	return RoundRequest{
-		UserID:      userID,
-		Title:       "Quick Round",
-		Description: "Quick round for today",
-		Location:    "Local Course",
-		StartTime:   "tomorrow at 3:00 PM",
-		Timezone:    "UTC",
-	}
-}
-
-// CreateInvalidRequest creates various types of invalid requests
-func (h *RoundTestHelper) CreateInvalidRequest(userID sharedtypes.DiscordID, invalidType string) RoundRequest {
-	base := h.CreateValidRequest(userID)
-
-	switch invalidType {
-	case "empty_title":
-		base.Title = ""
-	case "empty_description":
-		base.Description = ""
-	case "empty_location":
-		base.Location = ""
-	case "invalid_time":
-		base.StartTime = "not-a-valid-time"
-	case "past_time":
-		base.StartTime = "yesterday at 3:00 PM"
-	case "missing_fields":
-		return RoundRequest{
-			UserID:      userID,
-			Description: "Description only",
-		}
-	}
-
-	return base
+	Timezone    string
 }
 
 // PublishRoundRequest publishes a round creation request and returns the message
@@ -98,7 +49,7 @@ func (h *RoundTestHelper) PublishRoundRequest(t *testing.T, ctx context.Context,
 		Description: roundtypes.Description(req.Description),
 		Location:    roundtypes.Location(req.Location),
 		StartTime:   req.StartTime,
-		Timezone:    req.Timezone,
+		Timezone:    roundtypes.Timezone(req.Timezone),
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -117,112 +68,469 @@ func (h *RoundTestHelper) PublishRoundRequest(t *testing.T, ctx context.Context,
 }
 
 // PublishInvalidJSON publishes an invalid JSON message
-func (h *RoundTestHelper) PublishInvalidJSON(t *testing.T, ctx context.Context) *message.Message {
+func (h *RoundTestHelper) PublishInvalidJSON(t *testing.T, ctx context.Context, topic string) *message.Message {
 	t.Helper()
 
 	msg := message.NewMessage(uuid.New().String(), []byte("not valid json"))
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundCreateRequest, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
+	if err := PublishMessage(t, h.eventBus, ctx, topic, msg); err != nil {
+		t.Fatalf("Publish failed for topic %s: %v", topic, err)
 	}
 
 	return msg
 }
 
-// ExpectSuccess waits for and validates a successful round creation
-func (h *RoundTestHelper) ExpectSuccess(t *testing.T, originalRequest RoundRequest, timeout time.Duration) {
+// WaitForRoundEntityCreated waits for round entity created messages
+func (h *RoundTestHelper) WaitForRoundEntityCreated(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundEntityCreated, expectedCount, timeout)
+}
+
+// WaitForRoundValidationFailed waits for round validation failed messages
+func (h *RoundTestHelper) WaitForRoundValidationFailed(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundValidationFailed, expectedCount, timeout)
+}
+
+// GetRoundEntityCreatedMessages returns captured round entity created messages
+func (h *RoundTestHelper) GetRoundEntityCreatedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundEntityCreated)
+}
+
+// GetRoundValidationFailedMessages returns captured round validation failed messages
+func (h *RoundTestHelper) GetRoundValidationFailedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundValidationFailed)
+}
+
+// GetAllCapturedMessages returns all captured messages for round topics
+func (h *RoundTestHelper) GetAllCapturedMessages() map[string][]*message.Message {
+	topics := []string{
+		roundevents.RoundEntityCreated,
+		roundevents.RoundValidationFailed,
+		roundevents.RoundCreated,
+		roundevents.RoundCreationFailed,
+	}
+
+	result := make(map[string][]*message.Message)
+	for _, topic := range topics {
+		result[topic] = h.capture.GetMessages(topic)
+	}
+	return result
+}
+
+// ClearMessages clears all captured messages
+func (h *RoundTestHelper) ClearMessages() {
+	h.capture.Clear()
+}
+
+// ValidateRoundEntityCreated parses and validates a round entity created message
+func (h *RoundTestHelper) ValidateRoundEntityCreated(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundEntityCreatedPayload {
 	t.Helper()
 
-	if !h.capture.WaitForMessages(roundevents.RoundEntityCreated, 1, timeout) {
-		t.Fatalf("Expected round.entity.created message within %v", timeout)
-	}
-
-	msgs := h.capture.GetMessages(roundevents.RoundEntityCreated)
-	if len(msgs) != 1 {
-		t.Fatalf("Expected 1 success message, got %d", len(msgs))
-	}
-
-	result, err := ParsePayload[roundevents.RoundEntityCreatedPayload](msgs[0])
+	result, err := ParsePayload[roundevents.RoundEntityCreatedPayload](msg)
 	if err != nil {
-		t.Fatalf("Failed to parse success message: %v", err)
+		t.Fatalf("Failed to parse round entity created message: %v", err)
 	}
 
-	// Validate transformation
-	if result.Round.CreatedBy != originalRequest.UserID {
-		t.Errorf("CreatedBy mismatch: expected %s, got %s", originalRequest.UserID, result.Round.CreatedBy)
-	}
-
-	if result.Round.Title != roundtypes.Title(originalRequest.Title) {
-		t.Errorf("Title mismatch: expected %s, got %s", originalRequest.Title, result.Round.Title)
-	}
-
-	if result.Round.Location == nil || *result.Round.Location != roundtypes.Location(originalRequest.Location) {
-		t.Errorf("Location mismatch: expected %s, got %v", originalRequest.Location, result.Round.Location)
+	if result.Round.CreatedBy != expectedUserID {
+		t.Errorf("CreatedBy mismatch: expected %s, got %s", expectedUserID, result.Round.CreatedBy)
 	}
 
 	if result.Round.State != roundtypes.RoundStateUpcoming {
 		t.Errorf("Expected state %s, got %s", roundtypes.RoundStateUpcoming, result.Round.State)
 	}
 
-	if len(result.Round.Participants) != 0 {
-		t.Errorf("Expected empty participants, got %d", len(result.Round.Participants))
-	}
+	return result
 }
 
-// ExpectValidationFailure waits for and validates a validation failure
-func (h *RoundTestHelper) ExpectValidationFailure(t *testing.T, originalRequest RoundRequest, timeout time.Duration) {
+// ValidateRoundValidationFailed parses and validates a round validation failed message
+func (h *RoundTestHelper) ValidateRoundValidationFailed(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundValidationFailedPayload {
 	t.Helper()
 
-	if !h.capture.WaitForMessages(roundevents.RoundValidationFailed, 1, timeout) {
-		t.Fatalf("Expected validation failure message within %v", timeout)
-	}
-
-	msgs := h.capture.GetMessages(roundevents.RoundValidationFailed)
-	if len(msgs) != 1 {
-		t.Fatalf("Expected 1 failure message, got %d", len(msgs))
-	}
-
-	result, err := ParsePayload[roundevents.RoundValidationFailedPayload](msgs[0])
+	result, err := ParsePayload[roundevents.RoundValidationFailedPayload](msg)
 	if err != nil {
-		t.Fatalf("Failed to parse failure message: %v", err)
+		t.Fatalf("Failed to parse round validation failed message: %v", err)
 	}
 
-	if result.UserID != originalRequest.UserID {
-		t.Errorf("UserID mismatch: expected %s, got %s", originalRequest.UserID, result.UserID)
+	if result.UserID != expectedUserID {
+		t.Errorf("UserID mismatch: expected %s, got %s", expectedUserID, result.UserID)
 	}
 
 	if len(result.ErrorMessage) == 0 {
 		t.Errorf("Expected error message to be populated")
 	}
 
-	// Ensure no success message was published
-	successMsgs := h.capture.GetMessages(roundevents.RoundEntityCreated)
-	if len(successMsgs) > 0 {
-		t.Errorf("Expected no success messages, got %d", len(successMsgs))
-	}
+	return result
 }
 
-// ExpectNoMessages validates that no messages were published (for JSON errors)
-func (h *RoundTestHelper) ExpectNoMessages(t *testing.T, waitTime time.Duration) {
+// PublishRoundEntityCreated publishes a RoundEntityCreated event and returns the message
+func (h *RoundTestHelper) PublishRoundEntityCreated(t *testing.T, ctx context.Context, payload roundevents.RoundEntityCreatedPayload) *message.Message {
 	t.Helper()
 
-	time.Sleep(waitTime)
-
-	topics := []string{
-		roundevents.RoundEntityCreated,
-		roundevents.RoundValidationFailed,
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
 	}
 
-	for _, topic := range topics {
-		msgs := h.capture.GetMessages(topic)
-		if len(msgs) > 0 {
-			t.Errorf("Expected no messages on %s, got %d", topic, len(msgs))
-		}
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEntityCreated, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
 	}
+
+	return msg
 }
 
-// ClearMessages clears all captured messages
-func (h *RoundTestHelper) ClearMessages() {
-	h.capture.Clear()
+// WaitForRoundCreated waits for round created messages
+func (h *RoundTestHelper) WaitForRoundCreated(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundCreated, expectedCount, timeout)
+}
+
+// WaitForRoundCreationFailed waits for round creation failed messages
+func (h *RoundTestHelper) WaitForRoundCreationFailed(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundCreationFailed, expectedCount, timeout)
+}
+
+// GetRoundCreatedMessages returns captured round created messages
+func (h *RoundTestHelper) GetRoundCreatedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundCreated)
+}
+
+// GetRoundCreationFailedMessages returns captured round creation failed messages
+func (h *RoundTestHelper) GetRoundCreationFailedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundCreationFailed)
+}
+
+// ValidateRoundCreated parses and validates a round created message
+func (h *RoundTestHelper) ValidateRoundCreated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreatedPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundCreatedPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round created message: %v", err)
+	}
+
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
+	}
+
+	return result
+}
+
+// ValidateRoundCreationFailed parses and validates a round creation failed message
+func (h *RoundTestHelper) ValidateRoundCreationFailed(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreationFailedPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundCreationFailedPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round creation failed message: %v", err)
+	}
+
+	if len(result.ErrorMessage) == 0 {
+		t.Errorf("Expected error message to be populated")
+	}
+
+	return result
+}
+
+// PublishRoundMessageIDUpdate publishes a RoundMessageIDUpdate event with Discord message ID in metadata
+func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayload, discordMessageID string) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+	msg.Metadata.Set("discord_message_id", discordMessageID)
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdate, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// PublishRoundMessageIDUpdateWithoutDiscordID publishes a RoundMessageIDUpdate event without Discord message ID
+func (h *RoundTestHelper) PublishRoundMessageIDUpdateWithoutDiscordID(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayload) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+	// Intentionally not setting discord_message_id
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdate, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// WaitForRoundEventMessageIDUpdated waits for round event message ID updated messages
+func (h *RoundTestHelper) WaitForRoundEventMessageIDUpdated(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundEventMessageIDUpdated, expectedCount, timeout)
+}
+
+// GetRoundEventMessageIDUpdatedMessages returns captured round event message ID updated messages
+func (h *RoundTestHelper) GetRoundEventMessageIDUpdatedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundEventMessageIDUpdated)
+}
+
+// ValidateRoundEventMessageIDUpdated parses and validates a round event message ID updated message
+func (h *RoundTestHelper) ValidateRoundEventMessageIDUpdated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundScheduledPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundScheduledPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round event message ID updated message: %v", err)
+	}
+
+	if result.BaseRoundPayload.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.BaseRoundPayload.RoundID)
+	}
+
+	if result.EventMessageID == "" {
+		t.Errorf("Expected EventMessageID to be populated")
+	}
+
+	return result
+}
+
+// PublishRoundDeleteRequest publishes a RoundDeleteRequest event and returns the message
+func (h *RoundTestHelper) PublishRoundDeleteRequest(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteRequestPayload) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteRequest, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// PublishRoundDeleteAuthorized publishes a RoundDeleteAuthorized event and returns the message
+func (h *RoundTestHelper) PublishRoundDeleteAuthorized(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteAuthorized, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// WaitForRoundDeleteAuthorized waits for round delete authorized messages
+func (h *RoundTestHelper) WaitForRoundDeleteAuthorized(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundDeleteAuthorized, expectedCount, timeout)
+}
+
+// WaitForRoundDeleteError waits for round delete error messages
+func (h *RoundTestHelper) WaitForRoundDeleteError(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundDeleteError, expectedCount, timeout)
+}
+
+// WaitForRoundDeleted waits for round deleted messages
+func (h *RoundTestHelper) WaitForRoundDeleted(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundDeleted, expectedCount, timeout)
+}
+
+// GetRoundDeleteAuthorizedMessages returns captured round delete authorized messages
+func (h *RoundTestHelper) GetRoundDeleteAuthorizedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundDeleteAuthorized)
+}
+
+// GetRoundDeleteErrorMessages returns captured round delete error messages
+func (h *RoundTestHelper) GetRoundDeleteErrorMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundDeleteError)
+}
+
+// GetRoundDeletedMessages returns captured round deleted messages
+func (h *RoundTestHelper) GetRoundDeletedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundDeleted)
+}
+
+// ValidateRoundDeleteAuthorized parses and validates a round delete authorized message
+func (h *RoundTestHelper) ValidateRoundDeleteAuthorized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeleteAuthorizedPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundDeleteAuthorizedPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round delete authorized message: %v", err)
+	}
+
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
+	}
+
+	return result
+}
+
+// ValidateRoundDeleteError parses and validates a round delete error message
+func (h *RoundTestHelper) ValidateRoundDeleteError(t *testing.T, msg *message.Message) *roundevents.RoundDeleteErrorPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundDeleteErrorPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round delete error message: %v", err)
+	}
+
+	if len(result.Error) == 0 {
+		t.Errorf("Expected error message to be populated")
+	}
+
+	return result
+}
+
+// ValidateRoundDeleted parses and validates a round deleted message
+func (h *RoundTestHelper) ValidateRoundDeleted(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeletedPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundDeletedPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round deleted message: %v", err)
+	}
+
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
+	}
+
+	return result
+}
+
+// PublishAllScoresSubmitted publishes an AllScoresSubmitted event and returns the message
+func (h *RoundTestHelper) PublishAllScoresSubmitted(t *testing.T, ctx context.Context, payload roundevents.AllScoresSubmittedPayload) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundAllScoresSubmitted, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// PublishRoundFinalized publishes a RoundFinalized event and returns the message
+func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Context, payload roundevents.RoundFinalizedPayload) *message.Message {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	msg := message.NewMessage(uuid.New().String(), payloadBytes)
+	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundFinalized, msg); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	return msg
+}
+
+// GetDiscordRoundFinalizedMessages returns captured discord round finalized messages
+func (h *RoundTestHelper) GetDiscordRoundFinalizedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.DiscordRoundFinalized)
+}
+
+// GetProcessRoundScoresRequestMessages returns captured process round scores request messages
+func (h *RoundTestHelper) GetProcessRoundScoresRequestMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.ProcessRoundScoresRequest)
+}
+
+// GetRoundFinalizationErrorMessages returns captured round finalization error messages
+func (h *RoundTestHelper) GetRoundFinalizationErrorMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundFinalizationError)
+}
+
+// WaitForDiscordRoundFinalized waits for discord round finalized messages
+func (h *RoundTestHelper) WaitForDiscordRoundFinalized(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.DiscordRoundFinalized, expectedCount, timeout)
+}
+
+// WaitForProcessRoundScoresRequest waits for process round scores request messages
+func (h *RoundTestHelper) WaitForProcessRoundScoresRequest(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.ProcessRoundScoresRequest, expectedCount, timeout)
+}
+
+// WaitForRoundFinalizationError waits for round finalization error messages
+func (h *RoundTestHelper) WaitForRoundFinalizationError(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundFinalizationError, expectedCount, timeout)
+}
+
+// ValidateDiscordRoundFinalized parses and validates a discord round finalized message
+func (h *RoundTestHelper) ValidateDiscordRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundFinalizedPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse discord round finalized message: %v", err)
+	}
+
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
+	}
+
+	return result
+}
+
+// ValidateProcessRoundScoresRequest parses and validates a process round scores request message
+func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ProcessRoundScoresRequestPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.ProcessRoundScoresRequestPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse process round scores request message: %v", err)
+	}
+
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
+	}
+
+	return result
+}
+
+// ValidateRoundFinalizationError parses and validates a round finalization error message
+func (h *RoundTestHelper) ValidateRoundFinalizationError(t *testing.T, msg *message.Message) *roundevents.RoundFinalizationErrorPayload {
+	t.Helper()
+
+	result, err := ParsePayload[roundevents.RoundFinalizationErrorPayload](msg)
+	if err != nil {
+		t.Fatalf("Failed to parse round finalization error message: %v", err)
+	}
+
+	if len(result.Error) == 0 {
+		t.Errorf("Expected error message to be populated")
+	}
+
+	return result
 }

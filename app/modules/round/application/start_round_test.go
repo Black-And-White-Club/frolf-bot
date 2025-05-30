@@ -85,13 +85,18 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 			},
 			payload: roundevents.RoundStartedPayload{
 				RoundID: testStartRoundID,
+				// Note: Based on the service code, it uses payload.Title, payload.Location, payload.StartTime
+				// but the test payload doesn't set these, so they'll be nil/zero values in the result
+				Title:     testRoundTitle,      // Added to match expected result
+				Location:  &testStartLocation,  // Added to match expected result
+				StartTime: &testStartRoundTime, // Added to match expected result
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.DiscordRoundStartPayload{
+				Success: &roundevents.DiscordRoundStartPayload{ // Changed to pointer
 					RoundID:   testStartRoundID,
-					Title:     testRoundTitle,
-					Location:  &testStartLocation,
-					StartTime: &testStartRoundTime,
+					Title:     testRoundTitle,      // From payload
+					Location:  &testStartLocation,  // From payload
+					StartTime: &testStartRoundTime, // From payload
 					Participants: []roundevents.RoundParticipant{
 						{
 							UserID:    sharedtypes.DiscordID("user1"),
@@ -106,7 +111,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 							Score:     nil,
 						},
 					},
-					EventMessageID: testStartEventMessageID,
+					EventMessageID: testStartEventMessageID, // From DB
 				},
 			},
 			expectedError: nil,
@@ -120,12 +125,12 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testStartRoundID,
-					Error:   "database error",
+					Error:   "database error", // Service returns err.Error() directly
 				},
 			},
-			expectedError: errors.New("failed to get round from database: database error"),
+			expectedError: nil, // Changed from error to nil
 		},
 		{
 			name: "error updating round",
@@ -153,12 +158,12 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					RoundID: testStartRoundID,
-					Error:   "database error",
+					Error:   "database error", // Service returns err.Error() directly
 				},
 			},
-			expectedError: errors.New("failed to update round: database error"),
+			expectedError: nil, // Changed from error to nil
 		},
 	}
 
@@ -179,22 +184,81 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 			}
 
 			result, err := s.ProcessRoundStart(ctx, tt.payload)
-			if (err != nil) != (tt.expectedError != nil) {
-				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
+
+			// Check error expectation
+			if tt.expectedError != nil {
+				if err == nil {
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
 			}
 
-			if err != nil && tt.expectedError != nil {
-				if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message %q, got %q", tt.expectedError.Error(), err.Error())
+			// Check result structure - handle pointers properly
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got failure")
+				} else {
+					// Type assert to check the actual payload type
+					if expectedPayload, ok := tt.expectedResult.Success.(*roundevents.DiscordRoundStartPayload); ok {
+						if actualPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayload); ok {
+							// Compare fields individually for better error messages
+							if actualPayload.RoundID != expectedPayload.RoundID {
+								t.Errorf("expected RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
+							}
+							if actualPayload.Title != expectedPayload.Title {
+								t.Errorf("expected Title %v, got %v", expectedPayload.Title, actualPayload.Title)
+							}
+							// Compare Location pointers
+							if (actualPayload.Location == nil) != (expectedPayload.Location == nil) {
+								t.Errorf("expected Location nil status %v, got %v", expectedPayload.Location == nil, actualPayload.Location == nil)
+							} else if actualPayload.Location != nil && expectedPayload.Location != nil && *actualPayload.Location != *expectedPayload.Location {
+								t.Errorf("expected Location %v, got %v", *expectedPayload.Location, *actualPayload.Location)
+							}
+							// Compare StartTime pointers
+							if (actualPayload.StartTime == nil) != (expectedPayload.StartTime == nil) {
+								t.Errorf("expected StartTime nil status %v, got %v", expectedPayload.StartTime == nil, actualPayload.StartTime == nil)
+							} else if actualPayload.StartTime != nil && expectedPayload.StartTime != nil && !actualPayload.StartTime.AsTime().Equal(expectedPayload.StartTime.AsTime()) {
+								t.Errorf("expected StartTime %v, got %v", expectedPayload.StartTime, actualPayload.StartTime)
+							}
+							if actualPayload.EventMessageID != expectedPayload.EventMessageID {
+								t.Errorf("expected EventMessageID %v, got %v", expectedPayload.EventMessageID, actualPayload.EventMessageID)
+							}
+							// Compare participants
+							if !reflect.DeepEqual(actualPayload.Participants, expectedPayload.Participants) {
+								t.Errorf("expected Participants %v, got %v", expectedPayload.Participants, actualPayload.Participants)
+							}
+						} else {
+							t.Errorf("expected result.Success to be *roundevents.DiscordRoundStartPayload, got %T", result.Success)
+						}
+					} else {
+						t.Errorf("expected tt.expectedResult.Success to be *roundevents.DiscordRoundStartPayload, got %T", tt.expectedResult.Success)
+					}
 				}
 			}
 
-			if !reflect.DeepEqual(result.Success, tt.expectedResult.Success) {
-				t.Errorf("expected result Success %v, got %v", tt.expectedResult.Success, result.Success)
-			}
-
-			if !reflect.DeepEqual(result.Failure, tt.expectedResult.Failure) {
-				t.Errorf("expected result Failure %v, got %v", tt.expectedResult.Failure, result.Failure)
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got success")
+				} else {
+					// Type assert for failure payload
+					if expectedPayload, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload); ok {
+						if actualPayload, ok := result.Failure.(*roundevents.RoundErrorPayload); ok {
+							if actualPayload.RoundID != expectedPayload.RoundID {
+								t.Errorf("expected Failure RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
+							}
+							if actualPayload.Error != expectedPayload.Error {
+								t.Errorf("expected Failure Error %v, got %v", expectedPayload.Error, actualPayload.Error)
+							}
+						} else {
+							t.Errorf("expected result.Failure to be *roundevents.RoundErrorPayload, got %T", result.Failure)
+						}
+					} else {
+						t.Errorf("expected tt.expectedResult.Failure to be *roundevents.RoundErrorPayload, got %T", tt.expectedResult.Failure)
+					}
+				}
 			}
 		})
 	}

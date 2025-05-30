@@ -210,7 +210,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "service returned neither success nor failure", // Fix: Match the actual error message from handler
 		},
 	}
 

@@ -209,7 +209,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 			var err error
 
 			if !tc.skipCleanup {
-				currentDeps = SetupTestUserService(sharedCtx, sharedDB, t)
+				currentDeps = SetupTestUserService(t)
 				if err := testutils.CleanUserIntegrationTables(currentDeps.Ctx, currentDeps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database before test %q: %v", tc.name, err)
 				}

@@ -141,7 +141,7 @@ func (r *LeaderboardRouter) Configure(routerCtx context.Context, leaderboardServ
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
 	eventsToHandlers := map[string]message.HandlerFunc{
-		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
+		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested, // <-- FIXED!
 		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignment,
 		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
 		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,

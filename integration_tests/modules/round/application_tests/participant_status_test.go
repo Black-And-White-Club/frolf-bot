@@ -17,7 +17,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload)
-		expectedError            bool
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -40,14 +40,16 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				validationPayload, ok := returnedResult.Success.(roundevents.ParticipantJoinValidationRequestPayload)
+				// Fixed: expecting pointer type
+				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if validationPayload.UserID != sharedtypes.DiscordID("new_participant_1") {
 					t.Errorf("Expected UserID to be 'new_participant_1', got '%s'", validationPayload.UserID)
@@ -82,14 +84,16 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Response: roundtypes.ResponseAccept, // Same response as existing
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				removalPayload, ok := returnedResult.Success.(roundevents.ParticipantRemovalRequestPayload)
+				// Fixed: expecting pointer type
+				removalPayload, ok := returnedResult.Success.(*roundevents.ParticipantRemovalRequestPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantRemovalRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovalRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if removalPayload.UserID != sharedtypes.DiscordID("existing_participant_2") {
 					t.Errorf("Expected UserID to be 'existing_participant_2', got '%s'", removalPayload.UserID)
@@ -124,14 +128,16 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Response: roundtypes.ResponseAccept, // Different response
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				validationPayload, ok := returnedResult.Success.(roundevents.ParticipantJoinValidationRequestPayload)
+				// Fixed: expecting pointer type
+				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if validationPayload.UserID != sharedtypes.DiscordID("existing_participant_3") {
 					t.Errorf("Expected UserID to be 'existing_participant_3', got '%s'", validationPayload.UserID)
@@ -150,18 +156,20 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to get participant status",
+			expectedFailure:          true,                               // Changed from expectedError
+			expectedErrorMessagePart: "failed to get participant status", // Updated to match implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(roundevents.ParticipantStatusCheckErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "failed to get participant status") {
 					t.Errorf("Expected failure error to contain 'failed to get participant status', got '%s'", failurePayload.Error)
@@ -178,18 +186,20 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to get participant status",
+			expectedFailure:          true,                               // Changed from expectedError
+			expectedErrorMessagePart: "failed to get participant status", // Updated to match implementation
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(roundevents.ParticipantStatusCheckErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
 				if !ok {
-					t.Errorf("Expected ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "failed to get participant status") {
 					t.Errorf("Expected failure error to contain 'failed to get participant status', got '%s'", failurePayload.Error)
@@ -216,16 +226,26 @@ func TestCheckParticipantStatus(t *testing.T) {
 
 			// Call the actual service method
 			result, err := deps.Service.CheckParticipantStatus(deps.Ctx, payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
+					if !ok {
+						t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 
@@ -240,7 +260,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload)
-		expectedError            bool // Whether the top-level 'err' returned by ValidateParticipantJoinRequest is expected to be non-nil
+		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -263,7 +283,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -272,6 +292,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayload)
 				if !ok {
 					t.Errorf("Expected *roundevents.TagLookupRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if tagLookupPayloadPtr == nil {
 					t.Fatalf("Expected non-nil TagLookupRequestPayload pointer")
@@ -307,7 +328,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseTentative,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -316,6 +337,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayload)
 				if !ok {
 					t.Errorf("Expected *roundevents.TagLookupRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if tagLookupPayloadPtr == nil {
 					t.Fatalf("Expected non-nil TagLookupRequestPayload pointer")
@@ -351,7 +373,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseDecline,
 				}
 			},
-			expectedError: false,
+			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
@@ -360,6 +382,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				joinRequestPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantJoinRequestPayload)
 				if !ok {
 					t.Errorf("Expected *roundevents.ParticipantJoinRequestPayload, got %T", returnedResult.Success)
+					return
 				}
 				if joinRequestPayloadPtr == nil {
 					t.Fatalf("Expected non-nil ParticipantJoinRequestPayload pointer")
@@ -385,19 +408,20 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError:            true,
+			expectedFailure:          true, // Changed from expectedError
 			expectedErrorMessagePart: "validation failed: [round ID cannot be nil]",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns RoundParticipantJoinErrorPayload for failures
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundParticipantJoinErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "validation failed: [round ID cannot be nil]") {
 					t.Errorf("Expected failure error to contain 'validation failed: [round ID cannot be nil]', got '%s'", failurePayload.Error)
@@ -423,19 +447,20 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError:            true,
+			expectedFailure:          true, // Changed from expectedError
 			expectedErrorMessagePart: "validation failed: [participant Discord ID cannot be empty]",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns RoundParticipantJoinErrorPayload for failures
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundParticipantJoinErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "validation failed: [participant Discord ID cannot be empty]") {
 					t.Errorf("Expected failure error to contain 'validation failed: [participant Discord ID cannot be empty]', got '%s'", failurePayload.Error)
@@ -452,19 +477,20 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: roundtypes.ResponseAccept,
 				}
 			},
-			expectedError:            true,
+			expectedFailure:          true, // Changed from expectedError
 			expectedErrorMessagePart: "failed to fetch round details",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns RoundParticipantJoinErrorPayload for failures
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundParticipantJoinErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "failed to fetch round details") {
 					t.Errorf("Expected failure error to contain 'failed to fetch round details', got '%s'", failurePayload.Error)
@@ -490,19 +516,20 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Response: "INVALID_RESPONSE_TYPE", // Invalid response
 				}
 			},
-			expectedError:            true,
+			expectedFailure:          true, // Changed from expectedError
 			expectedErrorMessagePart: "unexpected response type: INVALID_RESPONSE_TYPE",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success != nil {
-					t.Errorf("Expected nil success on error, but got: %+v", returnedResult.Success)
+					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns RoundParticipantJoinErrorPayload for failures
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundParticipantJoinErrorPayload)
+				// Fixed: expecting pointer type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
 				if !ok {
-					t.Errorf("Expected RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
+					return
 				}
 				if !strings.Contains(failurePayload.Error, "unexpected response type: INVALID_RESPONSE_TYPE") {
 					t.Errorf("Expected failure error to contain 'unexpected response type: INVALID_RESPONSE_TYPE', got '%s'", failurePayload.Error)
@@ -539,16 +566,26 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 
 			// Call the actual service method: ValidateParticipantJoinRequest
 			result, err := deps.Service.ValidateParticipantJoinRequest(deps.Ctx, payload)
+			// The service should never return an error - failures are in the result
+			if err != nil {
+				t.Errorf("Expected no error from service, but got: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
+			// Check for expected failures in the result
+			if tt.expectedFailure {
+				if result.Failure == nil {
+					t.Errorf("Expected failure result, but got none")
+				} else if tt.expectedErrorMessagePart != "" {
+					failurePayload, ok := result.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+					if !ok {
+						t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", result.Failure)
+					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
+						t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, failurePayload.Error)
+					}
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Errorf("Expected success result, but got none")
 				}
 			}
 

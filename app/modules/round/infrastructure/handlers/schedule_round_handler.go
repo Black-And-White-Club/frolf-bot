@@ -2,7 +2,6 @@ package roundhandlers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -14,24 +13,15 @@ import (
 // successfully updated with the Discord message ID and is ready for scheduling.
 // It calls the service method to schedule the reminder and start events.
 func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*message.Message, error) {
-	return h.handlerWrapper(
+	wrappedHandler := h.handlerWrapper(
 		"HandleDiscordMessageIDUpdate",
 		&roundevents.RoundScheduledPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scheduledPayload, ok := payload.(*roundevents.RoundScheduledPayload)
-			if !ok {
-				h.logger.ErrorContext(ctx, "Received unexpected payload type for RoundScheduled",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("payload_type", fmt.Sprintf("%T", payload)),
-				)
-				return nil, errors.New("unexpected payload type")
-			}
-
-			roundID := scheduledPayload.RoundID
+			scheduledPayload := payload.(*roundevents.RoundScheduledPayload)
 
 			h.logger.InfoContext(ctx, "Received RoundScheduled event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundID),
+				attr.RoundID("round_id", scheduledPayload.RoundID),
 				attr.String("discord_message_id", scheduledPayload.EventMessageID),
 			)
 
@@ -39,7 +29,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed during ScheduleRoundEvents service call",
 					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundID),
+					attr.RoundID("round_id", scheduledPayload.RoundID),
 					attr.Error(err),
 				)
 				return nil, fmt.Errorf("failed to schedule round events: %w", err)
@@ -48,7 +38,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 			if result.Failure != nil {
 				h.logger.InfoContext(ctx, "Round events scheduling failed in service",
 					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundID),
+					attr.RoundID("round_id", scheduledPayload.RoundID),
 					attr.Any("failure_payload", result.Failure),
 				)
 
@@ -58,11 +48,6 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 					roundevents.RoundError,
 				)
 				if errMsg != nil {
-					h.logger.ErrorContext(ctx, "Failed to create failure message after scheduling failure",
-						attr.CorrelationIDFromMsg(msg),
-						attr.RoundID("round_id", roundID),
-						attr.Error(errMsg),
-					)
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
 
@@ -72,17 +57,21 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 			if result.Success != nil {
 				h.logger.InfoContext(ctx, "Round events scheduling successful",
 					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundID),
+					attr.RoundID("round_id", scheduledPayload.RoundID),
 				)
 
-				return nil, nil
+				// Since this handler only schedules events and doesn't publish anything,
+				// we return an empty slice to indicate successful processing
+				return []*message.Message{}, nil
 			}
 
 			h.logger.ErrorContext(ctx, "Unexpected result from ScheduleRoundEvents service",
 				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundID),
+				attr.RoundID("round_id", scheduledPayload.RoundID),
 			)
-			return nil, errors.New("unexpected result from service")
+			return nil, fmt.Errorf("service returned neither success nor failure")
 		},
-	)(msg)
+	)
+
+	return wrappedHandler(msg)
 }

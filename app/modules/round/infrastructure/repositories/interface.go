@@ -24,7 +24,7 @@ type RoundDB interface {
 	GetParticipants(ctx context.Context, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error)
 	UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error)
 	GetParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error)
-	RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) error
+	RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error)
 	GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error)
 	UpdateRoundsAndParticipants(ctx context.Context, updates []roundtypes.RoundUpdate) error
 	TagUpdates(ctx context.Context, bun bun.IDB, round *roundtypes.Round) error

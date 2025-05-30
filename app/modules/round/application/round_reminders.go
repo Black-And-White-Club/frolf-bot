@@ -2,7 +2,6 @@ package roundservice
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -27,13 +26,13 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			s.metrics.RecordDBOperationError(ctx, "GetRound")
+			s.metrics.RecordDBOperationError(ctx, "GetParticipants")
 			return RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, fmt.Errorf("failed to get round: %w", err)
+			}, nil // Return nil error since we're handling it in Failure
 		}
 
 		for _, p := range participants {
@@ -42,34 +41,32 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 			}
 		}
 
-		// If no participants to notify, log and return
+		// Create the Discord notification payload with filtered participants
+		discordPayload := &roundevents.DiscordReminderPayload{
+			RoundID:          payload.RoundID,
+			RoundTitle:       payload.RoundTitle,
+			StartTime:        payload.StartTime,
+			Location:         payload.Location,
+			UserIDs:          userIDs, // This could be empty
+			ReminderType:     payload.ReminderType,
+			EventMessageID:   payload.EventMessageID,
+			DiscordChannelID: payload.DiscordChannelID,
+			DiscordGuildID:   payload.DiscordGuildID,
+		}
+
+		// Log the processing result
 		if len(userIDs) == 0 {
 			s.logger.Warn("No participants to notify for reminder",
 				attr.RoundID("round_id", payload.RoundID),
 			)
-			return RoundOperationResult{
-				Success: roundevents.RoundReminderProcessedPayload{
-					RoundID: payload.RoundID,
-				},
-			}, nil
+		} else {
+			s.logger.InfoContext(ctx, "Round reminder processed",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Int("participants", len(userIDs)),
+			)
 		}
 
-		// Create the Discord notification payload
-		discordPayload := roundevents.DiscordReminderPayload{
-			RoundID:        payload.RoundID,
-			RoundTitle:     payload.RoundTitle,
-			StartTime:      payload.StartTime,
-			Location:       payload.Location,
-			UserIDs:        userIDs,
-			ReminderType:   payload.ReminderType,
-			EventMessageID: payload.EventMessageID,
-		}
-
-		s.logger.InfoContext(ctx, "Round reminder processed",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.Int("participants", len(userIDs)),
-		)
-
+		// Always return the DiscordReminderPayload (handler will decide what to do with it)
 		return RoundOperationResult{
 			Success: discordPayload,
 		}, nil

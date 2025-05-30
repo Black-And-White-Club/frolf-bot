@@ -7,7 +7,6 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
@@ -82,7 +81,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 						UserID:     result.UserID,
 						TagNumber:  result.TagNumber,
 						UpdateID:   sharedtypes.RoundID(uuid.New()),
-						Source:     string(leaderboarddb.ServiceUpdateSourceCreateUser),
+						Source:     string(sharedtypes.ServiceUpdateSourceCreateUser),
 						UpdateType: "automatic",
 					},
 					leaderboardevents.LeaderboardTagAssignmentRequested,

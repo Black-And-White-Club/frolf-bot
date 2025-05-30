@@ -16,8 +16,11 @@ func TestMain(m *testing.M) {
 	// Initialize the global test environment exactly once.
 	testEnvOnce.Do(func() {
 		log.Println("TestMain: Initializing global test environment...")
-		// Pass nil config to use default test config
-		testEnv, testEnvErr = testutils.NewTestEnvironment(nil)
+
+		// Create a test instance for the global environment
+		// This is needed because NewTestEnvironment now requires a *testing.T
+		globalTestInstance := &testing.T{}
+		testEnv, testEnvErr = testutils.NewTestEnvironment(globalTestInstance)
 		if testEnvErr != nil {
 			log.Printf("TestMain: Failed to setup test environment: %v", testEnvErr)
 			// Do not call os.Exit here yet, let the deferred cleanup run first if possible.
@@ -47,6 +50,8 @@ func TestMain(m *testing.M) {
 		os.Setenv("APP_ENV", oldAppEnv)
 
 		if testEnv != nil {
+			// Perform a final container health check and cleanup
+			log.Println("TestMain defer: Performing final container cleanup...")
 			testEnv.Cleanup()
 		}
 		log.Println("TestMain defer: Global test environment cleanup finished.")
@@ -54,6 +59,12 @@ func TestMain(m *testing.M) {
 	}()
 
 	log.Println("TestMain: Running tests with m.Run()...")
+
+	// Add periodic container recreation logging
+	if testEnv != nil {
+		log.Printf("TestMain: Container recreation configured every %d tests", 20)
+	}
+
 	// Run the tests. The exit code captures the test results.
 	exitCode := m.Run()
 	log.Printf("TestMain: m.Run() finished with exit code: %d", exitCode)

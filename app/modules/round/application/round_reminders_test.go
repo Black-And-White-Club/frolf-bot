@@ -127,12 +127,12 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
 					RoundID: testReminderRoundID,
 					Error:   "database error",
 				},
 			},
-			expectedError: errors.New("failed to get round: database error"),
+			expectedError: nil, // Change this to nil since you're handling errors in Failure
 		},
 	}
 
@@ -152,11 +152,9 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				},
 			}
 
-			_, err := s.ProcessRoundReminder(ctx, tt.payload)
-			if (err != nil) && (tt.expectedError == nil || err.Error() != tt.expectedError.Error()) {
-				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
-			}
+			result, err := s.ProcessRoundReminder(ctx, tt.payload)
 
+			// Check error expectations
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
@@ -167,14 +165,27 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				t.Errorf("expected no error, got: %v", err)
 			}
 
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			// Check result expectations
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got nil")
 				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+				// Add detailed comparison of the DiscordReminderPayload if needed
+			}
+
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got nil")
+				} else {
+					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload)
+					actualFailure := result.Failure.(*roundevents.RoundErrorPayload)
+					if expectedFailure.RoundID != actualFailure.RoundID {
+						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
+					}
+					if expectedFailure.Error != actualFailure.Error {
+						t.Errorf("expected Error: %v, got: %v", expectedFailure.Error, actualFailure.Error)
+					}
+				}
 			}
 		})
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/uptrace/bun"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardService "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -17,11 +16,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestBatchTagAssignmentRequested is an integration test for the BatchTagAssignmentRequested service method.
+// TestProcessTagAssignments is an integration test for the ProcessTagAssignments service method.
 // It tests the service's logic and its interaction with the database.
-func TestBatchTagAssignmentRequested(t *testing.T) {
+func TestProcessTagAssignments(t *testing.T) {
 	// Setup the test environment dependencies. sharedCtx and sharedDB are initialized in TestMain.
-	deps := SetupTestLeaderboardService(sharedCtx, sharedDB, t)
+	deps := SetupTestLeaderboardService(t)
 	defer deps.Cleanup()
 
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -31,8 +30,14 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 		// setupData prepares the database for the test case.
 		// It returns any generated users and the initial active leaderboard record if one is created.
 		setupData func(db *bun.DB, generator *testutils.TestDataGenerator) ([]testutils.User, *leaderboarddb.Leaderboard, error)
-		// payload is the incoming event payload to be processed by the service.
-		payload sharedevents.BatchTagAssignmentRequestedPayload // Use shared events payload type
+		// serviceParams contains the parameters to pass to ProcessTagAssignments
+		serviceParams struct {
+			source           sharedtypes.ServiceUpdateSource
+			requests         []sharedtypes.TagAssignmentRequest
+			requestingUserID *sharedtypes.DiscordID
+			operationID      uuid.UUID
+			batchID          uuid.UUID
+		}
 		// expectedError indicates if the service call is expected to return a Go error.
 		expectedError bool
 		// expectedSuccess indicates if the service call is expected to return a success payload.
@@ -59,7 +64,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{}, // Start with empty data
 					IsActive:        true,
-					UpdateSource:    leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -69,14 +74,22 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 
 				return users, initialLeaderboard, nil
 			},
-			payload: sharedevents.BatchTagAssignmentRequestedPayload{ // Use shared events payload
-				BatchID:          uuid.New().String(),
-				RequestingUserID: "test_admin_user",
-				Assignments: []sharedevents.TagAssignmentInfo{ // Use shared events TagAssignmentInfo
+			serviceParams: struct {
+				source           sharedtypes.ServiceUpdateSource
+				requests         []sharedtypes.TagAssignmentRequest
+				requestingUserID *sharedtypes.DiscordID
+				operationID      uuid.UUID
+				batchID          uuid.UUID
+			}{
+				source: sharedtypes.ServiceUpdateSourceAdminBatch,
+				requests: []sharedtypes.TagAssignmentRequest{
 					{UserID: "user_1", TagNumber: 1},
 					{UserID: "user_2", TagNumber: 2},
 					{UserID: "user_3", TagNumber: 3},
 				},
+				requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_admin_user"); return &id }(),
+				operationID:      uuid.New(),
+				batchID:          uuid.New(),
 			},
 			expectedError:   false, // Expect no Go error
 			expectedSuccess: true,  // Expect a success payload
@@ -197,7 +210,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 						{UserID: "user_initial", TagNumber: 99},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -207,15 +220,23 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 
 				return users, initialLeaderboard, nil
 			},
-			payload: sharedevents.BatchTagAssignmentRequestedPayload{ // Use shared events payload
-				BatchID:          uuid.New().String(),
-				RequestingUserID: "test_admin_user",
-				Assignments: []sharedevents.TagAssignmentInfo{ // Use shared events TagAssignmentInfo
+			serviceParams: struct {
+				source           sharedtypes.ServiceUpdateSource
+				requests         []sharedtypes.TagAssignmentRequest
+				requestingUserID *sharedtypes.DiscordID
+				operationID      uuid.UUID
+				batchID          uuid.UUID
+			}{
+				source: sharedtypes.ServiceUpdateSourceAdminBatch,
+				requests: []sharedtypes.TagAssignmentRequest{
 					{UserID: "user_a", TagNumber: 10}, // Existing user, valid tag
-					{UserID: "user_b", TagNumber: -5}, // Non-existent user, invalid tag (should be skipped by service before DB)
+					{UserID: "user_b", TagNumber: -5}, // Non-existent user, invalid tag (should be skipped)
 					{UserID: "user_c", TagNumber: 11}, // Existing user, valid tag
 					{UserID: "user_d", TagNumber: 12}, // Non-existent user, valid tag (should be added)
 				},
+				requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_admin_user"); return &id }(),
+				operationID:      uuid.New(),
+				batchID:          uuid.New(),
 			},
 			expectedError:   false, // Expect no Go error
 			expectedSuccess: true,  // Expect a success payload
@@ -338,7 +359,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 						{UserID: "existing_user", TagNumber: 42},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -348,10 +369,18 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 
 				return users, initialLeaderboard, nil
 			},
-			payload: sharedevents.BatchTagAssignmentRequestedPayload{ // Use shared events payload
-				BatchID:          uuid.New().String(),
-				RequestingUserID: "test_admin_user",
-				Assignments:      []sharedevents.TagAssignmentInfo{}, // Empty list
+			serviceParams: struct {
+				source           sharedtypes.ServiceUpdateSource
+				requests         []sharedtypes.TagAssignmentRequest
+				requestingUserID *sharedtypes.DiscordID
+				operationID      uuid.UUID
+				batchID          uuid.UUID
+			}{
+				source:           sharedtypes.ServiceUpdateSourceAdminBatch,
+				requests:         []sharedtypes.TagAssignmentRequest{}, // Empty list
+				requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_admin_user"); return &id }(),
+				operationID:      uuid.New(),
+				batchID:          uuid.New(),
 			},
 			expectedError:   false, // Expect no Go error
 			expectedSuccess: true,  // Expect a success payload
@@ -384,7 +413,7 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 					t.Fatalf("Failed to query active leaderboard: %v", err)
 				}
 
-				// For empty assignments, the service does NOT call the repository's BatchAssignTags.
+				// For empty assignments, the service does NOT call the repository's UpdateLeaderboard.
 				// Thus, the initial leaderboard should remain active, and no new one should be created.
 				if activeLeaderboard.ID != initialLeaderboard.ID {
 					t.Errorf("Expected the initial leaderboard (%d) to still be active, but a different one (%d) is active", initialLeaderboard.ID, activeLeaderboard.ID)
@@ -411,23 +440,24 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 			},
 		},
 		{
-			name: "Database error on batch assignment",
+			name: "Single assignment that requires tag swap",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) ([]testutils.User, *leaderboarddb.Leaderboard, error) {
-				// Generate and insert a user.
-				user := generator.GenerateUsers(1)
-				user[0].UserID = "user_error" // This user ID is used to trigger the simulated DB error
-				_, err := db.NewInsert().Model(&user).Exec(context.Background())
+				// Generate users where one already has a tag
+				users := generator.GenerateUsers(2)
+				users[0].UserID = "user_with_tag"
+				users[1].UserID = "user_requesting_tag"
+				_, err := db.NewInsert().Model(&users).Exec(context.Background())
 				if err != nil {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard.
+				// Insert an initial active leaderboard with user_with_tag having tag 1
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_initial", TagNumber: 99},
+						{UserID: "user_with_tag", TagNumber: 1},
 					},
 					IsActive:     true,
-					UpdateSource: leaderboarddb.ServiceUpdateSourceManual,
+					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
@@ -435,120 +465,73 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 					return nil, nil, err
 				}
 
-				return user, initialLeaderboard, nil
+				return users, initialLeaderboard, nil
 			},
-			payload: sharedevents.BatchTagAssignmentRequestedPayload{ // Use shared events payload
-				BatchID:          uuid.New().String(),
-				RequestingUserID: "test_admin_user",
-				Assignments: []sharedevents.TagAssignmentInfo{ // Use shared events TagAssignmentInfo
-					{UserID: "user_error", TagNumber: 50}, // This assignment is intended to cause a DB error in the repository
+			serviceParams: struct {
+				source           sharedtypes.ServiceUpdateSource
+				requests         []sharedtypes.TagAssignmentRequest
+				requestingUserID *sharedtypes.DiscordID
+				operationID      uuid.UUID
+				batchID          uuid.UUID
+			}{
+				source: sharedtypes.ServiceUpdateSourceManual,
+				requests: []sharedtypes.TagAssignmentRequest{
+					{UserID: "user_requesting_tag", TagNumber: 1}, // This should trigger a failure result
 				},
+				requestingUserID: nil, // Individual assignment
+				operationID:      uuid.New(),
+				batchID:          uuid.New(),
 			},
-			// Based on observed test output, the service returns a success payload and no error
-			// when the DB operation fails. This might indicate an issue in the service or test setup.
-			expectedError:   false, // Expect no Go error (matching observed behavior)
-			expectedSuccess: true,  // Expect a success payload (matching observed behavior)
+			expectedError:   false, // No Go error - service returns failure result instead
+			expectedSuccess: false, // Don't expect a success payload
 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
-				// Based on observed test output, the service returns a success payload
-				// even when the DB operation fails. Validate the success payload content.
-				if result.Success == nil {
-					t.Errorf("Expected success result based on observed behavior, but got nil")
+				// Expect a failure result for tag conflict
+				if result.Success != nil {
+					t.Errorf("Expected no success result for tag conflict, but got: %+v", result.Success)
+				}
+				if result.Failure == nil {
+					t.Errorf("Expected failure result for tag conflict, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.BatchTagAssignedPayload)
+				// Validate it's the correct failure type
+				failurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.BatchTagAssignedPayload, but got %T", result.Success)
+					t.Errorf("Expected failure result of type *leaderboardevents.BatchTagAssignmentFailedPayload, but got %T", result.Failure)
 					return
 				}
-				// Validate fields in the success payload based on observed output.
-				// The service seems to include the attempted assignment in the success payload.
-				if successPayload.RequestingUserID != "test_admin_user" {
-					// Corrected: Use successPayload.RequestingUserID for comparison
-					t.Errorf("Expected RequestingUserID 'test_admin_user', got %q", successPayload.RequestingUserID)
+				// Validate failure payload contents
+				if failurePayload.RequestingUserID != "system" {
+					t.Errorf("Expected requesting user ID 'system', got %s", failurePayload.RequestingUserID)
 				}
-				if successPayload.BatchID == "" {
-					t.Error("Expected non-empty BatchID in success payload")
+				if failurePayload.Reason == "" {
+					t.Errorf("Expected non-empty failure reason")
 				}
-				// Expecting 1 assignment in the success payload based on observed output
-				if successPayload.AssignmentCount != 1 {
-					t.Errorf("Expected 1 assignment in success payload based on observed behavior, got %d", successPayload.AssignmentCount)
-				}
-				if len(successPayload.Assignments) != 1 {
-					t.Errorf("Expected 1 assignment in success payload list based on observed behavior, got %d", len(successPayload.Assignments))
-				} else {
-					// Validate the content of the single assignment
-					expectedAssignment := sharedevents.TagAssignmentInfo{UserID: "user_error", TagNumber: 50}
-					if successPayload.Assignments[0].UserID != expectedAssignment.UserID || successPayload.Assignments[0].TagNumber != expectedAssignment.TagNumber {
-						t.Errorf("Success payload assignment mismatch: expected %+v, got %+v", expectedAssignment, successPayload.Assignments[0])
-					}
-				}
-
-				// Also validate that no failure payload was returned (matching observed behavior)
-				if result.Failure != nil {
-					t.Errorf("Expected no failure result based on observed behavior, but got: %+v", result.Failure)
+				// Check that the reason mentions the tag conflict
+				expectedReasonSubstring := "tag 1 is already assigned to user user_with_tag"
+				if failurePayload.Reason != expectedReasonSubstring {
+					t.Errorf("Expected failure reason to be '%s', got '%s'", expectedReasonSubstring, failurePayload.Reason)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialUsers []testutils.User, initialLeaderboard *leaderboarddb.Leaderboard) {
-				// Based on the test output, when the repository's BatchAssignTags encounters an error,
-				// it seems to create a new leaderboard record and mark it as active, while marking
-				// the old one inactive. This is likely *not* the intended behavior for a DB error
-				// (a rollback or keeping the old one active would be more typical), but the test
-				// must validate against the actual observed behavior.
-
-				var leaderboards []leaderboarddb.Leaderboard
+				// For a tag conflict failure, no leaderboard changes should occur
+				var activeLeaderboard leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
-					Model(&leaderboards).
-					Order("id ASC"). // Order to easily identify old and new records
+					Model(&activeLeaderboard).
+					Where("is_active = ?", true).
 					Scan(context.Background())
 				if err != nil {
-					t.Fatalf("Failed to query leaderboards: %v", err)
+					t.Fatalf("Failed to query active leaderboard: %v", err)
 				}
 
-				// Expecting two records: the initial one (now inactive) and the new one created by the failed operation (active).
-				if len(leaderboards) != 2 {
-					t.Fatalf("Expected 2 leaderboard records (old inactive, new active), got %d", len(leaderboards))
+				// The initial leaderboard should still be active and unchanged
+				if activeLeaderboard.ID != initialLeaderboard.ID {
+					t.Errorf("Expected the initial leaderboard to still be active for tag conflict, but a different one is active")
 				}
 
-				oldLeaderboard := leaderboards[0]
-				newLeaderboard := leaderboards[1]
-
-				// Validate the old leaderboard is inactive
-				if oldLeaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected old leaderboard ID %d, got %d", initialLeaderboard.ID, oldLeaderboard.ID)
-				}
-				if oldLeaderboard.IsActive {
-					t.Error("Expected old leaderboard to be inactive after service error")
-				}
-
-				// Validate the new leaderboard is active (matching observed behavior)
-				if !newLeaderboard.IsActive {
-					t.Error("Expected new leaderboard created by failed service call to be active based on test output")
-				}
-
-				// Validate the data in the new leaderboard based on observed output.
-				// It seems to contain the attempted assignment and the initial user.
-				expectedNewLeaderboardEntries := map[sharedtypes.DiscordID]sharedtypes.TagNumber{
-					"user_error":   50, // The attempted assignment
-					"user_initial": 99, // The user from the initial leaderboard
-				}
-				actualNewLeaderboardEntries := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-				for _, entry := range newLeaderboard.LeaderboardData {
-					if entry.TagNumber != 0 {
-						actualNewLeaderboardEntries[entry.UserID] = entry.TagNumber
-					}
-				}
-
-				if len(actualNewLeaderboardEntries) != len(expectedNewLeaderboardEntries) {
-					t.Errorf("Expected %d entries in new leaderboard data, got %d. Actual: %+v", len(expectedNewLeaderboardEntries), len(actualNewLeaderboardEntries), actualNewLeaderboardEntries)
-				} else {
-					for userID, expectedTag := range expectedNewLeaderboardEntries {
-						actualTag, ok := actualNewLeaderboardEntries[userID]
-						if !ok {
-							t.Errorf("Expected user %q not found in new leaderboard data", userID)
-						} else if actualTag != expectedTag {
-							t.Errorf("Tag mismatch for user %q in new leaderboard data: expected %d, got %d", userID, expectedTag, actualTag)
-						}
-					}
+				// Verify leaderboard data is unchanged
+				leaderboardEntries := activeLeaderboard.LeaderboardData
+				if len(leaderboardEntries) != 1 || leaderboardEntries[0].UserID != "user_with_tag" || leaderboardEntries[0].TagNumber != 1 {
+					t.Errorf("Expected unchanged leaderboard data for tag conflict, got %v", leaderboardEntries)
 				}
 			},
 		},
@@ -557,12 +540,6 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean database tables before each test case.
-			if err := testutils.CleanLeaderboardIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean leaderboard integration tables: %v", err)
-			}
-			if err := testutils.CleanUserIntegrationTables(sharedCtx, deps.BunDB); err != nil {
-				t.Fatalf("Failed to clean user integration tables: %v", err)
-			}
 
 			// Setup test-specific data.
 			var initialUsers []testutils.User
@@ -575,8 +552,15 @@ func TestBatchTagAssignmentRequested(t *testing.T) {
 				}
 			}
 
-			// Call the service method.
-			result, err := deps.Service.BatchTagAssignmentRequested(sharedCtx, tt.payload)
+			// Call the service method with the new signature
+			result, err := deps.Service.ProcessTagAssignments(
+				context.Background(),
+				tt.serviceParams.source,
+				tt.serviceParams.requests,
+				tt.serviceParams.requestingUserID,
+				tt.serviceParams.operationID,
+				tt.serviceParams.batchID,
+			)
 
 			// Validate expected error.
 			if tt.expectedError {

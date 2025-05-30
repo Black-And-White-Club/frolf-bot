@@ -102,12 +102,11 @@ func TestHandleTagAssignmentRequested(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				newUser := generator.GenerateUsers(1)[0]
-				requestingUser := generator.GenerateUsers(1)[0]
 
 				msg := createTagAssignmentRequestMessage(t,
 					sharedtypes.DiscordID(newUser.UserID),
 					10,
-					string(sharedtypes.DiscordID(requestingUser.UserID)),
+					"user_creation", // <-- CHANGED TO user_creation
 					"manual",
 				)
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardTagAssignmentRequested, msg); err != nil {
@@ -142,7 +141,7 @@ func TestHandleTagAssignmentRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, data, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				msg := createTagAssignmentRequestMessage(t, updateUserID, 99, "admin", "update")
+				msg := createTagAssignmentRequestMessage(t, updateUserID, 99, "user_creation", "update") // <-- CHANGED TO user_creation
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardTagAssignmentRequested, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
@@ -168,7 +167,7 @@ func TestHandleTagAssignmentRequested(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				newUser := generator.GenerateUsers(1)[0]
-				msg := createTagAssignmentRequestMessage(t, sharedtypes.DiscordID(newUser.UserID), 7, "system", "new")
+				msg := createTagAssignmentRequestMessage(t, sharedtypes.DiscordID(newUser.UserID), 7, "user_creation", "new") // <-- CHANGED TO user_creation
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardTagAssignmentRequested, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
@@ -198,6 +197,7 @@ func TestHandleTagAssignmentRequested(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				// A requests tag 20 (currently held by User B)
+				// Keep this as "manual" since we want it to trigger a swap, not individual assignment
 				msg := createTagAssignmentRequestMessage(t, swapUserA, 20, "manual", "update")
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardTagAssignmentRequested, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)

@@ -23,7 +23,6 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	mockDB := rounddb.NewMockRoundDB(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -66,13 +65,15 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 
 	// Setup test rounds with participants
 	round1 := roundtypes.Round{
-		ID:           round1ID,
-		Participants: []roundtypes.Participant{participant1, participant2},
+		ID:             round1ID,
+		EventMessageID: "msg1", // Add EventMessageID
+		Participants:   []roundtypes.Participant{participant1, participant2},
 	}
 
 	round2 := roundtypes.Round{
-		ID:           round2ID,
-		Participants: []roundtypes.Participant{participant2, participant3},
+		ID:             round2ID,
+		EventMessageID: "msg2", // Add EventMessageID
+		Participants:   []roundtypes.Participant{participant2, participant3},
 	}
 
 	// Create slice of pointers to rounds
@@ -82,8 +83,8 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
 		payload        roundevents.ScheduledRoundTagUpdatePayload
-		expectedResult RoundOperationResult
-		expectedError  error
+		expectedResult func(result RoundOperationResult) bool
+		expectError    bool
 	}{
 		{
 			name: "successful update with valid tags",
@@ -97,19 +98,40 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 					user2ID: &newTag2,
 				},
 			},
-			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundUpdateSuccess,
+			expectedResult: func(result RoundOperationResult) bool {
+				if result.Success == nil {
+					return false
+				}
+				payload, ok := result.Success.(*roundevents.DiscordRoundUpdatePayload)
+				if !ok {
+					return false
+				}
+				// Should have 2 rounds (both rounds have participants that need updates)
+				return len(payload.RoundIDs) == 2 && len(payload.Participants) == 3 // user2 appears in both rounds
 			},
-			expectedError: nil,
+			expectError: false,
 		},
 		{
 			name: "error fetching rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(nil, errors.New("database error"))
 			},
-			payload:        roundevents.ScheduledRoundTagUpdatePayload{},
-			expectedResult: RoundOperationResult{},
-			expectedError:  errors.New("failed to get rounds and participants: failed to get upcoming rounds: database error"),
+			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
+					user1ID: &newTag1,
+				},
+			},
+			expectedResult: func(result RoundOperationResult) bool {
+				if result.Failure == nil {
+					return false
+				}
+				errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayload)
+				if !ok {
+					return false
+				}
+				return errorPayload.Error == "failed to get upcoming rounds: database error"
+			},
+			expectError: false, // Error is in the result, not returned
 		},
 		{
 			name: "error updating rounds",
@@ -117,14 +139,51 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
 				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, gomock.Any()).Return(errors.New("update failed"))
 			},
-			payload:        roundevents.ScheduledRoundTagUpdatePayload{},
-			expectedResult: RoundOperationResult{},
-			expectedError:  errors.New("failed to update rounds: update failed"),
+			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
+					user1ID: &newTag1,
+				},
+			},
+			expectedResult: func(result RoundOperationResult) bool {
+				if result.Failure == nil {
+					return false
+				}
+				errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayload)
+				if !ok {
+					return false
+				}
+				return errorPayload.Error == "update failed"
+			},
+			expectError: false, // Error is in the result, not returned
+		},
+		{
+			name: "no updates needed - empty changedTags",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
+				// No UpdateRoundsAndParticipants call expected when no updates
+			},
+			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{}, // Empty map
+			},
+			expectedResult: func(result RoundOperationResult) bool {
+				if result.Success == nil {
+					return false
+				}
+				payload, ok := result.Success.(*roundevents.DiscordRoundUpdatePayload)
+				if !ok {
+					return false
+				}
+				// Should have empty arrays when no updates
+				return len(payload.RoundIDs) == 0 && len(payload.Participants) == 0 && len(payload.EventMessageIDs) == 0
+			},
+			expectError: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create a fresh mock for each test to avoid conflicts
+			mockDB := rounddb.NewMockRoundDB(ctrl)
 			tt.mockDBSetup(mockDB)
 
 			s := &RoundService{
@@ -139,29 +198,18 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				},
 			}
 
-			_, err := s.UpdateScheduledRoundsWithNewTags(ctx, tt.payload)
-			if (err != nil) && (tt.expectedError == nil || err.Error() != tt.expectedError.Error()) {
-				t.Fatalf("expected error %v, got %v", tt.expectedError, err)
+			result, err := s.UpdateScheduledRoundsWithNewTags(ctx, tt.payload)
+
+			// Check error expectation
+			if tt.expectError && err == nil {
+				t.Errorf("expected an error, but got nil")
+			} else if !tt.expectError && err != nil {
+				t.Errorf("expected no error, but got: %v", err)
 			}
 
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
-			}
-
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+			// Check result expectation
+			if !tt.expectedResult(result) {
+				t.Errorf("result validation failed. Got result: Success=%v, Failure=%v", result.Success, result.Failure)
 			}
 		})
 	}

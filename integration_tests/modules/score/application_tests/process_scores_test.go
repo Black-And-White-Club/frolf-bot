@@ -17,13 +17,8 @@ import (
 // TestProcessRoundScores verifies that the ProcessRoundScores method correctly
 // processes, stores, and returns tag mappings from round scores
 func TestProcessRoundScores(t *testing.T) {
-	// Clean tables before starting the test
-	if err := testutils.CleanScoreIntegrationTables(sharedCtx, sharedDB); err != nil {
-		t.Fatalf("Failed to clean score tables: %v", err)
-	}
-
 	// Set up the test dependencies
-	deps := SetupTestScoreService(sharedCtx, sharedDB, t)
+	deps := SetupTestScoreService(t)
 	defer deps.Cleanup()
 
 	// Create a test data generator with a fixed seed for reproducibility
@@ -309,13 +304,6 @@ func TestProcessRoundScores(t *testing.T) {
 	// Run test cases
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Clean tables if needed
-			if tc.cleanupBefore {
-				if err := testutils.CleanScoreIntegrationTables(sharedCtx, sharedDB); err != nil {
-					t.Fatalf("Failed to clean score tables: %v", err)
-				}
-			}
-
 			if tc.concurrent {
 				// Special handling for concurrent test case
 				runConcurrentScoreTest(t, deps, generator, tc.concurrentSize)
@@ -443,7 +431,7 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 // TestProcessScoresForStorage tests the score processing and sorting functionality
 func TestProcessScoresForStorage(t *testing.T) {
 	// Set up the test dependencies
-	deps := SetupTestScoreService(sharedCtx, sharedDB, t)
+	deps := SetupTestScoreService(t)
 	defer deps.Cleanup()
 
 	// Create a test data generator

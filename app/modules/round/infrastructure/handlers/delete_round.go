@@ -126,10 +126,9 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			roundDeleteAuthorizedPayload := payload.(*roundevents.RoundDeleteAuthorizedPayload)
 
-			// Log the receipt of the event and key payload fields
 			h.logger.InfoContext(ctx, "Received RoundDeleteAuthorized event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID), // Log the RoundID from payload
+				attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
 			)
 
 			result, err := h.roundService.DeleteRound(ctx, *roundDeleteAuthorizedPayload)
@@ -137,7 +136,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 				h.logger.ErrorContext(ctx, "Failed to execute RoundService.DeleteRound for RoundDeleteAuthorized event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-					attr.Any("service_call_error", err), // Log the error from the service call
+					attr.Any("service_call_error", err),
 				)
 				// Return the error, which will cause the message to be nacked/retried.
 				return nil, fmt.Errorf("RoundService.DeleteRound failed: %w", err)
@@ -145,21 +144,18 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 
 			// Check the result returned by the service for business logic success or failure
 			if result.Failure != nil {
-				// The service returned a business logic failure
 				h.logger.InfoContext(ctx, "RoundService.DeleteRound returned failure result",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-					// DiscordMessageID is NOT included in this log line
-					attr.Any("service_failure_payload", result.Failure), // Log the failure payload
+					attr.Any("service_failure_payload", result.Failure),
 				)
 
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,                          // Pass original msg to preserve metadata (includes discord_message_id)
-					result.Failure,               // Pass the RoundDeleteErrorPayload returned by the service
-					roundevents.RoundDeleteError, // Topic for deletion errors
+					msg,
+					result.Failure,
+					roundevents.RoundDeleteError,
 				)
 				if errMsg != nil {
-					// Critical failure: service failed AND couldn't publish error message.
 					h.logger.ErrorContext(ctx, "Failed to create failure message after RoundService.DeleteRound failure",
 						attr.CorrelationIDFromMsg(msg),
 						attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
@@ -168,13 +164,8 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 					return nil, fmt.Errorf("RoundService.DeleteRound failed and failed to create failure message: %w", errMsg)
 				}
 
-				// Return the failure message.
-				serviceFailureError := fmt.Errorf("service returned failure for round %s", roundDeleteAuthorizedPayload.RoundID.String())
-				if result.Failure != nil && result.Error != nil { // Check if the failure payload contains an error string
-					serviceFailureError = fmt.Errorf("service returned failure: %s", result.Error)
-				}
-				return []*message.Message{failureMsg}, serviceFailureError
-
+				// ✅ FIX: Return nil error for business logic failures
+				return []*message.Message{failureMsg}, nil
 			}
 
 			if result.Success != nil {
@@ -197,8 +188,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 					return nil, fmt.Errorf("failed to create RoundDeleted success message: %w", err)
 				}
 
-				// Return the success message.
-				return []*message.Message{successMsg}, nil // Return nil error on business logic success
+				return []*message.Message{successMsg}, nil
 			}
 
 			h.logger.ErrorContext(ctx, "Unexpected result from RoundService.DeleteRound - neither Success nor Failure is set",

@@ -62,14 +62,26 @@ func TestTimeParser_GetTimezoneFromInput(t *testing.T) {
 		{
 			name:  "Invalid timezone",
 			input: "What time is it?",
-			want:  "",
-			want1: false,
+			want:  "America/Chicago", // Fallback timezone
+			want1: false,             // Indicates fallback was used
 		},
 		{
 			name:  "Mixed case timezone",
 			input: "Meeting at 4 PM cst",
 			want:  "America/Chicago",
 			want1: true,
+		},
+		{
+			name:  "Valid full timezone name",
+			input: "America/New_York",
+			want:  "America/New_York",
+			want1: true,
+		},
+		{
+			name:  "Unknown abbreviation",
+			input: "XYZ",
+			want:  "America/Chicago", // Fallback timezone
+			want1: false,             // Indicates fallback was used
 		},
 	}
 	tp := NewTimeParser()
@@ -104,23 +116,23 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Valid time in PDT",
 			startTimeStr: "Tomorrow 5 PM",
 			timezone:     "PDT",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
-			want:         time.Date(2025, 6, 7, 0, 0, 0, 0, time.UTC).Unix(),
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 7, 0, 0, 0, 0, time.UTC).Unix(),
 			wantErr:      false,
 		},
 		{
-			name:         "Invalid timezone",
-			startTimeStr: "5 PM",
+			name:         "Unknown timezone uses fallback",
+			startTimeStr: "Tomorrow 5 PM",
 			timezone:     "XYZ",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
-			want:         0,
-			wantErr:      true,
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 6, 22, 0, 0, 0, time.UTC).Unix(), // 5 PM CDT = 22:00 UTC
+			wantErr:      false,
 		},
 		{
 			name:         "Invalid date format",
 			startTimeStr: "invalid date",
 			timezone:     "CST",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
 		},
@@ -128,31 +140,31 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "6am (time already passed)",
 			startTimeStr: "6am",
 			timezone:     "CDT",
-			mockNow:      time.Date(2025, 6, 5, 7, 0, 0, 0, time.UTC), // 2 AM CDT
-			want:         0,                                           // Should fail since 6 AM CDT has passed
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 7 AM CDT
+			want:         0,                                            // Should fail since 6 AM CDT has passed
 			wantErr:      true,
 		},
 		{
 			name:         "7pm (time not yet passed)",
 			startTimeStr: "7pm",
 			timezone:     "CDT",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),        // 7 AM CDT
-			want:         time.Date(2025, 6, 6, 00, 0, 0, 0, time.UTC).Unix(), // 7 PM CDT -> 00:00 UTC
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),       // 7 AM CDT
+			want:         time.Date(2027, 6, 6, 0, 0, 0, 0, time.UTC).Unix(), // 7 PM CDT -> 00:00 UTC next day
 			wantErr:      false,
 		},
 		{
-			name:         "Empty timezone string",
+			name:         "Empty timezone string uses fallback",
 			startTimeStr: "Tomorrow 5 PM",
 			timezone:     "",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
-			want:         0,
-			wantErr:      true,
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 6, 22, 0, 0, 0, time.UTC).Unix(), // 5 PM CDT = 22:00 UTC
+			wantErr:      false,
 		},
 		{
 			name:         "Malformed time string",
 			startTimeStr: "25 PM",
 			timezone:     "PDT",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
 		},
@@ -160,25 +172,41 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "DST Transition",
 			startTimeStr: "Nov 5 1:30 AM",
 			timezone:     "PDT",
-			mockNow:      time.Date(2025, 11, 4, 12, 0, 0, 0, time.UTC),
-			want:         time.Date(2025, 11, 5, 9, 30, 0, 0, time.UTC).Unix(), // Adjusted for DST
+			mockNow:      time.Date(2027, 11, 4, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 11, 5, 8, 30, 0, 0, time.UTC).Unix(), // 1:30 AM PST = 8:30 UTC (PST is UTC-8 in November)
 			wantErr:      false,
 		},
 		{
 			name:         "Empty startTimeStr",
 			startTimeStr: "",
 			timezone:     "PDT",
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
 		},
 		{
-			name:         "Nil timezone (default handling)",
-			startTimeStr: "Tomorrow 5 PM",
-			timezone:     "", // Simulates nil behavior for a string
-			mockNow:      time.Date(2025, 6, 5, 12, 0, 0, 0, time.UTC),
+			name:         "Whitespace only startTimeStr",
+			startTimeStr: "   ",
+			timezone:     "PDT",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
 			want:         0,
 			wantErr:      true,
+		},
+		{
+			name:         "Valid time format 932am",
+			startTimeStr: "932am",
+			timezone:     "CDT",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),         // 7 AM CDT
+			want:         time.Date(2027, 6, 5, 14, 32, 0, 0, time.UTC).Unix(), // 9:32 AM CDT same day
+			wantErr:      false,
+		},
+		{
+			name:         "Today at format",
+			startTimeStr: "today 3pm",
+			timezone:     "EST",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),        // 8 AM EST
+			want:         time.Date(2027, 6, 5, 20, 0, 0, 0, time.UTC).Unix(), // 3 PM EDT = 20:00 UTC (summer time)
+			wantErr:      false,
 		},
 	}
 
@@ -203,7 +231,9 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 				return
 			}
 			if got != tt.want {
-				t.Errorf("TimeParser.ParseUserTimeInput() = %v, want %v", got, tt.want)
+				gotTime := time.Unix(got, 0).UTC().Format(time.RFC3339)
+				wantTime := time.Unix(tt.want, 0).UTC().Format(time.RFC3339)
+				t.Errorf("TimeParser.ParseUserTimeInput() = %v (%s), want %v (%s)", got, gotTime, tt.want, wantTime)
 			}
 		})
 	}

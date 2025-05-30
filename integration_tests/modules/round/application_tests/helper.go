@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"log/slog"
-	"strings" // Added for testEnvOnce
 	"testing"
 
 	"github.com/uptrace/bun"
@@ -17,16 +16,15 @@ import (
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
-	"github.com/nats-io/nats.go/jetstream" // Explicitly import jetstream here if needed for type
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 type RoundTestDeps struct {
-	Ctx      context.Context
-	DB       rounddb.RoundDB
-	BunDB    *bun.DB
-	Service  roundservice.Service
-	EventBus eventbus.EventBus
-	// NEW: JetStreamContext is now part of RoundTestDeps
+	Ctx              context.Context
+	DB               rounddb.RoundDB
+	BunDB            *bun.DB
+	Service          roundservice.Service
+	EventBus         eventbus.EventBus
 	JetStreamContext jetstream.JetStream
 	Cleanup          func()
 }
@@ -36,13 +34,13 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 
 	testEnvOnce.Do(func() {
 		log.Println("Initializing round test environment...")
-		var err error
-		testEnv, err = testutils.NewTestEnvironment(nil) // Pass nil as *testing.T if not used in NewTestEnvironment
+		env, err := testutils.NewTestEnvironment(t)
 		if err != nil {
 			testEnvErr = err
 			log.Printf("Failed to set up test environment: %v", err)
 		} else {
 			log.Println("Round test environment initialized successfully.")
+			testEnv = env
 		}
 	})
 
@@ -63,15 +61,27 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 	// Get the shared test environment
 	env := GetTestEnv(t)
 
+	// Check if containers should be recreated for stability
+	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
+		t.Fatalf("Failed to handle container recreation: %v", err)
+	}
+
+	// Perform deep cleanup between tests for better isolation
+	if err := env.DeepCleanup(); err != nil {
+		t.Fatalf("Failed to perform deep cleanup: %v", err)
+	}
+
+	// Use standard stream names that the EventBus recognizes
+	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
+
+	// Clean up NATS consumers for relevant streams before starting the test
+	if err := env.ResetJetStreamState(env.Ctx, standardStreamNames...); err != nil {
+		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
+	}
+
 	// Clean up database tables before each test
 	if err := testutils.TruncateTables(env.Ctx, env.DB, "rounds"); err != nil {
 		t.Fatalf("Failed to truncate DB tables: %v", err)
-	}
-
-	// Clean up NATS consumers for relevant streams before starting the test
-	streamNames := []string{"round", "user", "discord", "delayed"} // Added "delayed" stream for cleanup
-	if err := env.ResetJetStreamState(env.Ctx, streamNames...); err != nil {
-		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
 	}
 
 	realDB := &rounddb.RoundDBImpl{DB: env.DB}
@@ -86,7 +96,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		eventBusCtx,
 		env.Config.NATS.URL,
 		testLogger,
-		"backend",
+		"backend", // Use standard app type that EventBus recognizes
 		eventbusmetrics.NewNoop(),
 		noOpTracer,
 	)
@@ -95,19 +105,12 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	// Create required NATS streams if they don't exist
-	for _, streamName := range streamNames { // Use the updated streamNames including "delayed"
-		_, err := eventBusImpl.GetJetStream().Stream(env.Ctx, streamName)
-		if err != nil && strings.Contains(err.Error(), "stream not found") {
-			if err := eventBusImpl.CreateStream(env.Ctx, streamName); err != nil {
-				eventBusImpl.Close()
-				eventBusCancel()
-				t.Fatalf("Failed to create required NATS stream %q: %v", streamName, err)
-			}
-		} else if err != nil {
+	// Ensure all required streams exist after EventBus creation
+	for _, streamName := range standardStreamNames {
+		if err := eventBusImpl.CreateStream(eventBusCtx, streamName); err != nil {
 			eventBusImpl.Close()
 			eventBusCancel()
-			t.Fatalf("Failed to check existence of NATS stream %q: %v", streamName, err)
+			t.Fatalf("Failed to create stream %s: %v", streamName, err)
 		}
 	}
 

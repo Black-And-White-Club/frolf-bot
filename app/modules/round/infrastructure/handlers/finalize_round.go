@@ -6,7 +6,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -37,35 +36,31 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 				return nil, fmt.Errorf("failed during backend FinalizeRound service call: %w", finalizeErr)
 			}
 
+			// ✅ FIX: Handle service failure results properly
 			if finalizeResult.Failure != nil {
 				h.logger.InfoContext(ctx, "Backend round finalization failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", finalizeResult.Failure),
 				)
-				return nil, fmt.Errorf("backend round finalization failed: %v", finalizeResult.Failure)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					finalizeResult.Failure,
+					roundevents.RoundFinalizationError,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				// ✅ Return failure message with nil error
+				return []*message.Message{failureMsg}, nil
 			}
 
 			h.logger.InfoContext(ctx, "Backend round finalization successful", attr.CorrelationIDFromMsg(msg))
 
-			getRoundResult, err := h.roundService.GetRound(ctx, allScoresSubmittedPayload.RoundID)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to get round details for Discord finalization payload",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-					attr.RoundID("round_id", allScoresSubmittedPayload.RoundID),
-				)
-				return nil, fmt.Errorf("failed to get round details for Discord finalization payload: %w", err)
-			}
-
-			// Perform type assertion to get the concrete *roundtypes.Round
-			fetchedRound, ok := getRoundResult.Success.(*roundtypes.Round)
-			if !ok {
-				h.logger.ErrorContext(ctx, "GetRound returned success payload of unexpected type for Discord finalization",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", allScoresSubmittedPayload.RoundID),
-				)
-				return nil, fmt.Errorf("GetRound returned no success payload for Discord finalization")
-			}
+			// Use the round data from the payload instead of fetching again
+			fetchedRound := &allScoresSubmittedPayload.RoundData
 
 			discordFinalizationPayload := roundevents.RoundFinalizedEmbedUpdatePayload{
 				RoundID:        allScoresSubmittedPayload.RoundID,
@@ -89,16 +84,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 				return nil, fmt.Errorf("failed to create DiscordRoundFinalized message: %w", err)
 			}
 
-			h.logger.InfoContext(ctx, "Published DiscordRoundFinalized event to trigger frontend update",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", allScoresSubmittedPayload.RoundID),
-				attr.String("discord_message_id", discordFinalizationPayload.EventMessageID),
-				attr.String("discord_channel_id", discordFinalizationPayload.DiscordChannelID),
-			)
-
-			messagesToReturn := []*message.Message{discordFinalizedMsg}
-
-			return messagesToReturn, nil
+			return []*message.Message{discordFinalizedMsg}, nil
 		},
 	)
 	return wrappedHandler(msg)

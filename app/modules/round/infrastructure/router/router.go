@@ -164,6 +164,9 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
 		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
 		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
+		roundevents.TagUpdateForScheduledRounds:           handlers.HandleScheduledRoundTagUpdate,
+		roundevents.GetRoundRequest:                       handlers.HandleGetRoundRequest,
+		roundevents.RoundUpdated:                          handlers.HandleRoundScheduleUpdate,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {
