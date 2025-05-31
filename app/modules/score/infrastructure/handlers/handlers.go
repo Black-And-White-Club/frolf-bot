@@ -1,69 +1,110 @@
 package scorehandlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
+// ScoreHandlers handles score-related events.
 type ScoreHandlers struct {
-	scoreService scoreservice.Service
-	logger       *slog.Logger
+	scoreService   scoreservice.Service
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	metrics        scoremetrics.ScoreMetrics
+	Helpers        utils.Helpers
+	handlerWrapper func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc
 }
 
-func NewScoreHandlers(scoreService scoreservice.Service, logger *slog.Logger) Handlers {
+// NewScoreHandlers creates a new ScoreHandlers.
+func NewScoreHandlers(
+	scoreService scoreservice.Service,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	helpers utils.Helpers,
+	metrics scoremetrics.ScoreMetrics,
+) Handlers {
 	return &ScoreHandlers{
 		scoreService: scoreService,
 		logger:       logger,
+		tracer:       tracer,
+		Helpers:      helpers,
+		metrics:      metrics,
+		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
+		},
 	}
 }
 
-func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[scoreevents.ProcessRoundScoresRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal ProcessRoundScoresRequestPayload: %w", err)
-	}
+// handlerWrapper is a standalone function that handles common tracing, logging, and metrics for handlers.
+func handlerWrapper(
+	handlerName string,
+	unmarshalTo interface{},
+	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
+	logger *slog.Logger,
+	metrics scoremetrics.ScoreMetrics,
+	tracer trace.Tracer,
+	helpers utils.Helpers,
+) message.HandlerFunc {
+	return func(msg *message.Message) ([]*message.Message, error) {
+		// Start a span for tracing
+		ctx, span := tracer.Start(msg.Context(), handlerName, trace.WithAttributes(
+			attribute.String("message.id", msg.UUID),
+			attribute.String("message.correlation_id", middleware.MessageCorrelationID(msg)),
+		))
+		defer span.End()
 
-	h.logger.Info("Received ProcessRoundScoresRequest event",
-		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
-	)
+		// Record metrics for handler attempt
+		metrics.RecordHandlerAttempt(ctx, handlerName)
 
-	if err := h.scoreService.ProcessRoundScores(msg.Context(), payload); err != nil {
-		h.logger.Error("Failed to handle ProcessRoundScoresRequest event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
+		startTime := time.Now()
+		defer func() {
+			duration := time.Duration(time.Since(startTime).Seconds())
+			metrics.RecordHandlerDuration(ctx, handlerName, duration)
+		}()
+
+		logger.InfoContext(ctx, handlerName+" triggered",
+			attr.CorrelationIDFromMsg(msg),
+			attr.String("message_id", msg.UUID),
 		)
-		return fmt.Errorf("failed to handle ProcessRoundScoresRequest event: %w", err)
+
+		// Create a new instance of the payload type
+		payloadInstance := unmarshalTo
+
+		// Unmarshal payload if a target is provided
+		if payloadInstance != nil {
+			if err := helpers.UnmarshalPayload(msg, payloadInstance); err != nil {
+				logger.ErrorContext(ctx, "Failed to unmarshal payload",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err))
+				metrics.RecordHandlerFailure(ctx, handlerName)
+				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+			}
+		}
+
+		// Call the actual handler logic
+		result, err := handlerFunc(ctx, msg, payloadInstance)
+		if err != nil {
+			logger.ErrorContext(ctx, "Error in "+handlerName,
+				attr.CorrelationIDFromMsg(msg),
+				attr.Error(err),
+			)
+			metrics.RecordHandlerFailure(ctx, handlerName)
+			return nil, err
+		}
+
+		logger.InfoContext(ctx, handlerName+" completed successfully", attr.CorrelationIDFromMsg(msg))
+		metrics.RecordHandlerSuccess(ctx, handlerName)
+		return result, nil
 	}
-
-	h.logger.Info("ProcessRoundScoresRequest event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-func (h *ScoreHandlers) HandleScoreUpdateRequest(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[scoreevents.ScoreUpdateRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal ScoreUpdateRequestPayload: %w", err)
-	}
-
-	h.logger.Info("Received ScoreUpdateRequest event",
-		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
-	)
-
-	if err := h.scoreService.CorrectScore(msg.Context(), payload); err != nil {
-		h.logger.Error("Failed to handle ScoreUpdateRequest event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle ScoreUpdateRequest event: %w", err)
-	}
-
-	h.logger.Info("ScoreUpdateRequest event processed", slog.String("correlation_id", correlationID))
-	return nil
 }

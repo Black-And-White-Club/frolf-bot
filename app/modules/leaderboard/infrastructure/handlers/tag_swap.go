@@ -1,62 +1,79 @@
 package leaderboardhandlers
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // HandleTagSwapRequested handles the TagSwapRequested event.
-func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapRequestedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagSwapRequestedPayload: %w", err)
-	}
+func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleTagSwapRequested",
+		&leaderboardevents.TagSwapRequestedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagSwapRequestedPayload := payload.(*leaderboardevents.TagSwapRequestedPayload)
 
-	h.logger.Info("Received TagSwapRequested event",
-		slog.String("correlation_id", correlationID),
-		slog.String("requestor_id", payload.RequestorID),
-		slog.String("target_id", payload.TargetID),
+			h.logger.InfoContext(ctx, "Received TagSwapRequested event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("requestor_id", string(tagSwapRequestedPayload.RequestorID)),
+				attr.String("target_id", string(tagSwapRequestedPayload.TargetID)),
+			)
+
+			// Call the service function to handle the event
+			result, err := h.leaderboardService.TagSwapRequested(ctx, *tagSwapRequestedPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle TagSwapRequested event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("failed to handle TagSwapRequested event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Tag swap failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.Helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					leaderboardevents.TagSwapFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			} else if result.Success != nil {
+				h.logger.InfoContext(ctx, "Tag swap successful", attr.CorrelationIDFromMsg(msg))
+
+				// Create success message to publish
+				successMsg, err := h.Helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					leaderboardevents.TagSwapProcessed,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			} else {
+				// Handle the case where both Success and Failure are nil
+				h.logger.ErrorContext(ctx, "Unexpected result from service: both success and failure are nil",
+					attr.CorrelationIDFromMsg(msg),
+				)
+				return nil, fmt.Errorf("unexpected result from service")
+			}
+		},
 	)
 
-	// Call the service function to handle the event
-	if err := h.leaderboardService.TagSwapRequested(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle TagSwapRequested event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle TagSwapRequested event: %w", err)
-	}
-
-	h.logger.Info("TagSwapRequested event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
-// HandleTagSwapInitiated handles the TagSwapInitiated event.
-func (h *LeaderboardHandlers) HandleTagSwapInitiated(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.TagSwapInitiatedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagSwapInitiatedPayload: %w", err)
-	}
-
-	h.logger.Info("Received TagSwapInitiated event",
-		slog.String("correlation_id", correlationID),
-		slog.String("requestor_id", payload.RequestorID),
-		slog.String("target_id", payload.TargetID),
-	)
-
-	// Call the service function to handle the event
-	if err := h.leaderboardService.TagSwapInitiated(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle TagSwapInitiated event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle TagSwapInitiated event: %w", err)
-	}
-
-	h.logger.Info("TagSwapInitiated event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }

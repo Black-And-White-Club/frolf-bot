@@ -1,32 +1,94 @@
 package roundhandlers
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundReminderPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundReminderPayload: %w", err)
-	}
+func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleRoundReminder",
+		&roundevents.DiscordReminderPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			discordReminderPayload := payload.(*roundevents.DiscordReminderPayload)
 
-	h.logger.Info("Received RoundReminder event",
-		slog.String("correlation_id", correlationID),
+			h.logger.InfoContext(ctx, "Received RoundReminder event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", discordReminderPayload.RoundID),
+				attr.String("reminder_type", discordReminderPayload.ReminderType),
+			)
+
+			// Call the service function to handle the event
+			result, err := h.roundService.ProcessRoundReminder(ctx, *discordReminderPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to process round reminder",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to process round reminder: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Round reminder processing failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.RoundError,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				discordPayload := result.Success.(*roundevents.DiscordReminderPayload)
+
+				h.logger.InfoContext(ctx, "Round reminder processed successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", discordPayload.RoundID),
+				)
+
+				// Only publish Discord reminder if there are participants to notify
+				if len(discordPayload.UserIDs) > 0 {
+					successMsg, err := h.helpers.CreateResultMessage(
+						msg,
+						discordPayload,
+						roundevents.DiscordRoundReminder,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create Discord reminder message: %w", err)
+					}
+					return []*message.Message{successMsg}, nil
+				} else {
+					// No participants to notify, but processing was successful
+					// Optionally publish a "processed" event or just return empty
+					h.logger.InfoContext(ctx, "Round reminder processed but no participants to notify",
+						attr.CorrelationIDFromMsg(msg),
+						attr.RoundID("round_id", discordPayload.RoundID),
+					)
+					return []*message.Message{}, nil // Return empty slice, not nil
+				}
+			}
+
+			// This should never happen now that service always returns Success or Failure
+			h.logger.ErrorContext(ctx, "Unexpected result from ProcessRoundReminder service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("service returned neither success nor failure")
+		},
 	)
 
-	if err := h.RoundService.ProcessRoundReminder(msg); err != nil {
-		h.logger.Error("Failed to handle RoundReminder event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundReminder event: %w", err)
-	}
-
-	h.logger.Info("RoundReminder event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }

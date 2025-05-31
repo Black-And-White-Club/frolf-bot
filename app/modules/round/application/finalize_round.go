@@ -3,115 +3,121 @@ package roundservice
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// FinalizeRound handles the round finalization process.
-func (s *RoundService) FinalizeRound(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.AllScoresSubmittedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal AllScoresSubmittedPayload: %w", err)
-	}
-
-	// 1. Update the round state to finalized
-	if err := s.RoundDB.UpdateRoundState(ctx, eventPayload.RoundID, roundtypes.RoundStateFinalized); err != nil {
-		return s.publishRoundFinalizationError(msg, eventPayload, err)
-	}
-
-	// 2. Publish a "round.finalized" event
-	if err := s.publishEvent(msg, roundevents.RoundFinalized, roundevents.RoundFinalizedPayload(eventPayload)); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.finalized event", map[string]interface{}{})
-		return fmt.Errorf("failed to publish round.finalized event: %w", err)
-	}
-
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round finalized", map[string]interface{}{"round_id": eventPayload.RoundID})
-	return nil
-}
-
-// NotifyScoreModule fetches the finalized round data and publishes an event for the Score Module.
-func (s *RoundService) NotifyScoreModule(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundFinalizedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundFinalizedPayload: %w", err)
-	}
-
-	// 1. Fetch the finalized round data
-	round, err := s.RoundDB.GetRound(ctx, eventPayload.RoundID)
-	if err != nil {
-		return s.publishScoreModuleNotificationError(msg, eventPayload, err) // Specific error event
-	}
-
-	// 2. Prepare the data for the Score Module
-	scores := make([]roundevents.ParticipantScore, 0)
-	for _, p := range round.Participants {
-		tagNumber := "0" // Default if no tag
-		if p.TagNumber != 0 {
-			tagNumber = strconv.Itoa(p.TagNumber)
+// FinalizeRound handles the round finalization process by updating the round state.
+func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "FinalizeRound", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		// Update the round state to finalized in the database
+		rounddbState := roundtypes.RoundStateFinalized
+		s.logger.InfoContext(ctx, "Attempting to update round state to finalized",
+			attr.StringUUID("round_id", payload.RoundID.String()),
+		)
+		if err := s.RoundDB.UpdateRoundState(ctx, payload.RoundID, rounddbState); err != nil {
+			s.metrics.RecordDBOperationError(ctx, "update_round_state")
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   fmt.Sprintf("failed to update round state to finalized: %v", err),
+			}
+			s.logger.ErrorContext(ctx, "Failed to update round state to finalized",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Error(err),
+			)
+			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
-		// Use 0 for nil scores, otherwise convert to float64
-		score := float64(0)
-		if p.Score != nil {
-			score = float64(*p.Score)
+		// Fetch the finalized round data
+		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		if err != nil {
+			s.metrics.RecordDBOperationError(ctx, "get_round")
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   fmt.Sprintf("failed to fetch round data: %v", err),
+			}
+			s.logger.ErrorContext(ctx, "Failed to fetch round data after finalization",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Error(err),
+			)
+			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
-		scores = append(scores, roundevents.ParticipantScore{
-			DiscordID: p.DiscordID,
-			TagNumber: tagNumber,
-			Score:     score,
-		})
-	}
+		// Prepare the success payload with round data
+		finalizedPayload := roundevents.RoundFinalizedPayload{
+			RoundID:   payload.RoundID,
+			RoundData: *round,
+		}
+		s.logger.InfoContext(ctx, "Round state updated to finalized successfully",
+			attr.StringUUID("round_id", payload.RoundID.String()),
+		)
 
-	// 3. Publish an event to the Score Module
-	if err := s.publishEvent(msg, roundevents.ProcessRoundScoresRequest, roundevents.ProcessRoundScoresRequestPayload{
-		RoundID: round.ID,
-		Scores:  scores,
-	}); err != nil {
-		return s.publishScoreModuleNotificationError(msg, eventPayload, err) // Specific error event
-	}
-
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Notified Score Module about finalized round", map[string]interface{}{"round_id": eventPayload.RoundID})
-	return nil
+		return RoundOperationResult{Success: &finalizedPayload}, nil
+	})
 }
 
-// publishRoundFinalizationError publishes a round.finalization.error event.
-func (s *RoundService) publishRoundFinalizationError(msg *message.Message, input roundevents.AllScoresSubmittedPayload, err error) error {
-	payload := roundevents.RoundFinalizationErrorPayload{
-		CorrelationID: middleware.MessageCorrelationID(msg),
-		RoundID:       input.RoundID,
-		Error:         err.Error(),
-	}
+// NotifyScoreModule prepares the data needed by the Score Module after a round is finalized.
+func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		// Check if round exists first
+		_, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Round not found for score processing",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Error(err),
+			)
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   fmt.Sprintf("round not found: %v", err),
+			}
+			return RoundOperationResult{Failure: &failurePayload}, nil
+		}
 
-	if pubErr := s.publishEvent(msg, roundevents.RoundFinalizationError, payload); pubErr != nil {
-		logging.LogErrorWithMetadata(context.Background(), s.logger, msg, "Failed to publish round.finalization.error event", map[string]interface{}{
-			"original_error": err.Error(),
-		})
-		return fmt.Errorf("failed to publish round.finalization.error event: %w, original error: %w", pubErr, err)
-	}
+		// Use the round data directly from the payload
+		round := payload.RoundData
 
-	return err
+		// Prepare the participant score data for the Score Module
+		scores := make([]roundevents.ParticipantScore, 0, len(round.Participants))
+		for _, p := range round.Participants {
+			tagNumber := 0
+			if p.TagNumber != nil && *p.TagNumber != 0 {
+				tagNumber = int(*p.TagNumber)
+			}
+
+			score := 0
+			if p.Score != nil {
+				score = int(*p.Score)
+			}
+
+			tagNumberPtr := sharedtypes.TagNumber(tagNumber)
+			scores = append(scores, roundevents.ParticipantScore{
+				UserID:    sharedtypes.DiscordID(p.UserID),
+				TagNumber: &tagNumberPtr,
+				Score:     sharedtypes.Score(score),
+			})
+		}
+
+		// Prepare the success payload containing the request for the Score Module
+		processScoresPayload := roundevents.ProcessRoundScoresRequestPayload{
+			RoundID: round.ID,
+			Scores:  scores,
+		}
+		s.logger.InfoContext(ctx, "Prepared score data for Score Module",
+			attr.StringUUID("round_id", payload.RoundID.String()),
+			attr.Int("participant_count_processed", len(scores)),
+		)
+
+		return RoundOperationResult{Success: &processScoresPayload}, nil
+	})
 }
 
-// publishScoreModuleNotificationError publishes a score.module.notification.error event.
-func (s *RoundService) publishScoreModuleNotificationError(msg *message.Message, input roundevents.RoundFinalizedPayload, err error) error {
-	payload := roundevents.ScoreModuleNotificationErrorPayload{
-		CorrelationID: middleware.MessageCorrelationID(msg),
-		RoundID:       input.RoundID,
-		Error:         err.Error(),
+// ConvertToRoundFinalizedPayload converts the event payload to the finalized payload structure.
+func ConvertToRoundFinalizedPayload(eventPayload roundevents.AllScoresSubmittedPayload) roundevents.RoundFinalizedPayload {
+	return roundevents.RoundFinalizedPayload{
+		RoundID:   eventPayload.RoundID,
+		RoundData: eventPayload.RoundData,
 	}
-	if pubErr := s.publishEvent(msg, roundevents.ScoreModuleNotificationError, payload); pubErr != nil {
-		logging.LogErrorWithMetadata(context.Background(), s.logger, msg, "Failed to publish score.module.notification.error event", map[string]interface{}{
-			"original_error": err.Error(),
-		})
-		return fmt.Errorf("failed to publish score.module.notification.error event: %w, original error: %w", pubErr, err)
-	}
-	return err
-
 }

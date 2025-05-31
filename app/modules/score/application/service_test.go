@@ -3,364 +3,291 @@ package scoreservice
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"reflect"
 	"testing"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
-	scoredbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestNewScoreService(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockScoreDB := scoredb.NewMockScoreDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type args struct {
-		eventBus eventbus.EventBus
-		db       scoredb.MockScoreDB
-		logger   *slog.Logger
-	}
+	// Define test cases
 	tests := []struct {
 		name string
-		args args
-		want Service
+		test func(t *testing.T)
 	}{
 		{
-			name: "Successful Creation",
-			args: args{
-				eventBus: mockEventBus,
-				db:       *mockScoreDB,
-				logger:   logger,
-			},
-			want: &ScoreService{
-				ScoreDB:  mockScoreDB,
-				EventBus: mockEventBus,
-				logger:   logger,
+			name: "Creates service with all dependencies",
+			test: func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				// Create mock dependencies
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
+				mockDB := scoredb.NewMockScoreDB(ctrl)
+				mockEventBus := eventbus.NewMockEventBus(ctrl)
+				mockMetrics := &scoremetrics.NoOpMetrics{}
+				tracer := noop.NewTracerProvider().Tracer("test")
+				// Call the function being tested
+				service := NewScoreService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
+				// Ensure service is correctly created
+				if service == nil {
+					t.Fatalf("NewScoreService returned nil")
+				}
+
+				// Access the concrete type to override serviceWrapper
+				scoreServiceImpl, ok := service.(*ScoreService)
+				if !ok {
+					t.Fatalf("service is not of type *ScoreService")
+				}
+
+				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
+				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
+				}
+
+				// Check that all dependencies were correctly assigned
+				if scoreServiceImpl.ScoreDB != mockDB {
+					t.Errorf("Score DB not correctly assigned")
+				}
+				if scoreServiceImpl.EventBus != mockEventBus {
+					t.Errorf("eventBus not correctly assigned")
+				}
+				if scoreServiceImpl.logger != logger {
+					t.Errorf("logger not correctly assigned")
+				}
+				if scoreServiceImpl.metrics != mockMetrics {
+					t.Errorf("metrics not correctly assigned")
+				}
+				if scoreServiceImpl.tracer != tracer {
+					t.Errorf("tracer not correctly assigned")
+				}
+
+				// Ensure serviceWrapper is correctly set
+				if scoreServiceImpl.serviceWrapper == nil {
+					t.Errorf("serviceWrapper should not be nil")
+				}
 			},
 		},
-		// Add more test cases if needed to test behavior with nil inputs
+		{
+			name: "Handles nil dependencies",
+			test: func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				// Call with nil dependencies
+				service := NewScoreService(nil, nil, nil, nil, nil)
+
+				// Ensure service is correctly created
+				if service == nil {
+					t.Fatalf("NewScoreService returned nil")
+				}
+
+				// Access the concrete type to override serviceWrapper
+				scoreServiceImpl, ok := service.(*ScoreService)
+				if !ok {
+					t.Fatalf("service is not of type *ScoreService")
+				}
+
+				// Override serviceWrapper to avoid nil tracing/logger issues
+				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
+					return serviceFunc(ctx) // Just execute serviceFunc directly
+				}
+
+				// Check nil fields
+				if scoreServiceImpl.ScoreDB != nil {
+					t.Errorf("Score DB should be nil")
+				}
+				if scoreServiceImpl.EventBus != nil {
+					t.Errorf("eventBus should be nil")
+				}
+				if scoreServiceImpl.logger != nil {
+					t.Errorf("logger should be nil")
+				}
+				if scoreServiceImpl.metrics != nil {
+					t.Errorf("metrics should be nil")
+				}
+				if scoreServiceImpl.tracer != nil {
+					t.Errorf("tracer should be nil")
+				}
+
+				// Ensure serviceWrapper is still set
+				if scoreServiceImpl.serviceWrapper == nil {
+					t.Errorf("serviceWrapper should not be nil")
+				}
+
+				// Test serviceWrapper runs correctly with nil dependencies
+				ctx := context.Background()
+				_, err := scoreServiceImpl.serviceWrapper(ctx, "TestOp", sharedtypes.RoundID(uuid.New()), func(ctx context.Context) (ScoreOperationResult, error) {
+					return ScoreOperationResult{Success: "test"}, nil
+				})
+				if err != nil {
+					t.Errorf("serviceWrapper should execute the provided function without error, got: %v", err)
+				}
+			},
+		},
 	}
+
+	// Run all test cases
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := NewScoreService(tt.args.eventBus, &tt.args.db, tt.args.logger)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewScoreService() = %v, want %v", got, tt.want)
-			}
-		})
+		t.Run(tt.name, tt.test)
 	}
 }
 
-func TestScoreService_ProcessRoundScores(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func Test_serviceWrapper(t *testing.T) {
+	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	mockScoreDB := scoredb.NewMockScoreDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		ScoreDB   *scoredb.MockScoreDB
-		EventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
 	type args struct {
-		ctx   context.Context
-		event scoreevents.ProcessRoundScoresRequestPayload
+		ctx           context.Context
+		operationName string
+		roundID       sharedtypes.RoundID
+		serviceFunc   func(ctx context.Context) (ScoreOperationResult, error)
+		logger        *slog.Logger
+		metrics       scoremetrics.ScoreMetrics
+		tracer        trace.Tracer
 	}
 	tests := []struct {
-		name        string
-		fields      fields
-		args        args
-		wantErr     bool
-		mockExpects func(f fields)
+		name    string
+		args    func(ctrl *gomock.Controller) args
+		want    ScoreOperationResult
+		wantErr bool
+		setup   func(a *args, ctx context.Context)
 	}{
 		{
-			name: "Successful score processing",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ProcessRoundScoresRequestPayload{
-					RoundID: "round1",
-					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
-					},
-				},
-			},
-			wantErr: false,
-			mockExpects: func(f fields) {
-				// Expect scores to be logged in the database
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), gomock.Eq("round1"), gomock.Any(), gomock.Eq("auto")).
-					DoAndReturn(func(ctx context.Context, roundID string, scores []scoredbtypes.Score, source string) error {
-						// You can add more specific validation for the 'scores' argument here if needed
-						return nil
-					}).Times(1)
+			name: "Successful operation",
+			args: func(ctrl *gomock.Controller) args {
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
 
-				// Expect a leaderboard update event to be published
-				f.EventBus.EXPECT().Publish(scoreevents.LeaderboardUpdateRequested, gomock.Any()).
-					DoAndReturn(func(eventName string, msg *message.Message) error {
-						if eventName != scoreevents.LeaderboardUpdateRequested {
-							return fmt.Errorf("unexpected event: %s", eventName)
-						}
-						// You can add more specific validation for the message payload here if needed
-						return nil
-					}).Times(1)
+				return args{
+					ctx:           context.Background(),
+					operationName: "TestOperation",
+					roundID:       testRoundID,
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
+						return ScoreOperationResult{Success: "test"}, nil
+					},
+					logger:  logger,
+					metrics: mockMetrics,
+					tracer:  tracer,
+				}
+			},
+			want:    ScoreOperationResult{Success: "test"},
+			wantErr: false,
+			setup: func(a *args, ctx context.Context) {
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger
+
+				// Mock metrics & logs
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Info("Operation succeeded", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 		{
-			name: "Database error during logging",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ProcessRoundScoresRequestPayload{
-					RoundID: "round1",
-					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
+			name: "Handles panic in service function",
+			args: func(ctrl *gomock.Controller) args {
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
+
+				return args{
+					ctx:           context.Background(),
+					operationName: "TestOperation",
+					roundID:       testRoundID,
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
+						panic("test panic") // Simulate a panic
 					},
-				},
+					logger:  logger,
+					metrics: mockMetrics,
+					tracer:  tracer,
+				}
 			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), gomock.Eq("round1"), gomock.Any(), gomock.Eq("auto")).
-					Return(fmt.Errorf("database error")).Times(1)
+			wantErr: true,
+			setup: func(a *args, ctx context.Context) {
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 		{
-			name: "Error publishing leaderboard update",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ProcessRoundScoresRequestPayload{
-					RoundID: "round1",
-					Scores: []scoreevents.ParticipantScore{
-						{DiscordID: "user1", TagNumber: 1234, Score: 95.0},
-						{DiscordID: "user2", TagNumber: 5678, Score: 90.0},
+			name: "Handles service function returning an error",
+			args: func(ctrl *gomock.Controller) args {
+				testHandler := loggerfrolfbot.NewTestHandler()
+				logger := slog.New(testHandler)
+				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
+				tracer := noop.NewTracerProvider().Tracer("test")
+
+				return args{
+					ctx:           context.Background(),
+					operationName: "TestOperation",
+					roundID:       testRoundID,
+					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
+						return ScoreOperationResult{}, fmt.Errorf("service error")
 					},
-				},
+					logger:  logger,
+					metrics: mockMetrics,
+					tracer:  tracer,
+				}
 			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), gomock.Eq("round1"), gomock.Any(), gomock.Eq("auto")).Return(nil).Times(1)
-				f.EventBus.EXPECT().Publish(scoreevents.LeaderboardUpdateRequested, gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
+			wantErr: true,
+			setup: func(a *args, ctx context.Context) {
+				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
+				mockLogger := a.logger
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
+				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
+				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &ScoreService{
-				ScoreDB:  tt.fields.ScoreDB,
-				EventBus: tt.fields.EventBus,
-				logger:   tt.fields.logger,
-			}
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields)
-			}
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-			if err := s.ProcessRoundScores(tt.args.ctx, tt.args.event); (err != nil) != tt.wantErr {
-				t.Errorf("ScoreService.ProcessRoundScores() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+			// Initialize args using fresh mock controller
+			testArgs := tt.args(ctrl)
 
-func TestScoreService_CorrectScore(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockScoreDB := scoredb.NewMockScoreDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	type fields struct {
-		ScoreDB   *scoredb.MockScoreDB
-		EventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
-	type args struct {
-		ctx   context.Context
-		event scoreevents.ScoreUpdateRequestPayload
-	}
-	tests := []struct {
-		name        string
-		fields      fields
-		args        args
-		wantErr     bool
-		mockExpects func(f fields)
-	}{
-		{
-			name: "Successful score correction",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "round1",
-					Participant: "user1",
-					Score:       func() *int { i := 95; return &i }(),
-					TagNumber:   1234,
-				},
-			},
-			wantErr: false,
-			mockExpects: func(f fields) {
-				// Expect the score to be updated/added in the database
-				f.ScoreDB.EXPECT().UpdateOrAddScore(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-
-				// Expect to fetch scores for the round
-				f.ScoreDB.EXPECT().GetScoresForRound(gomock.Any(), "round1").Return([]scoredbtypes.Score{
-					{DiscordID: "user1", RoundID: "round1", Score: 95, TagNumber: 1234},
-				}, nil).Times(1)
-
-				// Expect the updated scores to be logged
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), "round1", gomock.Any(), "manual").Return(nil).Times(1)
-
-				// Expect a leaderboard update event to be published
-				f.EventBus.EXPECT().Publish(scoreevents.LeaderboardUpdateRequested, gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Error updating/adding score",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "round1",
-					Participant: "user1",
-					Score:       func() *int { i := 95; return &i }(),
-					TagNumber:   1234,
-				},
-			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().UpdateOrAddScore(gomock.Any(), gomock.Any()).Return(fmt.Errorf("database error")).Times(1)
-			},
-		},
-		{
-			name: "Error fetching scores",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "round1",
-					Participant: "user1",
-					Score:       func() *int { i := 95; return &i }(),
-					TagNumber:   1234,
-				},
-			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().UpdateOrAddScore(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				f.ScoreDB.EXPECT().GetScoresForRound(gomock.Any(), "round1").Return(nil, fmt.Errorf("database error")).Times(1)
-			},
-		},
-		{
-			name: "Error logging updated scores",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "round1",
-					Participant: "user1",
-					Score:       func() *int { i := 95; return &i }(),
-					TagNumber:   1234,
-				},
-			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().UpdateOrAddScore(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				f.ScoreDB.EXPECT().GetScoresForRound(gomock.Any(), "round1").Return([]scoredbtypes.Score{}, nil).Times(1)
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), "round1", gomock.Any(), "manual").Return(fmt.Errorf("database error")).Times(1)
-			},
-		},
-		{
-			name: "Error publishing leaderboard update",
-			fields: fields{
-				ScoreDB:   mockScoreDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
-			},
-			args: args{
-				ctx: context.Background(),
-				event: scoreevents.ScoreUpdateRequestPayload{
-					RoundID:     "round1",
-					Participant: "user1",
-					Score:       func() *int { i := 95; return &i }(),
-					TagNumber:   1234,
-				},
-			},
-			wantErr: true, // Expecting an error
-			mockExpects: func(f fields) {
-				f.ScoreDB.EXPECT().UpdateOrAddScore(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				f.ScoreDB.EXPECT().GetScoresForRound(gomock.Any(), "round1").Return([]scoredbtypes.Score{}, nil).Times(1)
-				f.ScoreDB.EXPECT().LogScores(gomock.Any(), "round1", gomock.Any(), "manual").Return(nil).Times(1)
-				f.EventBus.EXPECT().Publish(scoreevents.LeaderboardUpdateRequested, gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &ScoreService{
-				ScoreDB:  tt.fields.ScoreDB,
-				EventBus: tt.fields.EventBus,
-				logger:   tt.fields.logger,
+			// Set up expectations
+			if tt.setup != nil {
+				tt.setup(&testArgs, testArgs.ctx)
 			}
 
-			if tt.mockExpects != nil {
-				tt.mockExpects(tt.fields)
+			// Run serviceWrapper
+			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.roundID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 
-			if err := s.CorrectScore(tt.args.ctx, tt.args.event); (err != nil) != tt.wantErr {
-				t.Errorf("ScoreService.CorrectScore() error = %v, wantErr %v", err, tt.wantErr)
+			if got.Success != tt.want.Success {
+				t.Errorf("serviceWrapper() Success = %v, want %v", got.Success, tt.want.Success)
+			}
+			if got.Failure != tt.want.Failure {
+				t.Errorf("serviceWrapper() Failure = %v, want %v", got.Failure, tt.want.Failure)
 			}
 		})
 	}

@@ -40,30 +40,32 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 	return m.recorder
 }
 
+// HandleCorrectScoreRequest mocks base method.
+func (m *MockHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleCorrectScoreRequest", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleCorrectScoreRequest indicates an expected call of HandleCorrectScoreRequest.
+func (mr *MockHandlersMockRecorder) HandleCorrectScoreRequest(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleCorrectScoreRequest), msg)
+}
+
 // HandleProcessRoundScoresRequest mocks base method.
-func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) error {
+func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleProcessRoundScoresRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // HandleProcessRoundScoresRequest indicates an expected call of HandleProcessRoundScoresRequest.
 func (mr *MockHandlersMockRecorder) HandleProcessRoundScoresRequest(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleProcessRoundScoresRequest", reflect.TypeOf((*MockHandlers)(nil).HandleProcessRoundScoresRequest), msg)
-}
-
-// HandleScoreUpdateRequest mocks base method.
-func (m *MockHandlers) HandleScoreUpdateRequest(msg *message.Message) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleScoreUpdateRequest", msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// HandleScoreUpdateRequest indicates an expected call of HandleScoreUpdateRequest.
-func (mr *MockHandlersMockRecorder) HandleScoreUpdateRequest(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScoreUpdateRequest", reflect.TypeOf((*MockHandlers)(nil).HandleScoreUpdateRequest), msg)
 }

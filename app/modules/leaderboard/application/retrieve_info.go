@@ -2,105 +2,271 @@ package leaderboardservice
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"fmt"
-	"strconv"
+	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
-// HandleGetLeaderboardRequest handles the GetLeaderboardRequest event.
-func (s *LeaderboardService) GetLeaderboardRequest(ctx context.Context, msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[leaderboardevents.GetLeaderboardRequestPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal GetLeaderboardRequestPayload: %w", err)
-	}
+// GetLeaderboard returns the active leaderboard.
+func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOperationResult, error) {
+	// Record leaderboard retrieval attempt
+	s.metrics.RecordLeaderboardGetAttempt(ctx, "LeaderboardService")
 
-	s.logger.Info("Handling GetLeaderboardRequest event", "correlation_id", correlationID)
+	s.logger.InfoContext(ctx, "Leaderboard retrieval triggered",
+		attr.ExtractCorrelationID(ctx))
 
-	// 1. Get the active leaderboard from the database.
-	leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-	if err != nil {
-		s.logger.Error("Failed to get active leaderboard", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
-	}
+	return s.serviceWrapper(ctx, "GetLeaderboard", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		// 1. Get the active leaderboard from the database.
+		dbStartTime := time.Now()
+		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
+		s.metrics.RecordLeaderboardGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
-	// 2. Prepare the response payload.
-	leaderboardEntries := make([]leaderboardevents.LeaderboardEntry, 0, len(leaderboard.LeaderboardData))
-	for tagNumber, discordID := range leaderboard.LeaderboardData {
-		leaderboardEntries = append(leaderboardEntries, leaderboardevents.LeaderboardEntry{
-			TagNumber: strconv.Itoa(tagNumber),
-			DiscordID: leaderboardtypes.DiscordID(discordID),
-		})
-	}
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",
+				attr.ExtractCorrelationID(ctx),
+				attr.Error(err))
 
-	responsePayload := leaderboardevents.GetLeaderboardResponsePayload{
-		Leaderboard: leaderboardEntries,
-	}
+			s.metrics.RecordLeaderboardGetFailure(ctx, "LeaderboardService")
 
-	// 3. Publish the GetLeaderboardResponse event.
-	return s.publishGetLeaderboardResponse(ctx, msg, responsePayload)
+			// If it's specifically the "no active leaderboard" error
+			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+				return LeaderboardOperationResult{
+					Failure: &leaderboardevents.GetLeaderboardFailedPayload{
+						Reason: err.Error(), // Use the error message directly
+					},
+				}, nil
+			}
+
+			// For other database errors, return both failure and error
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.GetLeaderboardFailedPayload{
+					Reason: "Database error when retrieving leaderboard",
+				},
+				Error: err,
+			}, err
+		}
+
+		// 2. Prepare the response payload.
+		leaderboardEntries := make([]leaderboardtypes.LeaderboardEntry, 0, len(leaderboard.LeaderboardData))
+		for _, entry := range leaderboard.LeaderboardData {
+			// Create a pointer to sharedtypes.TagNumber
+			tagNumPtr := entry.TagNumber
+			leaderboardEntries = append(leaderboardEntries, leaderboardtypes.LeaderboardEntry{
+				TagNumber: tagNumPtr,
+				UserID:    entry.UserID,
+			})
+		}
+
+		s.logger.InfoContext(ctx, "Successfully retrieved leaderboard",
+			attr.ExtractCorrelationID(ctx))
+
+		s.metrics.RecordLeaderboardGetSuccess(ctx, "LeaderboardService")
+
+		return LeaderboardOperationResult{
+			Success: &leaderboardevents.GetLeaderboardResponsePayload{
+				Leaderboard: leaderboardEntries,
+			},
+		}, nil
+	})
 }
 
-// publishGetLeaderboardResponse publishes a GetLeaderboardResponse event.
-func (s *LeaderboardService) publishGetLeaderboardResponse(_ context.Context, msg *message.Message, responsePayload leaderboardevents.GetLeaderboardResponsePayload) error {
-	payloadBytes, err := json.Marshal(responsePayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal GetLeaderboardResponsePayload: %w", err)
-	}
+func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sharedevents.RoundTagLookupRequestPayload) (LeaderboardOperationResult, error) {
+	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage)
+	s.logger.InfoContext(ctx, "Tag retrieval triggered for user (Round)",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("user_id", string(payload.UserID)),
+		attr.RoundID("round_id", payload.RoundID),
+		attr.String("original_response", string(payload.Response)),
+		attr.Any("original_joined_late", payload.JoinedLate),
+	)
 
-	if err := s.EventBus.Publish(leaderboardevents.GetLeaderboardResponse, newMessage); err != nil {
-		return fmt.Errorf("failed to publish GetLeaderboardResponse event: %w", err)
-	}
+	return s.serviceWrapper(ctx, "RoundGetTagByUserID", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		dbStartTime := time.Now()
+		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, payload.UserID)
+		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
+		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
-	return nil
+		resultPayload := sharedevents.RoundTagLookupResultPayload{
+			UserID:             payload.UserID,
+			RoundID:            payload.RoundID,
+			OriginalResponse:   payload.Response,
+			OriginalJoinedLate: payload.JoinedLate,
+		}
+
+		// Handle errors from the database call
+		if err != nil {
+			// Specific handling for no active leaderboard
+			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+				s.logger.ErrorContext(ctx, "Failed to get tag by UserID: No active leaderboard found (System Error)",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("user_id", string(payload.UserID)),
+					attr.Error(err),
+				)
+				s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
+
+				return LeaderboardOperationResult{
+					Failure: &sharedevents.RoundTagLookupFailedPayload{
+						UserID:  payload.UserID,
+						RoundID: payload.RoundID,
+						Reason:  "No active leaderboard found",
+					},
+				}, nil // Return nil standard error as this is a handled business error
+			}
+
+			// Specific handling for user not found (sql.ErrNoRows)
+			if errors.Is(err, sql.ErrNoRows) {
+				s.logger.InfoContext(ctx, "No tag found for user in active leaderboard data (Business Outcome - sql.ErrNoRows)",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("user_id", string(payload.UserID)),
+					attr.Error(err),
+				)
+				s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
+
+				resultPayload.TagNumber = nil
+				resultPayload.Found = false
+				resultPayload.Error = err.Error() // Set Error field with the actual error string
+
+				return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error as this is a handled business outcome
+			}
+
+			// General handling for any other unexpected database errors
+			s.logger.ErrorContext(ctx, "Failed to get tag by UserID due to unexpected DB error (Round)",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("user_id", string(payload.UserID)),
+				attr.Error(err),
+			)
+			s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
+
+			// Return the error in the result struct and as a standard error
+			return LeaderboardOperationResult{Error: fmt.Errorf("failed to get tag by UserID (Round): %w", err)}, fmt.Errorf("failed to get tag by UserID (Round): %w", err)
+		}
+
+		// Handle the case where err is nil, but tagNumber is also nil (should be treated as not found)
+		if tagNumber == nil {
+			s.logger.InfoContext(ctx, "No tag found for user in active leaderboard data (Business Outcome - nil tagNumber and nil error)",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("user_id", string(payload.UserID)),
+			)
+			s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
+
+			resultPayload.TagNumber = nil
+			resultPayload.Found = false
+			resultPayload.Error = "" // Error is empty string if nil tagNumber and nil error from DB
+
+			return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error as this is a handled business outcome
+		}
+
+		// Success path: err is nil and tagNumber is non-nil
+		s.logger.InfoContext(ctx, "Retrieved tag number for user (Round)",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("user_id", string(payload.UserID)),
+			attr.Any("tag_number", *tagNumber), // Log the dereferenced tag number
+		)
+		s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
+
+		tagValue := sharedtypes.TagNumber(*tagNumber)
+		resultPayload.TagNumber = &tagValue
+		resultPayload.Found = true
+		resultPayload.Error = ""
+
+		return LeaderboardOperationResult{Success: &resultPayload}, nil // Return nil standard error on success
+	})
 }
 
-// HandleGetTagByDiscordIDRequest handles the GetTagByDiscordIDRequest event.
-func (s *LeaderboardService) GetTagByDiscordIDRequest(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.GetTagByDiscordIDRequestPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal GetTagByDiscordIDRequestPayload: %w", err)
-	}
+// GetTagByUserID returns the tag number for a given user ID.
+// This method is used by handlers that need a simple tag lookup result.
+// It now accepts a TagNumberRequestPayload struct.
+func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error) {
+	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
-	s.logger.Info("Handling GetTagByDiscordIDRequest event", "correlation_id", correlationID)
+	s.logger.InfoContext(ctx, "Tag retrieval triggered for user",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("user_id", string(userID)),
+	)
 
-	// 1. Get the tag number from the database.
-	tagNumber, err := s.LeaderboardDB.GetTagByDiscordID(ctx, string(eventPayload.DiscordID))
-	if err != nil {
-		s.logger.Error("Failed to get tag by Discord ID", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to get tag by Discord ID: %w", err)
-	}
+	return s.serviceWrapper(ctx, "GetTagByUserID", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		dbStartTime := time.Now()
+		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, userID)
+		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
+		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
-	// 2. Prepare the response payload.
-	responsePayload := leaderboardevents.GetTagByDiscordIDResponsePayload{
-		TagNumber: tagNumber,
-	}
+		if err != nil {
+			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+				s.logger.ErrorContext(ctx, "Failed to get tag by UserID: No active leaderboard found (System Error)",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("user_id", string(userID)),
+					attr.Error(err),
+				)
+				s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
 
-	// 3. Publish the GetTagByDiscordIDResponse event.
-	return s.publishGetTagByDiscordIDResponse(ctx, msg, responsePayload)
-}
+				// Use the same pattern as RoundGetTagByUserID, returning a failure payload
+				return LeaderboardOperationResult{
+					Failure: &sharedevents.DiscordTagLookupByUserIDFailedPayload{
+						UserID: userID,
+						Reason: "No active leaderboard found",
+					},
+				}, nil
+			}
 
-// publishGetTagByDiscordIDResponse publishes a GetTagByDiscordIDResponse event.
-func (s *LeaderboardService) publishGetTagByDiscordIDResponse(_ context.Context, msg *message.Message, responsePayload leaderboardevents.GetTagByDiscordIDResponsePayload) error {
-	payloadBytes, err := json.Marshal(responsePayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal GetTagByDiscordIDResponsePayload: %w", err)
-	}
+			if errors.Is(err, sql.ErrNoRows) {
+				s.logger.InfoContext(ctx, "No tag found for user",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("user_id", string(userID)),
+				)
 
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	s.eventUtil.PropagateMetadata(msg, newMessage)
+				s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
 
-	if err := s.EventBus.Publish(leaderboardevents.GetTagByDiscordIDResponse, newMessage); err != nil {
-		return fmt.Errorf("failed to publish GetTagByDiscordIDResponse event: %w", err)
-	}
+				return LeaderboardOperationResult{
+					Success: &sharedevents.DiscordTagLookupResultPayload{
+						TagNumber: nil,
+						UserID:    userID,
+						Found:     false,
+					},
+				}, nil
+			}
 
-	return nil
+			s.logger.ErrorContext(ctx, "Failed to get tag by UserID due to unexpected DB error",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("user_id", string(userID)),
+				attr.Error(err),
+			)
+
+			s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
+
+			return LeaderboardOperationResult{
+				Error: fmt.Errorf("failed to get tag by UserID: %w", err),
+			}, nil
+		}
+
+		var tagPtr *sharedtypes.TagNumber
+		if tagNumber != nil {
+			tagValue := sharedtypes.TagNumber(*tagNumber)
+			tagPtr = &tagValue
+		}
+
+		s.logger.InfoContext(ctx, "Retrieved tag number",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("user_id", string(userID)),
+			attr.String("tag_number", fmt.Sprintf("%v", tagPtr)))
+
+		s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
+
+		return LeaderboardOperationResult{
+			Success: &sharedevents.DiscordTagLookupResultPayload{
+				TagNumber: tagPtr,
+				UserID:    userID,
+				Found:     tagPtr != nil,
+			},
+		}, nil
+	})
 }

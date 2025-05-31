@@ -3,73 +3,97 @@ package score
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	scorerouter "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Module represents the score module.
 type Module struct {
-	EventBus     eventbus.EventBus
-	ScoreService scoreservice.Service
-	logger       *slog.Logger
-	config       *config.Config
-	ScoreRouter  *scorerouter.ScoreRouter
-	cancelFunc   context.CancelFunc
+	EventBus           eventbus.EventBus
+	ScoreService       scoreservice.Service
+	config             *config.Config
+	ScoreRouter        *scorerouter.ScoreRouter
+	cancelFunc         context.CancelFunc
+	Helper             utils.Helpers
+	observability      observability.Observability
+	prometheusRegistry *prometheus.Registry
 }
 
-func NewScoreModule(ctx context.Context, cfg *config.Config, logger *slog.Logger, scoreDB scoredb.ScoreDB, eventBus eventbus.EventBus, router *message.Router) (*Module, error) {
-	logger.Info("score.NewScoreModule called")
+// NewScoreModule creates a new instance of the Score module.
+func NewScoreModule(
+	ctx context.Context,
+	cfg *config.Config,
+	obs observability.Observability,
+	scoreDB scoredb.ScoreDB,
+	eventBus eventbus.EventBus,
+	router *message.Router,
+	helpers utils.Helpers,
+	routerCtx context.Context,
+) (*Module, error) {
+	logger := obs.Provider.Logger
+	metrics := obs.Registry.ScoreMetrics
+	tracer := obs.Registry.Tracer
 
-	// Initialize score service.
-	scoreService := scoreservice.NewScoreService(eventBus, scoreDB, logger)
+	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer)
 
-	// Initialize score router.
-	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus)
+	// Prometheus registry can be created here or passed in if it's a shared registry
+	prometheusRegistry := prometheus.NewRegistry()
 
-	// Configure the router with the score service.
-	if err := scoreRouter.Configure(scoreService); err != nil {
+	// Create the ScoreRouter instance, passing the externally created router
+	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
+
+	// Configure the ScoreRouter
+	if err := scoreRouter.Configure(routerCtx, scoreService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure score router: %w", err)
 	}
 
 	module := &Module{
-		EventBus:     eventBus,
-		ScoreService: scoreService,
-		logger:       logger,
-		config:       cfg,
-		ScoreRouter:  scoreRouter, // Set the ScoreRouter
+		EventBus:           eventBus,
+		ScoreService:       scoreService,
+		config:             cfg,
+		ScoreRouter:        scoreRouter,
+		Helper:             helpers,
+		observability:      obs,
+		prometheusRegistry: prometheusRegistry,
 	}
 
 	return module, nil
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	m.logger.Info("Starting score module")
-
-	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
 	defer cancel()
 
-	// Keep this goroutine alive until the context is canceled
+	if wg != nil {
+		defer wg.Done()
+	}
+
 	<-ctx.Done()
-	m.logger.Info("Score module goroutine stopped")
 }
 
 func (m *Module) Close() error {
-	m.logger.Info("Stopping score module")
+	logger := m.observability.Provider.Logger
 
-	// Cancel any other running operations
+	// Closing the module should trigger the ScoreRouter's close
+	if m.ScoreRouter != nil {
+		if err := m.ScoreRouter.Close(); err != nil {
+			logger.Error("Error closing ScoreRouter from module", "error", err)
+			return fmt.Errorf("error closing ScoreRouter: %w", err)
+		}
+	}
+
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	m.logger.Info("Score module stopped")
 	return nil
 }

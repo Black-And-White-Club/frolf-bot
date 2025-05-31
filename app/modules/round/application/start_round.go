@@ -2,118 +2,81 @@ package roundservice
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// ProcessRoundStart handles the start of a round, updates participant data, updates DB, and publishes necessary events.
-func (s *RoundService) ProcessRoundStart(msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundStartedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal payload: %w", err)
-	}
+// ProcessRoundStart handles the start of a round, updates participant data, updates DB, and notifies Discord.
+func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ProcessRoundStart", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		s.logger.InfoContext(ctx, "Processing round start",
+			attr.RoundID("round_id", payload.RoundID),
+		)
 
-	s.logger.Info("Processing round start", "round_id", eventPayload.RoundID)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	round, err := s.RoundDB.GetRound(ctx, eventPayload.RoundID)
-	if err != nil {
-		return fmt.Errorf("failed to get round from database: %w", err)
-	}
-
-	round = s.transformParticipants(round)
-	round.State = roundtypes.RoundStateInProgress
-
-	if err := s.RoundDB.UpdateRound(ctx, round.ID, round); err != nil {
-		return fmt.Errorf("failed to update round: %w", err)
-	}
-
-	if err := s.EventBus.Publish(roundevents.RoundStarted, msg); err != nil {
-		return fmt.Errorf("failed to publish round.started event: %w", err)
-	}
-
-	discordPayload, err := s.createDiscordPayload(eventPayload, round)
-	if err != nil {
-		return fmt.Errorf("failed to create Discord payload: %w", err)
-	}
-
-	discordMsg := message.NewMessage(watermill.NewUUID(), discordPayload)
-	discordMsg.Metadata.Set("correlationID", eventPayload.RoundID)
-
-	if err := s.EventBus.Publish(roundevents.DiscordEventsSubject, discordMsg); err != nil {
-		return fmt.Errorf("failed to publish to discord.round.event: %w", err)
-	}
-
-	stateUpdatedPayload := roundevents.RoundStateUpdatedPayload{
-		RoundID: eventPayload.RoundID,
-		State:   round.State,
-	}
-
-	stateUpdatedPayloadBytes, err := json.Marshal(stateUpdatedPayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal RoundStateUpdatedPayload: %w", err)
-	}
-
-	stateUpdatedMsg := message.NewMessage(watermill.NewUUID(), stateUpdatedPayloadBytes)
-	stateUpdatedMsg.Metadata.Set("correlationID", eventPayload.RoundID)
-
-	if err := s.EventBus.Publish(roundevents.RoundStateUpdated, stateUpdatedMsg); err != nil {
-		return fmt.Errorf("failed to publish round.state.updated event: %w", err)
-	}
-
-	s.logger.Info("Round start processed and published to Discord", "round_id", eventPayload.RoundID)
-	return nil
-}
-
-// transformParticipants initializes each participant's score to 0 and retains existing details.
-func (s *RoundService) transformParticipants(round *roundtypes.Round) *roundtypes.Round {
-	updatedParticipants := make([]roundtypes.RoundParticipant, 0, len(round.Participants))
-	for _, participant := range round.Participants {
-		transformedParticipant := roundtypes.RoundParticipant{
-			DiscordID: participant.DiscordID,
-			Response:  participant.Response,
-			TagNumber: participant.TagNumber, // Include the tag number (even if 0)
+		// Fetch the round from DB
+		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to get round from database",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Error(err),
+			)
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayload{
+					RoundID: payload.RoundID,
+					Error:   err.Error(),
+				},
+			}, nil
 		}
 
-		zero := 0                            // Initialize zero
-		transformedParticipant.Score = &zero // Assign to Score
-		updatedParticipants = append(updatedParticipants, transformedParticipant)
-	}
-	round.Participants = updatedParticipants
-	return round
-}
+		// Update the round state to "in progress"
+		round.State = roundtypes.RoundStateInProgress
 
-// createDiscordPayload constructs the payload to send to the Discord bot.
-func (s *RoundService) createDiscordPayload(eventPayload roundevents.RoundStartedPayload, round *roundtypes.Round) ([]byte, error) {
-	discordParticipants := make([]roundevents.DiscordRoundParticipant, 0, len(round.Participants))
-	for _, p := range round.Participants {
-		discordParticipants = append(discordParticipants, roundevents.DiscordRoundParticipant{
-			DiscordID: p.DiscordID,
-			TagNumber: p.TagNumber,
-			Score:     p.Score,
-		})
-	}
+		if err := s.RoundDB.UpdateRound(ctx, round.ID, round); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to update round",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Error(err),
+			)
+			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayload{
+					RoundID: payload.RoundID,
+					Error:   err.Error(),
+				},
+			}, nil
+		}
 
-	discordPayload := roundevents.DiscordRoundStartPayload{
-		RoundID:      eventPayload.RoundID,
-		Title:        eventPayload.Title,
-		Location:     eventPayload.Location,
-		StartTime:    eventPayload.StartTime,
-		Participants: discordParticipants,
-	}
+		// Convert []roundtypes.Participant to []roundevents.RoundParticipant
+		participants := make([]roundevents.RoundParticipant, len(round.Participants))
+		for i, p := range round.Participants {
+			participants[i] = roundevents.RoundParticipant{
+				UserID:    sharedtypes.DiscordID(p.UserID),
+				TagNumber: p.TagNumber,
+				Response:  roundtypes.Response(p.Response),
+				Score:     p.Score,
+			}
+		}
 
-	discordPayloadBytes, err := json.Marshal(discordPayload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DiscordRoundStartPayload: %w", err)
-	}
-	return discordPayloadBytes, nil
+		// Use the payload data for the Discord event (not the DB data)
+		discordPayload := &roundevents.DiscordRoundStartPayload{
+			RoundID:        round.ID,
+			Title:          payload.Title,        // Use payload title
+			Location:       payload.Location,     // Use payload location
+			StartTime:      payload.StartTime,    // Use payload start time
+			Participants:   participants,         // Use DB participants (current state)
+			EventMessageID: round.EventMessageID, // Use DB event message ID
+		}
+
+		s.logger.InfoContext(ctx, "Round start processed",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Int("participant_count", len(participants)),
+		)
+
+		return RoundOperationResult{
+			Success: discordPayload,
+		}, nil
+	})
 }

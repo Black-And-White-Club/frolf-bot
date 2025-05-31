@@ -1,67 +1,160 @@
 package userhandlers
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // HandleTagAvailable handles the TagAvailable event.
-func (h *UserHandlers) HandleTagAvailable(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.TagAvailablePayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAvailablePayload: %w", err)
-	}
+func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleTagAvailable",
+		&userevents.TagAvailablePayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagAvailablePayload := payload.(*userevents.TagAvailablePayload)
 
-	h.logger.Info("HandleTagAvailable triggered",
-		slog.String("correlation_id", correlationID),
-		slog.String("message_id", msg.UUID),
-	) // Add this log
+			userID := tagAvailablePayload.UserID
+			tagNumber := tagAvailablePayload.TagNumber
 
-	h.logger.Info("Received TagAvailable event",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.DiscordID)),
-		slog.Int("tag_number", payload.TagNumber),
+			h.logger.InfoContext(ctx, "Received TagAvailable event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(userID)),
+				attr.Int("tag_number", int(tagNumber)),
+			)
+
+			ctx, span := h.tracer.Start(ctx, "CreateUserWithTag")
+			defer span.End()
+
+			result, err := h.userService.CreateUser(ctx, userID, &tagNumber)
+
+			if result.Failure != nil {
+				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				if !ok {
+					span.RecordError(errors.New("unexpected type for failure payload"))
+					return nil, errors.New("unexpected type for failure payload")
+				}
+
+				h.logger.InfoContext(ctx, "User creation failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+					attr.String("reason", failedPayload.Reason),
+				)
+
+				failureMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					failedPayload,
+					userevents.UserCreationFailed,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create failure message: %w", err)
+				}
+
+				h.metrics.RecordUserCreationFailure(ctx, failedPayload.Reason, "user_already_exists")
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			// Now check for service error after handling any failure payload
+			if err != nil {
+				span.RecordError(err)
+				h.logger.ErrorContext(ctx, "Failed to call CreateUser service",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to create user with tag: %w", err)
+			}
+
+			if result.Success != nil {
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				if !ok {
+					span.RecordError(errors.New("unexpected type for success payload"))
+					return nil, errors.New("unexpected type for success payload")
+				}
+
+				h.logger.InfoContext(ctx, "User creation with tag succeeded",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+					attr.Int("tag_number", int(tagNumber)),
+				)
+
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					successPayload,
+					userevents.UserCreated,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				h.metrics.RecordUserCreationSuccess(ctx, string(successPayload.UserID), "discord")
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			h.logger.WarnContext(ctx, "CreateUser returned no success or failure payload when error was nil",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(userID)),
+			)
+			return nil, errors.New("user creation service returned unexpected result")
+		},
 	)
 
-	// Call the service function to create the user
-	if err := h.userService.CreateUser(msg.Context(), msg, payload.DiscordID, &payload.TagNumber); err != nil {
-		h.logger.Error("Failed to create user",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-
-	h.logger.Info("TagAvailable event processed", slog.String("correlation_id", correlationID))
-	return nil
+	return wrappedHandler(msg)
 }
 
 // HandleTagUnavailable handles the TagUnavailable event.
-func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.TagUnavailablePayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagUnavailablePayload: %w", err)
-	}
+func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleTagUnavailable",
+		&userevents.TagUnavailablePayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			tagUnavailablePayload := payload.(*userevents.TagUnavailablePayload)
 
-	h.logger.Info("Received TagUnavailable event",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.DiscordID)),
-		slog.Int("tag_number", payload.TagNumber),
+			// Create convenient variables for frequently used fields
+			userID := tagUnavailablePayload.UserID
+			tagNumber := tagUnavailablePayload.TagNumber
+
+			h.logger.InfoContext(ctx, "Received TagUnavailable event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(userID)),
+				attr.Int("tag_number", int(tagNumber)),
+			)
+
+			// Create the UserCreationFailed payload directly in the handler
+			failedPayload := &userevents.UserCreationFailedPayload{
+				UserID:    userID,
+				TagNumber: &tagNumber,
+				Reason:    "tag not available",
+			}
+
+			// Trace message creation
+			ctx, span := h.tracer.Start(ctx, "CreateResultMessage")
+			defer span.End()
+
+			// Create message to publish the UserCreationFailed event
+			failedMsg, err := h.helpers.CreateResultMessage(msg, failedPayload, userevents.UserCreationFailed)
+			if err != nil {
+				span.RecordError(err)
+				return nil, fmt.Errorf("failed to create UserCreationFailed message: %w", err)
+			}
+
+			h.logger.InfoContext(ctx, "TagUnavailable event processed", attr.CorrelationIDFromMsg(msg))
+			// Record the failure metric
+			h.metrics.RecordTagAvailabilityCheck(ctx, false, tagNumber)
+
+			// Record handler success metric
+
+			return []*message.Message{failedMsg}, nil
+		},
 	)
 
-	// Call the service function to handle the tag unavailability
-	if err := h.userService.TagUnavailable(msg.Context(), msg, payload.TagNumber, payload.DiscordID); err != nil {
-		h.logger.Error("Failed to handle TagUnavailable",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle TagUnavailable: %w", err)
-	}
-
-	h.logger.Info("TagUnavailable event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }

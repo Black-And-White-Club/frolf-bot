@@ -2,108 +2,76 @@ package leaderboardservice
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
-	"github.com/google/uuid"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 )
 
-// TagAvailabilityCheckRequested handles the TagAvailabilityCheckRequested event.
-func (s *LeaderboardService) TagAvailabilityCheckRequested(ctx context.Context, msg *message.Message) error {
-	correlationID, eventPayload, err := eventutil.UnmarshalPayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](msg, s.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal TagAvailabilityCheckRequestedPayload: %w", err)
-	}
-
-	s.logger.Info("Handling TagAvailabilityCheckRequested event",
-		"correlation_id", correlationID,
-		"user_id", eventPayload.DiscordID,
-		"tag_number", eventPayload.TagNumber,
-	)
-
-	// Get the active leaderboard
-	activeLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
-	if err != nil {
-		s.logger.Error("Failed to get active leaderboard", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to get active leaderboard: %w", err)
-	}
-
-	s.logger.Info("Active Leaderboard Data", slog.Any("leaderboard_data", activeLeaderboard.LeaderboardData)) // Log the leaderboard data
-
-	// Check tag availability.
-	isAvailable, err := s.LeaderboardDB.CheckTagAvailability(ctx, eventPayload.TagNumber)
-
-	if err != nil {
-		s.logger.Error("Failed to check tag availability", "error", err, "correlation_id", correlationID)
-		return fmt.Errorf("failed to check tag availability: %w", err)
-	}
-
-	s.logger.Info("Result of CheckTagAvailability", slog.Bool("is_available", isAvailable)) // Log the result
-
-	// If tag is available, publish TagAssignmentRequested.
-	if isAvailable { // This branch should be taken when the tag is available
-		assignmentID := uuid.NewString() // Generate a unique ID for the assignment
-		s.logger.Info("Tag is available, publishing TagAssignmentRequested event",
-			"correlation_id", correlationID,
-			"tag_number", eventPayload.TagNumber,
-			"assignment_id", assignmentID,
+// CheckTagAvailability checks the availability of a tag in the database.
+func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		s.logger.InfoContext(ctx, "Checking tag availability",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("user_id", string(payload.UserID)),
+			attr.String("tag_number", payload.TagNumber.String()),
 		)
 
-		if err := s.publishTagAssignmentRequested(ctx, msg, eventPayload.DiscordID, eventPayload.TagNumber, assignmentID); err != nil {
-			return fmt.Errorf("failed to publish TagAssignmentRequested event: %w", err)
+		available, err := s.LeaderboardDB.CheckTagAvailability(ctx, *payload.TagNumber)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to check tag availability",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("user_id", string(payload.UserID)),
+				attr.String("tag_number", payload.TagNumber.String()),
+				attr.Error(err),
+			)
+
+			s.metrics.RecordTagAvailabilityCheck(ctx, false, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
+
+			return LeaderboardOperationResult{
+				Failure: &leaderboardevents.TagAvailabilityCheckFailedPayload{
+					UserID:    payload.UserID,
+					TagNumber: payload.TagNumber,
+					Reason:    "failed to check tag availability",
+				},
+			}, err
 		}
-	} else { // This branch should be taken when the tag is NOT available
-		// Publish TagUnavailable to notify User module.
-		s.logger.Info("Tag is not available, publishing TagUnavailable event",
-			"correlation_id", correlationID,
-			"tag_number", eventPayload.TagNumber,
+
+		s.logger.InfoContext(ctx, "Tag availability check result",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("user_id", string(payload.UserID)),
+			attr.String("tag_number", payload.TagNumber.String()),
+			attr.Bool("is_available", available),
 		)
 
-		if err := s.publishTagUnavailable(ctx, msg, eventPayload.TagNumber, eventPayload.DiscordID, "Tag is already assigned"); err != nil {
-			return fmt.Errorf("failed to publish TagUnavailable event: %w", err)
+		s.metrics.RecordTagAvailabilityCheck(ctx, available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
+
+		return LeaderboardOperationResult{
+			Success: &leaderboardevents.TagAvailabilityCheckResultPayload{
+				UserID:    payload.UserID,
+				TagNumber: payload.TagNumber,
+				Available: available,
+			},
+		}, nil
+	})
+	if err != nil {
+		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayload)
+		if !ok {
+			failurePayload = &leaderboardevents.TagAvailabilityCheckFailedPayload{
+				UserID:    payload.UserID,
+				TagNumber: payload.TagNumber,
+				Reason:    "unexpected error format",
+			}
+		}
+		return nil, failurePayload, err
+	}
+
+	successPayload, ok := result.Success.(*leaderboardevents.TagAvailabilityCheckResultPayload)
+	if !ok {
+		successPayload = &leaderboardevents.TagAvailabilityCheckResultPayload{
+			UserID:    payload.UserID,
+			TagNumber: payload.TagNumber,
+			Available: false,
 		}
 	}
-
-	return nil
-}
-
-// publishTagAssigned publishes a TagAssigned event.
-func (s *LeaderboardService) publishTagAssigned(_ context.Context, msg *message.Message, tagNumber int, discordID leaderboardtypes.DiscordID, assignmentID string) error {
-	eventPayload := &leaderboardevents.TagAssignedPayload{
-		DiscordID:    discordID,
-		TagNumber:    tagNumber,
-		AssignmentID: assignmentID,
-	}
-
-	// Publish the event to the LeaderboardStreamName.
-	return s.publishEvent(msg, leaderboardevents.TagAssigned, eventPayload)
-}
-
-// publishTagAvailable publishes a TagAvailable event to the User module.
-func (s *LeaderboardService) PublishTagAvailable(ctx context.Context, msg *message.Message, payload *leaderboardevents.TagAssignedPayload) error {
-	// Construct the payload for the user.tag.available event
-	eventPayload := &leaderboardevents.TagAvailablePayload{
-		DiscordID: leaderboardtypes.DiscordID(payload.DiscordID),
-		TagNumber: payload.TagNumber,
-	}
-
-	// Publish the new message to the user.tag.available topic
-	if err := s.publishEvent(msg, leaderboardevents.TagAvailable, eventPayload); err != nil {
-		s.logger.Error("Failed to publish TagAvailable event to user stream",
-			"error", err,
-			"correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-		)
-		return fmt.Errorf("failed to publish TagAvailable event to user stream: %w", err)
-	}
-
-	s.logger.Info("Successfully republished TagAvailable event to user stream",
-		"correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-	)
-
-	return nil
+	return successPayload, nil, nil
 }

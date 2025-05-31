@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,10 +42,10 @@ func (m *MockScoreDB) EXPECT() *MockScoreDBMockRecorder {
 }
 
 // GetScoresForRound mocks base method.
-func (m *MockScoreDB) GetScoresForRound(ctx context.Context, roundID string) ([]scoredb.Score, error) {
+func (m *MockScoreDB) GetScoresForRound(ctx context.Context, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetScoresForRound", ctx, roundID)
-	ret0, _ := ret[0].([]scoredb.Score)
+	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -57,7 +57,7 @@ func (mr *MockScoreDBMockRecorder) GetScoresForRound(ctx, roundID any) *gomock.C
 }
 
 // LogScores mocks base method.
-func (m *MockScoreDB) LogScores(ctx context.Context, roundID string, scores []scoredb.Score, source string) error {
+func (m *MockScoreDB) LogScores(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LogScores", ctx, roundID, scores, source)
 	ret0, _ := ret[0].(error)
@@ -71,29 +71,29 @@ func (mr *MockScoreDBMockRecorder) LogScores(ctx, roundID, scores, source any) *
 }
 
 // UpdateOrAddScore mocks base method.
-func (m *MockScoreDB) UpdateOrAddScore(ctx context.Context, score *scoredb.Score) error {
+func (m *MockScoreDB) UpdateOrAddScore(ctx context.Context, roundID sharedtypes.RoundID, scoreInfo sharedtypes.ScoreInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateOrAddScore", ctx, score)
+	ret := m.ctrl.Call(m, "UpdateOrAddScore", ctx, roundID, scoreInfo)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateOrAddScore indicates an expected call of UpdateOrAddScore.
-func (mr *MockScoreDBMockRecorder) UpdateOrAddScore(ctx, score any) *gomock.Call {
+func (mr *MockScoreDBMockRecorder) UpdateOrAddScore(ctx, roundID, scoreInfo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrAddScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateOrAddScore), ctx, score)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrAddScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateOrAddScore), ctx, roundID, scoreInfo)
 }
 
 // UpdateScore mocks base method.
-func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID, discordID string, newScore int) error {
+func (m *MockScoreDB) UpdateScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScore", ctx, roundID, discordID, newScore)
+	ret := m.ctrl.Call(m, "UpdateScore", ctx, roundID, userID, newScore)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateScore indicates an expected call of UpdateScore.
-func (mr *MockScoreDBMockRecorder) UpdateScore(ctx, roundID, discordID, newScore any) *gomock.Call {
+func (mr *MockScoreDBMockRecorder) UpdateScore(ctx, roundID, userID, newScore any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateScore), ctx, roundID, discordID, newScore)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateScore), ctx, roundID, userID, newScore)
 }

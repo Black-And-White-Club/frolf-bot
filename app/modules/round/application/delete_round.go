@@ -5,82 +5,144 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot/app/shared/logging"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 )
 
-// -- Service Functions for DeleteRound Flow --
-
 // ValidateRoundDeleteRequest validates the round delete request.
-func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteRequestPayload](msg, s.logger)
-	if err != nil {
-		return s.publishRoundDeleteError(msg, eventPayload, fmt.Errorf("invalid payload: %w", err))
-	}
+func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ValidateRoundDeleteRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &payload,
+					Error:              "round ID cannot be zero",
+				},
+			}, nil
+		}
 
-	if eventPayload.RoundID == "" {
-		err := fmt.Errorf("round ID cannot be empty")
-		return s.publishRoundDeleteError(msg, eventPayload, err)
-	}
+		if payload.RequestingUserUserID == "" {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &payload,
+					Error:              "requesting user's Discord ID cannot be empty",
+				},
+			}, nil
+		}
 
-	if eventPayload.RequestingUserDiscordID == "" {
-		err := fmt.Errorf("requesting user's Discord ID cannot be empty")
-		return s.publishRoundDeleteError(msg, eventPayload, err)
-	}
+		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Round not found for delete request",
+				attr.String("round_id", payload.RoundID.String()),
+				attr.String("requesting_user", string(payload.RequestingUserUserID)),
+				attr.Error(err),
+			)
+			return RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &payload,
+					Error:              fmt.Sprintf("round not found: %v", err),
+				},
+			}, nil
+		}
 
-	// If validation passes, publish a "round.delete.validated" event
-	if err := s.publishEvent(msg, roundevents.RoundDeleteValidated, roundevents.RoundDeleteValidatedPayload{
-		RoundDeleteRequestPayload: eventPayload,
-	}); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.delete.validated event", map[string]interface{}{"error": err.Error()})
-		return fmt.Errorf("failed to publish round.delete.validated event: %w", err)
-	}
+		if round.CreatedBy != payload.RequestingUserUserID {
+			s.logger.WarnContext(ctx, "Unauthorized delete request",
+				attr.String("round_id", payload.RoundID.String()),
+				attr.String("requesting_user", string(payload.RequestingUserUserID)),
+				attr.String("round_created_by", string(round.CreatedBy)),
+			)
+			return RoundOperationResult{
+				Failure: &roundevents.RoundDeleteErrorPayload{
+					RoundDeleteRequest: &payload,
+					Error:              "unauthorized: only the round creator can delete the round",
+				},
+			}, nil
+		}
 
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round delete request validated", map[string]interface{}{"round_id": eventPayload.RoundID})
-	return nil
+		s.logger.InfoContext(ctx, "Round delete request validated",
+			attr.String("round_id", payload.RoundID.String()),
+			attr.String("requesting_user", string(payload.RequestingUserUserID)),
+		)
+
+		return RoundOperationResult{
+			Success: &roundevents.RoundDeleteValidatedPayload{
+				RoundDeleteRequestPayload: payload,
+			},
+		}, nil
+	})
 }
 
-// DeleteRound deletes the round from the database.
-func (s *RoundService) DeleteRound(ctx context.Context, msg *message.Message) error {
-	_, eventPayload, err := eventutil.UnmarshalPayload[roundevents.RoundDeleteAuthorizedPayload](msg, s.logger)
+func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (RoundOperationResult, error) {
+	if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+		s.logger.ErrorContext(ctx, "Cannot delete round with nil UUID")
+		return RoundOperationResult{
+			Failure: &roundevents.RoundDeleteErrorPayload{
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+					RoundID: payload.RoundID,
+				},
+				Error: "round ID cannot be nil",
+			},
+		}, nil
+	}
+
+	s.logger.InfoContext(ctx, "DeleteRound service called",
+		attr.RoundID("round_id", payload.RoundID),
+	)
+
+	_, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 	if err != nil {
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{}, fmt.Errorf("invalid payload: %w", err))
+		s.logger.WarnContext(ctx, "Cannot delete non-existent round",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Error(err),
+		)
+		return RoundOperationResult{
+			Failure: &roundevents.RoundDeleteErrorPayload{
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+					RoundID: payload.RoundID,
+				},
+				Error: fmt.Sprintf("round not found: %v", err),
+			},
+		}, nil
 	}
 
-	if err := s.RoundDB.DeleteRound(ctx, eventPayload.RoundID); err != nil {
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
+	// Delete the round from the database
+	if err := s.RoundDB.DeleteRound(ctx, payload.RoundID); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to delete round from DB",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Error(err),
+		)
+		return RoundOperationResult{
+			Failure: &roundevents.RoundDeleteErrorPayload{
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+					RoundID: payload.RoundID,
+				},
+				Error: fmt.Sprintf("failed to delete round from database: %v", err),
+			},
+		}, nil
 	}
 
-	if err := s.EventBus.CancelScheduledMessage(ctx, eventPayload.RoundID); err != nil {
-		s.logger.Error("Failed to cancel scheduled messages", "error", err)
-		return s.publishRoundDeleteError(msg, roundevents.RoundDeleteRequestPayload{RoundID: eventPayload.RoundID}, err)
+	s.logger.InfoContext(ctx, "Round deleted from DB", attr.RoundID("round_id", payload.RoundID))
+
+	// Attempt to cancel any scheduled messages
+	if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
+		s.logger.WarnContext(ctx, "Failed to cancel scheduled message",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Error(err),
+		)
+	} else {
+		s.logger.InfoContext(ctx, "Scheduled message cancellation attempted", attr.RoundID("round_id", payload.RoundID))
 	}
 
-	// If publishing `round.deleted` fails, return the error immediately
-	if err := s.publishEvent(msg, roundevents.RoundDeleted, roundevents.RoundDeletedPayload(eventPayload)); err != nil {
-		logging.LogErrorWithMetadata(ctx, s.logger, msg, "Failed to publish round.deleted event", map[string]interface{}{"error": err.Error()})
-		return fmt.Errorf("failed to publish round.deleted event: %w", err) // ✅ Ensure error is returned
+	s.logger.InfoContext(ctx, "Round deletion service process successful (Discord message ID expected in metadata)",
+		attr.RoundID("round_id", payload.RoundID),
+	)
+
+	successPayload := &roundevents.RoundDeletedPayload{
+		RoundID: payload.RoundID,
 	}
 
-	// Success message should only be logged if everything succeeds
-	logging.LogInfoWithMetadata(ctx, s.logger, msg, "Round deleted from database and scheduled messages canceled", map[string]interface{}{"round_id": eventPayload.RoundID})
-	return nil
-}
-
-// publishRoundDeleteError publishes a round.delete.error event with details.
-func (s *RoundService) publishRoundDeleteError(msg *message.Message, input roundevents.RoundDeleteRequestPayload, err error) error {
-	payload := roundevents.RoundDeleteErrorPayload{
-		CorrelationID:      middleware.MessageCorrelationID(msg),
-		RoundDeleteRequest: &input,
-		Error:              err.Error(),
-	}
-
-	if pubErr := s.publishEvent(msg, roundevents.RoundDeleteError, payload); pubErr != nil {
-		s.logger.Error("Failed to publish round.delete.error event", "error", pubErr)
-		return fmt.Errorf("failed to publish round.delete.error event: %w", pubErr)
-	}
-
-	return err
+	return RoundOperationResult{
+		Success: successPayload,
+	}, nil
 }

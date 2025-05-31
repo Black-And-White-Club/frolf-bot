@@ -3,21 +3,28 @@ package rounddb
 
 import (
 	"time"
+
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/uptrace/bun"
 )
 
-// Round represents a single round in the tournament.// Round represents a single round in the tournament.
+// Round represents a single round in the tournament.
 type Round struct {
-	ID             string        `bun:"id,pk,autoincrement"`
-	Title          string        `bun:"title,notnull"`
-	Location       string        `bun:"location"`
-	EventType      *string       `bun:"event_type"`
-	StartTime      time.Time     `bun:"start_time,notnull"`
-	EndTime        *time.Time    `bun:"end_time"`
-	Finalized      bool          `bun:"finalized,notnull"`
-	CreatorID      string        `bun:"discord_id,notnull"`
-	State          RoundState    `bun:"state,notnull"`
-	Participants   []Participant `bun:"participants,type:jsonb"`
-	DiscordEventID string        `bun:"discord_event_id"`
+	bun.BaseModel  `bun:"table:rounds,alias:r"`
+	ID             sharedtypes.RoundID      `bun:"id,pk,type:uuid"`
+	Title          roundtypes.Title         `bun:"title,notnull"`
+	Description    roundtypes.Description   `bun:"description,nullzero"`
+	Location       roundtypes.Location      `bun:"location,nullzero"`
+	EventType      *roundtypes.EventType    `bun:"event_type,default:'casual'"`
+	StartTime      sharedtypes.StartTime    `bun:"start_time,notnull"`
+	Finalized      roundtypes.Finalized     `bun:"finalized,notnull"`
+	CreatedBy      sharedtypes.DiscordID    `bun:"created_by,notnull"`
+	State          roundtypes.RoundState    `bun:"state,notnull"`
+	Participants   []roundtypes.Participant `bun:"participants,type:jsonb"`
+	EventMessageID string                   `bun:"event_message_id,nullzero"`
+	CreatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
+	UpdatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
 }
 
 // Response represents the possible responses for a participant.
@@ -43,8 +50,8 @@ const (
 
 // Participant represents a user participating in a round.
 type Participant struct {
-	DiscordID string   `json:"user_id"`
-	TagNumber *int     `json:"tag_number"`
-	Response  Response `json:"response"`
-	Score     *int     `json:"score"`
+	UserID    sharedtypes.DiscordID  `json:"user_id"`
+	TagNumber *sharedtypes.TagNumber `json:"tag_number"`
+	Response  Response               `json:"response"`
+	Score     *sharedtypes.Score     `json:"score"`
 }

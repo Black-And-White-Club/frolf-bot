@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -56,46 +56,46 @@ func (mr *MockUserDBMockRecorder) CreateUser(ctx, user any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockUserDB)(nil).CreateUser), ctx, user)
 }
 
-// GetUserByDiscordID mocks base method.
-func (m *MockUserDB) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*userdb.User, error) {
+// GetUserByUserID mocks base method.
+func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*userdb.User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserByDiscordID", ctx, discordID)
+	ret := m.ctrl.Call(m, "GetUserByUserID", ctx, userID)
 	ret0, _ := ret[0].(*userdb.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetUserByDiscordID indicates an expected call of GetUserByDiscordID.
-func (mr *MockUserDBMockRecorder) GetUserByDiscordID(ctx, discordID any) *gomock.Call {
+// GetUserByUserID indicates an expected call of GetUserByUserID.
+func (mr *MockUserDBMockRecorder) GetUserByUserID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByDiscordID", reflect.TypeOf((*MockUserDB)(nil).GetUserByDiscordID), ctx, discordID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByUserID", reflect.TypeOf((*MockUserDB)(nil).GetUserByUserID), ctx, userID)
 }
 
 // GetUserRole mocks base method.
-func (m *MockUserDB) GetUserRole(ctx context.Context, discordID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
+func (m *MockUserDB) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (sharedtypes.UserRoleEnum, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserRole", ctx, discordID)
-	ret0, _ := ret[0].(usertypes.UserRoleEnum)
+	ret := m.ctrl.Call(m, "GetUserRole", ctx, userID)
+	ret0, _ := ret[0].(sharedtypes.UserRoleEnum)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetUserRole indicates an expected call of GetUserRole.
-func (mr *MockUserDBMockRecorder) GetUserRole(ctx, discordID any) *gomock.Call {
+func (mr *MockUserDBMockRecorder) GetUserRole(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRole", reflect.TypeOf((*MockUserDB)(nil).GetUserRole), ctx, discordID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRole", reflect.TypeOf((*MockUserDB)(nil).GetUserRole), ctx, userID)
 }
 
 // UpdateUserRole mocks base method.
-func (m *MockUserDB) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
+func (m *MockUserDB) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, role sharedtypes.UserRoleEnum) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUserRole", ctx, discordID, role)
+	ret := m.ctrl.Call(m, "UpdateUserRole", ctx, userID, role)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateUserRole indicates an expected call of UpdateUserRole.
-func (mr *MockUserDBMockRecorder) UpdateUserRole(ctx, discordID, role any) *gomock.Call {
+func (mr *MockUserDBMockRecorder) UpdateUserRole(ctx, userID, role any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRole", reflect.TypeOf((*MockUserDB)(nil).UpdateUserRole), ctx, discordID, role)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserRole", reflect.TypeOf((*MockUserDB)(nil).UpdateUserRole), ctx, userID, role)
 }

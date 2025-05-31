@@ -6,13 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
-var (
-	ErrUserNotFound = errors.New("user not found")
-)
+var ErrUserNotFound = errors.New("user not found")
 
 // UserDB is a repository for user data operations.
 type UserDBImpl struct {
@@ -25,7 +23,7 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback() // Rollback is safe to call even if tx is committed
+	defer tx.Rollback()
 
 	_, err = tx.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
@@ -40,7 +38,7 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 }
 
 // UpdateUserRole updates the role of an existing user within a transaction.
-func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.DiscordID, role usertypes.UserRoleEnum) error {
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, role sharedtypes.UserRoleEnum) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -51,13 +49,27 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.Di
 		return fmt.Errorf("invalid user role: %s", role)
 	}
 
-	_, err = tx.NewUpdate().
+	// Execute the update query and get the result
+	result, err := tx.NewUpdate().
 		Model((*User)(nil)).
 		Set("role = ?", role).
-		Where("discord_id = ?", discordID).
+		Where("user_id = ?", userID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update user role: %w", err)
+		// Handle errors during query execution
+		return fmt.Errorf("failed to execute update user role query: %w", err)
+	}
+
+	// Check the number of rows affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		// Handle error getting rows affected
+		return fmt.Errorf("failed to get rows affected after update: %w", err)
+	}
+
+	// If no rows were affected, the user was not found
+	if rowsAffected == 0 {
+		return ErrUserNotFound
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -67,10 +79,10 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, discordID usertypes.Di
 	return nil
 }
 
-// GetUserByDiscordID retrieves a user by their Discord ID.
-func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertypes.DiscordID) (*User, error) {
+// GetUserByUserID retrieves a user by their Discord ID.
+func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*User, error) {
 	user := &User{}
-	err := db.DB.NewSelect().Model(user).Where("discord_id = ?", discordID).Scan(ctx)
+	err := db.DB.NewSelect().Model(user).Where("user_id = ?", userID).Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrUserNotFound // Now returning a specific error
@@ -81,12 +93,12 @@ func (db *UserDBImpl) GetUserByDiscordID(ctx context.Context, discordID usertype
 }
 
 // GetUserRole retrieves the role of a user by their Discord ID.
-func (db *UserDBImpl) GetUserRole(ctx context.Context, discordID usertypes.DiscordID) (usertypes.UserRoleEnum, error) {
+func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (sharedtypes.UserRoleEnum, error) {
 	user := &User{}
 	err := db.DB.NewSelect().
 		Model(user).
 		Column("role").
-		Where("discord_id = ?", discordID).
+		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {

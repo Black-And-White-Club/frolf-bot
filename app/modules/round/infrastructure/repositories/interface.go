@@ -2,24 +2,30 @@ package rounddb
 
 import (
 	"context"
-	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/uptrace/bun"
 )
 
-// RoundDB is the interface for interacting with the rounds database.
+// RoundDBInterface is the interface for interacting with the rounds database.
 type RoundDB interface {
-	GetParticipantsWithResponses(ctx context.Context, roundID string, responses ...roundtypes.Response) ([]roundtypes.RoundParticipant, error)
 	CreateRound(ctx context.Context, round *roundtypes.Round) error
-	GetRound(ctx context.Context, roundID string) (*roundtypes.Round, error)
-	GetRoundState(ctx context.Context, roundID string) (roundtypes.RoundState, error)
-	UpdateRound(ctx context.Context, roundID string, round *roundtypes.Round) error
-	DeleteRound(ctx context.Context, roundID string) error
+	GetRound(ctx context.Context, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
+	UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) error
+	DeleteRound(ctx context.Context, roundID sharedtypes.RoundID) error
+	UpdateParticipant(ctx context.Context, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error)
+	UpdateRoundState(ctx context.Context, roundID sharedtypes.RoundID, state roundtypes.RoundState) error
+	GetUpcomingRounds(ctx context.Context) ([]*roundtypes.Round, error)
+	UpdateParticipantScore(ctx context.Context, roundID sharedtypes.RoundID, participantID sharedtypes.DiscordID, score sharedtypes.Score) error
+	GetParticipantsWithResponses(ctx context.Context, roundID sharedtypes.RoundID, responses ...string) ([]roundtypes.Participant, error)
+	GetRoundState(ctx context.Context, roundID sharedtypes.RoundID) (roundtypes.RoundState, error)
 	LogRound(ctx context.Context, round *roundtypes.Round) error
-	UpdateParticipant(ctx context.Context, roundID string, participant roundtypes.RoundParticipant) error
-	UpdateRoundState(ctx context.Context, roundID string, state roundtypes.RoundState) error
-	GetUpcomingRounds(ctx context.Context, now, oneHourFromNow time.Time) ([]*roundtypes.Round, error)
-	UpdateParticipantScore(ctx context.Context, roundID string, participantID string, score int) error
-	GetParticipants(ctx context.Context, roundID string) ([]roundtypes.RoundParticipant, error)
-	UpdateDiscordEventID(ctx context.Context, roundID string, discordEventID string) error
+	GetParticipants(ctx context.Context, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error)
+	UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error)
+	GetParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error)
+	RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error)
+	GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error)
+	UpdateRoundsAndParticipants(ctx context.Context, updates []roundtypes.RoundUpdate) error
+	TagUpdates(ctx context.Context, bun bun.IDB, round *roundtypes.Round) error
 }

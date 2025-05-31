@@ -1,4 +1,3 @@
-// db/bundb/bundb.go
 package bundb
 
 import (
@@ -19,10 +18,10 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB        *userdb.UserDBImpl
-	RoundDB       *rounddb.RoundDBImpl
-	ScoreDB       *scoredb.ScoreDBImpl
-	LeaderboardDB *leaderboarddb.LeaderboardDBImpl
+	UserDB        userdb.UserDB
+	RoundDB       rounddb.RoundDB
+	ScoreDB       scoredb.ScoreDB
+	LeaderboardDB leaderboarddb.LeaderboardDB
 	db            *bun.DB
 }
 
@@ -42,39 +41,54 @@ func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService
 	}
 
 	db := bunDB(sqldb)
+	return newDBServiceWithDB(db)
+}
+
+// NewTestDBService creates a new DBService with the provided bun.DB instance
+// This is useful for integration tests where we inject a test database
+func NewTestDBService(db *bun.DB) (*DBService, error) {
+	return newDBServiceWithDB(db)
+}
+
+// newDBServiceWithDB is a helper function to create a DBService with a provided bun.DB
+func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 	if db == nil {
-		log.Println("NewBunDBService - bunDB returned nil")
-		return nil, fmt.Errorf("failed to initialize bun.DB")
+		log.Println("newDBServiceWithDB - received nil db")
+		return nil, fmt.Errorf("failed to initialize: nil db provided")
 	}
 
-	dbService := &DBService{
-		UserDB:  &userdb.UserDBImpl{DB: db},
-		RoundDB: &rounddb.RoundDBImpl{DB: db},
-		// ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
-		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
-		db:            db,
-	}
-
-	log.Printf("NewBunDBService - DBService initialized: %+v", dbService)
-
-	log.Println("NewBunDBService - Registering models")
-	// Use the correct model types from their respective modules
+	// Register models
+	log.Println("newDBServiceWithDB - Registering models")
 	db.RegisterModel(&userdb.User{})
 	db.RegisterModel(&rounddb.Round{})
 	db.RegisterModel(&scoredb.Score{})
 	db.RegisterModel(&leaderboarddb.Leaderboard{})
-	log.Println("NewBunDBService - Models registered successfully")
+	log.Println("newDBServiceWithDB - Models registered successfully")
 
+	dbService := &DBService{
+		UserDB:        &userdb.UserDBImpl{DB: db},
+		RoundDB:       &rounddb.RoundDBImpl{DB: db},
+		ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
+		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
+		db:            db,
+	}
+
+	log.Printf("newDBServiceWithDB - DBService initialized: %+v", dbService)
 	return dbService, nil
 }
 
-// bunDB returns a new bun.DB for given sql.DB connection pool.
-func bunDB(sqldb *sql.DB) *bun.DB {
-	db := bun.NewDB(sqldb, pgdialect.New())
-	return db
+// BunDB returns a new bun.DB for given sql.DB connection pool - exported for testing
+func BunDB(sqlDB *sql.DB) *bun.DB {
+	return bun.NewDB(sqlDB, pgdialect.New())
 }
 
-func pgConn(dsn string) (*sql.DB, error) {
+// Internal version for regular use
+func bunDB(sqldb *sql.DB) *bun.DB {
+	return BunDB(sqldb)
+}
+
+// PgConn creates a new SQL DB connection - exported for testing
+func PgConn(dsn string) (*sql.DB, error) {
 	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
 
 	if err := sqldb.Ping(); err != nil {
@@ -82,4 +96,9 @@ func pgConn(dsn string) (*sql.DB, error) {
 	}
 
 	return sqldb, nil
+}
+
+// Internal version for regular use
+func pgConn(dsn string) (*sql.DB, error) {
+	return PgConn(dsn)
 }

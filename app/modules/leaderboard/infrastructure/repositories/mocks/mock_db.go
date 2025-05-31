@@ -13,7 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain/types"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,21 +44,36 @@ func (m *MockLeaderboardDB) EXPECT() *MockLeaderboardDBMockRecorder {
 }
 
 // AssignTag mocks base method.
-func (m *MockLeaderboardDB) AssignTag(ctx context.Context, discordID leaderboardtypes.DiscordID, tagNumber int, source leaderboarddb.ServiceUpdateTagSource, updateID string) error {
+func (m *MockLeaderboardDB) AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source string, requestUpdateID sharedtypes.RoundID, requestingUserID sharedtypes.DiscordID) (sharedtypes.RoundID, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AssignTag", ctx, discordID, tagNumber, source, updateID)
+	ret := m.ctrl.Call(m, "AssignTag", ctx, userID, tagNumber, source, requestUpdateID, requestingUserID)
+	ret0, _ := ret[0].(sharedtypes.RoundID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AssignTag indicates an expected call of AssignTag.
+func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, userID, tagNumber, source, requestUpdateID, requestingUserID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignTag", reflect.TypeOf((*MockLeaderboardDB)(nil).AssignTag), ctx, userID, tagNumber, source, requestUpdateID, requestingUserID)
+}
+
+// BatchAssignTags mocks base method.
+func (m *MockLeaderboardDB) BatchAssignTags(ctx context.Context, assignments []leaderboarddb.TagAssignment, source sharedtypes.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchAssignTags", ctx, assignments, source, updateID, userID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AssignTag indicates an expected call of AssignTag.
-func (mr *MockLeaderboardDBMockRecorder) AssignTag(ctx, discordID, tagNumber, source, updateID any) *gomock.Call {
+// BatchAssignTags indicates an expected call of BatchAssignTags.
+func (mr *MockLeaderboardDBMockRecorder) BatchAssignTags(ctx, assignments, source, updateID, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignTag", reflect.TypeOf((*MockLeaderboardDB)(nil).AssignTag), ctx, discordID, tagNumber, source, updateID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchAssignTags", reflect.TypeOf((*MockLeaderboardDB)(nil).BatchAssignTags), ctx, assignments, source, updateID, userID)
 }
 
 // CheckTagAvailability mocks base method.
-func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, tagNumber int) (bool, error) {
+func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, tagNumber sharedtypes.TagNumber) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, tagNumber)
 	ret0, _ := ret[0].(bool)
@@ -115,23 +131,23 @@ func (mr *MockLeaderboardDBMockRecorder) GetActiveLeaderboard(ctx any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).GetActiveLeaderboard), ctx)
 }
 
-// GetTagByDiscordID mocks base method.
-func (m *MockLeaderboardDB) GetTagByDiscordID(ctx context.Context, discordID string) (int, error) {
+// GetTagByUserID mocks base method.
+func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTagByDiscordID", ctx, discordID)
-	ret0, _ := ret[0].(int)
+	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, userID)
+	ret0, _ := ret[0].(*sharedtypes.TagNumber)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTagByDiscordID indicates an expected call of GetTagByDiscordID.
-func (mr *MockLeaderboardDBMockRecorder) GetTagByDiscordID(ctx, discordID any) *gomock.Call {
+// GetTagByUserID indicates an expected call of GetTagByUserID.
+func (mr *MockLeaderboardDBMockRecorder) GetTagByUserID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByDiscordID", reflect.TypeOf((*MockLeaderboardDB)(nil).GetTagByDiscordID), ctx, discordID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockLeaderboardDB)(nil).GetTagByUserID), ctx, userID)
 }
 
 // SwapTags mocks base method.
-func (m *MockLeaderboardDB) SwapTags(ctx context.Context, requestorID, targetID string) error {
+func (m *MockLeaderboardDB) SwapTags(ctx context.Context, requestorID, targetID sharedtypes.DiscordID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SwapTags", ctx, requestorID, targetID)
 	ret0, _ := ret[0].(error)
@@ -145,7 +161,7 @@ func (mr *MockLeaderboardDBMockRecorder) SwapTags(ctx, requestorID, targetID any
 }
 
 // UpdateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData map[int]string, scoreUpdateID string) error {
+func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, scoreUpdateID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, leaderboardData, scoreUpdateID)
 	ret0, _ := ret[0].(error)

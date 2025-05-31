@@ -3,15 +3,19 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
+
+	obs "github.com/Black-And-White-Club/frolf-bot-shared/observability"
 )
 
 // Config struct to hold the configuration settings
 type Config struct {
-	Postgres PostgresConfig `yaml:"postgres"`
-	NATS     NATSConfig     `yaml:"nats"`
-	// Discord  DiscordConfig  `yaml:"discord"`
+	Postgres      PostgresConfig      `yaml:"postgres"`
+	NATS          NATSConfig          `yaml:"nats"`
+	Observability ObservabilityConfig `yaml:"observability"`
+	// Discord     DiscordConfig      `yaml:"discord"`
 	// ... other configuration fields ...
 }
 
@@ -23,6 +27,17 @@ type PostgresConfig struct {
 // NATSConfig holds NATS configuration.
 type NATSConfig struct {
 	URL string `yaml:"url"`
+}
+
+// ObservabilityConfig holds configuration for observability components
+type ObservabilityConfig struct {
+	LokiURL         string  `yaml:"loki_url"`
+	LokiTenantID    string  `yaml:"loki_tenant_id"`
+	MetricsAddress  string  `yaml:"metrics_address"`
+	TempoEndpoint   string  `yaml:"tempo_endpoint"`
+	TempoInsecure   bool    `yaml:"tempo_insecure"`
+	TempoSampleRate float64 `yaml:"tempo_sample_rate"`
+	Environment     string  `yaml:"environment"`
 }
 
 // DiscordConfig holds Discord configuration.
@@ -66,6 +81,37 @@ func loadConfigFromEnv() (*Config, error) {
 		return nil, fmt.Errorf("NATS_URL environment variable not set")
 	}
 
+	// Load Observability settings
+	cfg.Observability.LokiURL = os.Getenv("LOKI_URL")
+	cfg.Observability.LokiTenantID = os.Getenv("LOKI_TENANT_ID")
+	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS")
+	if cfg.Observability.MetricsAddress == "" {
+		return nil, fmt.Errorf("METRICS_ADDRESS environment variable not set")
+	}
+	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")
+	if cfg.Observability.TempoEndpoint == "" {
+		return nil, fmt.Errorf("TEMPO_ENDPOINT environment variable not set")
+	}
+	cfg.Observability.Environment = os.Getenv("ENV")
+	tempoInsecure := os.Getenv("TEMPO_INSECURE")
+	if tempoInsecure == "" {
+		cfg.Observability.TempoInsecure = false // Default value
+	} else {
+		cfg.Observability.TempoInsecure = tempoInsecure == "true"
+	}
+
+	tempoSampleRate := os.Getenv("TEMPO_SAMPLE_RATE")
+	if tempoSampleRate == "" {
+		cfg.Observability.TempoSampleRate = 0.1 // Default value
+	} else {
+		// Convert tempoSampleRate to float64
+		var err error
+		cfg.Observability.TempoSampleRate, err = strconv.ParseFloat(tempoSampleRate, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TEMPO_SAMPLE_RATE value: %v", err)
+		}
+	}
+
 	// Load Discord token
 	// cfg.Discord.Token = os.Getenv("DISCORD_TOKEN")
 	// if cfg.Discord.Token == "" {
@@ -73,4 +119,17 @@ func loadConfigFromEnv() (*Config, error) {
 	// }
 
 	return &cfg, nil
+}
+
+func ToObsConfig(appCfg *Config) obs.Config {
+	return obs.Config{
+		ServiceName:     "frolf-bot", // Or dynamic from app build
+		Environment:     appCfg.Observability.Environment,
+		Version:         "1.2.3", // Could inject via `ldflags`
+		LokiURL:         appCfg.Observability.LokiURL,
+		MetricsAddress:  appCfg.Observability.MetricsAddress,
+		TempoEndpoint:   appCfg.Observability.TempoEndpoint,
+		TempoInsecure:   appCfg.Observability.TempoInsecure,
+		TempoSampleRate: appCfg.Observability.TempoSampleRate,
+	}
 }

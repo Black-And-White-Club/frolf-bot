@@ -1,120 +1,266 @@
 package roundhandlers
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func (h *RoundHandlers) HandleRoundCreateRequest(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundCreateRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundCreateRequestPayload: %w", err)
-	}
+// HandleCreateRoundRequest handles the CreateRoundRequest event.
+func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleCreateRoundRequest",
+		&roundevents.CreateRoundRequestedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			createRoundRequestedPayload := payload.(*roundevents.CreateRoundRequestedPayload)
 
-	h.logger.Info("Received RoundCreateRequest event",
-		slog.String("correlation_id", correlationID),
+			h.logger.InfoContext(ctx, "Received CreateRoundRequest event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("title", string(createRoundRequestedPayload.Title)),
+				attr.String("description", string(createRoundRequestedPayload.Description)),
+				attr.String("location", string(createRoundRequestedPayload.Location)),
+				attr.String("start_time", string(createRoundRequestedPayload.StartTime)),
+				attr.String("user_id", string(createRoundRequestedPayload.UserID)),
+			)
+
+			// Call the service function to handle the event
+			result, err := h.roundService.ValidateAndProcessRound(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser())
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle CreateRoundRequest event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("failed to handle CreateRoundRequest event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Create round request failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.RoundValidationFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Create round request successful", attr.CorrelationIDFromMsg(msg))
+
+				// Create success message to publish
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.RoundEntityCreated,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			// If neither Failure nor Success is set, return an error
+			h.logger.ErrorContext(ctx, "Unexpected result from ValidateAndProcessRound service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
 	)
 
-	if err := h.RoundService.ValidateRoundRequest(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundCreateRequest event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundCreateRequest event: %w", err)
-	}
-
-	h.logger.Info("RoundCreateRequest event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }
 
-func (h *RoundHandlers) HandleRoundValidated(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundValidatedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundValidatedPayload: %w", err)
-	}
+// HandleRoundEntityCreated handles the RoundEntityCreated event.
+func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleRoundEntityCreated",
+		&roundevents.RoundEntityCreatedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			roundEntityCreatedPayload := payload.(*roundevents.RoundEntityCreatedPayload)
 
-	h.logger.Info("Received RoundValidated event",
-		slog.String("correlation_id", correlationID),
+			h.logger.InfoContext(ctx, "Received RoundEntityCreated event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("round_id", roundEntityCreatedPayload.Round.ID.String()),
+				attr.String("title", string(roundEntityCreatedPayload.Round.Title)),
+				attr.String("description", string(*roundEntityCreatedPayload.Round.Description)),
+				attr.String("location", string(*roundEntityCreatedPayload.Round.Location)),
+				attr.Time("start_time", roundEntityCreatedPayload.Round.StartTime.AsTime()),
+				attr.String("user_id", string(roundEntityCreatedPayload.Round.CreatedBy)),
+			)
+
+			// Call the service function to handle the event
+			result, err := h.roundService.StoreRound(ctx, *roundEntityCreatedPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle RoundEntityCreated event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("failed to handle RoundEntityCreated event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Store round failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Create failure message
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.RoundCreationFailed,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Store round successful", attr.CorrelationIDFromMsg(msg))
+
+				// Create success message to publish
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.RoundCreated,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			// If neither Failure nor Success is set, return an error
+			h.logger.ErrorContext(ctx, "Unexpected result from StoreRound service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
 	)
 
-	if err := h.RoundService.StoreRound(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundValidated event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundValidated event: %w", err)
-	}
-
-	h.logger.Info("RoundValidated event processed", slog.String("correlation_id", correlationID))
-	return nil
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
 }
 
-func (h *RoundHandlers) HandleRoundStored(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundStoredPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundStoredPayload: %w", err)
-	}
+func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([]*message.Message, error) {
+	// Use the handlerWrapper for consistent logging, tracing, and error handling
+	return h.handlerWrapper(
+		"HandleRoundEventMessageIDUpdate",          // Operation name for logging/tracing
+		&roundevents.RoundMessageIDUpdatePayload{}, // Expected payload type for unmarshalling
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			// Assert the unmarshalled payload to the correct type
+			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Received unexpected payload type for RoundEventMessageIDUpdate",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("payload_type", fmt.Sprintf("%T", payload)),
+				)
+				return nil, errors.New("unexpected payload type")
+			}
 
-	h.logger.Info("Received RoundStored event",
-		slog.String("correlation_id", correlationID),
-	)
+			roundID := updatePayload.RoundID
 
-	if err := h.RoundService.ScheduleRoundEvents(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundStored event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundStored event: %w", err)
-	}
+			h.logger.InfoContext(ctx, "Received RoundEventMessageIDUpdate event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+			)
 
-	h.logger.Info("RoundStored event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
+			// Extract the Discord message ID from the message metadata
+			discordMessageID, ok := msg.Metadata["discord_message_id"]
+			if !ok || discordMessageID == "" {
+				h.logger.ErrorContext(ctx, "Discord message ID not found or empty in metadata",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+				)
+				return nil, errors.New("discord message ID not found in metadata")
+			}
 
-func (h *RoundHandlers) HandleRoundScheduled(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundScheduledPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundScheduledPayload: %w", err)
-	}
+			// 1. Update the round in the database with the Discord message ID
+			// Call the service method which now returns the updated round object
+			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, roundID, discordMessageID)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to update round with Discord message ID via service",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+					attr.String("discord_message_id", discordMessageID),
+					attr.Error(err),
+				)
+				// Return the error so Watermill retries the message
+				return nil, fmt.Errorf("failed to update round message ID: %w", err)
+			}
 
-	h.logger.Info("Received RoundScheduled event",
-		slog.String("correlation_id", correlationID),
-	)
+			// Check if the updatedRound is nil (e.g., if UpdateRoundMessageID didn't find the round)
+			if updatedRound == nil {
+				h.logger.ErrorContext(ctx, "Updated round object is nil after UpdateRoundMessageID service call",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+				)
+				// This might indicate a deeper issue or a race condition, handle appropriately
+				return nil, errors.New("updated round object is nil")
+			}
 
-	if err := h.RoundService.PublishRoundCreated(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundScheduled event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundScheduled event: %w", err)
-	}
+			h.logger.InfoContext(ctx, "Successfully updated round with Discord message ID in DB",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+				attr.String("discord_message_id", discordMessageID),
+			)
 
-	h.logger.Info("RoundScheduled event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
+			// 2. Construct the RoundScheduledPayload using the updated round object
+			scheduledPayload := roundevents.RoundScheduledPayload{
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:     updatedRound.ID,
+					Title:       updatedRound.Title,
+					Description: updatedRound.Description,
+					Location:    updatedRound.Location,
+					StartTime:   updatedRound.StartTime,
+					UserID:      updatedRound.CreatedBy,
+				},
+				EventMessageID: discordMessageID, // Use the Discord message ID from metadata
+			}
 
-func (h *RoundHandlers) HandleUpdateDiscordEventID(msg *message.Message) error {
-	correlationID, _, err := eventutil.UnmarshalPayload[roundevents.RoundEventCreatedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundEventCreatedPayload: %w", err)
-	}
+			// 3. Publish the RoundScheduled event
+			// This event will be consumed by the (now refactored) ScheduleRoundEvents function
+			scheduledMsg, err := h.helpers.CreateResultMessage(
+				msg, // Use the original message for metadata propagation (like correlation ID)
+				scheduledPayload,
+				roundevents.RoundEventMessageIDUpdated,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to create RoundScheduled message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundID),
+					attr.Error(err),
+				)
+				// Return the error so Watermill retries the message
+				return nil, fmt.Errorf("failed to create RoundScheduled message: %w", err)
+			}
 
-	h.logger.Info("Received RoundEventCreated event",
-		slog.String("correlation_id", correlationID),
-	)
+			h.logger.InfoContext(ctx, "Successfully published RoundScheduled event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundID),
+			)
 
-	if err := h.RoundService.UpdateDiscordEventID(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundEventCreated event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundEventCreated event: %w", err)
-	}
-
-	h.logger.Info("RoundEventCreated event processed", slog.String("correlation_id", correlationID))
-	return nil
+			// Return the message to be published
+			return []*message.Message{scheduledMsg}, nil
+		},
+	)(msg) // Execute the wrapped handler with the incoming message
 }

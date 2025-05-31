@@ -5,46 +5,29 @@ import (
 )
 
 type Handlers interface {
-	// Create Round
-	HandleRoundCreateRequest(msg *message.Message) error
-	HandleRoundValidated(msg *message.Message) error
-	HandleRoundStored(msg *message.Message) error
-	HandleRoundScheduled(msg *message.Message) error
-	HandleUpdateDiscordEventID(msg *message.Message) error
-
-	// Update Round
-	HandleRoundUpdateRequest(msg *message.Message) error
-	HandleRoundUpdateValidated(msg *message.Message) error
-	HandleRoundFetched(msg *message.Message) error
-	HandleRoundEntityUpdated(msg *message.Message) error
-	HandleRoundScheduleUpdate(msg *message.Message) error
-
-	// Delete Round
-	HandleRoundDeleteRequest(msg *message.Message) error
-	HandleRoundDeleteValidated(msg *message.Message) error
-	HandleRoundToDeleteFetched(msg *message.Message) error
-	HandleRoundUserRoleCheckResult(msg *message.Message) error
-	HandleRoundDeleteAuthorized(msg *message.Message) error
-
-	// Start Round
-	HandleRoundStarted(msg *message.Message) error
-	HandleRoundReminder(msg *message.Message) error
-	HandleScheduleRoundEvents(msg *message.Message) error
-
-	// Join Round
-	HandleRoundParticipantJoinRequest(msg *message.Message) error
-	HandleRoundParticipantJoinValidated(msg *message.Message) error
-	HandleRoundTagNumberFound(msg *message.Message) error
-	HandleRoundTagNumberNotFound(msg *message.Message) error
-
-	// Score Round
-	HandleRoundScoreUpdateRequest(msg *message.Message) error
-	HandleRoundScoreUpdateValidated(msg *message.Message) error
-	HandleRoundParticipantScoreUpdated(msg *message.Message) error
-	HandleRoundAllScoresSubmitted(msg *message.Message) error
-	HandleRoundFinalized(msg *message.Message) error
-
-	// Tag Retrieval
-	HandleRoundTagNumberRequest(msg *message.Message) error
-	HandleLeaderboardGetTagNumberResponse(msg *message.Message) error
+	HandleRoundStarted(msg *message.Message) ([]*message.Message, error)
+	HandleRoundUpdateRequest(msg *message.Message) ([]*message.Message, error)
+	HandleRoundUpdateValidated(msg *message.Message) ([]*message.Message, error)
+	HandleAllScoresSubmitted(msg *message.Message) ([]*message.Message, error)
+	HandleRoundFinalized(msg *message.Message) ([]*message.Message, error)
+	HandleGetRoundRequest(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantJoinRequest(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantJoinValidationRequest(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantRemovalRequest(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantScoreUpdated(msg *message.Message) ([]*message.Message, error)
+	HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error)
+	HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error)
+	HandleCreateRoundRequest(msg *message.Message) ([]*message.Message, error)
+	HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error)
+	HandleScoreUpdateValidated(msg *message.Message) ([]*message.Message, error)
+	HandleRoundScheduleUpdate(msg *message.Message) ([]*message.Message, error)
+	HandleDiscordMessageIDUpdated(msg *message.Message) ([]*message.Message, error)
+	HandleRoundEventMessageIDUpdate(msg *message.Message) ([]*message.Message, error)
+	HandleRoundReminder(msg *message.Message) ([]*message.Message, error)
+	HandleScheduledRoundTagUpdate(msg *message.Message) ([]*message.Message, error)
+	HandleTagNumberFound(msg *message.Message) ([]*message.Message, error)
+	HandleTagNumberNotFound(msg *message.Message) ([]*message.Message, error)
+	HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantDeclined(msg *message.Message) ([]*message.Message, error)
+	HandleParticipantStatusUpdateRequest(msg *message.Message) ([]*message.Message, error)
 }

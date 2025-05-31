@@ -1,94 +1,120 @@
 package roundservice
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
-	"runtime"
-
 	"log/slog"
+	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/errors"
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RoundService handles round-related logic.
 type RoundService struct {
 	RoundDB        rounddb.RoundDB
-	EventBus       eventbus.EventBus
 	logger         *slog.Logger
-	eventUtil      eventutil.EventUtil
+	metrics        roundmetrics.RoundMetrics
+	tracer         trace.Tracer
 	roundValidator roundutil.RoundValidator
-	ErrorReporter  errors.ErrorReporterInterface
+	EventBus       eventbus.EventBus
+	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error)
 }
 
 // NewRoundService creates a new RoundService.
-func NewRoundService(db rounddb.RoundDB, eventBus eventbus.EventBus, logger *slog.Logger, errorReporter errors.ErrorReporterInterface) Service {
+func NewRoundService(
+	db rounddb.RoundDB,
+	logger *slog.Logger,
+	metrics roundmetrics.RoundMetrics,
+	tracer trace.Tracer,
+	eventBus eventbus.EventBus,
+) Service {
 	return &RoundService{
 		RoundDB:        db,
-		EventBus:       eventBus,
 		logger:         logger,
-		eventUtil:      eventutil.NewEventUtil(),
+		metrics:        metrics,
+		tracer:         tracer,
 		roundValidator: roundutil.NewRoundValidator(),
+		EventBus:       eventBus,
+		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (result RoundOperationResult, err error) {
+			return serviceWrapper(ctx, operationName, roundID, serviceFunc, logger, metrics, tracer)
+		},
 	}
 }
 
-// publishEvent is a generic helper function to publish events.
-func (s *RoundService) publishEvent(msg *message.Message, eventName string, payload interface{}) error {
-	correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey)
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		s.logger.Error("Failed to marshal event payload",
-			slog.String("event", eventName),
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to marshal event payload for %s: %w", eventName, err)
+// serviceWrapper handles common tracing, logging, and metrics for service operations.
+func serviceWrapper(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error), logger *slog.Logger, metrics roundmetrics.RoundMetrics, tracer trace.Tracer) (result RoundOperationResult, err error) {
+	if serviceFunc == nil {
+		return RoundOperationResult{}, errors.New("service function is nil")
 	}
 
-	newMessage := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
+		attribute.String("operation", operationName),
+		attribute.String("round_id", roundID.String()),
+	))
+	defer span.End()
 
-	// Preserve correlation ID
-	if correlationID == "" {
-		correlationID = watermill.NewUUID() // Generate a new correlation ID if it's missing
-	}
-	newMessage.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID) // Use middleware.CorrelationIDMetadataKey
+	metrics.RecordOperationAttempt(ctx, operationName, "RoundService")
 
-	// Use `Nats-Msg-Id` for deduplication (optional, but recommended)
-	newMessage.Metadata.Set("Nats-Msg-Id", fmt.Sprintf("%s-%s", correlationID, eventName))
+	startTime := time.Now()
+	defer func() {
+		duration := time.Duration(time.Since(startTime).Seconds())
+		metrics.RecordOperationDuration(ctx, operationName, "RoundService", duration)
+	}()
 
-	// (Optional) Set caused_by metadata to the name of the calling function
-	newMessage.Metadata.Set("caused_by", getCallerFunctionName())
-
-	if err := s.EventBus.Publish(eventName, newMessage); err != nil {
-		s.logger.Error("Failed to publish event",
-			slog.String("event", eventName),
-			slog.Any("error", err),
-			slog.String("correlation_id", correlationID),
-		)
-		return fmt.Errorf("failed to publish event %s: %w", eventName, err)
-	}
-
-	s.logger.Info("Published event",
-		slog.String("event", eventName),
-		slog.String("correlation_id", correlationID),
-		slog.String("message_id", newMessage.UUID),
+	logger.InfoContext(ctx, "Operation triggered",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("operation", operationName),
 	)
 
-	return nil
+	// Handle panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
+			logger.ErrorContext(ctx, errorMsg,
+				attr.ExtractCorrelationID(ctx),
+				attr.Any("panic", r),
+			)
+			metrics.RecordOperationFailure(ctx, operationName, "RoundService")
+			span.RecordError(errors.New(errorMsg))
+
+			// Set the return values explicitly for panic cases
+			result = RoundOperationResult{}
+			err = fmt.Errorf("%s", errorMsg)
+		}
+	}()
+
+	result, err = serviceFunc(ctx)
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
+		logger.ErrorContext(ctx, "Error in "+operationName,
+			attr.ExtractCorrelationID(ctx),
+			attr.Error(wrappedErr),
+		)
+		metrics.RecordOperationFailure(ctx, operationName, "RoundService")
+		span.RecordError(wrappedErr)
+		return result, wrappedErr
+	}
+
+	logger.InfoContext(ctx, operationName+" completed successfully",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("operation", operationName),
+	)
+	metrics.RecordOperationSuccess(ctx, operationName, "RoundService")
+
+	return result, nil
 }
 
-// getCallerFunctionName is a helper function to get the name of the calling function.
-func getCallerFunctionName() string {
-	pc, _, _, ok := runtime.Caller(1) // 1 level up the call stack
-	if !ok {
-		return "unknown"
-	}
-	return runtime.FuncForPC(pc).Name() // Get the function name
+// RoundOperationResult represents a generic result from a round operation
+type RoundOperationResult struct {
+	Success interface{}
+	Failure interface{}
+	Error   error
 }

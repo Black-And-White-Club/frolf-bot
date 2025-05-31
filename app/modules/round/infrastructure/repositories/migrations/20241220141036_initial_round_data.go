@@ -12,7 +12,11 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Creating round table...")
 
-		if _, err := db.NewCreateTable().Model((*rounddb.Round)(nil)).IfNotExists().Exec(ctx); err != nil {
+		// Create the table using the model
+		_, err := db.NewCreateTable().Model((*rounddb.Round)(nil)).
+			IfNotExists().
+			Exec(ctx)
+		if err != nil {
 			return err
 		}
 
@@ -21,7 +25,7 @@ func init() {
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Dropping round table...")
 
-		if _, err := db.NewDropTable().Model((*rounddb.Round)(nil)).IfExists().Exec(ctx); err != nil {
+		if _, err := db.NewDropTable().Model((*rounddb.Round)(nil)).IfExists().Cascade().Exec(ctx); err != nil {
 			return err
 		}
 

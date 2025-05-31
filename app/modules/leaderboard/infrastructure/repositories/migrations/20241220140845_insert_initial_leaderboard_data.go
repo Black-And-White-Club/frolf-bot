@@ -17,20 +17,11 @@ func init() {
 		}
 
 		// Insert initial leaderboard data
-		initialLeaderboard := &leaderboarddb.Leaderboard{
-			LeaderboardData: make(map[int]string),
-			IsActive:        true,
-		}
-		if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {
+		if _, err := db.Exec(`INSERT INTO leaderboards (leaderboard_data, is_active, update_id) VALUES ('[]', true, uuid_generate_v4())`); err != nil {
 			return err
 		}
 
 		fmt.Println("Leaderboard table created successfully!")
-
-		// Call createInitialData after tables are created
-		if err := createInitialData(ctx, db); err != nil {
-			return fmt.Errorf("failed to create initial data: %w", err)
-		}
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Dropping leaderboard table...")
@@ -42,15 +33,4 @@ func init() {
 		fmt.Println("Leaderboard table dropped successfully!")
 		return nil
 	})
-}
-
-func createInitialData(ctx context.Context, db *bun.DB) error {
-	initialLeaderboard := &leaderboarddb.Leaderboard{
-		LeaderboardData: make(map[int]string), // Initialize LeaderboardData as an empty map
-		IsActive:        true,
-	}
-	if _, err := db.NewInsert().Model(initialLeaderboard).Exec(ctx); err != nil {
-		return err
-	}
-	return nil
 }

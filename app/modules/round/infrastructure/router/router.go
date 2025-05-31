@@ -4,109 +4,206 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os" // Import os for environment variable check
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
-	"github.com/ThreeDotsLabs/watermill"
+	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// Constants for environment check.
+const (
+	TestEnvironmentFlag  = "APP_ENV"
+	TestEnvironmentValue = "test"
 )
 
 // RoundRouter handles routing for round module events.
 type RoundRouter struct {
-	logger     *slog.Logger
-	router     *message.Router
-	subscriber message.Subscriber
+	logger             *slog.Logger
+	Router             *message.Router
+	subscriber         eventbus.EventBus
+	publisher          eventbus.EventBus
+	config             *config.Config
+	helper             utils.Helpers
+	tracer             trace.Tracer
+	middlewareHelper   utils.MiddlewareHelpers
+	metricsBuilder     *metrics.PrometheusMetricsBuilder
+	prometheusRegistry *prometheus.Registry
+	metricsEnabled     bool
 }
 
 // NewRoundRouter creates a new RoundRouter.
-func NewRoundRouter(logger *slog.Logger, router *message.Router, subscriber message.Subscriber) *RoundRouter {
+// It now accepts a prometheusRegistry to conditionally enable metrics.
+func NewRoundRouter(
+	logger *slog.Logger,
+	router *message.Router,
+	subscriber eventbus.EventBus,
+	publisher eventbus.EventBus,
+	config *config.Config,
+	helper utils.Helpers,
+	tracer trace.Tracer,
+	prometheusRegistry *prometheus.Registry,
+) *RoundRouter {
+	// Add logging to check environment variable and conditions
+	actualAppEnv := os.Getenv(TestEnvironmentFlag)
+	logger.Info("NewRoundRouter: Environment check",
+		"APP_ENV_Actual", actualAppEnv,
+		"TestEnvironmentValue", TestEnvironmentValue,
+		"prometheusRegistryProvided", prometheusRegistry != nil,
+	)
+
+	// Check if the application is running in the test environment
+	inTestEnv := actualAppEnv == TestEnvironmentValue
+	logger.Info("NewRoundRouter: inTestEnv determined", "inTestEnv", inTestEnv)
+
+	var metricsBuilder *metrics.PrometheusMetricsBuilder
+	// Only create the metrics builder if a registry is provided AND we are NOT in the test environment
+	// Add logging for the condition
+	if prometheusRegistry != nil && !inTestEnv {
+		logger.Info("NewRoundRouter: Creating Prometheus metrics builder")
+		builder := metrics.NewPrometheusMetricsBuilder(prometheusRegistry, "", "")
+		metricsBuilder = &builder
+	} else {
+		logger.Info("NewRoundRouter: Skipping Prometheus metrics builder creation",
+			"prometheusRegistryProvided", prometheusRegistry != nil,
+			"inTestEnv", inTestEnv,
+		)
+	}
+
+	// metricsEnabled is true only if a registry is provided AND we are NOT in the test environment
+	metricsEnabled := prometheusRegistry != nil && !inTestEnv
+	logger.Info("NewRoundRouter: metricsEnabled determined", "metricsEnabled", metricsEnabled)
+
 	return &RoundRouter{
-		logger:     logger,
-		router:     router,
-		subscriber: subscriber,
+		logger:             logger,
+		Router:             router,
+		subscriber:         subscriber,
+		publisher:          publisher,
+		config:             config,
+		helper:             helper,
+		tracer:             tracer,
+		middlewareHelper:   utils.NewMiddlewareHelper(),
+		metricsBuilder:     metricsBuilder,
+		prometheusRegistry: prometheusRegistry,
+		metricsEnabled:     metricsEnabled,
 	}
 }
 
 // Configure sets up the router with the necessary handlers and dependencies.
-func (r *RoundRouter) Configure(
-	roundService roundservice.Service,
-) error {
-	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger).(*roundhandlers.RoundHandlers)
-	if err := r.RegisterHandlers(context.Background(), roundHandlers); err != nil {
+func (r *RoundRouter) Configure(routerCtx context.Context, roundService roundservice.Service, eventbus eventbus.EventBus, roundMetrics roundmetrics.RoundMetrics) error {
+	r.logger.Info("Configure: Checking metricsEnabled before adding middleware",
+		"metricsEnabled", r.metricsEnabled,
+		"metricsBuilderNil", r.metricsBuilder == nil,
+	)
+
+	// Conditionally add Prometheus metrics middleware based on the metricsEnabled flag
+	if r.metricsEnabled && r.metricsBuilder != nil {
+		r.logger.Info("Adding Prometheus router metrics middleware for Round")
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
+	} else {
+		// This log message confirms that metrics are being skipped in the test environment
+		r.logger.Info("Skipping Prometheus router metrics middleware for Round - either in test environment or metrics not configured")
+	}
+
+	// Create round handlers with logger and tracer
+	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper, roundMetrics)
+
+	// Add middleware specific to the round module
+	r.Router.AddMiddleware(
+		middleware.CorrelationID,
+		r.middlewareHelper.CommonMetadataMiddleware("round"),
+		r.middlewareHelper.DiscordMetadataMiddleware(),
+		r.middlewareHelper.RoutingMetadataMiddleware(),
+		middleware.Recoverer,
+		tracingfrolfbot.TraceHandler(r.tracer),
+	)
+
+	// Pass routerCtx to RegisterHandlers
+	if err := r.RegisterHandlers(routerCtx, roundHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
 }
 
-// RegisterHandlers registers the event handlers for the round module.
-func (r *RoundRouter) RegisterHandlers(
-	ctx context.Context,
-	handlers roundhandlers.Handlers, // Use a pointer to RoundHandlers
-) error {
-	r.logger.Info("Entering RegisterHandlers for Round")
+// RegisterHandlers registers event handlers.
+func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandlers.Handlers) error {
+	r.logger.InfoContext(ctx, "Entering RegisterHandlers for Round")
 
-	// Define the mapping of event topics to handler functions.
-	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
-		// Create Round
-		roundevents.RoundCreateRequest: handlers.HandleRoundCreateRequest,
-		roundevents.RoundValidated:     handlers.HandleRoundValidated,
-		roundevents.RoundStored:        handlers.HandleRoundStored,
-		roundevents.RoundScheduled:     handlers.HandleRoundScheduled,
-
-		// Update Discord Event ID
-		roundevents.RoundDiscordEventIDUpdate: handlers.HandleUpdateDiscordEventID,
-
-		// Update Round
-		roundevents.RoundUpdateRequest:   handlers.HandleRoundUpdateRequest,
-		roundevents.RoundUpdateValidated: handlers.HandleRoundUpdateValidated,
-		roundevents.RoundFetched:         handlers.HandleRoundFetched,
-		roundevents.RoundEntityUpdated:   handlers.HandleRoundEntityUpdated,
-		roundevents.RoundScheduleUpdate:  handlers.HandleRoundScheduleUpdate,
-
-		// Delete Round
-		roundevents.RoundDeleteRequest:       handlers.HandleRoundDeleteRequest,
-		roundevents.RoundDeleteValidated:     handlers.HandleRoundDeleteValidated,
-		roundevents.RoundToDeleteFetched:     handlers.HandleRoundToDeleteFetched,
-		roundevents.RoundDeleteAuthorized:    handlers.HandleRoundDeleteAuthorized,
-		roundevents.RoundUserRoleCheckResult: handlers.HandleRoundUserRoleCheckResult,
-
-		// Start Round
-		roundevents.RoundStarted: handlers.HandleRoundStarted,
-
-		// Remind Round
-		roundevents.RoundReminder: handlers.HandleRoundReminder,
-
-		// Join Round
-		roundevents.RoundParticipantJoinRequest:   handlers.HandleRoundParticipantJoinRequest,
-		roundevents.RoundParticipantJoinValidated: handlers.HandleRoundParticipantJoinValidated,
-		roundevents.RoundTagNumberFound:           handlers.HandleRoundTagNumberFound,
-		roundevents.RoundTagNumberNotFound:        handlers.HandleRoundTagNumberNotFound,
+	eventsToHandlers := map[string]message.HandlerFunc{
+		roundevents.RoundCreateRequest:                    handlers.HandleCreateRoundRequest,
+		roundevents.RoundUpdateRequest:                    handlers.HandleRoundUpdateRequest,
+		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
+		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
+		roundevents.RoundDeleteRequest:                    handlers.HandleRoundDeleteRequest,
+		roundevents.RoundDeleteAuthorized:                 handlers.HandleRoundDeleteAuthorized,
+		roundevents.RoundParticipantJoinRequest:           handlers.HandleParticipantJoinRequest,
+		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleParticipantJoinValidationRequest,
+		roundevents.RoundParticipantRemovalRequest:        handlers.HandleParticipantRemovalRequest,
+		roundevents.RoundScoreUpdateRequest:               handlers.HandleScoreUpdateRequest,
+		roundevents.RoundScoreUpdateValidated:             handlers.HandleScoreUpdateValidated,
+		roundevents.RoundAllScoresSubmitted:               handlers.HandleAllScoresSubmitted,
+		roundevents.RoundReminder:                         handlers.HandleRoundReminder,
+		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
+		sharedevents.RoundTagLookupFound:                  handlers.HandleTagNumberFound,
+		sharedevents.RoundTagLookupNotFound:               handlers.HandleTagNumberNotFound,
+		roundevents.RoundEntityCreated:                    handlers.HandleRoundEntityCreated,
+		roundevents.RoundParticipantStatusUpdateRequest:   handlers.HandleParticipantStatusUpdateRequest,
+		roundevents.RoundParticipantDeclined:              handlers.HandleParticipantDeclined,
+		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
+		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
+		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
+		roundevents.TagUpdateForScheduledRounds:           handlers.HandleScheduledRoundTagUpdate,
+		roundevents.GetRoundRequest:                       handlers.HandleGetRoundRequest,
+		roundevents.RoundUpdated:                          handlers.HandleRoundScheduleUpdate,
 	}
 
-	// Register each handler in the router.
 	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("round.module.handle.%s.%s", topic, watermill.NewUUID())
-		r.logger.Info("Registering handler with AddNoPublisherHandle", slog.String("topic", topic), slog.String("handler", handlerName))
-
-		// Add the handler.
-		r.router.AddNoPublisherHandler(
-			handlerName,  // Handler name
-			topic,        // Topic
-			r.subscriber, // Subscriber (EventBus)
-			handlerFunc,  // Handler function
+		handlerName := fmt.Sprintf("round.%s", topic)
+		r.Router.AddHandler(
+			handlerName,
+			topic,
+			r.subscriber,
+			"",  // No direct publish topic
+			nil, // No manual publisher
+			func(msg *message.Message) ([]*message.Message, error) {
+				messages, err := handlerFunc(msg)
+				if err != nil {
+					// Log the error and return it to Watermill for potential retries/dead-lettering.
+					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					return nil, err
+				}
+				for _, m := range messages {
+					publishTopic := m.Metadata.Get("topic")
+					if publishTopic != "" {
+						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						if err := r.publisher.Publish(publishTopic, m); err != nil {
+							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
+							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
+						}
+					} else {
+						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
+					}
+				}
+				return nil, nil // Return nil, nil to indicate successful processing and publishing
+			},
 		)
-
-		r.logger.Info("Handler registered successfully", slog.String("handler", handlerName), slog.String("topic", topic))
 	}
-
-	r.logger.Info("Exiting RegisterHandlers for Round")
 	return nil
 }
 
-// Close stops the router and cleans up resources.
+// Close stops the router.
 func (r *RoundRouter) Close() error {
-	// Currently, no specific resources to close in this router.
-	// If there were any, they would be handled here.
-	return nil
+	return r.Router.Close()
 }

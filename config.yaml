@@ -1,11 +1,12 @@
 postgres:
-  dsn: "postgres://postgres:postgres@localhost:5432/tcr-bot?sslmode=disable"
-  log_statement: "all"
-  log_min_duration_statement: 0
+  dsn: "postgres://local:local@my-postgresql.postgres:5432/tcr-bot?sslmode=disable"
 
 nats:
-  url: "nats://localhost:4222"
+  url: "nats://my-nats.nats:4222"
 
-discord:
-  token: "YOUR_DISCORD_BOT_TOKEN"
-# ... other configuration settings ...
+observability:
+  metrics_address: "localhost:4317"
+  tempo_endpoint: "localhost:4317"
+  tempo_insecure: true
+  tempo_sample_rate: 0.1
+  environment: "local"

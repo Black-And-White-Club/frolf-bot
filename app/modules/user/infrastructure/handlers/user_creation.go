@@ -1,60 +1,138 @@
 package userhandlers
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 )
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
-func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) error {
-	h.logger.Info("HandleUserSignupRequest triggered",
-		slog.String("message_id", msg.UUID),
-		slog.String("correlation_id", msg.Metadata.Get(middleware.CorrelationIDMetadataKey)),
-	)
+func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleUserSignupRequest",
+		&userevents.UserSignupRequestPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			userSignupPayload := payload.(*userevents.UserSignupRequestPayload)
 
-	// Log the entire message for debugging
-	h.logger.Debug("Message details", slog.Any("message", msg))
+			userID := userSignupPayload.UserID
 
-	correlationID, payload, err := eventutil.UnmarshalPayload[userevents.UserSignupRequestPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal UserSignupRequest event: %w", err)
-	}
-
-	h.logger.Info("Received UserSignupRequest event",
-		slog.String("correlation_id", correlationID),
-		slog.String("user_id", string(payload.DiscordID)),
-	)
-
-	// If a tag is provided, check its availability
-	if payload.TagNumber != nil {
-		// Call CheckTagAvailability with the extracted information
-		if err := h.userService.CheckTagAvailability(msg.Context(), msg, *payload.TagNumber, payload.DiscordID); err != nil {
-			h.logger.Error("Failed to check tag availability",
-				slog.String("correlation_id", correlationID),
-				slog.Any("error", err),
+			h.logger.InfoContext(ctx, "Received UserSignupRequest event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(userID)),
 			)
-			return fmt.Errorf("failed to check tag availability: %w", err)
-		}
 
-		h.logger.Info("Tag availability check requested", slog.String("correlation_id", correlationID))
-		return nil // Exit here, waiting for the response
-	}
+			if userSignupPayload.TagNumber != nil {
+				tagNumber := *userSignupPayload.TagNumber
 
-	// If no tag is provided, proceed with user creation
-	if err := h.userService.CreateUser(msg.Context(), msg, payload.DiscordID, nil); err != nil {
-		h.logger.Error("Error in user signup",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to process UserSignupRequest: %w", err)
-	}
+				h.logger.InfoContext(ctx, "Tag availability check requested",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+					attr.Int("tag_number", int(tagNumber)),
+				)
 
-	h.logger.Info("User signup request processed", slog.String("correlation_id", correlationID))
+				ctx, span := h.tracer.Start(ctx, "TagAvailabilityCheck")
+				defer span.End()
 
-	return nil
+				eventPayload := &userevents.TagAvailabilityCheckRequestedPayload{
+					TagNumber: tagNumber,
+					UserID:    userID,
+				}
+
+				tagAvailabilityMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					eventPayload,
+					userevents.TagAvailabilityCheckRequested,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create tag availability check message: %w", err)
+				}
+
+				h.metrics.RecordTagAvailabilityCheck(ctx, true, tagNumber)
+
+				return []*message.Message{tagAvailabilityMsg}, nil
+			}
+
+			ctx, span := h.tracer.Start(ctx, "CreateUser")
+			defer span.End()
+
+			result, err := h.userService.CreateUser(ctx, userID, nil)
+
+			if result.Failure != nil {
+				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				if !ok {
+					span.RecordError(errors.New("unexpected type for failure payload"))
+					return nil, errors.New("unexpected type for failure payload")
+				}
+
+				h.logger.InfoContext(ctx, "User creation failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("reason", failedPayload.Reason),
+				)
+
+				failureMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					failedPayload,
+					userevents.UserCreationFailed,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create failure message: %w", err)
+				}
+
+				h.metrics.RecordUserCreationFailure(ctx, failedPayload.Reason, "failed")
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			// Now check for service error after handling any failure payload
+			if err != nil {
+				span.RecordError(err)
+				h.logger.ErrorContext(ctx, "Failed to call CreateUser service",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to process UserSignupRequest service call: %w", err)
+			}
+
+			if result.Success != nil {
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				if !ok {
+					span.RecordError(errors.New("unexpected type for success payload"))
+					return nil, errors.New("unexpected type for success payload")
+				}
+
+				h.logger.InfoContext(ctx, "User creation succeeded",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("user_id", string(userID)),
+				)
+
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					successPayload,
+					userevents.UserCreated,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				h.metrics.RecordUserCreationSuccess(ctx, string(successPayload.UserID), "discord")
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			h.logger.WarnContext(ctx, "CreateUser returned no success or failure payload when error was nil",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("user_id", string(userID)),
+			)
+			return nil, errors.New("user creation service returned unexpected result")
+		},
+	)
+
+	return wrappedHandler(msg)
 }

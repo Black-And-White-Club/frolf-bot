@@ -2,304 +2,147 @@ package roundservice
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
+	"errors"
 	"testing"
+	"time"
 
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
+
+var (
+	testRoundID   = sharedtypes.RoundID(uuid.New())
+	testTitle     = roundtypes.Title("Test Round")
+	testDesc      = roundtypes.Description("Test Description")
+	testLoc       = roundtypes.Location("Test Location")
+	testEventType = roundtypes.EventType("Test Event Type")
+	testStartTime = sharedtypes.StartTime(time.Now())
+	testCreatorID = sharedtypes.DiscordID("Test User")
+	testState     = roundtypes.RoundState("Test State")
+)
+
+var testRound = roundtypes.Round{
+	ID:           testRoundID,
+	Title:        testTitle,
+	Description:  &testDesc,
+	Location:     &testLoc,
+	EventType:    &testEventType,
+	StartTime:    &testStartTime,
+	Finalized:    false,
+	CreatedBy:    testCreatorID,
+	State:        testState,
+	Participants: []roundtypes.Participant{},
+}
 
 func TestRoundService_GetRound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
-	logger := slog.Default()
+	ctx := context.Background()
+	mockDB := rounddb.NewMockRoundDB(ctrl)
+	logger := loggerfrolfbot.NoOpLogger
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
 
-	type args struct {
-		ctx     context.Context
-		payload interface{}
-	}
 	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
+		name           string
+		mockDBSetup    func(*rounddb.MockRoundDB)
+		expectedResult RoundOperationResult
+		expectedError  error
 	}{
 		{
-			name: "Successful round retrieval",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-					},
-				},
+			name: "successful retrieval",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&testRound, nil)
 			},
-			expectedEvent: roundevents.RoundFetched,
-			expectErr:     false,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
-					Title: "Test Round",
-					State: roundtypes.RoundStateUpcoming,
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFetched), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
-					if topic != roundevents.RoundFetched {
-						return fmt.Errorf("unexpected topic: %s", topic)
-					}
-
-					var payload roundevents.RoundFetchedPayload
-					err := json.Unmarshal(msg.Payload, &payload)
-					if err != nil {
-						return fmt.Errorf("failed to unmarshal payload: %w", err)
-					}
-
-					if payload.Round.ID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
-					}
-
-					if payload.Round.Title != "Test Round" {
-						return fmt.Errorf("unexpected round title: %s", payload.Round.Title)
-					}
-
-					if payload.RoundUpdateRequestPayload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundUpdateRequestPayload.RoundID)
-					}
-
-					return nil
-				}).Times(1)
+			expectedResult: RoundOperationResult{
+				Success: &testRound, // Make this a pointer to match your implementation
 			},
+			expectedError: nil,
 		},
 		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
+			name: "error retrieving round",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
-			expectErr: true,
-			mockExpects: func() {
-			},
-		},
-		{
-			name: "Database error",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-					},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayload{ // Add pointer to match your implementation
+					RoundID: testRoundID,
+					Error:   "database error",
 				},
 			},
-			expectedEvent: roundevents.RoundUpdateError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(nil, fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundUpdateError), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Publish RoundFetched event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
-						RoundID: "some-round-id",
-					},
-				},
-			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
-					Title: "Test Round",
-					State: roundtypes.RoundStateUpcoming,
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundFetched), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
+			expectedError: nil, // Change this to nil since you're handling errors in Failure
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
-			tt.mockExpects()
+			tt.mockDBSetup(mockDB)
 
 			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+				RoundDB:        mockDB,
+				logger:         logger,
+				metrics:        mockMetrics,
+				tracer:         tracer,
+				roundValidator: mockRoundValidator,
+				EventBus:       mockEventBus,
+				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+					return serviceFunc(ctx)
+				},
 			}
 
-			// Call the service function
-			err := s.GetRound(tt.args.ctx, msg)
-			if tt.expectErr {
+			result, err := s.GetRound(ctx, testRoundID)
+
+			// Check error expectations
+			if tt.expectedError != nil {
 				if err == nil {
-					t.Error("GetRound() expected error, got none")
+					t.Errorf("expected error: %v, got: nil", tt.expectedError)
+				} else if err.Error() != tt.expectedError.Error() {
+					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Errorf("GetRound() unexpected error: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestRoundService_CheckRoundExists(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	mockRoundDB := rounddb.NewMockRoundDB(ctrl)
-	logger := slog.Default()
-
-	type args struct {
-		ctx     context.Context
-		payload interface{}
-	}
-	tests := []struct {
-		name          string
-		args          args
-		expectedEvent string
-		expectErr     bool
-		mockExpects   func()
-	}{
-		{
-			name: "Successful round existence check",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
-					},
-				},
-			},
-			expectedEvent: roundevents.RoundToDeleteFetched,
-			expectErr:     false,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
-					Title: "Test Round",
-					State: roundtypes.RoundStateUpcoming,
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundToDeleteFetched), gomock.Any()).DoAndReturn(func(topic string, msg *message.Message) error {
-					if topic != roundevents.RoundToDeleteFetched {
-						return fmt.Errorf("unexpected topic: %s", topic)
-					}
-
-					var payload roundevents.RoundToDeleteFetchedPayload
-					err := json.Unmarshal(msg.Payload, &payload)
-					if err != nil {
-						return fmt.Errorf("failed to unmarshal payload: %w", err)
-					}
-
-					if payload.Round.ID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.Round.ID)
-					}
-
-					if payload.Round.Title != "Test Round" {
-						return fmt.Errorf("unexpected round title: %s", payload.Round.Title)
-					}
-
-					if payload.RoundDeleteRequestPayload.RoundID != "some-round-id" {
-						return fmt.Errorf("unexpected round ID: %s", payload.RoundDeleteRequestPayload.RoundID)
-					}
-
-					return nil
-				}).Times(1)
-			},
-		},
-		{
-			name: "Invalid payload",
-			args: args{
-				ctx:     context.Background(),
-				payload: "invalid json",
-			},
-			expectErr: true,
-			mockExpects: func() {
-			},
-		},
-		{
-			name: "Database error",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
-					},
-				},
-			},
-			expectedEvent: roundevents.RoundDeleteError,
-			expectErr:     true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(nil, fmt.Errorf("db error")).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundDeleteError), gomock.Any()).Return(nil).Times(1)
-			},
-		},
-		{
-			name: "Publish RoundToDeleteFetched event fails",
-			args: args{
-				ctx: context.Background(),
-				payload: roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-						RoundID: "some-round-id",
-					},
-				},
-			},
-			expectErr: true,
-			mockExpects: func() {
-				mockRoundDB.EXPECT().GetRound(gomock.Any(), "some-round-id").Return(&roundtypes.Round{
-					ID:    "some-round-id",
-					Title: "Test Round",
-					State: roundtypes.RoundStateUpcoming,
-				}, nil).Times(1)
-				mockEventBus.EXPECT().Publish(gomock.Eq(roundevents.RoundToDeleteFetched), gomock.Any()).Return(fmt.Errorf("publish error")).Times(1)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Prepare a mock message with the payload
-			payloadBytes, _ := json.Marshal(tt.args.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, watermill.NewUUID())
-
-			tt.mockExpects()
-
-			s := &RoundService{
-				RoundDB:   mockRoundDB,
-				EventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(),
+			} else if err != nil {
+				t.Errorf("expected no error, got: %v", err)
 			}
 
-			// Call the service function
-			err := s.CheckRoundExists(tt.args.ctx, msg)
-			if tt.expectErr {
-				if err == nil {
-					t.Error("CheckRoundExists() expected error, got none")
+			// Check result expectations
+			if tt.expectedResult.Success != nil {
+				if result.Success == nil {
+					t.Errorf("expected success result, got nil")
+				} else {
+					// Compare the actual round data
+					expectedRound := tt.expectedResult.Success.(*roundtypes.Round)
+					actualRound := result.Success.(*roundtypes.Round)
+					if expectedRound.ID != actualRound.ID {
+						t.Errorf("expected RoundID: %v, got: %v", expectedRound.ID, actualRound.ID)
+					}
+					// Add more field comparisons as needed
 				}
-			} else {
-				if err != nil {
-					t.Errorf("CheckRoundExists() unexpected error: %v", err)
+			}
+
+			if tt.expectedResult.Failure != nil {
+				if result.Failure == nil {
+					t.Errorf("expected failure result, got nil")
+				} else {
+					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload)
+					actualFailure := result.Failure.(*roundevents.RoundErrorPayload)
+					if expectedFailure.RoundID != actualFailure.RoundID {
+						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
+					}
+					if expectedFailure.Error != actualFailure.Error {
+						t.Errorf("expected Error: %v, got: %v", expectedFailure.Error, actualFailure.Error)
+					}
 				}
 			}
 		})

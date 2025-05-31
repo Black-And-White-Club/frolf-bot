@@ -2,504 +2,209 @@ package userservice
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
+	"fmt" // Import fmt for error wrapping
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	eventbusmocks "github.com/Black-And-White-Club/frolf-bot/app/eventbus/mocks"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
-
-func TestUserServiceImpl_UpdateUserRole(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	testDiscordID := "123456789012345678"
-	testRole := "admin"
-	testRequesterID := "requester456"
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background()
-
-	type fields struct {
-		UserDB    *userdb.MockUserDB
-		eventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
-	type args struct {
-		ctx         context.Context
-		msg         *message.Message
-		discordID   usertypes.DiscordID
-		role        string
-		requesterID string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, args args)
-	}{
-		{
-			name: "Successful UpdateUserRole",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:         testCtx,
-				msg:         message.NewMessage(testCorrelationID, nil),
-				discordID:   usertypes.DiscordID(testDiscordID),
-				role:        testRole,
-				requesterID: testRequesterID,
-			},
-			wantErr: false,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserPermissionsCheckRequest, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserPermissionsCheckRequest {
-							t.Errorf("Expected topic %s, got %s", userevents.UserPermissionsCheckRequest, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserPermissionsCheckRequestPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.RequesterID != testRequesterID {
-							t.Errorf("Payload does not match expected values")
-						}
-
-						if correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey); correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
-			},
-		},
-		{
-			name: "Failed to Publish Event",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:         testCtx,
-				msg:         message.NewMessage(testCorrelationID, nil),
-				discordID:   usertypes.DiscordID(testDiscordID),
-				role:        testRole,
-				requesterID: testRequesterID,
-			},
-			wantErr: true,
-			setup: func(f fields, args args) {
-				args.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserPermissionsCheckRequest, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil,
-			}
-
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
-			}
-
-			if err := s.UpdateUserRole(tt.args.ctx, tt.args.msg, tt.args.discordID, usertypes.UserRoleEnum(tt.args.role), tt.args.requesterID); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.UpdateUserRole() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
 
 func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl) // Assuming you don't need eventBus in this test
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := context.Background()
+	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testRole := sharedtypes.UserRoleAdmin
+	invalidRole := sharedtypes.UserRoleEnum("InvalidRole")
+	dbErr := errors.New("database connection failed")
 
-	testDiscordID := "123456789012345678"
-	testRole := usertypes.UserRoleEnum("admin") // Ensure this type is used
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background()
+	mockDB := userdb.NewMockUserDB(ctrl)
 
-	type fields struct {
-		UserDB   *userdb.MockUserDB
-		eventBus *eventbusmocks.MockEventBus // Now a mock
-		logger   *slog.Logger
-	}
-	type args struct {
-		ctx       context.Context
-		msg       *message.Message // Add msg argument
-		discordID string
-		role      string
-	}
+	logger := loggerfrolfbot.NoOpLogger
+	metrics := &usermetrics.NoOpMetrics{}
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
+		name             string
+		mockDBSetup      func(*userdb.MockUserDB)
+		newRole          sharedtypes.UserRoleEnum
+		expectedOpResult UserOperationResult
+		expectedErr      error // This should be the error returned by the mocked serviceWrapper (which is the error from the inner serviceFunc)
 	}{
 		{
-			name: "Successful Role Update",
-			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+			name: "Successfully updates user role",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					Return(nil)
 			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil), // Create message
-				discordID: testDiscordID,
-				role:      string(testRole), // Convert to string for the test
+			newRole: testRole,
+			expectedOpResult: UserOperationResult{
+				Success: &userevents.UserRoleUpdateResultPayload{
+					UserID:  testUserID,
+					Role:    testRole,
+					Success: true,
+					Error:   "",
+				},
+				Failure: nil,
+				Error:   nil,
 			},
-			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.UserDB.EXPECT().
-					UpdateUserRole(a.ctx, usertypes.DiscordID(a.discordID), testRole).
-					Return(nil).
-					Times(1)
-			},
+			expectedErr: nil,
 		},
 		{
-			name: "Database Error on Role Update",
-			fields: fields{
-				UserDB:   mockUserDB,
-				eventBus: mockEventBus,
-				logger:   logger,
+			name: "Fails due to invalid role",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				// No database call expected for invalid role
 			},
-			args: args{
-				ctx:       testCtx,
-				msg:       message.NewMessage(testCorrelationID, nil), // Create message
-				discordID: testDiscordID,
-				role:      string(testRole), // Convert to string for the test
+			newRole: invalidRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+					UserID:  testUserID,
+					Role:    invalidRole,
+					Success: false,
+					Error:   "invalid role", // Reason set in the service code (Error field)
+				},
+				Error: errors.New("invalid role"), // Error within the result
 			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.UserDB.EXPECT().
-					UpdateUserRole(a.ctx, usertypes.DiscordID(a.discordID), testRole).
-					Return(errors.New("database error")).
-					Times(1)
+			expectedErr: nil, // Mocked serviceWrapper returns nil error at top level for this case
+		},
+		{
+			name: "Fails due to user not found",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					Return(userdbtypes.ErrUserNotFound)
 			},
+			newRole: testRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+					UserID:  testUserID,
+					Role:    testRole,
+					Success: false,
+					Error:   "user not found", // Reason set in the service code (Error field)
+				},
+				Error: userdbtypes.ErrUserNotFound, // Error within the result
+			},
+			// Expect the wrapped error returned by the service function
+			expectedErr: fmt.Errorf("failed to update user role: %w", userdbtypes.ErrUserNotFound),
+		},
+		{
+			name: "Fails due to database error",
+			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+				mockDB.EXPECT().
+					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					Return(dbErr)
+			},
+			newRole: testRole,
+			expectedOpResult: UserOperationResult{
+				Success: nil,
+				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+					UserID:  testUserID,
+					Role:    testRole,
+					Success: false,
+					Error:   "failed to update user role", // Reason set in the service code (Error field)
+				},
+				Error: dbErr, // Error within the result
+			},
+			// Expect the wrapped error returned by the service function
+			expectedErr: fmt.Errorf("failed to update user role: %w", dbErr),
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.mockDBSetup(mockDB)
+
 			s := &UserServiceImpl{
-				UserDB:   tt.fields.UserDB,
-				eventBus: tt.fields.eventBus,
-				logger:   tt.fields.logger,
+				UserDB:  mockDB,
+				logger:  logger,
+				metrics: metrics,
+				tracer:  tracer,
+				// Mock the serviceWrapper to call the provided function directly in tests
+				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
+					// In the test wrapper, just call the actual service function and return its result
+					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
+					// as these are concerns of the wrapper itself, not the service method logic being tested.
+					return serviceFunc(ctx)
+				},
 			}
 
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
+			gotResult, gotErr := s.UpdateUserRoleInDatabase(ctx, testUserID, tt.newRole)
+
+			// Validate the returned UserOperationResult
+			if tt.expectedOpResult.Success != nil {
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserRoleUpdateResultPayload)
+				gotSuccess, ok := gotResult.Success.(*userevents.UserRoleUpdateResultPayload)
+				if !ok {
+					t.Errorf("Expected success payload of type *userevents.UserRoleUpdateResultPayload, got %T", gotResult.Success)
+				} else if gotSuccess == nil {
+					t.Errorf("Expected non-nil success payload, got nil")
+				} else if gotSuccess.UserID != expectedSuccess.UserID {
+					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, expectedSuccess.UserID)
+				} else if gotSuccess.Role != expectedSuccess.Role {
+					t.Errorf("Mismatched Role, got: %v, expected: %v", gotSuccess.Role, expectedSuccess.Role)
+				} else if gotSuccess.Success != expectedSuccess.Success {
+					t.Errorf("Mismatched Success status, got: %v, expected: %v", gotSuccess.Success, expectedSuccess.Success)
+				} else if gotSuccess.Error != expectedSuccess.Error {
+					t.Errorf("Mismatched Error message in success payload, got: %v, expected: %v", gotSuccess.Error, expectedSuccess.Error)
+				}
+			} else if gotResult.Success != nil {
+				t.Errorf("Unexpected success payload: %v", gotResult.Success)
 			}
 
-			if err := s.UpdateUserRoleInDatabase(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.discordID), usertypes.UserRoleEnum(tt.args.role)); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.UpdateUserRoleInDatabase() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+			if tt.expectedOpResult.Failure != nil {
+				// The service function returns UserRoleUpdateResultPayload for failures, not UserRoleUpdateFailedPayload
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserRoleUpdateResultPayload)
+				gotFailure, ok := gotResult.Failure.(*userevents.UserRoleUpdateResultPayload)
+				if !ok {
+					t.Errorf("Expected failure payload of type *userevents.UserRoleUpdateResultPayload, got %T", gotResult.Failure)
+				} else if gotFailure == nil {
+					t.Errorf("Expected non-nil failure payload, got nil")
+				} else if gotFailure.Error != expectedFailure.Error { // Check the Error field
+					t.Errorf("Mismatched failure reason (Error field), got: %v, expected: %v", gotFailure.Error, expectedFailure.Error)
+				} else if gotFailure.UserID != expectedFailure.UserID {
+					t.Errorf("Mismatched failure UserID, got: %v, expected: %v", gotFailure.UserID, expectedFailure.UserID)
+				} else if gotFailure.Success != expectedFailure.Success {
+					t.Errorf("Mismatched Success status in failure payload, got: %v, expected: %v", gotFailure.Success, expectedFailure.Success)
+				} else if gotFailure.Role != expectedFailure.Role {
+					t.Errorf("Mismatched Role in failure payload, got: %v, expected: %v", gotFailure.Role, expectedFailure.Role)
+				}
 
-func TestUserServiceImpl_PublishUserRoleUpdated(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	testDiscordID := "123456789012345678"
-	testRole := "admin"
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background()
-
-	type fields struct {
-		UserDB    *userdb.MockUserDB
-		eventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil
-	}
-	type args struct {
-		ctx    context.Context
-		msg    *message.Message
-		userID string
-		role   string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
-	}{
-		{
-			name: "Successful Publish",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:    testCtx,
-				msg:    message.NewMessage(testCorrelationID, nil), // New message with new UUID
-				userID: testDiscordID,
-				role:   testRole,
-			},
-			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserRoleUpdated, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserRoleUpdated {
-							t.Errorf("Expected topic %s, got %s", userevents.UserRoleUpdated, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserRoleUpdatedPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) {
-							t.Errorf("Payload does not match expected values")
-						}
-
-						if correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey); correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
-			},
-		},
-		{
-			name: "Publish Error",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:    testCtx,
-				msg:    message.NewMessage(testCorrelationID, nil), // New message with new UUID
-				userID: testDiscordID,
-				role:   testRole,
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-
-				f.eventBus.EXPECT().
-					Publish(userevents.UserRoleUpdated, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil,
+			} else if gotResult.Failure != nil {
+				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
 			}
 
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
+			// Validate the Error field within the UserOperationResult
+			if tt.expectedOpResult.Error != nil {
+				if gotResult.Error == nil {
+					t.Errorf("Expected error in result, got nil")
+				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
+					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
+				}
+			} else if gotResult.Error != nil {
+				t.Errorf("Unexpected error in result: %v", gotResult.Error)
 			}
 
-			if err := s.PublishUserRoleUpdated(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.userID), usertypes.UserRoleEnum(tt.args.role)); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.PublishUserRoleUpdated() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestUserServiceImpl_PublishUserRoleUpdateFailed(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockUserDB := userdb.NewMockUserDB(ctrl)
-	mockEventBus := eventbusmocks.NewMockEventBus(ctrl)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	testDiscordID := "123456789012345678"
-	testRole := "admin"
-	testReason := "Test reason"
-	testCorrelationID := watermill.NewUUID()
-	testCtx := context.Background()
-
-	type fields struct {
-		UserDB    *userdb.MockUserDB
-		eventBus  *eventbusmocks.MockEventBus
-		logger    *slog.Logger
-		eventUtil eventutil.EventUtil // Use actual interface
-	}
-	type args struct {
-		ctx    context.Context
-		msg    *message.Message
-		userID string
-		role   string
-		reason string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-		setup   func(f fields, a args)
-	}{
-		{
-			name: "Successful Publish",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:    testCtx,
-				msg:    message.NewMessage(testCorrelationID, nil), // Using correlationID as message ID
-				userID: testDiscordID,
-				role:   testRole,
-				reason: testReason,
-			},
-			wantErr: false,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.eventBus.EXPECT().
-					Publish(userevents.UserRoleUpdateFailed, gomock.Any()).
-					DoAndReturn(func(topic string, msgs ...*message.Message) error {
-						if topic != userevents.UserRoleUpdateFailed {
-							t.Errorf("Expected topic %s, got %s", userevents.UserRoleUpdateFailed, topic)
-						}
-
-						if len(msgs) != 1 {
-							t.Fatalf("Expected 1 message, got %d", len(msgs))
-						}
-
-						msg := msgs[0]
-
-						var payload userevents.UserRoleUpdateFailedPayload
-						err := json.Unmarshal(msg.Payload, &payload)
-						if err != nil {
-							t.Fatalf("failed to unmarshal message payload: %v", err)
-						}
-
-						if payload.DiscordID != usertypes.DiscordID(testDiscordID) || payload.Role != usertypes.UserRoleEnum(testRole) || payload.Reason != testReason {
-							t.Errorf("Payload does not match expected values")
-						}
-
-						if correlationID := msg.Metadata.Get(middleware.CorrelationIDMetadataKey); correlationID != testCorrelationID {
-							t.Errorf("Expected correlation ID %s, got %s", testCorrelationID, correlationID)
-						}
-
-						return nil
-					}).
-					Times(1)
-			},
-		},
-		{
-			name: "Publish Error",
-			fields: fields{
-				UserDB:    mockUserDB,
-				eventBus:  mockEventBus,
-				logger:    logger,
-				eventUtil: eventutil.NewEventUtil(), // Use actual implementation
-			},
-			args: args{
-				ctx:    testCtx,
-				msg:    message.NewMessage(testCorrelationID, nil), // Using correlationID as message ID
-				userID: testDiscordID,
-				role:   testRole,
-				reason: testReason,
-			},
-			wantErr: true,
-			setup: func(f fields, a args) {
-				a.msg.Metadata.Set(middleware.CorrelationIDMetadataKey, testCorrelationID)
-				f.eventBus.EXPECT().
-					Publish(userevents.UserRoleUpdateFailed, gomock.Any()).
-					Return(errors.New("publish error")).
-					Times(1)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &UserServiceImpl{
-				UserDB:    tt.fields.UserDB,
-				eventBus:  tt.fields.eventBus,
-				logger:    tt.fields.logger,
-				eventUtil: tt.fields.eventUtil, // Use actual implementation
-			}
-
-			// Call setup function to configure mocks before each test case
-			if tt.setup != nil {
-				tt.setup(tt.fields, tt.args)
-			}
-
-			if err := s.PublishUserRoleUpdateFailed(tt.args.ctx, tt.args.msg, usertypes.DiscordID(tt.args.userID), usertypes.UserRoleEnum(tt.args.role), tt.args.reason); (err != nil) != tt.wantErr {
-				t.Errorf("UserServiceImpl.PublishUserRoleUpdateFailed() error = %v, wantErr %v", err, tt.wantErr)
+			// Validate the top-level returned error
+			if tt.expectedErr != nil {
+				if gotErr == nil {
+					t.Errorf("Expected a top-level error but got nil")
+				} else if gotErr.Error() != tt.expectedErr.Error() {
+					t.Errorf("Mismatched top-level error reason, got: %v, expected: %v", gotErr.Error(), tt.expectedErr.Error())
+				}
+			} else if gotErr != nil {
+				t.Errorf("Unexpected top-level error: %v", gotErr)
 			}
 		})
 	}

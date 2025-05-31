@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	message "github.com/ThreeDotsLabs/watermill/message"
 	gomock "go.uber.org/mock/gomock"
@@ -57,7 +58,7 @@ func (mr *MockRouterMockRecorder) Close() *gomock.Call {
 }
 
 // Configure mocks base method.
-func (m *MockRouter) Configure(router *message.Router, leaderboardService leaderboardservice.Service, subscriber message.Subscriber) error {
+func (m *MockRouter) Configure(router *message.Router, leaderboardService leaderboardservice.Service, subscriber eventbus.EventBus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Configure", router, leaderboardService, subscriber)
 	ret0, _ := ret[0].(error)

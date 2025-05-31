@@ -4,80 +4,141 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
-	"github.com/ThreeDotsLabs/watermill"
+	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// ScoreRouter handles routing for score module events.
+const (
+	TestEnvironmentFlag  = "APP_ENV"
+	TestEnvironmentValue = "test"
+)
+
 type ScoreRouter struct {
-	logger     *slog.Logger
-	router     *message.Router
-	subscriber message.Subscriber
+	logger             *slog.Logger
+	Router             *message.Router
+	subscriber         eventbus.EventBus
+	publisher          eventbus.EventBus
+	config             *config.Config
+	helper             utils.Helpers
+	tracer             trace.Tracer
+	middlewareHelper   utils.MiddlewareHelpers
+	metricsBuilder     *metrics.PrometheusMetricsBuilder
+	prometheusRegistry *prometheus.Registry
+	metricsEnabled     bool
 }
 
-// NewScoreRouter creates a new ScoreRouter.
-func NewScoreRouter(logger *slog.Logger, router *message.Router, subscriber message.Subscriber) *ScoreRouter {
+func NewScoreRouter(
+	logger *slog.Logger,
+	router *message.Router,
+	subscriber eventbus.EventBus,
+	publisher eventbus.EventBus,
+	config *config.Config,
+	helper utils.Helpers,
+	tracer trace.Tracer,
+	prometheusRegistry *prometheus.Registry,
+) *ScoreRouter {
+	inTestEnv := os.Getenv(TestEnvironmentFlag) == TestEnvironmentValue
+
+	var metricsBuilder *metrics.PrometheusMetricsBuilder
+	if prometheusRegistry != nil && !inTestEnv {
+		builder := metrics.NewPrometheusMetricsBuilder(prometheusRegistry, "", "")
+		metricsBuilder = &builder
+	}
 	return &ScoreRouter{
-		logger:     logger,
-		router:     router,
-		subscriber: subscriber,
+		logger:             logger,
+		Router:             router,
+		subscriber:         subscriber,
+		publisher:          publisher,
+		config:             config,
+		helper:             helper,
+		tracer:             tracer,
+		middlewareHelper:   utils.NewMiddlewareHelper(),
+		metricsBuilder:     metricsBuilder,
+		prometheusRegistry: prometheusRegistry,
+		metricsEnabled:     prometheusRegistry != nil && !inTestEnv,
 	}
 }
 
-// Configure sets up the router with the necessary handlers and dependencies.
-func (r *ScoreRouter) Configure(
-	scoreService scoreservice.Service,
-) error {
-	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger)
-	// Add middleware to enhance logging and deduplication
-	r.router.AddMiddleware(
-		middleware.Recoverer,
+// Configure sets up the router using the provided context and score service.
+// It registers handlers and adds middleware to the router held by the ScoreRouter.
+func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreservice.Service, eventbus eventbus.EventBus, scoreMetrics scoremetrics.ScoreMetrics) error {
+	if r.metricsEnabled && r.metricsBuilder != nil {
+		r.logger.Info("Adding Prometheus router metrics middleware")
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
+	} else {
+		r.logger.Info("Skipping Prometheus router metrics middleware - either in test environment or metrics not configured")
+	}
+
+	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper, scoreMetrics)
+
+	r.Router.AddMiddleware(
 		middleware.CorrelationID,
+		r.middlewareHelper.CommonMetadataMiddleware("score"),
+		r.middlewareHelper.DiscordMetadataMiddleware(),
+		r.middlewareHelper.RoutingMetadataMiddleware(),
+		middleware.Recoverer,
+		middleware.Retry{MaxRetries: 3}.Middleware,
+		tracingfrolfbot.TraceHandler(r.tracer),
 	)
-	if err := r.RegisterHandlers(context.Background(), scoreHandlers); err != nil {
+
+	// Pass the routerCtx to RegisterHandlers
+	if err := r.RegisterHandlers(routerCtx, scoreHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
 }
 
-// RegisterHandlers registers the event handlers for the score module.
+// RegisterHandlers registers event handlers using the provided context.
 func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandlers.Handlers) error {
-	r.logger.Info("Entering RegisterHandlers for Score")
-
-	// Define the mapping of event topics to handler functions.
-	eventsToHandlers := map[string]message.NoPublishHandlerFunc{
+	eventsToHandlers := map[string]message.HandlerFunc{
 		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
-		scoreevents.ScoreCorrectionRequest:    handlers.HandleScoreUpdateRequest, // Assuming this handles score corrections
+		scoreevents.ScoreUpdateRequest:        handlers.HandleCorrectScoreRequest,
 	}
 
-	// Register each handler in the router.
 	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("score.module.handle.%s.%s", topic, watermill.NewUUID())
-		r.logger.Info("Registering handler with AddHandler", slog.String("topic", topic), slog.String("handler", handlerName))
-
-		// Add the handler.
-		r.router.AddNoPublisherHandler(
-			handlerName,  // Handler name
-			topic,        // Topic
-			r.subscriber, // Subscriber (EventBus)
-			handlerFunc,  // Handler function
+		handlerName := fmt.Sprintf("score.%s", topic)
+		r.Router.AddHandler(
+			handlerName,
+			topic,
+			r.subscriber,
+			"",
+			nil,
+			func(msg *message.Message) ([]*message.Message, error) {
+				messages, err := handlerFunc(msg)
+				if err != nil {
+					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
+					return nil, err
+				}
+				for _, m := range messages {
+					publishTopic := m.Metadata.Get("topic")
+					if publishTopic != "" {
+						// Pass the context from RegisterHandlers (routerCtx) to Publish
+						if err := r.publisher.Publish(publishTopic, m); err != nil {
+							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
+						}
+					}
+				}
+				return nil, nil
+			},
 		)
-
-		r.logger.Info("Handler registered successfully", slog.String("handler", handlerName), slog.String("topic", topic))
 	}
-
-	r.logger.Info("Exiting RegisterHandlers for Score")
 	return nil
 }
 
-// Close stops the router and cleans up resources.
 func (r *ScoreRouter) Close() error {
-	// Currently, no specific resources to close in this router.
-	// If there were any, they would be handled here.
-	return nil
+	return r.Router.Close()
 }

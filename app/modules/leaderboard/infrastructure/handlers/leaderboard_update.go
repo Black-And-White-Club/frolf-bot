@@ -1,63 +1,96 @@
 package leaderboardhandlers
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
+	"strconv"
+	"strings"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot/internal/eventutil"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
-// HandleRoundFinalized handles the RoundFinalized event.
-func (h *LeaderboardHandlers) HandleRoundFinalized(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.RoundFinalizedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal RoundFinalizedPayload: %w", err)
-	}
-
-	h.logger.Info("Received RoundFinalized event",
-		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
-	)
-
-	// Call the service function directly
-	if err := h.leaderboardService.RoundFinalized(msg.Context(), msg); err != nil {
-		h.logger.Error("Failed to handle RoundFinalized event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle RoundFinalized event: %w", err)
-	}
-
-	h.logger.Info("RoundFinalized event processed", slog.String("correlation_id", correlationID))
-	return nil
-}
-
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
-func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) error {
-	correlationID, payload, err := eventutil.UnmarshalPayload[leaderboardevents.LeaderboardUpdateRequestedPayload](msg, h.logger)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal LeaderboardUpdateRequestedPayload: %w", err)
-	}
+// This is for score processing after round completion - updates leaderboard with new participant tags.
+func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
+	return h.handlerWrapper("HandleLeaderboardUpdateRequested", &leaderboardevents.LeaderboardUpdateRequestedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			requestPayload := payload.(*leaderboardevents.LeaderboardUpdateRequestedPayload)
 
-	h.logger.Info("Received LeaderboardUpdateRequested event",
-		slog.String("correlation_id", correlationID),
-		slog.String("round_id", payload.RoundID),
-	)
+			h.logger.InfoContext(ctx, "Received LeaderboardUpdateRequested event from score processing",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", requestPayload.RoundID),
+				attr.Int("participant_count", len(requestPayload.SortedParticipantTags)),
+			)
 
-	// Extract the context from the message
-	ctx := msg.Context()
+			// Parse tag:userID format
+			assignments := make([]sharedtypes.TagAssignmentRequest, len(requestPayload.SortedParticipantTags))
+			for i, tagUserPair := range requestPayload.SortedParticipantTags {
+				parts := strings.Split(tagUserPair, ":")
+				if len(parts) != 2 {
+					h.logger.ErrorContext(ctx, "Invalid tag format in score processing",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("tag_pair", tagUserPair),
+					)
+					return nil, fmt.Errorf("invalid tag format: %s", tagUserPair)
+				}
 
-	// Call the service function to handle the event
-	if err := h.leaderboardService.LeaderboardUpdateRequested(ctx, msg); err != nil {
-		h.logger.Error("Failed to handle LeaderboardUpdateRequested event",
-			slog.String("correlation_id", correlationID),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("failed to handle LeaderboardUpdateRequested event: %w", err)
-	}
+				tagNumber, err := strconv.Atoi(parts[0])
+				if err != nil {
+					h.logger.ErrorContext(ctx, "Failed to parse tag number",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("tag_number", parts[0]),
+						attr.Any("error", err),
+					)
+					return nil, fmt.Errorf("failed to parse tag number: %w", err)
+				}
 
-	h.logger.Info("LeaderboardUpdateRequested event processed", slog.String("correlation_id", correlationID))
-	return nil
+				assignments[i] = sharedtypes.TagAssignmentRequest{
+					UserID:    sharedtypes.DiscordID(parts[1]),
+					TagNumber: sharedtypes.TagNumber(tagNumber),
+				}
+			}
+
+			// Use the public interface method
+			result, err := h.leaderboardService.ProcessTagAssignments(
+				ctx,
+				sharedtypes.ServiceUpdateSourceProcessScores,
+				assignments,
+				nil,                               // System operation
+				uuid.UUID(requestPayload.RoundID), // Use roundID as operation ID
+				uuid.New(),                        // Generate batch ID
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Service failed to handle leaderboard update",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", requestPayload.RoundID),
+					attr.Any("error", err),
+				)
+				return nil, fmt.Errorf("failed to process score-based tag assignments: %w", err)
+			}
+
+			// Handle failure response
+			if result.Failure != nil {
+				failureMsg, err := h.Helpers.CreateResultMessage(msg, result.Failure, leaderboardevents.LeaderboardUpdateFailed)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", err)
+				}
+				return []*message.Message{failureMsg}, nil
+			}
+
+			// Handle success response
+			if result.Success != nil {
+				successMsg, err := h.Helpers.CreateResultMessage(msg, result.Success, leaderboardevents.LeaderboardUpdated)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+				return []*message.Message{successMsg}, nil
+			}
+
+			return nil, fmt.Errorf("unexpected service result: neither success nor failure set")
+		},
+	)(msg)
 }

@@ -1,22 +1,45 @@
 package leaderboarddb
 
-import "github.com/uptrace/bun"
+import (
+	"context"
 
-type ServiceUpdateTagSource string
+	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 
-// Constants for ServiceUpdateTagSource.
-const (
-	ServiceUpdateTagSourceProcessScores ServiceUpdateTagSource = "processScores"
-	ServiceUpdateTagSourceManual        ServiceUpdateTagSource = "manual"
-	ServiceUpdateTagSourceCreateUser    ServiceUpdateTagSource = "createUser"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-// Leaderboard represents a leaderboard with entries.
+// Leaderboard represents a leaderboard with entries
 type Leaderboard struct {
-	bun.BaseModel     `bun:"table:leaderboards,alias:l"`
-	ID                int64                  `bun:"id,pk,autoincrement"`
-	LeaderboardData   map[int]string         `bun:"leaderboard_data,type:jsonb,notnull"`
-	IsActive          bool                   `bun:"is_active,notnull"`
-	ScoreUpdateSource ServiceUpdateTagSource `bun:"score_update_source"`                 // Added to track the source of the update (e.g., from Score module, manual, etc.)
-	ScoreUpdateID     string                 `bun:"score_update_id,nullzero,default:''"` // Added to store the identifier from the Score module (e.g., round ID) - make this nullable
+	bun.BaseModel   `bun:"table:leaderboards,alias:l"`
+	ID              int64                            `bun:"id,pk,autoincrement"`
+	LeaderboardData leaderboardtypes.LeaderboardData `bun:"leaderboard_data,type:jsonb,notnull"`
+	IsActive        bool                             `bun:"is_active,notnull"`
+	UpdateSource    sharedtypes.ServiceUpdateSource  `bun:"update_source"`
+	UpdateID        sharedtypes.RoundID              `bun:"update_id,type:uuid"`
+}
+
+// BeforeInsert is a hook that generates a UUID for UpdateID before inserting a new record
+func (l *Leaderboard) BeforeInsert(ctx context.Context) error {
+	if l.UpdateID == sharedtypes.RoundID(uuid.Nil) {
+		l.UpdateID = sharedtypes.RoundID(uuid.New())
+	}
+	return nil
+}
+
+// TagAssignment represents a single tag assignment for database operations
+type TagAssignment struct {
+	UserID    sharedtypes.DiscordID
+	TagNumber sharedtypes.TagNumber
+}
+
+// FindEntryForUser returns a pointer to the entry for the given user, or nil if not found.
+func (l *Leaderboard) FindEntryForUser(userID sharedtypes.DiscordID) *leaderboardtypes.LeaderboardEntry {
+	for i := range l.LeaderboardData {
+		if l.LeaderboardData[i].UserID == userID {
+			return &l.LeaderboardData[i]
+		}
+	}
+	return nil
 }

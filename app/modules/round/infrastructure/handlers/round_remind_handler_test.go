@@ -1,118 +1,291 @@
 package roundhandlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-	"strings"
+	"reflect"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	roundservicemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/ThreeDotsLabs/watermill"
+	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
-// --- Constants and Variables for Test Data ---
-const (
-	reminderHandlerRoundID       = "some-round-id"
-	reminderHandlerCorrelationID = "some-correlation-id"
-	reminderHandlerType          = "1h"
-	reminderHandlerRoundTitle    = "Test Round"
-	reminderProcessError         = "processing error"
-)
-
-var (
-	reminderHandlerLocation  = "Test Location" // var for pointer
-	reminderHandlerNow       = time.Now().UTC().Truncate(time.Second)
-	reminderHandlerStartTime = &reminderHandlerNow
-
-	validReminderHandlerPayload = roundevents.RoundReminderPayload{
-		RoundID:      reminderHandlerRoundID,
-		ReminderType: reminderHandlerType,
-		RoundTitle:   reminderHandlerRoundTitle,
-		StartTime:    reminderHandlerStartTime,
-		Location:     &reminderHandlerLocation,
-	}
-)
-
 func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testReminderType := "test-reminder-type"
+	testUserIDs := []sharedtypes.DiscordID{"user1", "user2"}
 
-	mockRoundService := roundservicemocks.NewMockService(ctrl)
-	logger := slog.Default()
+	testPayload := &roundevents.DiscordReminderPayload{
+		RoundID:      testRoundID,
+		ReminderType: testReminderType,
+	}
+
+	payloadBytes, _ := json.Marshal(testPayload)
+	testMsg := message.NewMessage("test-id", payloadBytes)
+
+	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
+
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name        string
-		payload     interface{}
-		mockExpects func()
-		wantErr     bool
-		errMsg      string
+		name           string
+		msg            *message.Message
+		want           []*message.Message
+		wantErr        bool
+		expectedErrMsg string
+		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
 	}{
 		{
-			name:    "Successful round reminder processing",
-			payload: validReminderHandlerPayload, // Use constant
-			mockExpects: func() {
-				mockRoundService.EXPECT().
-					ProcessRoundReminder(gomock.Any()).
-					Return(nil).
-					Times(1)
+			name: "Successfully handle RoundReminder",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      testUserIDs, // Added UserIDs so len > 0
+						},
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.DiscordRoundReminder,
+				).Return(testMsg, nil)
 			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
 			wantErr: false,
 		},
 		{
-			name:        "Invalid payload",
-			payload:     "invalid json", // Invalid JSON
-			mockExpects: func() {},      // No service calls expected
-			wantErr:     true,
-			errMsg:      "failed to unmarshal RoundReminderPayload",
+			name: "Successfully handle RoundReminder with no participants",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      []sharedtypes.DiscordID{}, // Empty UserIDs
+						},
+					},
+					nil,
+				)
+
+				// No CreateResultMessage call expected when UserIDs is empty
+			},
+			msg:     testMsg,
+			want:    []*message.Message{}, // Empty slice, not nil
+			wantErr: false,
 		},
 		{
-			name:    "Failed to process round reminder",
-			payload: validReminderHandlerPayload, // Use constant
-			mockExpects: func() {
-				mockRoundService.EXPECT().
-					ProcessRoundReminder(gomock.Any()).
-					Return(fmt.Errorf(reminderProcessError)). // Simulate processing error
-					Times(1)
+			name: "Fail to unmarshal payload",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 			},
-			wantErr: true,
-			errMsg:  "failed to handle RoundReminder event: " + reminderProcessError,
+			msg:            invalidMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+		},
+		{
+			name: "Service failure in ProcessRoundReminder",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{},
+					fmt.Errorf("internal service error"),
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to process round reminder: internal service error", // Updated to match handler
+		},
+		{
+			name: "Service success but CreateResultMessage fails",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+							RoundID:      testRoundID,
+							ReminderType: testReminderType,
+							UserIDs:      testUserIDs, // Added UserIDs so len > 0
+						},
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.DiscordRoundReminder,
+				).Return(nil, fmt.Errorf("failed to create result message"))
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create Discord reminder message: failed to create result message", // Updated to match handler
+		},
+		{
+			name: "Unknown result from ProcessRoundReminder",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{}, // Return empty result
+					nil,
+				)
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "service returned neither success nor failure", // Updated to match handler
+		},
+		{
+			name: "Failure result from ProcessRoundReminder",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().ProcessRoundReminder(
+					gomock.Any(),
+					roundevents.DiscordReminderPayload{
+						RoundID:      testRoundID,
+						ReminderType: testReminderType,
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundErrorPayload{
+							RoundID: testRoundID,
+						},
+					},
+					nil,
+				)
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.RoundError,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockRoundService := roundmocks.NewMockService(ctrl)
+			mockHelpers := mocks.NewMockHelpers(ctrl)
+
+			tt.mockSetup(mockRoundService, mockHelpers)
+
 			h := &RoundHandlers{
-				RoundService: mockRoundService, // Inject mock service
+				roundService: mockRoundService,
 				logger:       logger,
+				tracer:       tracer,
+				metrics:      metrics,
+				helpers:      mockHelpers,
+				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+				},
 			}
 
-			// Create message directly using json.Marshal
-			payloadBytes, _ := json.Marshal(tt.payload)
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			msg.Metadata.Set(middleware.CorrelationIDMetadataKey, reminderHandlerCorrelationID)
+			got, err := h.HandleRoundReminder(tt.msg)
 
-			if tt.mockExpects != nil {
-				tt.mockExpects()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleRoundReminder() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleRoundReminder() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			err := h.HandleRoundReminder(msg) // Pass the message
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("HandleRoundReminder() expected error, got none")
-				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("HandleRoundReminder() error = %v, wantErrMsg containing %v", err, tt.errMsg)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("HandleRoundReminder() unexpected error: %v", err)
-				}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HandleRoundReminder() = %v, want %v", got, tt.want)
 			}
 		})
 	}
