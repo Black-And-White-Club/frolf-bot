@@ -76,9 +76,9 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				discordPayload, ok := returnedResult.Success.(roundevents.DiscordReminderPayload)
+				discordPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
 				if !ok {
-					t.Errorf("Expected result to be of type DiscordReminderPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
 					return
 				}
 
@@ -160,16 +160,35 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				processedPayload, ok := returnedResult.Success.(roundevents.RoundReminderProcessedPayload)
+				// Change: Expect DiscordReminderPayload, not RoundReminderProcessedPayload
+				discordPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
 				if !ok {
-					t.Errorf("Expected result to be of type RoundReminderProcessedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				if processedPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-					t.Errorf("Expected RoundID to be set in processed payload, got empty")
+				if discordPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Errorf("Expected RoundID to be set in payload, got empty")
 				}
-				// No UserIDs should be in this payload, as per service logic for no participants to notify
+
+				// Verify that UserIDs is empty since no participants should be notified
+				if len(discordPayload.UserIDs) != 0 {
+					t.Errorf("Expected 0 UserIDs for notification (all declined), got %d", len(discordPayload.UserIDs))
+				}
+
+				// Verify other fields are still populated correctly
+				if discordPayload.RoundTitle == "" {
+					t.Errorf("Expected RoundTitle to be set")
+				}
+				if discordPayload.StartTime == nil {
+					t.Errorf("Expected StartTime to be set")
+				}
+				if discordPayload.ReminderType != "1_HOUR_REMINDER" {
+					t.Errorf("Expected ReminderType '1_HOUR_REMINDER', got '%s'", discordPayload.ReminderType)
+				}
+				if discordPayload.EventMessageID == "" {
+					t.Errorf("Expected EventMessageID to be set")
+				}
 			},
 		},
 		{
@@ -185,27 +204,35 @@ func TestProcessRoundReminder(t *testing.T) {
 					EventMessageID: "non_existent_event_message_id",
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to get round", // This is the top-level error from the service
+			expectedError:            false, // ← Change to false - this is a business failure
+			expectedErrorMessagePart: "",    // ← Remove this since we're not expecting a Go error
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+				// Check for business failure instead of Go error
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {
 					t.Errorf("Expected failure RoundID to be '%s', got '%s'", nonexistentRoundID, failurePayload.RoundID)
 				}
+
 				expectedDBErrorMessagePart := "not found"
 				if !strings.Contains(failurePayload.Error, expectedDBErrorMessagePart) {
 					t.Errorf("Expected failure payload error message to contain '%s', got '%s'", expectedDBErrorMessagePart, failurePayload.Error)
 				}
-				if !strings.Contains(failurePayload.Error, sharedtypes.RoundID(nonexistentRoundID).String()) {
+
+				if !strings.Contains(failurePayload.Error, (nonexistentRoundID.String())) {
 					t.Errorf("Expected failure payload error message to contain the round ID '%s', got '%s'", nonexistentRoundID, failurePayload.Error)
+				}
+
+				// Ensure Success is nil when we have a business failure
+				if returnedResult.Success != nil {
+					t.Errorf("Expected Success to be nil when Failure is present, but got %T", returnedResult.Success)
 				}
 			},
 		},

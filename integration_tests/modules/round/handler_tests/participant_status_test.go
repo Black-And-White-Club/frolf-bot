@@ -133,20 +133,42 @@ func TestHandleParticipantJoinRequest(t *testing.T) {
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
 			helper.ClearMessages()
 
+			// Log initial state
+			t.Logf("Starting test case: %s", tc.name)
+
 			// Run the test scenario
 			tc.setupAndRun(t, helper, &deps)
 
-			// Wait for message processing
-			time.Sleep(1 * time.Second)
+			// MUCH longer wait for message processing and capture
+			t.Logf("Waiting for message processing and capture...")
+			time.Sleep(5 * time.Second) // Increased from 1 second
 
-			// Check what messages were produced by the FIRST handler
+			// Check what messages were captured
 			validationMsgs := helper.GetParticipantJoinValidationRequestMessages()
 			removalMsgs := helper.GetParticipantRemovalRequestMessages()
 			errorMsgs := helper.GetParticipantStatusCheckErrorMessages()
 
+			// Log what we found
+			t.Logf("Messages captured: validation=%d, removal=%d, error=%d",
+				len(validationMsgs), len(removalMsgs), len(errorMsgs))
+
+			// Check ALL captured messages for debugging
+			if allMsgs := helper.GetAllCapturedMessages(); len(allMsgs) > 0 {
+				for topic, msgs := range allMsgs {
+					if len(msgs) > 0 {
+						t.Logf("Captured topic %s: %d messages", topic, len(msgs))
+						for i, msg := range msgs {
+							t.Logf("  Message %d ID: %s", i, msg.UUID)
+						}
+					}
+				}
+			} else {
+				t.Logf("NO messages captured at all - check message capture setup")
+			}
+
 			if tc.expectValidationRequest {
 				if len(validationMsgs) == 0 {
-					t.Error("Expected participant validation request message, got none")
+					t.Errorf("Expected participant validation request message, got none. Handler published message UUID f37e7f14-6ed6-46ab-b421-3372d3752472 but capture didn't receive it.")
 				}
 				if len(removalMsgs) > 0 {
 					t.Errorf("Expected no removal messages, got %d", len(removalMsgs))

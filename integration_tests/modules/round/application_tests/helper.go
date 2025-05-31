@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/uptrace/bun"
@@ -17,6 +19,12 @@ import (
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/nats-io/nats.go/jetstream"
+)
+
+var (
+	testEnvOnce sync.Once
+	testEnv     *testutils.TestEnvironment
+	testEnvErr  error
 )
 
 type RoundTestDeps struct {
@@ -34,13 +42,13 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 
 	testEnvOnce.Do(func() {
 		log.Println("Initializing round test environment...")
-		env, err := testutils.NewTestEnvironment(t)
+		var err error
+		testEnv, err = testutils.NewTestEnvironment(t) // Pass t here
 		if err != nil {
 			testEnvErr = err
 			log.Printf("Failed to set up test environment: %v", err)
 		} else {
 			log.Println("Round test environment initialized successfully.")
-			testEnv = env
 		}
 	})
 
@@ -58,30 +66,18 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 func SetupTestRoundService(t *testing.T) RoundTestDeps {
 	t.Helper()
 
-	// Get the shared test environment
+	// Get the shared test environment (your old working pattern)
 	env := GetTestEnv(t)
-
-	// Check if containers should be recreated for stability
-	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
-		t.Fatalf("Failed to handle container recreation: %v", err)
-	}
-
-	// Perform deep cleanup between tests for better isolation
-	if err := env.DeepCleanup(); err != nil {
-		t.Fatalf("Failed to perform deep cleanup: %v", err)
-	}
-
-	// Use standard stream names that the EventBus recognizes
-	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
-
-	// Clean up NATS consumers for relevant streams before starting the test
-	if err := env.ResetJetStreamState(env.Ctx, standardStreamNames...); err != nil {
-		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
-	}
 
 	// Clean up database tables before each test
 	if err := testutils.TruncateTables(env.Ctx, env.DB, "rounds"); err != nil {
 		t.Fatalf("Failed to truncate DB tables: %v", err)
+	}
+
+	// Clean up NATS consumers for relevant streams before starting the test
+	streamNames := []string{"round", "user", "discord", "delayed"}
+	if err := env.ResetJetStreamState(env.Ctx, streamNames...); err != nil {
+		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
 	}
 
 	realDB := &rounddb.RoundDBImpl{DB: env.DB}
@@ -96,7 +92,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		eventBusCtx,
 		env.Config.NATS.URL,
 		testLogger,
-		"backend", // Use standard app type that EventBus recognizes
+		"backend",
 		eventbusmetrics.NewNoop(),
 		noOpTracer,
 	)
@@ -105,12 +101,19 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	// Ensure all required streams exist after EventBus creation
-	for _, streamName := range standardStreamNames {
-		if err := eventBusImpl.CreateStream(eventBusCtx, streamName); err != nil {
+	// Create required NATS streams if they don't exist (your old working logic)
+	for _, streamName := range streamNames {
+		_, err := eventBusImpl.GetJetStream().Stream(env.Ctx, streamName)
+		if err != nil && strings.Contains(err.Error(), "stream not found") {
+			if err := eventBusImpl.CreateStream(env.Ctx, streamName); err != nil {
+				eventBusImpl.Close()
+				eventBusCancel()
+				t.Fatalf("Failed to create required NATS stream %q: %v", streamName, err)
+			}
+		} else if err != nil {
 			eventBusImpl.Close()
 			eventBusCancel()
-			t.Fatalf("Failed to create stream %s: %v", streamName, err)
+			t.Fatalf("Failed to check existence of NATS stream %q: %v", streamName, err)
 		}
 	}
 

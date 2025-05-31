@@ -109,7 +109,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.DiscordRoundUpdatePayload)
 				if !ok {
 					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
 					return
@@ -220,7 +220,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.DiscordRoundUpdatePayload)
 				if !ok {
 					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
 					return
@@ -279,7 +279,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.DiscordRoundUpdatePayload)
 				if !ok {
 					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
 					return
@@ -333,7 +333,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.DiscordRoundUpdatePayload)
 				if !ok {
 					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
 					return

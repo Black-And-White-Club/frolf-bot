@@ -46,7 +46,7 @@ func TestProcessRoundStart(t *testing.T) {
 				if result.Success == nil {
 					t.Fatalf("Expected success payload, got nil")
 				}
-				successPayload, ok := result.Success.(roundevents.DiscordRoundStartPayload)
+				successPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayload)
 				if !ok {
 					t.Fatalf("Expected DiscordRoundStartPayload, got %T", result.Success)
 				}
@@ -91,7 +91,7 @@ func TestProcessRoundStart(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
 					t.Fatalf("Expected RoundErrorPayload, got %T", result.Failure)
 				}
@@ -120,7 +120,7 @@ func TestProcessRoundStart(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
-				failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
 					t.Fatalf("Expected RoundErrorPayload, got %T", result.Failure)
 				}
@@ -165,8 +165,9 @@ func TestProcessRoundStart(t *testing.T) {
 			result, err := deps.Service.ProcessRoundStart(deps.Ctx, tt.payload)
 
 			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
+				// Check for business failure, not Go error
+				if err != nil {
+					t.Errorf("Expected no Go error (business failure should be in result), but got: %v", err)
 				}
 				if result.Failure == nil {
 					t.Errorf("Expected a failure payload, but got nil")
@@ -175,7 +176,7 @@ func TestProcessRoundStart(t *testing.T) {
 					t.Errorf("Expected nil success payload, but got %v", result.Success)
 				}
 				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
 					if ok && !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
 						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
 					}

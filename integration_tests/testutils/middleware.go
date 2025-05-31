@@ -61,13 +61,68 @@ func (mc *MessageCapture) Clear() {
 
 // WaitForMessages waits for a specific number of messages on a topic with timeout
 func (mc *MessageCapture) WaitForMessages(topic string, expectedCount int, timeout time.Duration) bool {
+	interval := 1 * time.Millisecond
+	maxInterval := 50 * time.Millisecond
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
 		if len(mc.GetMessages(topic)) >= expectedCount {
 			return true
 		}
-		time.Sleep(10 * time.Millisecond)
+
+		time.Sleep(interval)
+		interval *= 2
+		if interval > maxInterval {
+			interval = maxInterval
+		}
 	}
 	return false
+}
+
+func (mc *MessageCapture) ClearOldMessages(olderThan time.Duration) {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+
+	cutoff := time.Now().Add(-olderThan)
+
+	for topic, messages := range mc.messages {
+		filtered := make([]*message.Message, 0, len(messages))
+		for _, msg := range messages {
+			// Keep recent messages, clear old ones
+			if msg.Metadata.Get("timestamp") != "" {
+				if timestamp, err := time.Parse(time.RFC3339, msg.Metadata.Get("timestamp")); err == nil {
+					if timestamp.After(cutoff) {
+						filtered = append(filtered, msg)
+					}
+				} else {
+					filtered = append(filtered, msg) // Keep if can't parse timestamp
+				}
+			} else {
+				filtered = append(filtered, msg) // Keep if no timestamp
+			}
+		}
+		mc.messages[topic] = filtered
+	}
+}
+
+func (mc *MessageCapture) WaitForMessageType(topic string, messageType string, timeout time.Duration) *message.Message {
+	deadline := time.Now().Add(timeout)
+	interval := 1 * time.Millisecond
+	maxInterval := 50 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		messages := mc.GetMessages(topic)
+		for _, msg := range messages {
+			if msg.Metadata.Get("type") == messageType {
+				return msg
+			}
+		}
+
+		time.Sleep(interval)
+		interval *= 2
+		if interval > maxInterval {
+			interval = maxInterval
+		}
+	}
+	return nil
 }

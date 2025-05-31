@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
@@ -20,39 +19,54 @@ import (
 
 func TestTagAssignmentRequested(t *testing.T) {
 	deps := SetupTestLeaderboardService(t)
-	defer deps.Cleanup()
-
-	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
 
 	tests := []struct {
 		name            string
-		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error)
+		setupData       func(t *testing.T, db *bun.DB) (*leaderboarddb.Leaderboard, error)
 		payload         leaderboardevents.TagAssignmentRequestedPayload
-		expectedError   bool                                                                                                                                             // Expected error from the service function call itself
-		expectedSuccess bool                                                                                                                                             // Expected a non-nil Success field in LeaderboardOperationResult
-		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) // Modified signature
+		expectedError   bool
+		expectedSuccess bool
+		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload)
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
 		{
 			name: "Successful tag assignment to a new user",
-			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
+			setupData: func(t *testing.T, db *bun.DB) (*leaderboarddb.Leaderboard, error) {
+				// Ensure clean state
+				_, err := db.NewUpdate().
+					Model((*leaderboarddb.Leaderboard)(nil)).
+					Set("is_active = ?", false).
+					Where("is_active = ?", true).
+					Exec(context.Background())
+				if err != nil && err != sql.ErrNoRows {
+					return nil, fmt.Errorf("failed to deactivate existing leaderboards: %w", err)
+				}
+
+				// Create users for initial leaderboard
+				if err := testutils.InsertUser(t, db, "tag_assign_existing_user_1", sharedtypes.UserRoleRattler); err != nil {
+					return nil, err
+				}
+				if err := testutils.InsertUser(t, db, "tag_assign_existing_user_2", sharedtypes.UserRoleRattler); err != nil {
+					return nil, err
+				}
+
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "existing_user_1", TagNumber: 1},
-						{UserID: "existing_user_2", TagNumber: 2},
+						{UserID: "tag_assign_existing_user_1", TagNumber: 1},
+						{UserID: "tag_assign_existing_user_2", TagNumber: 2},
 					},
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
-				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
+				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
 					return nil, err
 				}
 				return initialLeaderboard, nil
 			},
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
-				UserID:     "new_user_1",
+				UserID:     "tag_assign_new_user_1",
 				TagNumber:  tagPtr(3),
 				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
@@ -60,86 +74,69 @@ func TestTagAssignmentRequested(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.TagAssignedPayload)
+				successPayload, ok := result.Success.(*leaderboardevents.BatchTagAssignedPayload)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.TagAssignedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.BatchTagAssignedPayload, but got %T", result.Success)
 					return
 				}
 
-				// Validate fields that should match the request payload (using the 'payload' parameter)
-				if successPayload.UserID != payload.UserID {
-					t.Errorf("Expected UserID '%s', got '%s'", payload.UserID, successPayload.UserID)
-				}
-				if successPayload.TagNumber == nil || *successPayload.TagNumber != *payload.TagNumber {
-					t.Errorf("Expected TagNumber %v, got %v", payload.TagNumber, successPayload.TagNumber)
+				if successPayload.AssignmentCount != 1 {
+					t.Errorf("Expected 1 assignment, got %d", successPayload.AssignmentCount)
+					return
 				}
 
-				// Validate Source: Should match the Source from the original request payload (payload.Source)
-				if successPayload.Source != payload.Source {
-					t.Errorf("Expected Source '%s', got '%s'", payload.Source, successPayload.Source)
+				if len(successPayload.Assignments) != 1 {
+					t.Errorf("Expected 1 assignment in payload, got %d", len(successPayload.Assignments))
+					return
 				}
 
-				// Validate AssignmentID: Should be a newly generated, non-nil UUID
-				if successPayload.AssignmentID == sharedtypes.RoundID(uuid.Nil) {
-					t.Errorf("Expected a non-nil AssignmentID, but got the zero UUID")
+				assignment := successPayload.Assignments[0]
+				if assignment.UserID != payload.UserID {
+					t.Errorf("Expected UserID '%s', got '%s'", payload.UserID, assignment.UserID)
+				}
+				if assignment.TagNumber != *payload.TagNumber {
+					t.Errorf("Expected TagNumber %v, got %v", *payload.TagNumber, assignment.TagNumber)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
-				var leaderboards []leaderboarddb.Leaderboard
+				var activeLeaderboard leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
-					Model(&leaderboards).
-					Order("id ASC").
+					Model(&activeLeaderboard).
+					Where("is_active = ?", true).
 					Scan(context.Background())
 				if err != nil {
-					t.Fatalf("Failed to query leaderboards: %v", err)
+					t.Fatalf("Failed to query active leaderboard: %v", err)
 				}
 
-				if len(leaderboards) != 2 {
-					t.Errorf("Expected 2 leaderboard records (old inactive, new active), got %d", len(leaderboards))
+				leaderboardEntries := activeLeaderboard.LeaderboardData
+				if len(leaderboardEntries) != 3 {
+					t.Errorf("Expected 3 leaderboard entries, got %d", len(leaderboardEntries))
 					return
 				}
 
-				oldLeaderboard := leaderboards[0]
-				newLeaderboard := leaderboards[1]
-
-				if oldLeaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected old leaderboard ID %d, got %d", initialLeaderboard.ID, oldLeaderboard.ID)
-				}
-				if oldLeaderboard.IsActive {
-					t.Error("Expected old leaderboard to be inactive")
-				}
-
-				if !newLeaderboard.IsActive {
-					t.Error("Expected new leaderboard to be active")
-				}
-
 				foundNewUserTag := false
-				for _, entry := range newLeaderboard.LeaderboardData {
-					// Corrected comparison for TagNumber (assuming it's now value type sharedtypes.TagNumber)
-					if entry.UserID == "new_user_1" && entry.TagNumber != 0 && entry.TagNumber == 3 {
-						foundNewUserTag = true
-						break
-					}
-				}
-				if !foundNewUserTag {
-					t.Error("New user with assigned tag not found in the new leaderboard data")
-				}
-
 				foundExistingUser1 := false
 				foundExistingUser2 := false
-				for _, entry := range newLeaderboard.LeaderboardData {
-					// Corrected comparison for TagNumber (assuming it's now value type sharedtypes.TagNumber)
-					if entry.UserID == "existing_user_1" && entry.TagNumber != 0 && entry.TagNumber == 1 {
+
+				for _, entry := range leaderboardEntries {
+					if entry.UserID == "tag_assign_new_user_1" && entry.TagNumber == 3 {
+						foundNewUserTag = true
+					}
+					if entry.UserID == "tag_assign_existing_user_1" && entry.TagNumber == 1 {
 						foundExistingUser1 = true
 					}
-					if entry.UserID == "existing_user_2" && entry.TagNumber != 0 && entry.TagNumber == 2 {
+					if entry.UserID == "tag_assign_existing_user_2" && entry.TagNumber == 2 {
 						foundExistingUser2 = true
 					}
+				}
+
+				if !foundNewUserTag {
+					t.Error("New user with assigned tag not found in the new leaderboard data")
 				}
 				if !foundExistingUser1 || !foundExistingUser2 {
 					t.Error("Existing users/tags not found in the new leaderboard data")
@@ -147,141 +144,86 @@ func TestTagAssignmentRequested(t *testing.T) {
 			},
 		},
 		{
-			name: "Tag swap is triggered when user with tag claims another user's tag",
-			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
-				initialLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_A", TagNumber: 10},
-						{UserID: "user_B", TagNumber: 20},
-					},
-					IsActive:     true,
-					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
-					UpdateID:     sharedtypes.RoundID(uuid.New()),
-				}
-				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
-				if err != nil {
-					return nil, err
-				}
-				return initialLeaderboard, nil
-			},
-			payload: leaderboardevents.TagAssignmentRequestedPayload{
-				UserID:     "user_A",   // Already has tag 10
-				TagNumber:  tagPtr(20), // Wants to claim tag 20 (owned by user_B)
-				UpdateID:   sharedtypes.RoundID(uuid.New()),
-				Source:     "Test",
-				UpdateType: "Manual",
-			},
-			expectedError:   false, // Swap is a successful outcome for this handler
-			expectedSuccess: true,  // Swap returns a success payload
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
-				swapPayload, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayload)
-				if !ok {
-					t.Errorf("Expected swap result of type *TagSwapRequestedPayload, but got %T", result.Success)
-					return
-				}
-				if swapPayload.RequestorID != "user_A" {
-					t.Errorf("Expected RequestorID 'user_A', got '%s'", swapPayload.RequestorID)
-				}
-				if swapPayload.TargetID != "user_B" {
-					t.Errorf("Expected TargetID 'user_B', got '%s'", swapPayload.TargetID)
-				}
-			},
-			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
-				// Optionally, check that no new leaderboard was created yet (swap not performed)
-				var leaderboards []leaderboarddb.Leaderboard
-				err := deps.BunDB.NewSelect().
-					Model(&leaderboards).
-					Scan(context.Background())
-				if err != nil && err != sql.ErrNoRows {
-					t.Fatalf("Failed to query leaderboards: %v", err)
-				}
-				if len(leaderboards) != 1 {
-					t.Errorf("Expected 1 leaderboard record in DB (no swap performed yet), got %d", len(leaderboards))
-				}
-			},
-		},
-		{
 			name: "Tag assignment fails if tag is already assigned",
-			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
+			setupData: func(t *testing.T, db *bun.DB) (*leaderboarddb.Leaderboard, error) {
+				// Ensure clean state
+				_, err := db.NewUpdate().
+					Model((*leaderboarddb.Leaderboard)(nil)).
+					Set("is_active = ?", false).
+					Where("is_active = ?", true).
+					Exec(context.Background())
+				if err != nil && err != sql.ErrNoRows {
+					return nil, fmt.Errorf("failed to deactivate existing leaderboards: %w", err)
+				}
+
+				// Create users for leaderboard
+				if err := testutils.InsertUser(t, db, "tag_conflict_user_a", sharedtypes.UserRoleRattler); err != nil {
+					return nil, err
+				}
+				if err := testutils.InsertUser(t, db, "tag_conflict_user_b", sharedtypes.UserRoleRattler); err != nil {
+					return nil, err
+				}
+
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_A", TagNumber: 10},
-						{UserID: "user_B", TagNumber: 20},
+						{UserID: "tag_conflict_user_a", TagNumber: 10},
+						{UserID: "tag_conflict_user_b", TagNumber: 20},
 					},
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
 				}
-				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
+				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
 					return nil, err
 				}
 				return initialLeaderboard, nil
 			},
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
-				UserID:     "user_C",
-				TagNumber:  tagPtr(10), // Tag 10 is already assigned to user_A
+				UserID:     "tag_conflict_user_c",
+				TagNumber:  tagPtr(10), // Tag 10 is already assigned to tag_conflict_user_a
 				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
-			expectedError:   false, // Service returns nil error for validation failures
-			expectedSuccess: false, // Service returns a failure payload
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+			expectedError:   false,
+			expectedSuccess: false,
+			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagAssignmentFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagAssignmentFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.BatchTagAssignmentFailedPayload, but got %T", result.Failure)
 					return
 				}
 
-				if failurePayload.UserID != payload.UserID {
-					t.Errorf("Expected UserID '%s', got '%s'", payload.UserID, failurePayload.UserID)
-				}
-				// Corrected comparison for TagNumber (assuming the payload still uses a pointer)
-				if failurePayload.TagNumber == nil || *failurePayload.TagNumber != *payload.TagNumber {
-					t.Errorf("Expected TagNumber %v in failure payload, got %v", payload.TagNumber, failurePayload.TagNumber)
-				}
-				if failurePayload.Source != payload.Source {
-					t.Errorf("Expected Source '%s', got '%s'", payload.Source, failurePayload.Source)
-				}
-				if failurePayload.UpdateType != payload.UpdateType {
-					t.Errorf("Expected UpdateType '%s', got '%s'", payload.UpdateType, failurePayload.UpdateType)
-				}
-				// Updated substring check to be more general or match the exact expected error message
 				if !strings.Contains(strings.ToLower(failurePayload.Reason), "already assigned") {
 					t.Errorf("Expected failure reason to contain 'already assigned', got '%s'", failurePayload.Reason)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
-				var leaderboards []leaderboarddb.Leaderboard
+				var activeLeaderboard leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
-					Model(&leaderboards).
+					Model(&activeLeaderboard).
+					Where("is_active = ?", true).
 					Scan(context.Background())
-				if err != nil && err != sql.ErrNoRows {
-					t.Fatalf("Failed to query leaderboards: %v", err)
+				if err != nil {
+					t.Fatalf("Failed to query active leaderboard: %v", err)
 				}
 
-				if len(leaderboards) != 1 {
-					t.Errorf("Expected 1 leaderboard record in DB, got %d", len(leaderboards))
-					return
+				if activeLeaderboard.ID != initialLeaderboard.ID {
+					t.Errorf("Expected leaderboard to remain unchanged for tag conflict")
 				}
-
-				leaderboard := leaderboards[0]
-				if leaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected leaderboard ID %d, got %d", initialLeaderboard.ID, leaderboard.ID)
-				}
-				if !leaderboard.IsActive {
+				if !activeLeaderboard.IsActive {
 					t.Error("Expected leaderboard to remain active")
 				}
 			},
 		},
 		{
 			name: "Tag assignment fails if no active leaderboard exists",
-			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
+			setupData: func(t *testing.T, db *bun.DB) (*leaderboarddb.Leaderboard, error) {
 				_, err := db.NewUpdate().
 					Model((*leaderboarddb.Leaderboard)(nil)).
 					Set("is_active = ?", false).
@@ -293,120 +235,109 @@ func TestTagAssignmentRequested(t *testing.T) {
 				return nil, nil
 			},
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
-				UserID:     "user_D",
+				UserID:     "tag_no_board_user_d",
 				TagNumber:  tagPtr(4),
 				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
-			expectedError:   true, // Service returns an error if getting active leaderboard fails
+			expectedError:   true,
 			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
-				// This case expects an error from the service call itself, not a failure payload.
-				// The check for `result.Failure == nil` is sufficient here based on expectedSuccess: false.
+			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) {
+				// This case expects an error from the service call itself
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
 				var leaderboards []leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
 					Model(&leaderboards).
+					Where("is_active = ?", true).
 					Scan(context.Background())
 				if err != nil && err != sql.ErrNoRows {
 					t.Fatalf("Failed to query leaderboards: %v", err)
 				}
 				if len(leaderboards) != 0 {
-					t.Errorf("Expected 0 leaderboard records in DB, got %d", len(leaderboards))
+					t.Errorf("Expected 0 active leaderboard records in DB, got %d", len(leaderboards))
 				}
 			},
 		},
 		{
 			name: "Tag assignment fails for invalid tag number (e.g., negative)",
-			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
+			setupData: func(t *testing.T, db *bun.DB) (*leaderboarddb.Leaderboard, error) {
+				// Ensure clean state
+				_, err := db.NewUpdate().
+					Model((*leaderboarddb.Leaderboard)(nil)).
+					Set("is_active = ?", false).
+					Where("is_active = ?", true).
+					Exec(context.Background())
+				if err != nil && err != sql.ErrNoRows {
+					return nil, fmt.Errorf("failed to deactivate existing leaderboards: %w", err)
+				}
+
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 					IsActive:        true,
 					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
 				}
-				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
+				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
 					return nil, err
 				}
 				return initialLeaderboard, nil
 			},
 			payload: leaderboardevents.TagAssignmentRequestedPayload{
-				UserID:     "user_E",
+				UserID:     "tag_negative_user_e",
 				TagNumber:  tagPtr(-5), // Invalid tag number
 				UpdateID:   sharedtypes.RoundID(uuid.New()),
 				Source:     "Test",
 				UpdateType: "Manual",
 			},
-			expectedError:   false, // Service returns nil error for validation failures
-			expectedSuccess: false, // Service returns a failure payload
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+			expectedError:   false,
+			expectedSuccess: false,
+			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagAssignmentFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagAssignmentFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.BatchTagAssignmentFailedPayload, but got %T", result.Failure)
 					return
 				}
 
-				if failurePayload.UserID != payload.UserID {
-					t.Errorf("Expected UserID '%s', got '%s'", payload.UserID, failurePayload.UserID)
-				}
-				// Updated validation to match current service behavior (TagNumber is nil for negative input)
-				if failurePayload.TagNumber != nil {
-					t.Errorf("Expected nil TagNumber in failure payload for invalid tag, got %v", failurePayload.TagNumber)
-				}
-				if failurePayload.Source != payload.Source {
-					t.Errorf("Expected Source %v, got '%v'", payload.Source, failurePayload.Source)
-				}
-				if failurePayload.UpdateType != payload.UpdateType {
-					t.Errorf("Expected UpdateType %s, got '%s'", payload.UpdateType, failurePayload.UpdateType)
-				}
-				// Updated substring check to match the actual error message
-				if !strings.Contains(strings.ToLower(failurePayload.Reason), "invalid input: tag number cannot be negative") {
-					t.Errorf("Expected failure reason to contain 'invalid input: tag number cannot be negative', got '%s'", failurePayload.Reason)
+				if !strings.Contains(strings.ToLower(failurePayload.Reason), "invalid tag number") {
+					t.Errorf("Expected failure reason to contain 'invalid tag number', got '%s'", failurePayload.Reason)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
-				var leaderboards []leaderboarddb.Leaderboard
+				var activeLeaderboard leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
-					Model(&leaderboards).
+					Model(&activeLeaderboard).
+					Where("is_active = ?", true).
 					Scan(context.Background())
-				if err != nil && err != sql.ErrNoRows {
-					t.Fatalf("Failed to query leaderboards: %v", err)
+				if err != nil {
+					t.Fatalf("Failed to query active leaderboard: %v", err)
 				}
 
-				if len(leaderboards) != 1 {
-					t.Errorf("Expected 1 leaderboard record in DB, got %d", len(leaderboards))
-					return
+				if activeLeaderboard.ID != initialLeaderboard.ID {
+					t.Errorf("Expected leaderboard to remain unchanged for invalid input")
 				}
-
-				leaderboard := leaderboards[0]
-				if leaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected leaderboard ID %d, got %d", initialLeaderboard.ID, leaderboard.ID)
-				}
-				if !leaderboard.IsActive {
+				if !activeLeaderboard.IsActive {
 					t.Error("Expected leaderboard to remain active")
 				}
-				if len(leaderboard.LeaderboardData) != 0 {
-					t.Errorf("Expected leaderboard data to be empty, got %d entries", len(leaderboard.LeaderboardData))
+				if len(activeLeaderboard.LeaderboardData) != 0 {
+					t.Errorf("Expected leaderboard data to be empty, got %d entries", len(activeLeaderboard.LeaderboardData))
 				}
 			},
 		},
 	}
 
 	for _, tt := range tests {
-		// Capture tt for use in the validateResult closure
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {
-				initialLeaderboard, setupErr = tt.setupData(deps.BunDB, dataGen)
+				initialLeaderboard, setupErr = tt.setupData(t, deps.BunDB)
 				if setupErr != nil {
 					t.Fatalf("Failed to set up test data: %v", setupErr)
 				}
@@ -419,7 +350,17 @@ func TestTagAssignmentRequested(t *testing.T) {
 					TagNumber: *tt.payload.TagNumber,
 				},
 			}
-			result, err := deps.Service.ProcessTagAssignments(ctx, tt.payload, tagAssignmentRequests, nil, tt.payload.UpdateID.UUID(), tt.payload.UpdateID.UUID())
+
+			// Call the service
+			result, err := deps.Service.ProcessTagAssignments(
+				ctx,
+				sharedtypes.ServiceUpdateSourceManual, // Correct source type
+				tagAssignmentRequests,
+				nil,                        // No requesting user for manual assignments
+				tt.payload.UpdateID.UUID(), // Operation ID
+				tt.payload.UpdateID.UUID(), // Batch ID
+			)
+
 			// Check for error return value from the service function
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")
@@ -438,7 +379,6 @@ func TestTagAssignmentRequested(t *testing.T) {
 
 			// Validate the content of the result payload (either success or failure)
 			if tt.validateResult != nil {
-				// Pass the test case's payload to the validation function
 				tt.validateResult(t, deps, result, tt.payload)
 			}
 

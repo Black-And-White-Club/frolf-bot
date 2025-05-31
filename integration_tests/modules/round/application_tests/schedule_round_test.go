@@ -271,7 +271,7 @@ func TestScheduleRoundEvents_Behavioral(t *testing.T) {
 			}
 
 			// Verify the immediate result
-			scheduledPayload, ok := result.Success.(roundevents.RoundScheduledPayload)
+			scheduledPayload, ok := result.Success.(*roundevents.RoundScheduledPayload)
 			if !ok {
 				t.Errorf("Expected result to be RoundScheduledPayload, got %T", result.Success)
 				return

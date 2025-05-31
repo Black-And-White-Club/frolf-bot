@@ -98,7 +98,7 @@ func TestGetRound(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				retrievedRound, ok := returnedResult.Success.(roundtypes.Round)
+				retrievedRound, ok := returnedResult.Success.(*roundtypes.Round)
 				if !ok {
 					t.Errorf("Expected result to be of type roundtypes.Round, got %T", returnedResult.Success)
 					return
@@ -204,27 +204,35 @@ func TestGetRound(t *testing.T) {
 				return nonexistentRoundID
 			},
 			roundIDToFetch:           nonexistentRoundID,
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to retrieve round", // This is the top-level error from the service
+			expectedError:            false, // ← Change to false - this is a business failure, not technical error
+			expectedErrorMessagePart: "",    // ← Remove this since we're not expecting a Go error
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+				// Check for business failure instead of Go error
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {
 					t.Errorf("Expected failure RoundID to be '%s', got '%s'", nonexistentRoundID, failurePayload.RoundID)
 				}
+
 				expectedDBErrorMessagePart := "not found"
 				if !strings.Contains(failurePayload.Error, expectedDBErrorMessagePart) {
 					t.Errorf("Expected failure payload error message to contain '%s', got '%s'", expectedDBErrorMessagePart, failurePayload.Error)
 				}
-				if !strings.Contains(failurePayload.Error, sharedtypes.RoundID(nonexistentRoundID).String()) {
+
+				if !strings.Contains(failurePayload.Error, (nonexistentRoundID.String())) {
 					t.Errorf("Expected failure payload error message to contain the round ID '%s', got '%s'", nonexistentRoundID, failurePayload.Error)
+				}
+
+				// Ensure Success is nil when we have a business failure
+				if returnedResult.Success != nil {
+					t.Errorf("Expected Success to be nil when Failure is present, but got %T", returnedResult.Success)
 				}
 			},
 		},
