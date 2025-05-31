@@ -1,9 +1,9 @@
 module github.com/Black-And-White-Club/frolf-bot
 
-go 1.24.2
+go 1.24.3
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.40.0
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.42
 	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/docker/docker v28.0.1+incompatible
@@ -25,8 +25,6 @@ require (
 	go.uber.org/mock v0.5.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
 	dario.cat/mergo v1.0.1 // indirect

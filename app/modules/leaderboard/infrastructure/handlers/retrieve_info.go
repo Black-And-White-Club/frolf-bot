@@ -289,7 +289,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				}
 
 				// Determine which event type to use based on whether the tag was found
-				eventType := sharedevents.DiscordTagLoopupByUserIDNotFound
+				eventType := sharedevents.DiscordTagLookupByUserIDNotFound
 
 				// The responsePayload is the same as the successPayload from the service in this case
 				responsePayload := successPayload
