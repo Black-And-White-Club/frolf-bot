@@ -885,7 +885,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					notFoundResponsePayload,
-					sharedevents.DiscordTagLoopupByUserIDNotFound,
+					sharedevents.DiscordTagLookupByUserIDNotFound,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

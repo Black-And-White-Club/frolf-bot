@@ -75,7 +75,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				expectedTopic := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic := sharedevents.DiscordTagLoopupByUserIDNotFound
+				unexpectedTopic := sharedevents.DiscordTagLookupByUserIDNotFound
 				unexpectedFailTopic := sharedevents.DiscordTagLookupByUserIDFailed
 
 				msgs := receivedMsgs[expectedTopic]
@@ -150,7 +150,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLoopupByUserIDNotFound
+				expectedTopic := sharedevents.DiscordTagLookupByUserIDNotFound
 				unexpectedTopic := sharedevents.DiscordTagLookupByUserIDSuccess
 				unexpectedFailTopic := sharedevents.DiscordTagLookupByUserIDFailed
 
@@ -198,7 +198,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 1, true)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLoopupByUserIDNotFound},
+			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupByUserIDNotFound},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -222,7 +222,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				expectedTopic := sharedevents.DiscordTagLookupByUserIDFailed
 				unexpectedTopic1 := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic2 := sharedevents.DiscordTagLoopupByUserIDNotFound
+				unexpectedTopic2 := sharedevents.DiscordTagLookupByUserIDNotFound
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -285,7 +285,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				unexpectedTopic1 := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic2 := sharedevents.DiscordTagLoopupByUserIDNotFound
+				unexpectedTopic2 := sharedevents.DiscordTagLookupByUserIDNotFound
 				unexpectedTopic3 := sharedevents.DiscordTagLookupByUserIDFailed
 
 				if len(receivedMsgs[unexpectedTopic1]) > 0 {
