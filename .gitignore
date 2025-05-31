@@ -25,3 +25,15 @@
 
 postgres-data*
 /tmp
+
+reports*
+bin/app-coverage
+bin/app-instrumented
+bin/bun-instrumented
+reports/combined-coverage-filtered.txt
+reports/combined-test-output.log
+reports/integration-output.log
+reports/integration-test-output.log
+reports/test-output.log
+reports/unit-output.log
+reports/unit-test-output.log

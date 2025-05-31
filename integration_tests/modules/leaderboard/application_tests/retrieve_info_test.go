@@ -24,6 +24,7 @@ import (
 // TestGetLeaderboard tests the GetLeaderboard service function.
 func TestGetLeaderboard(t *testing.T) {
 	deps := SetupTestLeaderboardService(t)
+	defer deps.Cleanup()
 
 	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -330,6 +331,7 @@ func TestGetLeaderboard(t *testing.T) {
 // TestRoundGetTagByUserID tests the RoundGetTagByUserID service function.
 func TestRoundGetTagByUserID(t *testing.T) {
 	deps := SetupTestLeaderboardService(t)
+	defer deps.Cleanup()
 
 	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -628,6 +630,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 
 func TestGetTagByUserID(t *testing.T) {
 	deps := SetupTestLeaderboardService(t)
+	defer deps.Cleanup()
 
 	sharedCtx := context.Background()
 	dataGen := testutils.NewTestDataGenerator(time.Now().UnixNano())
