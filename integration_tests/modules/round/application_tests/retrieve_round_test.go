@@ -98,9 +98,10 @@ func TestGetRound(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				retrievedRound, ok := returnedResult.Success.(roundtypes.Round)
+				// Fix: Expect pointer type instead of value type
+				retrievedRound, ok := returnedResult.Success.(*roundtypes.Round)
 				if !ok {
-					t.Errorf("Expected result to be of type roundtypes.Round, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *roundtypes.Round, got %T", returnedResult.Success)
 					return
 				}
 
@@ -203,17 +204,19 @@ func TestGetRound(t *testing.T) {
 				// No rounds are created for this test, as we want to test fetching a non-existent one.
 				return nonexistentRoundID
 			},
-			roundIDToFetch:           nonexistentRoundID,
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to retrieve round", // This is the top-level error from the service
+			roundIDToFetch: nonexistentRoundID,
+			// Fix: The service returns nil error but uses Failure payload
+			expectedError:            false,
+			expectedErrorMessagePart: "",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundErrorPayload)
+				// Fix: Expect pointer type instead of value type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {

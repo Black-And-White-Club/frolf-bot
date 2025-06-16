@@ -102,12 +102,12 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if result.Success == nil {
 					return false
 				}
-				payload, ok := result.Success.(*roundevents.DiscordRoundUpdatePayload)
+				payload, ok := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
 					return false
 				}
 				// Should have 2 rounds (both rounds have participants that need updates)
-				return len(payload.RoundIDs) == 2 && len(payload.Participants) == 3 // user2 appears in both rounds
+				return len(payload.UpdatedRounds) == 2 && payload.Summary.ParticipantsUpdated == 3 // user2 appears in both rounds
 			},
 			expectError: false,
 		},
@@ -152,14 +152,14 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if !ok {
 					return false
 				}
-				return errorPayload.Error == "update failed"
+				return errorPayload.Error == "database update failed: update failed"
 			},
 			expectError: false, // Error is in the result, not returned
 		},
 		{
 			name: "no updates needed - empty changedTags",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
+				// No GetUpcomingRounds call expected for empty changedTags - early return
 				// No UpdateRoundsAndParticipants call expected when no updates
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayload{
@@ -169,12 +169,12 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if result.Success == nil {
 					return false
 				}
-				payload, ok := result.Success.(*roundevents.DiscordRoundUpdatePayload)
+				payload, ok := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
 					return false
 				}
 				// Should have empty arrays when no updates
-				return len(payload.RoundIDs) == 0 && len(payload.Participants) == 0 && len(payload.EventMessageIDs) == 0
+				return len(payload.UpdatedRounds) == 0 && payload.Summary.RoundsUpdated == 0 && payload.Summary.ParticipantsUpdated == 0
 			},
 			expectError: false,
 		},

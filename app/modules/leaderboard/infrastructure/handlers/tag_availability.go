@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
@@ -74,17 +74,20 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
 
-				// Create message for Leaderboard module to assign tag
+				// Create message for Leaderboard module to assign tag via batch assignment
 				assignTag, err := h.Helpers.CreateResultMessage(
 					msg,
-					&leaderboardevents.TagAssignmentRequestedPayload{
-						UserID:     result.UserID,
-						TagNumber:  result.TagNumber,
-						UpdateID:   sharedtypes.RoundID(uuid.New()),
-						Source:     string(sharedtypes.ServiceUpdateSourceCreateUser),
-						UpdateType: "automatic",
+					&sharedevents.BatchTagAssignmentRequestedPayload{
+						RequestingUserID: "system", // User creation is system-initiated
+						BatchID:          uuid.New().String(),
+						Assignments: []sharedevents.TagAssignmentInfo{
+							{
+								UserID:    result.UserID,
+								TagNumber: *result.TagNumber,
+							},
+						},
 					},
-					leaderboardevents.LeaderboardTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequested,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

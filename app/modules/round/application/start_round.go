@@ -32,15 +32,14 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			}, nil
 		}
 
-		// Update the round state to "in progress"
-		round.State = roundtypes.RoundStateInProgress
-
-		if err := s.RoundDB.UpdateRound(ctx, round.ID, round); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to update round",
+		// Update the round state to "in progress" - call DB method directly
+		err = s.RoundDB.UpdateRoundState(ctx, payload.RoundID, roundtypes.RoundStateInProgress)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to update round state to in progress",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
+			s.metrics.RecordDBOperationError(ctx, "UpdateRoundState")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
 					RoundID: payload.RoundID,

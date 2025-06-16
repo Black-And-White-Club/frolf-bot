@@ -6,27 +6,68 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleScheduledRoundTagUpdate",
-		&roundevents.ScheduledRoundTagUpdatePayload{},
+		&map[string]interface{}{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scheduledRoundTagUpdatePayload := payload.(*roundevents.ScheduledRoundTagUpdatePayload)
+			tagUpdateMap := payload.(*map[string]interface{})
 
 			h.logger.InfoContext(ctx, "Received ScheduledRoundTagUpdate event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.Any("changed_tags", scheduledRoundTagUpdatePayload.ChangedTags),
+				attr.String("source", getStringFromMap(tagUpdateMap, "source")),
+				attr.String("batch_id", getStringFromMap(tagUpdateMap, "batch_id")),
 			)
 
+			// Convert the map to the service payload format
+			changedTags := make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber)
+
+			if changedTagsRaw, ok := (*tagUpdateMap)["changed_tags"]; ok {
+				if changedTagsMap, ok := changedTagsRaw.(map[string]interface{}); ok {
+					for userID, tagNumberRaw := range changedTagsMap {
+						switch v := tagNumberRaw.(type) {
+						case float64:
+							tagNumber := sharedtypes.TagNumber(v)
+							changedTags[sharedtypes.DiscordID(userID)] = &tagNumber
+						case int:
+							tagNumber := sharedtypes.TagNumber(v)
+							changedTags[sharedtypes.DiscordID(userID)] = &tagNumber
+						default:
+							h.logger.WarnContext(ctx, "Unexpected tag number type",
+								attr.String("user_id", userID),
+								attr.Any("tag_number", tagNumberRaw),
+								attr.String("type", fmt.Sprintf("%T", tagNumberRaw)),
+							)
+						}
+					}
+				}
+			}
+
+			h.logger.InfoContext(ctx, "Converted changed tags",
+				attr.CorrelationIDFromMsg(msg),
+				attr.Int("changed_tags_count", len(changedTags)),
+			)
+
+			if len(changedTags) == 0 {
+				h.logger.InfoContext(ctx, "No valid tag changes found, skipping update")
+				return nil, nil
+			}
+
+			// Create the service payload
+			servicePayload := roundevents.ScheduledRoundTagUpdatePayload{
+				ChangedTags: changedTags,
+			}
+
 			// Call the service function to handle the event
-			result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, *scheduledRoundTagUpdatePayload)
+			result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, servicePayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle ScheduledRoundTagUpdate event",
 					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
+					attr.Error(err),
 				)
 				return nil, fmt.Errorf("failed to handle ScheduledRoundTagUpdate event: %w", err)
 			}
@@ -51,24 +92,50 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Scheduled round tag update successful",
-					attr.CorrelationIDFromMsg(msg))
+				// FOLLOW THE SAME PATTERN AS REMINDER HANDLER - Extract and log the success payload details
+				tagsUpdatedPayload := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 
-				// Create success message to publish
-				// Remove the type assertion since result.Success is already the correct type
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					result.Success, // This is already a pointer to the correct type
-					roundevents.TagsUpdatedForScheduledRounds,
+				h.logger.InfoContext(ctx, "Scheduled round tag update processed successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Int("total_rounds_processed", tagsUpdatedPayload.Summary.TotalRoundsProcessed),
+					attr.Int("rounds_updated", tagsUpdatedPayload.Summary.RoundsUpdated),
+					attr.Int("participants_updated", tagsUpdatedPayload.Summary.ParticipantsUpdated),
 				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
+
+				// Log each round that will be updated (similar to reminder handler logging participants)
+				for _, roundInfo := range tagsUpdatedPayload.UpdatedRounds {
+					h.logger.InfoContext(ctx, "Round requires Discord embed update",
+						attr.CorrelationIDFromMsg(msg),
+						attr.RoundID("round_id", roundInfo.RoundID),
+						attr.String("round_title", string(roundInfo.Title)),
+						attr.String("event_message_id", roundInfo.EventMessageID),
+						attr.Int("total_participants", len(roundInfo.UpdatedParticipants)),
+						attr.Int("participants_with_tag_changes", roundInfo.ParticipantsChanged),
+					)
 				}
 
-				return []*message.Message{successMsg}, nil
+				// Only publish Discord update if there are rounds to update
+				if len(tagsUpdatedPayload.UpdatedRounds) > 0 {
+					successMsg, err := h.helpers.CreateResultMessage(
+						msg,
+						tagsUpdatedPayload, // Pass the extracted payload, not result.Success
+						roundevents.TagsUpdatedForScheduledRounds,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create success message: %w", err)
+					}
+					return []*message.Message{successMsg}, nil
+				} else {
+					// No rounds to update, but processing was successful
+					h.logger.InfoContext(ctx, "Tag update processed but no rounds require Discord updates",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Int("total_rounds_processed", tagsUpdatedPayload.Summary.TotalRoundsProcessed),
+					)
+					return []*message.Message{}, nil
+				}
 			}
 
-			// This should never happen now that service always returns Success
+			// This should never happen now that service always returns Success or Failure
 			h.logger.ErrorContext(ctx, "Unexpected result from UpdateScheduledRoundsWithNewTags service",
 				attr.CorrelationIDFromMsg(msg),
 			)
@@ -76,6 +143,15 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 		},
 	)
 
-	// Execute the wrapped handler with the message
 	return wrappedHandler(msg)
+}
+
+// Helper function to safely extract string values from the map
+func getStringFromMap(m *map[string]interface{}, key string) string {
+	if value, ok := (*m)[key]; ok {
+		if str, ok := value.(string); ok {
+			return str
+		}
+	}
+	return ""
 }

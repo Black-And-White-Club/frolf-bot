@@ -76,9 +76,10 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				discordPayload, ok := returnedResult.Success.(roundevents.DiscordReminderPayload)
+				// Fix: Expect pointer type instead of value type
+				discordPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
 				if !ok {
-					t.Errorf("Expected result to be of type DiscordReminderPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
 					return
 				}
 
@@ -160,16 +161,21 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				processedPayload, ok := returnedResult.Success.(roundevents.RoundReminderProcessedPayload)
+				// Fix: Service always returns DiscordReminderPayload, not RoundReminderProcessedPayload
+				processedPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
 				if !ok {
-					t.Errorf("Expected result to be of type RoundReminderProcessedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
 					return
 				}
 
 				if processedPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Errorf("Expected RoundID to be set in processed payload, got empty")
 				}
-				// No UserIDs should be in this payload, as per service logic for no participants to notify
+
+				// Verify no UserIDs in the payload since only declined participants exist
+				if len(processedPayload.UserIDs) != 0 {
+					t.Errorf("Expected 0 UserIDs for declined participants only, got %d", len(processedPayload.UserIDs))
+				}
 			},
 		},
 		{
@@ -185,16 +191,18 @@ func TestProcessRoundReminder(t *testing.T) {
 					EventMessageID: "non_existent_event_message_id",
 				}
 			},
-			expectedError:            true,
-			expectedErrorMessagePart: "failed to get round", // This is the top-level error from the service
+			// Fix: Service returns nil error and uses Failure payload
+			expectedError:            false,
+			expectedErrorMessagePart: "",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := returnedResult.Failure.(roundevents.RoundErrorPayload)
+				// Fix: Expect pointer type instead of value type
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {

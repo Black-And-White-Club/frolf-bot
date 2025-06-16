@@ -90,7 +90,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 		attr.RoundID("round_id", payload.RoundID),
 	)
 
-	_, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+	round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "Cannot delete non-existent round",
 			attr.RoundID("round_id", payload.RoundID),
@@ -105,6 +105,9 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 			},
 		}, nil
 	}
+
+	// Capture the event message ID before deletion
+	eventMessageID := round.EventMessageID
 
 	// Delete the round from the database
 	if err := s.RoundDB.DeleteRound(ctx, payload.RoundID); err != nil {
@@ -124,22 +127,23 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 
 	s.logger.InfoContext(ctx, "Round deleted from DB", attr.RoundID("round_id", payload.RoundID))
 
-	// Attempt to cancel any scheduled messages
-	if err := s.EventBus.CancelScheduledMessage(ctx, payload.RoundID); err != nil {
-		s.logger.WarnContext(ctx, "Failed to cancel scheduled message",
+	// Attempt to cancel any scheduled jobs for this round
+	if err := s.QueueService.CancelRoundJobs(ctx, payload.RoundID); err != nil {
+		s.logger.WarnContext(ctx, "Failed to cancel scheduled jobs",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.Error(err),
 		)
 	} else {
-		s.logger.InfoContext(ctx, "Scheduled message cancellation attempted", attr.RoundID("round_id", payload.RoundID))
+		s.logger.InfoContext(ctx, "Scheduled jobs cancellation successful", attr.RoundID("round_id", payload.RoundID))
 	}
 
-	s.logger.InfoContext(ctx, "Round deletion service process successful (Discord message ID expected in metadata)",
+	s.logger.InfoContext(ctx, "Round deletion service process successful",
 		attr.RoundID("round_id", payload.RoundID),
 	)
 
 	successPayload := &roundevents.RoundDeletedPayload{
-		RoundID: payload.RoundID,
+		RoundID:        payload.RoundID,
+		EventMessageID: eventMessageID,
 	}
 
 	return RoundOperationResult{

@@ -17,7 +17,7 @@ type Service interface {
 	UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 
 	// Update Round
-	ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (RoundOperationResult, error)
+	ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
 	UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error)
 	UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error)
 

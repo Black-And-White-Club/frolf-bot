@@ -14,6 +14,7 @@ import (
 )
 
 // TestUpdateScheduledRoundsWithNewTags is the main test function for the service method.
+// TestUpdateScheduledRoundsWithNewTags is the main test function for the service method.
 func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -109,44 +110,56 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
-					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify that we have the expected number of participants to update
-				if len(updatePayload.Participants) != 3 {
-					t.Errorf("Expected 3 participants to update (user1 in 2 rounds + user2 in 1 round), got %d", len(updatePayload.Participants))
+				// Verify that we have the expected number of rounds updated
+				if len(updatePayload.UpdatedRounds) != 2 {
+					t.Errorf("Expected 2 rounds to update, got %d", len(updatePayload.UpdatedRounds))
 				}
 
-				// Verify that we have updates for 2 rounds
-				if len(updatePayload.RoundIDs) != 2 {
-					t.Errorf("Expected 2 rounds to update, got %d", len(updatePayload.RoundIDs))
+				// Verify the summary shows correct counts
+				if updatePayload.Summary.RoundsUpdated != 2 {
+					t.Errorf("Expected Summary.RoundsUpdated to be 2, got %d", updatePayload.Summary.RoundsUpdated)
 				}
 
-				if len(updatePayload.EventMessageIDs) != 2 {
-					t.Errorf("Expected 2 event message IDs, got %d", len(updatePayload.EventMessageIDs))
+				if updatePayload.Summary.ParticipantsUpdated != 3 {
+					t.Errorf("Expected Summary.ParticipantsUpdated to be 3 (user1 in 2 rounds + user2 in 1 round), got %d", updatePayload.Summary.ParticipantsUpdated)
 				}
 
-				// Verify the tag updates were applied correctly
+				// Verify the tag updates were applied correctly by checking each round's participants
 				expectedTagUpdates := map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 					"user1": 111,
 					"user2": 222,
 				}
 
-				for _, participant := range updatePayload.Participants {
-					expectedTag, exists := expectedTagUpdates[participant.UserID]
-					if !exists {
-						t.Errorf("Unexpected participant %s in update payload", participant.UserID)
-						continue
+				foundUsers := make(map[sharedtypes.DiscordID]int) // Track how many times each user appears
+				for _, roundInfo := range updatePayload.UpdatedRounds {
+					if roundInfo.EventMessageID == "" {
+						t.Errorf("Expected EventMessageID to be set for round %s", roundInfo.RoundID)
 					}
 
-					if participant.TagNumber == nil {
-						t.Errorf("Expected participant %s to have tag number %d, but got nil", participant.UserID, expectedTag)
-					} else if *participant.TagNumber != expectedTag {
-						t.Errorf("Expected participant %s to have tag number %d, got %d", participant.UserID, expectedTag, *participant.TagNumber)
+					for _, participant := range roundInfo.UpdatedParticipants {
+						if expectedTag, exists := expectedTagUpdates[participant.UserID]; exists {
+							foundUsers[participant.UserID]++
+							if participant.TagNumber == nil {
+								t.Errorf("Expected participant %s to have tag number %d, but got nil", participant.UserID, expectedTag)
+							} else if *participant.TagNumber != expectedTag {
+								t.Errorf("Expected participant %s to have tag number %d, got %d", participant.UserID, expectedTag, *participant.TagNumber)
+							}
+						}
 					}
+				}
+
+				// Verify user1 appears in 2 rounds and user2 appears in 1 round
+				if foundUsers["user1"] != 2 {
+					t.Errorf("Expected user1 to appear in 2 rounds, but found %d", foundUsers["user1"])
+				}
+				if foundUsers["user2"] != 1 {
+					t.Errorf("Expected user2 to appear in 1 round, but found %d", foundUsers["user2"])
 				}
 
 				// Verify the rounds were actually updated in the database
@@ -220,23 +233,24 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
-					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify that no participants need to be updated
-				if len(updatePayload.Participants) != 0 {
-					t.Errorf("Expected 0 participants to update, got %d", len(updatePayload.Participants))
+				// Verify that no rounds need to be updated
+				if len(updatePayload.UpdatedRounds) != 0 {
+					t.Errorf("Expected 0 rounds to update, got %d", len(updatePayload.UpdatedRounds))
 				}
 
-				if len(updatePayload.RoundIDs) != 0 {
-					t.Errorf("Expected 0 rounds to update, got %d", len(updatePayload.RoundIDs))
+				// Verify summary shows no updates
+				if updatePayload.Summary.RoundsUpdated != 0 {
+					t.Errorf("Expected Summary.RoundsUpdated to be 0, got %d", updatePayload.Summary.RoundsUpdated)
 				}
 
-				if len(updatePayload.EventMessageIDs) != 0 {
-					t.Errorf("Expected 0 event message IDs, got %d", len(updatePayload.EventMessageIDs))
+				if updatePayload.Summary.ParticipantsUpdated != 0 {
+					t.Errorf("Expected Summary.ParticipantsUpdated to be 0, got %d", updatePayload.Summary.ParticipantsUpdated)
 				}
 			},
 		},
@@ -279,15 +293,24 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
-					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify that no participants need to be updated
-				if len(updatePayload.Participants) != 0 {
-					t.Errorf("Expected 0 participants to update, got %d", len(updatePayload.Participants))
+				// Verify that no rounds need to be updated (empty changed tags)
+				if len(updatePayload.UpdatedRounds) != 0 {
+					t.Errorf("Expected 0 rounds to update, got %d", len(updatePayload.UpdatedRounds))
+				}
+
+				// Verify summary shows no updates
+				if updatePayload.Summary.RoundsUpdated != 0 {
+					t.Errorf("Expected Summary.RoundsUpdated to be 0, got %d", updatePayload.Summary.RoundsUpdated)
+				}
+
+				if updatePayload.Summary.ParticipantsUpdated != 0 {
+					t.Errorf("Expected Summary.ParticipantsUpdated to be 0, got %d", updatePayload.Summary.ParticipantsUpdated)
 				}
 			},
 		},
@@ -333,22 +356,41 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(roundevents.DiscordRoundUpdatePayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
 				if !ok {
-					t.Errorf("Expected DiscordRoundUpdatePayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify that the participant is updated with nil tag
-				if len(updatePayload.Participants) != 1 {
-					t.Errorf("Expected 1 participant to update, got %d", len(updatePayload.Participants))
+				// Verify that the round is updated with the participant having nil tag
+				if len(updatePayload.UpdatedRounds) != 1 {
+					t.Errorf("Expected 1 round to update, got %d", len(updatePayload.UpdatedRounds))
 				}
 
-				if len(updatePayload.Participants) > 0 {
-					participant := updatePayload.Participants[0]
-					if participant.TagNumber != nil {
-						t.Errorf("Expected participant to have nil tag number, got %v", *participant.TagNumber)
+				if len(updatePayload.UpdatedRounds) > 0 {
+					roundInfo := updatePayload.UpdatedRounds[0]
+					foundUser := false
+					for _, participant := range roundInfo.UpdatedParticipants {
+						if participant.UserID == "user1" {
+							foundUser = true
+							if participant.TagNumber != nil {
+								t.Errorf("Expected participant to have nil tag number, got %v", *participant.TagNumber)
+							}
+							break
+						}
 					}
+					if !foundUser {
+						t.Errorf("Expected to find user1 in updated participants")
+					}
+				}
+
+				// Verify summary shows 1 participant was updated
+				if updatePayload.Summary.RoundsUpdated != 1 {
+					t.Errorf("Expected Summary.RoundsUpdated to be 1, got %d", updatePayload.Summary.RoundsUpdated)
+				}
+
+				if updatePayload.Summary.ParticipantsUpdated != 1 {
+					t.Errorf("Expected Summary.ParticipantsUpdated to be 1, got %d", updatePayload.Summary.ParticipantsUpdated)
 				}
 			},
 		},

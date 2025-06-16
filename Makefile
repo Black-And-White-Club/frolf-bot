@@ -6,6 +6,8 @@
 .PHONY: integration-round-service integration-round-handlers
 .PHONY: build-coverage coverage-all coverage-html coverage-unit coverage-integration clean-coverage
 .PHONY: mocks-user mocks-leaderboard mocks-round mocks-score mocks-eventbus mocks-all build-version
+.PHONY: river-migrate-up river-migrate-down river-clean clean-all
+.PHONY: db-config db-test ci-setup help
 
 # --- Database Migration and Run Targets ---
 migrate-init:
@@ -14,10 +16,62 @@ migrate-init:
 migrate:
 	go run cmd/bun/main.go migrate migrate
 
-migrate-all: migrate-init migrate
+clean-all: river-clean rollback-all
 
-rollback-all:
+# Run River migrations first, then our app migrations
+migrate-all: river-migrate-up migrate-init migrate
+
+rollback-all: 
+	@echo "Rolling back application migrations..."
 	go run cmd/bun/main.go migrate rollback
+
+# Database configuration - can be overridden via environment variables
+# Default to loading from .env file if DATABASE_URL is not set
+DB_URL ?= $(shell [ -f .env ] && grep '^DATABASE_URL=' .env | cut -d '=' -f2- | tr -d '"' || echo "")
+ifeq ($(DB_URL),)
+    $(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
+endif
+
+# Parse DATABASE_URL for psql components (for river-clean)
+DB_PARAMS := $(shell echo '$(DB_URL)' | sed -E 's|postgres://([^:]+):([^@]+)@([^:]+):([^/]+)/([^?]+).*|\1 \2 \3 \4 \5|')
+DB_USER := $(word 1, $(DB_PARAMS))
+DB_PASS := $(word 2, $(DB_PARAMS))
+DB_HOST := $(word 3, $(DB_PARAMS))
+DB_PORT := $(word 4, $(DB_PARAMS))
+DB_NAME := $(word 5, $(DB_PARAMS))
+
+# River migration targets
+river-migrate-up:
+	@echo "Running River migrations..."
+	@echo "Using database: $(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+	@if ! command -v river >/dev/null 2>&1; then \
+		echo "Installing River CLI..."; \
+		go install github.com/riverqueue/river/cmd/river@latest; \
+	fi
+	river migrate-up --line main --database-url "$(DB_URL)"
+
+river-migrate-down:
+	@echo "Rolling back River migrations..."
+	@echo "Using database: $(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+	@if command -v river >/dev/null 2>&1; then \
+		river migrate-down --line main --database-url "$(DB_URL)" --max-steps 10; \
+	else \
+		echo "River CLI not found, skipping River migration rollback"; \
+	fi
+
+# Clean up any leftover River artifacts from manual creation
+river-clean:
+	@echo "Cleaning up any manual River table artifacts..."
+	@echo "Using database: $(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+	@go run cmd/bun/main.go migrate rollback || true
+	@echo "Dropping any existing River tables and types..."
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "DROP TABLE IF EXISTS river_migration CASCADE;" || true
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "DROP TABLE IF EXISTS river_queue CASCADE;" || true  
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "DROP TABLE IF EXISTS river_leader CASCADE;" || true
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "DROP TABLE IF EXISTS river_job CASCADE;" || true
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "DROP TYPE IF EXISTS river_job_state CASCADE;" || true
+	@echo "River cleanup completed"
+
 
 run:
 	go run cmd/app/main.go
@@ -227,6 +281,7 @@ mocks-round:
 	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/handlers/interface.go -destination=$(ROUND_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/router/interface.go -destination=$(ROUND_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/repositories/interface.go -destination=$(ROUND_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
+	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/queue/service.go -destination=$(ROUND_DIR)/infrastructure/queue/mocks/mock_queue.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/utils/clock.go -destination=$(ROUND_DIR)/mocks/mock_clock.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/time_utils/time_conversion.go -destination=$(ROUND_DIR)/mocks/mock_conversion.go -package=mocks
 	$(MOCKGEN) -source=$(ROUND_DIR)/utils/validator.go -destination=$(ROUND_DIR)/mocks/mock_validator.go -package=mocks
@@ -247,3 +302,70 @@ build_version_ldflags := -X 'main.Version=$(shell git describe --tags --always)'
 build-version:
 	@echo "Building with version information..."
 	go build -ldflags="$(build_version_ldflags)" ./...
+
+# --- Database Configuration Helpers ---
+# Show current database configuration
+db-config:
+	@echo "Database Configuration:"
+	@echo "  URL: $(DB_URL)"
+	@echo "  Host: $(DB_HOST)"
+	@echo "  Port: $(DB_PORT)"
+	@echo "  Database: $(DB_NAME)"
+	@echo "  User: $(DB_USER)"
+	@echo "  Password: [hidden]"
+
+# Validate database connection
+db-test:
+	@echo "Testing database connection..."
+	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "SELECT version();" || (echo "Database connection failed!" && exit 1)
+	@echo "Database connection successful!"
+
+# Set up environment for CI/CD (validates required variables)
+ci-setup:
+	@echo "Validating CI/CD environment..."
+	@if [ -z "$(DATABASE_URL)" ]; then echo "ERROR: DATABASE_URL environment variable is required for CI/CD" && exit 1; fi
+	@echo "DATABASE_URL is set"
+	@echo "Testing database connection..."
+	@$(MAKE) db-test
+	@echo "CI/CD environment validation complete!"
+
+# --- Help Target ---
+help:
+	@echo "Available targets:"
+	@echo ""
+	@echo "Database Migration:"
+	@echo "  migrate-init          - Initialize database migrations"
+	@echo "  migrate              - Run application migrations"
+	@echo "  migrate-all          - Run River + application migrations"
+	@echo "  rollback-all         - Rollback all migrations"
+	@echo "  river-migrate-up     - Run River queue migrations"
+	@echo "  river-migrate-down   - Rollback River migrations"
+	@echo "  river-clean          - Clean up River tables and artifacts"
+	@echo "  clean-all            - Clean all migrations and artifacts"
+	@echo ""
+	@echo "Database Configuration:"
+	@echo "  db-config            - Show current database configuration"
+	@echo "  db-test              - Test database connection"
+	@echo "  ci-setup             - Validate environment for CI/CD"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test-unit-all        - Run all unit tests"
+	@echo "  test-integration-all - Run all integration tests"
+	@echo "  test-all-project     - Run all tests (unit + integration)"
+	@echo "  test-count-all       - Show test counts"
+	@echo ""
+	@echo "Coverage:"
+	@echo "  coverage-all         - Run tests with coverage"
+	@echo "  coverage-html        - Generate HTML coverage report"
+	@echo "  coverage-unit        - Unit test coverage only"
+	@echo "  coverage-integration - Integration test coverage only"
+	@echo ""
+	@echo "Development:"
+	@echo "  run                  - Run the application"
+	@echo "  mocks-all            - Generate all mocks"
+	@echo "  build-version        - Build with version info"
+	@echo ""
+	@echo "Environment Variables:"
+	@echo "  DATABASE_URL         - Database connection string (required)"
+	@echo "                         Can be set via environment or .env file"
+	@echo "  Example: DATABASE_URL='postgres://user:pass@host:port/db'"

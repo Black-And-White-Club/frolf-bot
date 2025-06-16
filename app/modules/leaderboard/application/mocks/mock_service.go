@@ -91,36 +91,6 @@ func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, userID any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockService)(nil).GetTagByUserID), ctx, userID)
 }
 
-// ProcessBatchTagAssignments mocks base method.
-func (m *MockService) ProcessBatchTagAssignments(ctx context.Context, assignments []sharedtypes.TagAssignmentRequest, requestingUserID sharedtypes.DiscordID, batchIDString string) (leaderboardservice.LeaderboardOperationResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessBatchTagAssignments", ctx, assignments, requestingUserID, batchIDString)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ProcessBatchTagAssignments indicates an expected call of ProcessBatchTagAssignments.
-func (mr *MockServiceMockRecorder) ProcessBatchTagAssignments(ctx, assignments, requestingUserID, batchIDString any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessBatchTagAssignments", reflect.TypeOf((*MockService)(nil).ProcessBatchTagAssignments), ctx, assignments, requestingUserID, batchIDString)
-}
-
-// ProcessScoreBasedTagAssignments mocks base method.
-func (m *MockService) ProcessScoreBasedTagAssignments(ctx context.Context, sortedParticipantTags []string, roundID uuid.UUID) (leaderboardservice.LeaderboardOperationResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessScoreBasedTagAssignments", ctx, sortedParticipantTags, roundID)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ProcessScoreBasedTagAssignments indicates an expected call of ProcessScoreBasedTagAssignments.
-func (mr *MockServiceMockRecorder) ProcessScoreBasedTagAssignments(ctx, sortedParticipantTags, roundID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessScoreBasedTagAssignments", reflect.TypeOf((*MockService)(nil).ProcessScoreBasedTagAssignments), ctx, sortedParticipantTags, roundID)
-}
-
 // ProcessTagAssignments mocks base method.
 func (m *MockService) ProcessTagAssignments(ctx context.Context, source any, requests []sharedtypes.TagAssignmentRequest, requestingUserID *sharedtypes.DiscordID, operationID, batchID uuid.UUID) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()

@@ -11,7 +11,9 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	queuemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue/mocks"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -116,45 +118,44 @@ func TestNewRoundService(t *testing.T) {
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
 				mockDB := rounddb.NewMockRoundDB(ctrl)
+				mockQueueService := queuemocks.NewMockQueueService(ctrl)
 				mockMetrics := &roundmetrics.NoOpMetrics{}
 				tracer := noop.NewTracerProvider().Tracer("test")
 				mockEventbus := mocks.NewMockEventBus(ctrl)
+				mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
 				// Call the function being tested
-				service := NewRoundService(mockDB, logger, mockMetrics, tracer, mockEventbus)
+				service := NewRoundService(mockDB, mockQueueService, mockEventbus, mockMetrics, logger, tracer, mockRoundValidator)
 
 				// Ensure service is correctly created
 				if service == nil {
 					t.Fatalf("NewRoundService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				roundServiceImpl, ok := service.(*RoundService)
-				if !ok {
-					t.Fatalf("service is not of type *RoundService")
-				}
-
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				roundServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+				service.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
 					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check that all dependencies were correctly assigned
-				if roundServiceImpl.RoundDB != mockDB {
+				if service.RoundDB != mockDB {
 					t.Errorf("Round DB not correctly assigned")
 				}
-				if roundServiceImpl.logger != logger {
+				if service.QueueService != mockQueueService {
+					t.Errorf("Queue Service not correctly assigned")
+				}
+				if service.logger != logger {
 					t.Errorf("logger not correctly assigned")
 				}
-				if roundServiceImpl.metrics != mockMetrics {
+				if service.metrics != mockMetrics {
 					t.Errorf("metrics not correctly assigned")
 				}
-				if roundServiceImpl.tracer != tracer {
+				if service.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
 
 				// Ensure serviceWrapper is correctly set
-				if roundServiceImpl.serviceWrapper == nil {
+				if service.serviceWrapper == nil {
 					t.Errorf("serviceWrapper should not be nil")
 				}
 			},
@@ -162,50 +163,47 @@ func TestNewRoundService(t *testing.T) {
 		{
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
 				// Call with nil dependencies
-				service := NewRoundService(nil, nil, nil, nil, nil)
+				service := NewRoundService(nil, nil, nil, nil, nil, nil, nil)
 
 				// Ensure service is correctly created
 				if service == nil {
 					t.Fatalf("NewRoundService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				roundServiceImpl, ok := service.(*RoundService)
-				if !ok {
-					t.Fatalf("service is not of type *RoundService")
-				}
-
 				// Override serviceWrapper to avoid nil tracing/logger issues
-				roundServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
+				service.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
 					return serviceFunc(ctx) // Just execute serviceFunc directly
 				}
 
 				// Check nil fields
-				if roundServiceImpl.RoundDB != nil {
+				if service.RoundDB != nil {
 					t.Errorf("Round DB should be nil")
 				}
-				if roundServiceImpl.logger != nil {
+				if service.QueueService != nil {
+					t.Errorf("Queue Service should be nil")
+				}
+				if service.EventBus != nil {
+					t.Errorf("EventBus should be nil")
+				}
+				if service.logger != nil {
 					t.Errorf("logger should be nil")
 				}
-				if roundServiceImpl.metrics != nil {
+				if service.metrics != nil {
 					t.Errorf("metrics should be nil")
 				}
-				if roundServiceImpl.tracer != nil {
+				if service.tracer != nil {
 					t.Errorf("tracer should be nil")
 				}
 
 				// Ensure serviceWrapper is still set
-				if roundServiceImpl.serviceWrapper == nil {
+				if service.serviceWrapper == nil {
 					t.Errorf("serviceWrapper should not be nil")
 				}
 
 				// Test serviceWrapper runs correctly with nil dependencies
 				ctx := context.Background()
-				_, err := roundServiceImpl.serviceWrapper(ctx, "TestOp", sharedtypes.RoundID(uuid.New()), func(ctx context.Context) (RoundOperationResult, error) {
+				_, err := service.serviceWrapper(ctx, "TestOp", sharedtypes.RoundID(uuid.New()), func(ctx context.Context) (RoundOperationResult, error) {
 					return RoundOperationResult{Success: "test"}, nil
 				})
 				if err != nil {

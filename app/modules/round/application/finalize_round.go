@@ -80,17 +80,24 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 		round := payload.RoundData
 
 		// Prepare the participant score data for the Score Module
+		// ONLY include participants who have actually submitted scores
 		scores := make([]roundevents.ParticipantScore, 0, len(round.Participants))
 		for _, p := range round.Participants {
+			// Skip participants without scores
+			if p.Score == nil {
+				s.logger.DebugContext(ctx, "Skipping participant without score",
+					attr.String("user_id", string(p.UserID)),
+					attr.StringUUID("round_id", payload.RoundID.String()),
+				)
+				continue
+			}
+
 			tagNumber := 0
 			if p.TagNumber != nil && *p.TagNumber != 0 {
 				tagNumber = int(*p.TagNumber)
 			}
 
-			score := 0
-			if p.Score != nil {
-				score = int(*p.Score)
-			}
+			score := int(*p.Score) // We know p.Score is not nil here
 
 			tagNumberPtr := sharedtypes.TagNumber(tagNumber)
 			scores = append(scores, roundevents.ParticipantScore{
@@ -98,6 +105,26 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 				TagNumber: &tagNumberPtr,
 				Score:     sharedtypes.Score(score),
 			})
+
+			s.logger.DebugContext(ctx, "Added participant score",
+				attr.String("user_id", string(p.UserID)),
+				attr.Int("score", score),
+				attr.Int("tag_number", tagNumber),
+				attr.StringUUID("round_id", payload.RoundID.String()),
+			)
+		}
+
+		// Check if we have any scores to process
+		if len(scores) == 0 {
+			s.logger.WarnContext(ctx, "No participants with scores found for round",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Int("total_participants", len(round.Participants)),
+			)
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   "no participants with submitted scores found",
+			}
+			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
 		// Prepare the success payload containing the request for the Score Module
@@ -108,6 +135,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 		s.logger.InfoContext(ctx, "Prepared score data for Score Module",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 			attr.Int("participant_count_processed", len(scores)),
+			attr.Int("total_participants", len(round.Participants)),
 		)
 
 		return RoundOperationResult{Success: &processScoresPayload}, nil

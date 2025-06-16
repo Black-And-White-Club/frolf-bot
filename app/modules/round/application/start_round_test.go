@@ -64,7 +64,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 		{
 			name: "successful processing",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(&roundtypes.Round{
+				round := &roundtypes.Round{
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
 					Location:       &testStartLocation,
@@ -72,31 +72,25 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					State:          roundtypes.RoundStateUpcoming,
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
 					EventMessageID: testStartEventMessageID,
-				}, nil)
-				mockDB.EXPECT().UpdateRound(ctx, testStartRoundID, &roundtypes.Round{
-					ID:             testStartRoundID,
-					Title:          testRoundTitle,
-					Location:       &testStartLocation,
-					StartTime:      &testStartRoundTime,
-					State:          roundtypes.RoundStateInProgress,
-					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
-					EventMessageID: testStartEventMessageID,
-				}).Return(nil)
+				}
+
+				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(round, nil)
+
+				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
+				mockDB.EXPECT().UpdateRoundState(ctx, testStartRoundID, roundtypes.RoundStateInProgress).Return(nil)
 			},
 			payload: roundevents.RoundStartedPayload{
-				RoundID: testStartRoundID,
-				// Note: Based on the service code, it uses payload.Title, payload.Location, payload.StartTime
-				// but the test payload doesn't set these, so they'll be nil/zero values in the result
-				Title:     testRoundTitle,      // Added to match expected result
-				Location:  &testStartLocation,  // Added to match expected result
-				StartTime: &testStartRoundTime, // Added to match expected result
+				RoundID:   testStartRoundID,
+				Title:     testRoundTitle,
+				Location:  &testStartLocation,
+				StartTime: &testStartRoundTime,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.DiscordRoundStartPayload{ // Changed to pointer
+				Success: &roundevents.DiscordRoundStartPayload{
 					RoundID:   testStartRoundID,
-					Title:     testRoundTitle,      // From payload
-					Location:  &testStartLocation,  // From payload
-					StartTime: &testStartRoundTime, // From payload
+					Title:     testRoundTitle,
+					Location:  &testStartLocation,
+					StartTime: &testStartRoundTime,
 					Participants: []roundevents.RoundParticipant{
 						{
 							UserID:    sharedtypes.DiscordID("user1"),
@@ -111,7 +105,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 							Score:     nil,
 						},
 					},
-					EventMessageID: testStartEventMessageID, // From DB
+					EventMessageID: testStartEventMessageID,
 				},
 			},
 			expectedError: nil,
@@ -125,17 +119,17 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: testStartRoundID,
-					Error:   "database error", // Service returns err.Error() directly
+					Error:   "database error",
 				},
 			},
-			expectedError: nil, // Changed from error to nil
+			expectedError: nil,
 		},
 		{
 			name: "error updating round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(&roundtypes.Round{
+				round := &roundtypes.Round{
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
 					Location:       &testStartLocation,
@@ -143,27 +137,22 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					State:          roundtypes.RoundStateUpcoming,
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
 					EventMessageID: testStartEventMessageID,
-				}, nil)
-				mockDB.EXPECT().UpdateRound(ctx, testStartRoundID, &roundtypes.Round{
-					ID:             testStartRoundID,
-					Title:          testRoundTitle,
-					Location:       &testStartLocation,
-					StartTime:      &testStartRoundTime,
-					State:          roundtypes.RoundStateInProgress,
-					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
-					EventMessageID: testStartEventMessageID,
-				}).Return(errors.New("database error"))
+				}
+
+				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(round, nil)
+				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
+				mockDB.EXPECT().UpdateRoundState(ctx, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
 			},
 			payload: roundevents.RoundStartedPayload{
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: testStartRoundID,
-					Error:   "database error", // Service returns err.Error() directly
+					Error:   "database error",
 				},
 			},
-			expectedError: nil, // Changed from error to nil
+			expectedError: nil,
 		},
 	}
 
@@ -196,28 +185,24 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				t.Errorf("expected no error, got: %v", err)
 			}
 
-			// Check result structure - handle pointers properly
+			// Check result structure
 			if tt.expectedResult.Success != nil {
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
 				} else {
-					// Type assert to check the actual payload type
 					if expectedPayload, ok := tt.expectedResult.Success.(*roundevents.DiscordRoundStartPayload); ok {
 						if actualPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayload); ok {
-							// Compare fields individually for better error messages
 							if actualPayload.RoundID != expectedPayload.RoundID {
 								t.Errorf("expected RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
 							}
 							if actualPayload.Title != expectedPayload.Title {
 								t.Errorf("expected Title %v, got %v", expectedPayload.Title, actualPayload.Title)
 							}
-							// Compare Location pointers
 							if (actualPayload.Location == nil) != (expectedPayload.Location == nil) {
 								t.Errorf("expected Location nil status %v, got %v", expectedPayload.Location == nil, actualPayload.Location == nil)
 							} else if actualPayload.Location != nil && expectedPayload.Location != nil && *actualPayload.Location != *expectedPayload.Location {
 								t.Errorf("expected Location %v, got %v", *expectedPayload.Location, *actualPayload.Location)
 							}
-							// Compare StartTime pointers
 							if (actualPayload.StartTime == nil) != (expectedPayload.StartTime == nil) {
 								t.Errorf("expected StartTime nil status %v, got %v", expectedPayload.StartTime == nil, actualPayload.StartTime == nil)
 							} else if actualPayload.StartTime != nil && expectedPayload.StartTime != nil && !actualPayload.StartTime.AsTime().Equal(expectedPayload.StartTime.AsTime()) {
@@ -226,15 +211,12 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 							if actualPayload.EventMessageID != expectedPayload.EventMessageID {
 								t.Errorf("expected EventMessageID %v, got %v", expectedPayload.EventMessageID, actualPayload.EventMessageID)
 							}
-							// Compare participants
 							if !reflect.DeepEqual(actualPayload.Participants, expectedPayload.Participants) {
 								t.Errorf("expected Participants %v, got %v", expectedPayload.Participants, actualPayload.Participants)
 							}
 						} else {
 							t.Errorf("expected result.Success to be *roundevents.DiscordRoundStartPayload, got %T", result.Success)
 						}
-					} else {
-						t.Errorf("expected tt.expectedResult.Success to be *roundevents.DiscordRoundStartPayload, got %T", tt.expectedResult.Success)
 					}
 				}
 			}
@@ -243,7 +225,6 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
 				} else {
-					// Type assert for failure payload
 					if expectedPayload, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload); ok {
 						if actualPayload, ok := result.Failure.(*roundevents.RoundErrorPayload); ok {
 							if actualPayload.RoundID != expectedPayload.RoundID {
@@ -255,8 +236,6 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 						} else {
 							t.Errorf("expected result.Failure to be *roundevents.RoundErrorPayload, got %T", result.Failure)
 						}
-					} else {
-						t.Errorf("expected tt.expectedResult.Failure to be *roundevents.RoundErrorPayload, got %T", tt.expectedResult.Failure)
 					}
 				}
 			}

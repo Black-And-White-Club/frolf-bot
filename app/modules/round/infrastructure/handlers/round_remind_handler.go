@@ -20,6 +20,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", discordReminderPayload.RoundID),
 				attr.String("reminder_type", discordReminderPayload.ReminderType),
+				attr.String("delivered_count", msg.Metadata.Get("Delivered")), // Track delivery count
 			)
 
 			// Call the service function to handle the event
@@ -61,8 +62,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 
 				// Only publish Discord reminder if there are participants to notify
 				if len(discordPayload.UserIDs) > 0 {
-					successMsg, err := h.helpers.CreateResultMessage(
-						msg,
+					successMsg, err := h.helpers.CreateNewMessage(
 						discordPayload,
 						roundevents.DiscordRoundReminder,
 					)
@@ -72,12 +72,11 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 					return []*message.Message{successMsg}, nil
 				} else {
 					// No participants to notify, but processing was successful
-					// Optionally publish a "processed" event or just return empty
 					h.logger.InfoContext(ctx, "Round reminder processed but no participants to notify",
 						attr.CorrelationIDFromMsg(msg),
 						attr.RoundID("round_id", discordPayload.RoundID),
 					)
-					return []*message.Message{}, nil // Return empty slice, not nil
+					return []*message.Message{}, nil
 				}
 			}
 

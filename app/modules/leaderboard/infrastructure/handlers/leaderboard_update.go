@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -12,6 +13,15 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
+
+// extractChangedTagsMap converts tag assignments to a simple map for cross-module communication
+func extractChangedTagsMap(assignments []sharedtypes.TagAssignmentRequest) map[string]int {
+	result := make(map[string]int, len(assignments))
+	for _, assignment := range assignments {
+		result[string(assignment.UserID)] = int(assignment.TagNumber)
+	}
+	return result
+}
 
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
 // This is for score processing after round completion - updates leaderboard with new participant tags.
@@ -83,11 +93,34 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 
 			// Handle success response
 			if result.Success != nil {
+				// Existing LeaderboardUpdated publication
 				successMsg, err := h.Helpers.CreateResultMessage(msg, result.Success, leaderboardevents.LeaderboardUpdated)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
-				return []*message.Message{successMsg}, nil
+
+				// NEW: Also publish TagUpdateForScheduledRounds to notify round module
+				tagUpdatePayload := map[string]interface{}{
+					"changed_tags": extractChangedTagsMap(assignments),
+					"updated_at":   time.Now().UTC(),
+					"source":       "leaderboard_update",
+					"round_id":     requestPayload.RoundID,
+				}
+
+				tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, leaderboardevents.TagUpdateForScheduledRounds)
+				if err != nil {
+					h.logger.WarnContext(ctx, "Failed to create tag update message for scheduled rounds", attr.Error(err))
+					// Still return the leaderboard success even if this fails
+					return []*message.Message{successMsg}, nil
+				}
+
+				h.logger.InfoContext(ctx, "Publishing tag updates to scheduled rounds",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", requestPayload.RoundID),
+					attr.Int("changed_tags", len(assignments)),
+				)
+
+				return []*message.Message{successMsg, tagUpdateMsg}, nil
 			}
 
 			return nil, fmt.Errorf("unexpected service result: neither success nor failure set")

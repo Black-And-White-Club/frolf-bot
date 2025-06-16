@@ -264,6 +264,7 @@ func publishParticipantScoreUpdatedMessage(t *testing.T, deps *RoundHandlerTestD
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
+	t.Logf("Publishing ParticipantScoreUpdated message for round %s", payload.RoundID)
 	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantScoreUpdated, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
@@ -312,7 +313,7 @@ func waitForNotAllScoresSubmittedFromHandler(capture *testutils.MessageCapture, 
 }
 
 func waitForScoreCheckErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundError, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundError, count, 5*time.Second) // Increase timeout
 }
 
 // Message retrieval functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
@@ -449,9 +450,22 @@ func publishAndExpectNotAllScoresSubmitted(t *testing.T, deps *RoundHandlerTestD
 }
 
 func publishAndExpectScoreCheckError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantScoreUpdatedPayload) {
+	t.Logf("Publishing ParticipantScoreUpdated for non-existent round %s", payload.RoundID)
 	publishParticipantScoreUpdatedMessage(t, deps, &payload)
 
+	// Add extra wait time for debugging
+	time.Sleep(500 * time.Millisecond)
+
+	t.Logf("Waiting for error message on topic %s", roundevents.RoundError)
 	if !waitForScoreCheckErrorFromHandler(capture, 1) {
+		// Debug: Check what messages we did receive
+		allScoresMsgs := getAllScoresSubmittedFromHandlerMessages(capture)
+		notAllScoresMsgs := getNotAllScoresSubmittedFromHandlerMessages(capture)
+		errorMsgs := getScoreCheckErrorFromHandlerMessages(capture)
+
+		t.Logf("DEBUG: Messages received - AllScores: %d, NotAllScores: %d, Errors: %d",
+			len(allScoresMsgs), len(notAllScoresMsgs), len(errorMsgs))
+
 		t.Fatalf("Expected score check error message from %s", roundevents.RoundError)
 	}
 

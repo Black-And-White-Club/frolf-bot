@@ -284,6 +284,17 @@ func TestCheckTagAvailability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clean database tables before each test case.
+			cleanCtx := context.Background()
+			err := testutils.CleanUserIntegrationTables(cleanCtx, deps.BunDB)
+			if err != nil {
+				t.Fatalf("Failed to clean user tables: %v", err)
+			}
+			err = testutils.CleanLeaderboardIntegrationTables(cleanCtx, deps.BunDB)
+			if err != nil {
+				t.Fatalf("Failed to clean leaderboard tables: %v", err)
+			}
+
 			var initialLeaderboard *leaderboarddb.Leaderboard
 			var setupErr error
 			if tt.setupData != nil {

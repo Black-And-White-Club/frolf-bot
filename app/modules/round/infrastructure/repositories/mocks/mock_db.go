@@ -72,10 +72,10 @@ func (mr *MockRoundDBMockRecorder) DeleteRound(ctx, roundID any) *gomock.Call {
 }
 
 // GetEventMessageID mocks base method.
-func (m *MockRoundDB) GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error) {
+func (m *MockRoundDB) GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventMessageID", ctx, roundID)
-	ret0, _ := ret[0].(*sharedtypes.RoundID)
+	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -269,11 +269,12 @@ func (mr *MockRoundDBMockRecorder) UpdateParticipantScore(ctx, roundID, particip
 }
 
 // UpdateRound mocks base method.
-func (m *MockRoundDB) UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) error {
+func (m *MockRoundDB) UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) (*roundtypes.Round, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRound", ctx, roundID, round)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateRound indicates an expected call of UpdateRound.

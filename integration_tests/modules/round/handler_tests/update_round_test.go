@@ -90,10 +90,20 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
 
-				// Create payload with start time update
-				futureTime := time.Now().Add(48 * time.Hour)
-				startTime := sharedtypes.StartTime(futureTime)
-				payload := createRoundUpdateRequestPayload(roundID, user1ID, nil, nil, nil, &startTime)
+				// Create a definitive future time in Chicago timezone
+				chicagoLocation, _ := time.LoadLocation("America/Chicago")
+				futureTime := time.Now().In(chicagoLocation).Add(48 * time.Hour)
+				timeStr := futureTime.Format("2006-01-02 15:04")
+
+				timezone := roundtypes.Timezone("America/Chicago")
+				payload := roundevents.UpdateRoundRequestedPayload{
+					RoundID:   roundID,
+					UserID:    user1ID,
+					ChannelID: "test_channel_123",
+					MessageID: "test_message_456",
+					Timezone:  &timezone,
+					StartTime: &timeStr,
+				}
 
 				result := publishAndExpectRoundUpdateValidated(t, deps, deps.MessageCapture, payload)
 
@@ -112,10 +122,24 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 				newTitle := roundtypes.Title("Multi-Update Round")
 				newDesc := roundtypes.Description("Updated with multiple fields")
 				newLocation := roundtypes.Location("New Multi-Field Location")
-				futureTime := time.Now().Add(72 * time.Hour)
-				startTime := sharedtypes.StartTime(futureTime)
 
-				payload := createRoundUpdateRequestPayload(roundID, user1ID, &newTitle, &newDesc, &newLocation, &startTime)
+				// Create a definitive future time in Chicago timezone
+				chicagoLocation, _ := time.LoadLocation("America/Chicago")
+				futureTime := time.Now().In(chicagoLocation).Add(72 * time.Hour)
+				timeStr := futureTime.Format("2006-01-02 15:04")
+
+				timezone := roundtypes.Timezone("America/Chicago")
+				payload := roundevents.UpdateRoundRequestedPayload{
+					RoundID:     roundID,
+					UserID:      user1ID,
+					ChannelID:   "test_channel_123",
+					MessageID:   "test_message_456",
+					Timezone:    &timezone,
+					Title:       &newTitle,
+					Description: &newDesc,
+					Location:    &newLocation,
+					StartTime:   &timeStr,
+				}
 
 				result := publishAndExpectRoundUpdateValidated(t, deps, deps.MessageCapture, payload)
 
@@ -177,9 +201,17 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
 
-				// Create payload with empty title and no other fields
+				// Create payload with empty title and no other fields - using the CORRECT roundID
 				emptyTitle := roundtypes.Title("")
-				payload := createRoundUpdateRequestPayload(roundID, user1ID, &emptyTitle, nil, nil, nil)
+				timezone := roundtypes.Timezone("America/Chicago")
+				payload := roundevents.UpdateRoundRequestedPayload{
+					RoundID:   roundID, // Use the actual roundID, not zero UUID
+					UserID:    user1ID,
+					ChannelID: "test_channel_123",
+					MessageID: "test_message_456",
+					Timezone:  &timezone,
+					Title:     &emptyTitle,
+				}
 
 				result := publishAndExpectRoundUpdateError(t, deps, deps.MessageCapture, payload)
 
@@ -229,7 +261,7 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 	}
 }
 
-// Helper functions for creating payloads - UNIQUE TO ROUND UPDATE REQUEST TESTS
+// Helper functions for creating payloads - UPDATED TO MATCH HANDLER
 func createRoundUpdateRequestPayload(
 	roundID sharedtypes.RoundID,
 	userID sharedtypes.DiscordID,
@@ -237,16 +269,19 @@ func createRoundUpdateRequestPayload(
 	description *roundtypes.Description,
 	location *roundtypes.Location,
 	startTime *sharedtypes.StartTime,
-) roundevents.RoundUpdateRequestPayload {
-	payload := roundevents.RoundUpdateRequestPayload{}
-
-	// Set fields from BaseRoundPayload
-	payload.RoundID = roundID
-	payload.UserID = userID
+) roundevents.UpdateRoundRequestedPayload {
+	timezone := roundtypes.Timezone("America/Chicago")
+	payload := roundevents.UpdateRoundRequestedPayload{
+		RoundID:   roundID,
+		UserID:    userID,
+		ChannelID: "test_channel_123", // Required Discord field
+		MessageID: "test_message_456", // Required Discord field
+		Timezone:  &timezone,          // Required for time parsing
+	}
 
 	// Set optional fields if provided
 	if title != nil {
-		payload.Title = *title
+		payload.Title = title
 	}
 	if description != nil {
 		payload.Description = description
@@ -255,14 +290,19 @@ func createRoundUpdateRequestPayload(
 		payload.Location = location
 	}
 	if startTime != nil {
-		payload.StartTime = startTime
+		// Create a definitive future time in Chicago timezone
+		chicagoLocation, _ := time.LoadLocation("America/Chicago")
+		now := time.Now().In(chicagoLocation)
+		futureTime := now.Add(48 * time.Hour)
+		timeStr := futureTime.Format("2006-01-02 15:04")
+		payload.StartTime = &timeStr
 	}
 
 	return payload
 }
 
-// Publishing functions - UNIQUE TO ROUND UPDATE REQUEST TESTS
-func publishRoundUpdateRequestMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.RoundUpdateRequestPayload) *message.Message {
+// Publishing functions - UPDATED TO MATCH HANDLER
+func publishRoundUpdateRequestMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.UpdateRoundRequestedPayload) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -273,11 +313,39 @@ func publishRoundUpdateRequestMessage(t *testing.T, deps *RoundHandlerTestDeps, 
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
+	// Publish to the correct topic that the handler subscribes to
 	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateRequest, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
 	return msg
+}
+
+// Test expectation functions - UPDATED SIGNATURES
+func publishAndExpectRoundUpdateValidated(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.UpdateRoundRequestedPayload) *roundevents.RoundUpdateValidatedPayload {
+	publishRoundUpdateRequestMessage(t, deps, &payload)
+
+	if !waitForRoundUpdateValidatedFromHandler(capture, 1) {
+		t.Fatalf("Expected round update validated message from %s", roundevents.RoundUpdateValidated)
+	}
+
+	msgs := getRoundUpdateValidatedFromHandlerMessages(capture)
+	result := validateRoundUpdateValidatedFromHandler(t, msgs[0])
+
+	return result
+}
+
+func publishAndExpectRoundUpdateError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.UpdateRoundRequestedPayload) *roundevents.RoundUpdateErrorPayload {
+	publishRoundUpdateRequestMessage(t, deps, &payload)
+
+	if !waitForRoundUpdateErrorFromHandler(capture, 1) {
+		t.Fatalf("Expected round update error message from %s", roundevents.RoundUpdateError)
+	}
+
+	msgs := getRoundUpdateErrorFromHandlerMessages(capture)
+	result := validateRoundUpdateErrorFromHandler(t, msgs[0])
+
+	return result
 }
 
 func publishInvalidJSONAndExpectNoRoundUpdateMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
@@ -287,6 +355,7 @@ func publishInvalidJSONAndExpectNoRoundUpdateMessages(t *testing.T, deps *RoundH
 	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
+	// Publish to the correct topic
 	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateRequest, invalidMsg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
@@ -367,33 +436,6 @@ func validateRoundUpdateErrorFromHandler(t *testing.T, msg *message.Message) *ro
 
 	// Log what we got for debugging
 	t.Logf("Round update request failed with error: %s", result.Error)
-
-	return result
-}
-
-// Test expectation functions - UNIQUE TO ROUND UPDATE REQUEST TESTS
-func publishAndExpectRoundUpdateValidated(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateRequestPayload) *roundevents.RoundUpdateValidatedPayload {
-	publishRoundUpdateRequestMessage(t, deps, &payload)
-
-	if !waitForRoundUpdateValidatedFromHandler(capture, 1) {
-		t.Fatalf("Expected round update validated message from %s", roundevents.RoundUpdateValidated)
-	}
-
-	msgs := getRoundUpdateValidatedFromHandlerMessages(capture)
-	result := validateRoundUpdateValidatedFromHandler(t, msgs[0])
-
-	return result
-}
-
-func publishAndExpectRoundUpdateError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateRequestPayload) *roundevents.RoundUpdateErrorPayload {
-	publishRoundUpdateRequestMessage(t, deps, &payload)
-
-	if !waitForRoundUpdateErrorFromHandler(capture, 1) {
-		t.Fatalf("Expected round update error message from %s", roundevents.RoundUpdateError)
-	}
-
-	msgs := getRoundUpdateErrorFromHandlerMessages(capture)
-	result := validateRoundUpdateErrorFromHandler(t, msgs[0])
 
 	return result
 }

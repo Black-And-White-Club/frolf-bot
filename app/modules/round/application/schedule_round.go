@@ -2,7 +2,6 @@ package roundservice
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -14,13 +13,18 @@ import (
 // It handles cases where the round start time might be too close for certain reminders.
 func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ScheduleRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
-		s.logger.InfoContext(ctx, "Scheduling round events",
+		s.logger.InfoContext(ctx, "Processing round scheduling",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Time("start_time", payload.StartTime.AsTime()),
+		)
+
+		// Cancel any existing scheduled jobs for this round
+		s.logger.InfoContext(ctx, "Cancelling existing scheduled jobs",
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
-		// Ensure the consumer is created for this round ID
-		if err := s.EventBus.ProcessDelayedMessages(ctx, payload.RoundID, *payload.StartTime); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to create consumer for round",
+		if err := s.QueueService.CancelRoundJobs(ctx, payload.RoundID); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to cancel existing jobs",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
@@ -29,99 +33,32 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
-			}, nil // Return nil error since we're handling it in Failure
+			}, nil
 		}
 
-		// Get current time to evaluate which events to schedule
+		// Calculate times
 		now := time.Now().UTC()
+		startTimeUTC := payload.StartTime.AsTime().UTC()
+		reminderTimeUTC := startTimeUTC.Add(-1 * time.Hour)
 
-		// Calculate reminder time (1 hour before the round starts)
-		reminderTime := payload.StartTime.Add(-1 * time.Hour)
-
-		// Only schedule reminder if there's enough time (reminder time is in the future)
-		if reminderTime.AsTime().After(now) {
+		// Schedule reminder if there's enough time (at least 5 minutes in the future)
+		if reminderTimeUTC.After(now.Add(5 * time.Second)) {
 			s.logger.InfoContext(ctx, "Scheduling 1-hour reminder",
 				attr.RoundID("round_id", payload.RoundID),
-				attr.Time("reminder_time", reminderTime.AsTime()),
+				attr.Time("reminder_time", reminderTimeUTC),
 			)
 
-			// Prepare reminder payload
 			reminderPayload := roundevents.DiscordReminderPayload{
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
 				RoundTitle:     payload.Title,
-				EventMessageID: discordMessageID,
-			}
-			reminderBytes, err := json.Marshal(reminderPayload)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "Failed to encode reminder payload",
-					attr.RoundID("round_id", payload.RoundID),
-					attr.Error(err),
-				)
-				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
-						RoundID: payload.RoundID,
-						Error:   err.Error(),
-					},
-				}, nil
-			}
-
-			// Schedule reminder with empty additional metadata map
-			additionalMetadata := make(map[string]string)
-			if err := s.EventBus.ScheduleDelayedMessage(ctx, roundevents.RoundReminder, payload.RoundID, reminderTime, reminderBytes, additionalMetadata); err != nil {
-				s.logger.ErrorContext(ctx, "Failed to schedule reminder",
-					attr.RoundID("round_id", payload.RoundID),
-					attr.Error(err),
-				)
-				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
-						RoundID: payload.RoundID,
-						Error:   err.Error(),
-					},
-				}, nil
-			}
-		} else {
-			s.logger.InfoContext(ctx, "Skipping 1-hour reminder - not enough time before round start",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.Time("start_time", payload.StartTime.AsTime()),
-				attr.Time("current_time", now),
-			)
-		}
-
-		// Always schedule the round start if it's in the future
-		if payload.StartTime.AsTime().After(now) {
-			s.logger.InfoContext(ctx, "Scheduling round start event",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.Time("start_time", payload.StartTime.AsTime()),
-			)
-
-			// Prepare round start payload
-			startPayload := roundevents.DiscordRoundStartPayload{
-				RoundID:        payload.RoundID,
-				Title:          payload.Title,
 				Location:       payload.Location,
 				StartTime:      payload.StartTime,
-				Participants:   []roundevents.RoundParticipant{},
 				EventMessageID: discordMessageID,
 			}
-			startBytes, err := json.Marshal(startPayload)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "Failed to encode round start payload",
-					attr.RoundID("round_id", payload.RoundID),
-					attr.Error(err),
-				)
-				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
-						RoundID: payload.RoundID,
-						Error:   err.Error(),
-					},
-				}, nil
-			}
 
-			// Schedule start event with empty additional metadata map
-			additionalMetadata := make(map[string]string)
-			if err := s.EventBus.ScheduleDelayedMessage(ctx, roundevents.RoundStarted, payload.RoundID, *payload.StartTime, startBytes, additionalMetadata); err != nil {
-				s.logger.ErrorContext(ctx, "Failed to schedule round start",
+			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to schedule reminder job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
 				)
@@ -133,30 +70,58 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 				}, nil
 			}
 		} else {
-			s.logger.WarnContext(ctx, "Round start time is in the past, not scheduling start event",
+			s.logger.InfoContext(ctx, "Skipping 1-hour reminder - not enough time",
 				attr.RoundID("round_id", payload.RoundID),
-				attr.Time("start_time", payload.StartTime.AsTime()),
-				attr.Time("current_time", now),
+				attr.Time("start_time", startTimeUTC),
+				attr.Time("reminder_time", reminderTimeUTC),
 			)
 		}
 
-		s.logger.InfoContext(ctx, "Round events scheduled",
-			attr.RoundID("round_id", payload.RoundID),
-		)
+		// Schedule round start if in the future (at least 30 seconds buffer)
+		if startTimeUTC.After(now.Add(30 * time.Second)) {
+			s.logger.InfoContext(ctx, "Scheduling round start",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Time("start_time", startTimeUTC),
+			)
 
-		scheduledPayload := &roundevents.RoundScheduledPayload{
-			BaseRoundPayload: roundtypes.BaseRoundPayload{
-				RoundID:     payload.RoundID,
-				Title:       payload.Title,
-				Description: payload.Description,
-				Location:    payload.Location,
-				StartTime:   payload.StartTime,
-			},
-			EventMessageID: discordMessageID,
+			startPayload := roundevents.RoundStartedPayload{
+				RoundID:   payload.RoundID,
+				Title:     payload.Title,
+				Location:  payload.Location,
+				StartTime: payload.StartTime,
+			}
+
+			if err := s.QueueService.ScheduleRoundStart(ctx, payload.RoundID, startTimeUTC, startPayload); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to schedule round start job",
+					attr.RoundID("round_id", payload.RoundID),
+					attr.Error(err),
+				)
+				return RoundOperationResult{
+					Failure: &roundevents.RoundErrorPayload{
+						RoundID: payload.RoundID,
+						Error:   err.Error(),
+					},
+				}, nil
+			}
+		} else {
+			s.logger.InfoContext(ctx, "Round start time is too close or in the past, not scheduling",
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Time("start_time", startTimeUTC),
+			)
 		}
 
+		// Return success with the original payload
 		return RoundOperationResult{
-			Success: scheduledPayload,
+			Success: &roundevents.RoundScheduledPayload{
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:     payload.RoundID,
+					Title:       payload.Title,
+					Description: payload.Description,
+					Location:    payload.Location,
+					StartTime:   payload.StartTime,
+				},
+				EventMessageID: discordMessageID,
+			},
 		}, nil
 	})
 }

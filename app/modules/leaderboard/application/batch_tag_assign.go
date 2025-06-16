@@ -6,6 +6,7 @@ import (
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -15,16 +16,16 @@ import (
 
 // ProcessTagAssignments handles tag assignments from different sources with optimized validation
 // utilizing utils methods for consistent validation and error handling
-// Accepts both string and enum source types for flexibility
+// Accepts both string, enum, and payload types for source determination
 func (s *LeaderboardService) ProcessTagAssignments(
 	ctx context.Context,
-	source interface{}, // Accept both string and enum
+	source interface{}, // Accept string, enum, or payload for source determination
 	requests []sharedtypes.TagAssignmentRequest,
 	requestingUserID *sharedtypes.DiscordID,
 	operationID uuid.UUID,
 	batchID uuid.UUID,
 ) (LeaderboardOperationResult, error) {
-	// Map source to enum type
+	// Map source to enum type with intelligent determination
 	var sourceType sharedtypes.ServiceUpdateSource
 	switch src := source.(type) {
 	case string:
@@ -36,6 +37,15 @@ func (s *LeaderboardService) ProcessTagAssignments(
 		}
 	case sharedtypes.ServiceUpdateSource:
 		sourceType = src
+	case *sharedevents.BatchTagAssignmentRequestedPayload:
+		// Intelligent source determination based on payload context
+		if len(src.Assignments) == 1 && src.RequestingUserID == "system" {
+			// Single assignment from system is likely user creation
+			sourceType = sharedtypes.ServiceUpdateSourceCreateUser
+		} else {
+			// Multiple assignments or non-system requests are admin batch operations
+			sourceType = sharedtypes.ServiceUpdateSourceAdminBatch
+		}
 	default:
 		return LeaderboardOperationResult{}, fmt.Errorf("invalid source type: %T", source)
 	}
@@ -49,17 +59,27 @@ func (s *LeaderboardService) ProcessTagAssignments(
 		attr.Int("request_count", len(requests)),
 	)
 
-	// Early return for empty requests
-	if len(requests) == 0 {
-		s.logger.InfoContext(ctx, "No requests to process, completing successfully")
-		return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, nil), nil
-	}
-
 	return s.serviceWrapper(ctx, "ProcessTagAssignments", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// Get current leaderboard for validation
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
 		if err != nil {
 			return s.buildFailureResponse(sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
+		}
+
+		// Early return for empty requests - return current leaderboard state
+		if len(requests) == 0 {
+			s.logger.InfoContext(ctx, "No requests to process, completing successfully")
+
+			// Get current complete leaderboard for empty requests case
+			allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
+			for i, entry := range currentLeaderboard.LeaderboardData {
+				allRequests[i] = sharedtypes.TagAssignmentRequest{
+					UserID:    entry.UserID,
+					TagNumber: entry.TagNumber,
+				}
+			}
+
+			return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
 		}
 
 		// For single assignments, use utils methods for proper validation and swap detection
@@ -80,7 +100,17 @@ func (s *LeaderboardService) ProcessTagAssignments(
 
 		if len(validRequests) == 0 {
 			s.logger.InfoContext(ctx, "No valid requests after validation, completing successfully")
-			return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, nil), nil
+
+			// Get current complete leaderboard for no valid requests case
+			allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
+			for i, entry := range currentLeaderboard.LeaderboardData {
+				allRequests[i] = sharedtypes.TagAssignmentRequest{
+					UserID:    entry.UserID,
+					TagNumber: entry.TagNumber,
+				}
+			}
+
+			return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
 		}
 
 		// Convert to tag:user format and use GenerateUpdatedLeaderboard
@@ -98,7 +128,7 @@ func (s *LeaderboardService) ProcessTagAssignments(
 
 		// Atomic leaderboard update
 		startTime := time.Now()
-		err = s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+		updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
 		s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
 
 		if err != nil {
@@ -110,12 +140,22 @@ func (s *LeaderboardService) ProcessTagAssignments(
 			return s.buildFailureResponse(sourceType, requestingUserID, operationID, batchID, err.Error()), err
 		}
 
+		// Convert complete leaderboard to requests format for Discord client
+		allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
+		for i, entry := range updatedLeaderboard.LeaderboardData {
+			allRequests[i] = sharedtypes.TagAssignmentRequest{
+				UserID:    entry.UserID,
+				TagNumber: entry.TagNumber,
+			}
+		}
+
 		s.logger.InfoContext(ctx, "Tag assignments completed successfully",
 			attr.Int("assignment_count", len(validRequests)),
+			attr.Int("total_leaderboard_entries", len(allRequests)),
 			attr.String("source", string(sourceType)),
 		)
 
-		return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, validRequests), nil
+		return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
 	})
 }
 
@@ -150,7 +190,7 @@ func (s *LeaderboardService) processScoreUpdate(
 
 	// Atomic leaderboard update
 	startTime := time.Now()
-	err = s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
 	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessScoreUpdate", time.Since(startTime))
 
 	if err != nil {
@@ -161,11 +201,21 @@ func (s *LeaderboardService) processScoreUpdate(
 		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), err
 	}
 
+	// Convert complete leaderboard to requests format
+	allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
+	for i, entry := range updatedLeaderboard.LeaderboardData {
+		allRequests[i] = sharedtypes.TagAssignmentRequest{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		}
+	}
+
 	s.logger.InfoContext(ctx, "Score processing leaderboard update completed successfully",
 		attr.Int("updated_users", len(requests)),
+		attr.Int("total_leaderboard_entries", len(allRequests)),
 	)
 
-	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, requests), nil
+	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
 }
 
 // processSingleAssignment uses utils methods for proper validation and error handling
@@ -232,12 +282,22 @@ func (s *LeaderboardService) processSingleAssignment(
 			attr.String("user_id", string(request.UserID)),
 			attr.Int("tag_number", int(request.TagNumber)),
 		)
-		return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, []sharedtypes.TagAssignmentRequest{request}), nil
+
+		// Get current complete leaderboard for no-op case
+		allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
+		for i, entry := range currentLeaderboard.LeaderboardData {
+			allRequests[i] = sharedtypes.TagAssignmentRequest{
+				UserID:    entry.UserID,
+				TagNumber: entry.TagNumber,
+			}
+		}
+
+		return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
 	}
 
 	// Update leaderboard with the new data
 	startTime := time.Now()
-	err = s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
 	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
 
 	if err != nil {
@@ -249,12 +309,22 @@ func (s *LeaderboardService) processSingleAssignment(
 		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), err
 	}
 
+	// Convert complete leaderboard to requests format
+	allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
+	for i, entry := range updatedLeaderboard.LeaderboardData {
+		allRequests[i] = sharedtypes.TagAssignmentRequest{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		}
+	}
+
 	s.logger.InfoContext(ctx, "Single tag assignment completed successfully",
 		attr.String("user_id", string(request.UserID)),
 		attr.Int("tag_number", int(request.TagNumber)),
+		attr.Int("total_leaderboard_entries", len(allRequests)),
 	)
 
-	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, []sharedtypes.TagAssignmentRequest{request}), nil
+	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
 }
 
 // validateBatchRequests validates all requests using utils methods and skips any that would require swaps

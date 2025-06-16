@@ -9,17 +9,20 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/prometheus/client_golang/prometheus" // Import prometheus
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Module represents the round module.
 type Module struct {
 	EventBus           eventbus.EventBus
 	RoundService       roundservice.Service
+	QueueService       roundqueue.QueueService
 	config             *config.Config
 	RoundRouter        *roundrouter.RoundRouter
 	cancelFunc         context.CancelFunc
@@ -45,16 +48,52 @@ func NewRoundModule(
 
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
-	// Initialize round service with observability components
-	roundService := roundservice.NewRoundService(roundDB, logger, metrics, tracer, eventBus)
+	// Get the underlying Bun DB from your existing roundDB implementation
+	roundDBImpl, ok := roundDB.(*rounddb.RoundDBImpl)
+	if !ok {
+		return nil, fmt.Errorf("roundDB is not of type *RoundDBImpl")
+	}
 
-	// Create a Prometheus registry for this module, similar to leaderboard module
+	// Initialize River queue service using the existing Bun DB
+	queueService, err := roundqueue.NewService(
+		ctx,
+		roundDBImpl.DB, // Use the existing Bun DB connection
+		logger,
+		cfg.Postgres.DSN,
+		metrics,
+		eventBus,
+		helpers,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize queue service: %w", err)
+	}
+
+	// Start the queue service
+	if err := queueService.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start queue service: %w", err)
+	}
+
+	// Use your existing round validator
+	roundValidator := roundutil.NewRoundValidator()
+
+	// Initialize round service with queue service
+	roundService := roundservice.NewRoundService(
+		roundDB,
+		queueService,
+		eventBus,
+		metrics,
+		logger,
+		tracer,
+		roundValidator,
+	)
+
+	// Create a Prometheus registry for this module
 	prometheusRegistry := prometheus.NewRegistry()
 
-	// Initialize round router with observability and prometheusRegistry
+	// Initialize round router
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
 
-	// Configure the router with the round service, passing routerCtx
+	// Configure the router with the round service
 	if err := roundRouter.Configure(routerCtx, roundService, eventBus, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
@@ -62,6 +101,7 @@ func NewRoundModule(
 	module := &Module{
 		EventBus:           eventBus,
 		RoundService:       roundService,
+		QueueService:       queueService,
 		config:             cfg,
 		RoundRouter:        roundRouter,
 		helper:             helpers,
@@ -102,7 +142,14 @@ func (m *Module) Close() error {
 		m.cancelFunc()
 	}
 
-	// Close the RoundRouter, similar to LeaderboardRouter
+	// Stop the queue service
+	if m.QueueService != nil {
+		if err := m.QueueService.Stop(context.Background()); err != nil {
+			logger.Error("Error stopping queue service", "error", err)
+		}
+	}
+
+	// Close the RoundRouter
 	if m.RoundRouter != nil {
 		if err := m.RoundRouter.Close(); err != nil {
 			logger.Error("Error closing RoundRouter from module", "error", err)

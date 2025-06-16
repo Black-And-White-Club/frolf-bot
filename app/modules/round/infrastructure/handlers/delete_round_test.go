@@ -37,14 +37,12 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
-	// Create an expected message for the successful output (RoundDeleteAuthorized)
-	expectedAuthPayload := roundevents.RoundDeleteAuthorizedPayload{
-		RoundID: testRoundID,
+	// Create an expected message for the successful output (RoundDeleteValidated)
+	expectedValidatedPayload := roundevents.RoundDeleteValidatedPayload{
+		RoundDeleteRequestPayload: *testPayload,
 	}
-	expectedAuthPayloadBytes, _ := json.Marshal(expectedAuthPayload)
-	expectedAuthMsg := message.NewMessage("test-id", expectedAuthPayloadBytes)
-	// Add metadata as done in the handler for deep equality check
-	expectedAuthMsg.Metadata.Set("round_id", testRoundID.String())
+	expectedValidatedPayloadBytes, _ := json.Marshal(expectedValidatedPayload)
+	expectedValidatedMsg := message.NewMessage("test-id", expectedValidatedPayloadBytes)
 
 	// Mock dependencies
 	mockRoundService := roundmocks.NewMockService(ctrl)
@@ -88,19 +86,19 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 					nil,
 				)
 
-				// The payload passed to CreateResultMessage is authPayload, which is RoundDeleteAuthorizedPayload
-				authPayloadForMock := roundevents.RoundDeleteAuthorizedPayload{
-					RoundID: testRoundID,
+				// The payload passed to CreateResultMessage is the validated payload
+				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayload{
+					RoundDeleteRequestPayload: *testPayload,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					authPayloadForMock, // Use the correct payload type for the mock expectation
-					roundevents.RoundDeleteAuthorized,
-				).Return(expectedAuthMsg, nil) // Return the message created with RoundDeleteAuthorizedPayload
+					validatedPayloadForMock, // Use the correct payload type for the mock expectation
+					roundevents.RoundDeleteValidated,
+				).Return(expectedValidatedMsg, nil) // Return the message created with RoundDeleteValidatedPayload
 			},
 			msg:     testMsg,
-			want:    []*message.Message{expectedAuthMsg}, // CORRECTED: Expect the message created from RoundDeleteAuthorizedPayload
+			want:    []*message.Message{expectedValidatedMsg}, // CORRECTED: Expect the message created from RoundDeleteValidatedPayload
 			wantErr: false,
 		},
 		{
@@ -137,7 +135,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle RoundDeleteRequest event: internal service error",
+			expectedErrMsg: "failed to validate RoundDeleteRequest: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -165,15 +163,15 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 					nil,
 				)
 
-				// The payload passed to CreateResultMessage is authPayload, which is RoundDeleteAuthorizedPayload
-				authPayloadForMock := roundevents.RoundDeleteAuthorizedPayload{
-					RoundID: testRoundID,
+				// The payload passed to CreateResultMessage is the validated payload
+				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayload{
+					RoundDeleteRequestPayload: *testPayload,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					authPayloadForMock, // Use the correct payload type for the mock expectation
-					roundevents.RoundDeleteAuthorized,
+					validatedPayloadForMock, // Use the correct payload type for the mock expectation
+					roundevents.RoundDeleteValidated,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -249,7 +247,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle RoundDeleteRequest event: internal service error",
+			expectedErrMsg: "failed to validate RoundDeleteRequest: internal service error",
 		},
 		{
 			name: "Unknown result from ValidateRoundDeleteRequest",

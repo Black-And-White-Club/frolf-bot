@@ -161,15 +161,16 @@ func (mr *MockLeaderboardDBMockRecorder) SwapTags(ctx, requestorID, targetID any
 }
 
 // UpdateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, scoreUpdateID sharedtypes.RoundID) error {
+func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, UpdateID sharedtypes.RoundID) (*leaderboarddb.Leaderboard, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, leaderboardData, scoreUpdateID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, leaderboardData, UpdateID)
+	ret0, _ := ret[0].(*leaderboarddb.Leaderboard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateLeaderboard indicates an expected call of UpdateLeaderboard.
-func (mr *MockLeaderboardDBMockRecorder) UpdateLeaderboard(ctx, leaderboardData, scoreUpdateID any) *gomock.Call {
+func (mr *MockLeaderboardDBMockRecorder) UpdateLeaderboard(ctx, leaderboardData, UpdateID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).UpdateLeaderboard), ctx, leaderboardData, scoreUpdateID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).UpdateLeaderboard), ctx, leaderboardData, UpdateID)
 }

@@ -178,22 +178,43 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 					return nil, fmt.Errorf("unexpected success payload type from UpdateParticipantScore service: %T", result.Success)
 				}
 
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,                                      // Original message
-					&updatedPayload,                          // The payload for the next event (publish pointer)
-					roundevents.RoundParticipantScoreUpdated, // The topic for the next step (the check)
+				// Create TWO messages to publish in parallel
+				// 1. Discord message for embed update
+				discordMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					&updatedPayload,
+					roundevents.DiscordParticipantScoreUpdated, // Discord updates embed
 				)
 				if err != nil {
-					// Log and return error if message creation fails
-					h.logger.ErrorContext(ctx, "Failed to create success message for participant score updated",
+					h.logger.ErrorContext(ctx, "Failed to create discord message for participant score updated",
 						attr.CorrelationIDFromMsg(msg),
 						attr.Error(err),
 					)
-					return nil, fmt.Errorf("failed to create success message: %w", err)
+					return nil, fmt.Errorf("failed to create discord message: %w", err)
 				}
 
-				// Return the created success message to be published by the router
-				return []*message.Message{successMsg}, nil
+				// 2. Backend message for checking all scores submitted
+				backendMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					&updatedPayload,
+					roundevents.RoundParticipantScoreUpdated, // Backend checks all scores
+				)
+				if err != nil {
+					h.logger.ErrorContext(ctx, "Failed to create backend message for participant score updated",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(err),
+					)
+					return nil, fmt.Errorf("failed to create backend message: %w", err)
+				}
+
+				h.logger.InfoContext(ctx, "Publishing parallel messages for score update",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("discord_topic", roundevents.DiscordParticipantScoreUpdated),
+					attr.String("backend_topic", roundevents.RoundParticipantScoreUpdated),
+				)
+
+				// Return BOTH messages to be published simultaneously
+				return []*message.Message{discordMsg, backendMsg}, nil
 			}
 
 			// If neither Failure nor Success is set, something unexpected happened

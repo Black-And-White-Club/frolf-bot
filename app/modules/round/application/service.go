@@ -11,38 +11,43 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// RoundService handles round-related logic.
+// RoundService uses the concrete queue service directly
 type RoundService struct {
 	RoundDB        rounddb.RoundDB
-	logger         *slog.Logger
+	QueueService   roundqueue.QueueService // Use the interface from infrastructure
+	EventBus       eventbus.EventBus
 	metrics        roundmetrics.RoundMetrics
+	logger         *slog.Logger
 	tracer         trace.Tracer
 	roundValidator roundutil.RoundValidator
-	EventBus       eventbus.EventBus
 	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error)
 }
 
-// NewRoundService creates a new RoundService.
+// Constructor takes the concrete implementation
 func NewRoundService(
-	db rounddb.RoundDB,
-	logger *slog.Logger,
-	metrics roundmetrics.RoundMetrics,
-	tracer trace.Tracer,
+	roundDB rounddb.RoundDB,
+	queueService roundqueue.QueueService, // Interface from infrastructure
 	eventBus eventbus.EventBus,
-) Service {
+	metrics roundmetrics.RoundMetrics,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	roundValidator roundutil.RoundValidator,
+) *RoundService {
 	return &RoundService{
-		RoundDB:        db,
-		logger:         logger,
-		metrics:        metrics,
-		tracer:         tracer,
-		roundValidator: roundutil.NewRoundValidator(),
+		RoundDB:        roundDB,
+		QueueService:   queueService,
 		EventBus:       eventBus,
+		metrics:        metrics,
+		logger:         logger,
+		tracer:         tracer,
+		roundValidator: roundValidator,
 		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (result RoundOperationResult, err error) {
 			return serviceWrapper(ctx, operationName, roundID, serviceFunc, logger, metrics, tracer)
 		},

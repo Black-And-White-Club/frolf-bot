@@ -296,11 +296,11 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 		want           []*message.Message
 		wantErr        bool
 		expectedErrMsg string
-		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
+		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message
 	}{
 		{
 			name: "Successfully handle ScoreUpdateValidated",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
@@ -328,29 +328,41 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					nil,
 				)
 
+				// Create the expected messages that will be returned by the mocks
+				discordMsg := message.NewMessage("discord-msg", []byte("discord"))
+				backendMsg := message.NewMessage("backend-msg", []byte("backend"))
+
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.DiscordParticipantScoreUpdated,
+				).Return(discordMsg, nil)
+
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
 					roundevents.RoundParticipantScoreUpdated,
-				).Return(testMsg, nil)
+				).Return(backendMsg, nil)
+
+				// Return the same message instances that the mocks will return
+				return []*message.Message{discordMsg, backendMsg}
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
 			wantErr: false,
 		},
 		{
 			name: "Fail to unmarshal payload",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+				return nil
 			},
 			msg:            invalidMsg,
-			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "failed to unmarshal payload: invalid payload",
 		},
 		{
 			name: "Service failure in UpdateParticipantScore",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
@@ -371,15 +383,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
+				return nil
 			},
 			msg:            testMsg,
-			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "failed to handle ScoreUpdateValidated event during score update: internal service error",
 		},
 		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			name: "Service success but Discord CreateResultMessage fails",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
@@ -407,20 +419,70 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					nil,
 				)
 
+				// Discord message creation fails
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.DiscordParticipantScoreUpdated,
+				).Return(nil, fmt.Errorf("failed to create result message"))
+				return nil
+			},
+			msg:            testMsg,
+			wantErr:        true,
+			expectedErrMsg: "failed to create discord message: failed to create result message",
+		},
+		{
+			name: "Service success but Backend CreateResultMessage fails",
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						return nil
+					},
+				)
+
+				mockRoundService.EXPECT().UpdateParticipantScore(
+					gomock.Any(),
+					roundevents.ScoreUpdateValidatedPayload{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+							RoundID:     testRoundID,
+							Participant: testParticipant,
+							Score:       &testScore,
+						},
+					},
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.ParticipantScoreUpdatedPayload{
+							RoundID:     testRoundID,
+							Participant: testParticipant,
+							Score:       testScore,
+						},
+					},
+					nil,
+				)
+
+				// Discord message creation succeeds, but backend fails
+				discordMsg := message.NewMessage("discord-msg", []byte("discord"))
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					roundevents.DiscordParticipantScoreUpdated,
+				).Return(discordMsg, nil)
+
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
 					roundevents.RoundParticipantScoreUpdated,
 				).Return(nil, fmt.Errorf("failed to create result message"))
+				return nil
 			},
 			msg:            testMsg,
-			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "failed to create backend message: failed to create result message",
 		},
 		{
 			name: "Unknown result from UpdateParticipantScore",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
@@ -441,15 +503,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					roundservice.RoundOperationResult{}, // Return empty result
 					nil,
 				)
+				return nil
 			},
 			msg:            testMsg,
-			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "unexpected result from service (neither success nor failure)",
 		},
 		{
 			name: "Failure result from UpdateParticipantScore",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
+			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
@@ -475,14 +537,16 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					nil,
 				)
 
+				errorMsg := message.NewMessage("error-msg", []byte("error"))
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
 					roundevents.RoundScoreUpdateError,
-				).Return(testMsg, nil)
+				).Return(errorMsg, nil)
+
+				return []*message.Message{errorMsg}
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
 			wantErr: false,
 		},
 	}
@@ -495,7 +559,8 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockRoundService := roundmocks.NewMockService(ctrl)
 			mockHelpers := mocks.NewMockHelpers(ctrl)
 
-			tt.mockSetup(mockRoundService, mockHelpers)
+			expectedMsgs := tt.mockSetup(mockRoundService, mockHelpers)
+			tt.want = expectedMsgs // Set the want field to the messages returned by mockSetup
 
 			h := &RoundHandlers{
 				roundService: mockRoundService,
@@ -513,7 +578,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleScoreUpdateValidated() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
 				t.Errorf("HandleScoreUpdateValidated() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 

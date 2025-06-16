@@ -315,6 +315,21 @@ func (mr *MockServiceMockRecorder) ValidateAndProcessRound(ctx, payload, timePar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRound", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRound), ctx, payload, timeParser)
 }
 
+// ValidateAndProcessRoundUpdate mocks base method.
+func (m *MockService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateAndProcessRoundUpdate", ctx, payload, timeParser)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateAndProcessRoundUpdate indicates an expected call of ValidateAndProcessRoundUpdate.
+func (mr *MockServiceMockRecorder) ValidateAndProcessRoundUpdate(ctx, payload, timeParser any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRoundUpdate", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRoundUpdate), ctx, payload, timeParser)
+}
+
 // ValidateParticipantJoinRequest mocks base method.
 func (m *MockService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
@@ -343,21 +358,6 @@ func (m *MockService) ValidateRoundDeleteRequest(ctx context.Context, payload ro
 func (mr *MockServiceMockRecorder) ValidateRoundDeleteRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundDeleteRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundDeleteRequest), ctx, payload)
-}
-
-// ValidateRoundUpdateRequest mocks base method.
-func (m *MockService) ValidateRoundUpdateRequest(ctx context.Context, payload roundevents.RoundUpdateRequestPayload) (roundservice.RoundOperationResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateRoundUpdateRequest", ctx, payload)
-	ret0, _ := ret[0].(roundservice.RoundOperationResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ValidateRoundUpdateRequest indicates an expected call of ValidateRoundUpdateRequest.
-func (mr *MockServiceMockRecorder) ValidateRoundUpdateRequest(ctx, payload any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRoundUpdateRequest", reflect.TypeOf((*MockService)(nil).ValidateRoundUpdateRequest), ctx, payload)
 }
 
 // ValidateScoreUpdateRequest mocks base method.

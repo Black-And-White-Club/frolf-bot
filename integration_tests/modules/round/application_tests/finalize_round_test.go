@@ -239,7 +239,7 @@ func TestNotifyScoreModule(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload)
-		expectedFailure          bool // Changed from expectedError
+		expectedFailure          bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
@@ -281,19 +281,18 @@ func TestNotifyScoreModule(t *testing.T) {
 					RoundData: roundForDB,
 				}
 			},
-			expectedFailure: false, // Changed from expectedError
+			expectedFailure: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// Fixed: expecting pointer type
 				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify the payload contains the correct number of participants
+				// Verify the payload contains the correct number of participants (only those with scores)
 				if len(processScoresPayload.Scores) != 2 {
 					t.Errorf("Expected 2 participant scores, got %d", len(processScoresPayload.Scores))
 				}
@@ -329,7 +328,7 @@ func TestNotifyScoreModule(t *testing.T) {
 			},
 		},
 		{
-			name: "Successful notification with participants having nil scores and tag numbers",
+			name: "Failure notification with participants having nil scores",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
@@ -347,13 +346,13 @@ func TestNotifyScoreModule(t *testing.T) {
 				participant1 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user3"),
 					TagNumber: nil,
-					Score:     nil,
+					Score:     nil, // No score submitted
 					Response:  roundtypes.ResponseAccept,
 				}
 				participant2 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user4"),
-					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(0); return &tn }(), // Zero tag number
-					Score:     nil,
+					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(0); return &tn }(),
+					Score:     nil, // No score submitted
 					Response:  roundtypes.ResponseAccept,
 				}
 
@@ -366,39 +365,25 @@ func TestNotifyScoreModule(t *testing.T) {
 					RoundData: roundForDB,
 				}
 			},
-			expectedFailure: false, // Changed from expectedError
+			expectedFailure:          true, // Changed to expect failure
+			expectedErrorMessagePart: "no participants with submitted scores found",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
-				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+				if returnedResult.Failure == nil {
+					t.Fatalf("Expected failure result, but got nil")
 				}
-				// Fixed: expecting pointer type
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
 				if !ok {
-					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
 				}
 
-				// Verify the payload contains the correct number of participants
-				if len(processScoresPayload.Scores) != 2 {
-					t.Errorf("Expected 2 participant scores, got %d", len(processScoresPayload.Scores))
-				}
-
-				// Verify default values are applied correctly
-				for _, score := range processScoresPayload.Scores {
-					if score.TagNumber == nil {
-						t.Errorf("Expected tag number pointer to be set (even if value is 0) for user %s", score.UserID)
-					} else if int(*score.TagNumber) != 0 {
-						t.Errorf("Expected tag number to default to 0 for user %s, got %d", score.UserID, *score.TagNumber)
-					}
-
-					if int(score.Score) != 0 {
-						t.Errorf("Expected score to default to 0 for user %s, got %d", score.UserID, score.Score)
-					}
+				if !strings.Contains(failurePayload.Error, "no participants with submitted scores found") {
+					t.Errorf("Expected error to contain 'no participants with submitted scores found', got '%s'", failurePayload.Error)
 				}
 			},
 		},
 		{
-			name: "Successful notification with empty participants list",
+			name: "Failure notification with empty participants list",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
@@ -417,31 +402,25 @@ func TestNotifyScoreModule(t *testing.T) {
 					RoundData: roundForDB, // Empty participants from generator
 				}
 			},
-			expectedFailure: false, // Changed from expectedError
+			expectedFailure:          true, // Changed to expect failure
+			expectedErrorMessagePart: "no participants with submitted scores found",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
-				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+				if returnedResult.Failure == nil {
+					t.Fatalf("Expected failure result, but got nil")
 				}
-				// Fixed: expecting pointer type
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
 				if !ok {
-					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
 				}
 
-				// Verify empty scores list
-				if len(processScoresPayload.Scores) != 0 {
-					t.Errorf("Expected 0 participant scores, got %d", len(processScoresPayload.Scores))
-				}
-
-				// Verify the round ID is still correctly set
-				if processScoresPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-					t.Errorf("Expected non-nil round ID in payload")
+				if !strings.Contains(failurePayload.Error, "no participants with submitted scores found") {
+					t.Errorf("Expected error to contain 'no participants with submitted scores found', got '%s'", failurePayload.Error)
 				}
 			},
 		},
 		{
-			name: "Notification with mixed participant data",
+			name: "Notification with mixed participant data - only includes participants with scores",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
@@ -455,23 +434,23 @@ func TestNotifyScoreModule(t *testing.T) {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
-				// Mix of participants with complete data, partial data, and nil data
+				// Mix of participants: some with scores, some without
 				participant1 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user5"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(25); return &tn }(),
-					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(78); return &s }(),
+					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(78); return &s }(), // HAS SCORE
 					Response:  roundtypes.ResponseAccept,
 				}
 				participant2 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user6"),
 					TagNumber: nil,
-					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(65); return &s }(),
+					Score:     func() *sharedtypes.Score { s := sharedtypes.Score(65); return &s }(), // HAS SCORE
 					Response:  roundtypes.ResponseAccept,
 				}
 				participant3 := roundtypes.Participant{
 					UserID:    sharedtypes.DiscordID("user7"),
 					TagNumber: func() *sharedtypes.TagNumber { tn := sharedtypes.TagNumber(33); return &tn }(),
-					Score:     nil,
+					Score:     nil, // NO SCORE - should be excluded
 					Response:  roundtypes.ResponseAccept,
 				}
 
@@ -485,21 +464,20 @@ func TestNotifyScoreModule(t *testing.T) {
 					RoundData: roundForDB,
 				}
 			},
-			expectedFailure: false, // Changed from expectedError
+			expectedFailure: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// Fixed: expecting pointer type
 				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
 				}
 
-				// Verify the payload contains the correct number of participants
-				if len(processScoresPayload.Scores) != 3 {
-					t.Errorf("Expected 3 participant scores, got %d", len(processScoresPayload.Scores))
+				// Only 2 participants should be included (user5 and user6 have scores, user7 doesn't)
+				if len(processScoresPayload.Scores) != 2 {
+					t.Errorf("Expected 2 participant scores (only those with scores), got %d", len(processScoresPayload.Scores))
 				}
 
 				// Create a map to verify specific user data
@@ -508,7 +486,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					scoresByUser[score.UserID] = score
 				}
 
-				// Verify user5 (complete data)
+				// Verify user5 (complete data with score)
 				if score, exists := scoresByUser[sharedtypes.DiscordID("user5")]; exists {
 					if score.TagNumber == nil || int(*score.TagNumber) != 25 {
 						t.Errorf("Expected user5 tag number to be 25, got %v", score.TagNumber)
@@ -520,7 +498,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					t.Errorf("Expected user5 to be in scores")
 				}
 
-				// Verify user6 (nil tag number, has score)
+				// Verify user6 (nil tag number but has score)
 				if score, exists := scoresByUser[sharedtypes.DiscordID("user6")]; exists {
 					if score.TagNumber == nil || int(*score.TagNumber) != 0 {
 						t.Errorf("Expected user6 tag number to default to 0, got %v", score.TagNumber)
@@ -532,16 +510,9 @@ func TestNotifyScoreModule(t *testing.T) {
 					t.Errorf("Expected user6 to be in scores")
 				}
 
-				// Verify user7 (has tag number, nil score)
-				if score, exists := scoresByUser[sharedtypes.DiscordID("user7")]; exists {
-					if score.TagNumber == nil || int(*score.TagNumber) != 33 {
-						t.Errorf("Expected user7 tag number to be 33, got %v", score.TagNumber)
-					}
-					if int(score.Score) != 0 {
-						t.Errorf("Expected user7 score to default to 0, got %d", score.Score)
-					}
-				} else {
-					t.Errorf("Expected user7 to be in scores")
+				// Verify user7 is NOT in scores (no score submitted)
+				if _, exists := scoresByUser[sharedtypes.DiscordID("user7")]; exists {
+					t.Errorf("Expected user7 to NOT be in scores (no score submitted)")
 				}
 			},
 		},

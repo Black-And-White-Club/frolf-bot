@@ -37,11 +37,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 		ChangedTags: testChangedTags,
 	}
 
-	// Corrected DiscordRoundUpdatePayload initialization to match its actual fields
-	discordUpdatePayload := &roundevents.DiscordRoundUpdatePayload{
-		RoundIDs:        []sharedtypes.RoundID{testRoundID}, // Use RoundIDs (plural) and make it a slice
-		EventMessageIDs: []string{"some-event-message-id"},  // Example value, adjust as needed
-		Participants:    []roundtypes.Participant{},         // Initialize as empty or with relevant participants
+	// Create the correct payload type that the handler expects
+	tagsUpdatedPayload := &roundevents.TagsUpdatedForScheduledRoundsPayload{
+		UpdatedRounds: []roundevents.RoundUpdateInfo{
+			{
+				RoundID:             testRoundID,
+				Title:               roundtypes.Title("Test Round"),
+				EventMessageID:      "some-event-message-id",
+				UpdatedParticipants: []roundtypes.Participant{},
+				ParticipantsChanged: 2,
+			},
+		},
+		Summary: roundevents.UpdateSummary{
+			TotalRoundsProcessed: 1,
+			RoundsUpdated:        1,
+			ParticipantsUpdated:  2,
+		},
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -66,7 +77,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						// The handler expects a map[string]interface{}, not a structured payload
+						tagUpdateMap := out.(*map[string]interface{})
+
+						// Convert the structured testPayload to the map format that the handler expects
+						changedTagsMap := make(map[string]interface{})
+						for userID, tagNumber := range testPayload.ChangedTags {
+							if tagNumber != nil {
+								changedTagsMap[string(userID)] = int(*tagNumber)
+							}
+						}
+
+						*tagUpdateMap = map[string]interface{}{
+							"source":       "test_source",
+							"batch_id":     "test_batch_id",
+							"changed_tags": changedTagsMap,
+						}
 						return nil
 					},
 				)
@@ -76,14 +102,14 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: discordUpdatePayload,
+						Success: tagsUpdatedPayload,
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					discordUpdatePayload,
+					tagsUpdatedPayload,
 					roundevents.TagsUpdatedForScheduledRounds,
 				).Return(testMsg, nil)
 			},
@@ -106,7 +132,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						// The handler expects a map[string]interface{}, not a structured payload
+						tagUpdateMap := out.(*map[string]interface{})
+
+						// Convert the structured testPayload to the map format that the handler expects
+						changedTagsMap := make(map[string]interface{})
+						for userID, tagNumber := range testPayload.ChangedTags {
+							if tagNumber != nil {
+								changedTagsMap[string(userID)] = int(*tagNumber)
+							}
+						}
+
+						*tagUpdateMap = map[string]interface{}{
+							"source":       "test_source",
+							"batch_id":     "test_batch_id",
+							"changed_tags": changedTagsMap,
+						}
 						return nil
 					},
 				)
@@ -129,7 +170,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						// The handler expects a map[string]interface{}, not a structured payload
+						tagUpdateMap := out.(*map[string]interface{})
+
+						// Convert the structured testPayload to the map format that the handler expects
+						changedTagsMap := make(map[string]interface{})
+						for userID, tagNumber := range testPayload.ChangedTags {
+							if tagNumber != nil {
+								changedTagsMap[string(userID)] = int(*tagNumber)
+							}
+						}
+
+						*tagUpdateMap = map[string]interface{}{
+							"source":       "test_source",
+							"batch_id":     "test_batch_id",
+							"changed_tags": changedTagsMap,
+						}
 						return nil
 					},
 				)
@@ -163,7 +219,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						// The handler expects a map[string]interface{}, not a structured payload
+						tagUpdateMap := out.(*map[string]interface{})
+
+						// Convert the structured testPayload to the map format that the handler expects
+						changedTagsMap := make(map[string]interface{})
+						for userID, tagNumber := range testPayload.ChangedTags {
+							if tagNumber != nil {
+								changedTagsMap[string(userID)] = int(*tagNumber)
+							}
+						}
+
+						*tagUpdateMap = map[string]interface{}{
+							"source":       "test_source",
+							"batch_id":     "test_batch_id",
+							"changed_tags": changedTagsMap,
+						}
 						return nil
 					},
 				)
@@ -173,14 +244,14 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: discordUpdatePayload,
+						Success: tagsUpdatedPayload,
 					},
 					nil,
 				)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					discordUpdatePayload,
+					tagsUpdatedPayload,
 					roundevents.TagsUpdatedForScheduledRounds,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
@@ -194,7 +265,22 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScheduledRoundTagUpdatePayload) = *testPayload
+						// The handler expects a map[string]interface{}, not a structured payload
+						tagUpdateMap := out.(*map[string]interface{})
+
+						// Convert the structured testPayload to the map format that the handler expects
+						changedTagsMap := make(map[string]interface{})
+						for userID, tagNumber := range testPayload.ChangedTags {
+							if tagNumber != nil {
+								changedTagsMap[string(userID)] = int(*tagNumber)
+							}
+						}
+
+						*tagUpdateMap = map[string]interface{}{
+							"source":       "test_source",
+							"batch_id":     "test_batch_id",
+							"changed_tags": changedTagsMap,
+						}
 						return nil
 					},
 				)

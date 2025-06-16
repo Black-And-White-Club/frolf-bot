@@ -226,13 +226,13 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 	return nil
 }
 
-// UpdateLeaderboard updates the leaderboard with new data from the Score module.
-func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, UpdateID sharedtypes.RoundID) error {
+// UpdateLeaderboard updates the leaderboard with new data and returns the updated leaderboard.
+func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardData leaderboardtypes.LeaderboardData, UpdateID sharedtypes.RoundID) (*Leaderboard, error) {
 	tx, err := db.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err) // ← RETURN NIL, ERROR
 	}
 	defer tx.Rollback()
 
@@ -243,7 +243,7 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 		Where("is_active = ?", true).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate current leaderboard during UpdateLeaderboard: %w", err)
+		return nil, fmt.Errorf("failed to deactivate current leaderboard during UpdateLeaderboard: %w", err) // ← RETURN NIL, ERROR
 	}
 
 	// 2. Create a new leaderboard with the updated data
@@ -254,18 +254,20 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, leaderboardD
 		UpdateID:        UpdateID,
 	}
 
-	// Insert the new leaderboard
-	_, err = tx.NewInsert().Model(newLeaderboard).Exec(ctx)
+	// Insert and let Bun handle ID population
+	_, err = tx.NewInsert().
+		Model(newLeaderboard).
+		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to insert new leaderboard during UpdateLeaderboard: %w", err)
+		return nil, fmt.Errorf("failed to insert new leaderboard during UpdateLeaderboard: %w", err) // ← RETURN NIL, ERROR
 	}
 
 	// 3. Commit the transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction during UpdateLeaderboard: %w", err)
+		return nil, fmt.Errorf("failed to commit transaction during UpdateLeaderboard: %w", err) // ← RETURN NIL, ERROR
 	}
 
-	return nil
+	return newLeaderboard, nil // ← RETURN LEADERBOARD, NIL
 }
 
 // SwapTags swaps the tag numbers of two users in the leaderboard.

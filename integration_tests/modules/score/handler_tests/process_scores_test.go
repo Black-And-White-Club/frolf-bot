@@ -56,10 +56,14 @@ func validateProcessRoundScoresSuccess(t *testing.T, deps ScoreHandlerTestDeps, 
 		t.Fatalf("Failed to unmarshal BatchTagAssignmentRequestedPayload: %v", err)
 	}
 
-	expectedBatchIDPrefix := requestPayload.RoundID.String() + "-"
-	if !strings.HasPrefix(batchPayload.BatchID, expectedBatchIDPrefix) {
-		t.Errorf("BatchID format mismatch: expected prefix %q, got %q",
-			expectedBatchIDPrefix, batchPayload.BatchID)
+	// Validate that we have a proper UUID for BatchID (not a concatenated string)
+	if _, err := uuid.Parse(batchPayload.BatchID); err != nil {
+		t.Errorf("BatchID is not a valid UUID: %q, error: %v", batchPayload.BatchID, err)
+	}
+
+	// Validate that RequestingUserID is from score service
+	if batchPayload.RequestingUserID != "score-service" {
+		t.Errorf("Expected RequestingUserID to be 'score-service', got %q", batchPayload.RequestingUserID)
 	}
 
 	// Create a map of expected UserID to TagNumber from the incoming message payload

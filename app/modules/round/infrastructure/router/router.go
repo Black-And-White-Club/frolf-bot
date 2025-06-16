@@ -164,7 +164,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
 		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
 		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
-		roundevents.TagUpdateForScheduledRounds:           handlers.HandleScheduledRoundTagUpdate,
+		sharedevents.TagUpdateForScheduledRounds:          handlers.HandleScheduledRoundTagUpdate,
 		roundevents.GetRoundRequest:                       handlers.HandleGetRoundRequest,
 		roundevents.RoundUpdated:                          handlers.HandleRoundScheduleUpdate,
 	}
@@ -175,12 +175,11 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 			handlerName,
 			topic,
 			r.subscriber,
-			"",  // No direct publish topic
-			nil, // No manual publisher
+			"",
+			nil,
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					// Log the error and return it to Watermill for potential retries/dead-lettering.
 					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
@@ -196,7 +195,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
 					}
 				}
-				return nil, nil // Return nil, nil to indicate successful processing and publishing
+				return nil, nil
 			},
 		)
 	}
