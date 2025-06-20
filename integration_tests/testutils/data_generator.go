@@ -270,10 +270,13 @@ func (g *TestDataGenerator) GenerateLeaderboard(rounds []roundtypes.Round, isAct
 
 	// Convert to leaderboard entries
 	for userID := range userScores {
-		entries = append(entries, leaderboardtypes.LeaderboardEntry{
-			TagNumber: *userTags[userID],
-			UserID:    userID,
-		})
+		// Only include users who have a tag assigned
+		if userTags[userID] != nil {
+			entries = append(entries, leaderboardtypes.LeaderboardEntry{
+				TagNumber: *userTags[userID],
+				UserID:    userID,
+			})
+		}
 	}
 
 	return Leaderboard{

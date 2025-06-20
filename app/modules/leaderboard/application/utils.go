@@ -50,6 +50,13 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboardData l
 			s.logger.Error("Failed to parse tag number from sorted participant tag", "tag_string", parts[0], "error", err)
 			return nil, fmt.Errorf("invalid tag number format: %s", parts[0])
 		}
+
+		// Validate that tag number is not 0
+		if tagNumberInt == 0 {
+			s.logger.Error("Tag number 0 is not valid", "tag_string", parts[0], "user_id", parts[1])
+			return nil, fmt.Errorf("tag number 0 is not valid for user %s", parts[1])
+		}
+
 		tagNumber := sharedtypes.TagNumber(tagNumberInt)
 		userID := sharedtypes.DiscordID(parts[1])
 
@@ -73,21 +80,41 @@ func (s *LeaderboardService) GenerateUpdatedLeaderboard(currentLeaderboardData l
 
 	// Sort the final list of leaderboard entries by tag number
 	slices.SortFunc(newLeaderboardData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		// Standard comparison for non-zero tags
-		if a.TagNumber != 0 && b.TagNumber != 0 {
-			return int(a.TagNumber - b.TagNumber)
+		// Filter out any entries with tag 0 - they shouldn't be in the leaderboard
+		if a.TagNumber == 0 || b.TagNumber == 0 {
+			// This shouldn't happen, but if it does, log it and handle gracefully
+			s.logger.Warn("Found entry with tag number 0 in leaderboard data - this should not happen",
+				"user_a", string(a.UserID), "tag_a", int(a.TagNumber),
+				"user_b", string(b.UserID), "tag_b", int(b.TagNumber),
+			)
+
+			// If one has tag 0, sort it after the valid tag
+			if a.TagNumber == 0 && b.TagNumber != 0 {
+				return 1 // a comes after b
+			}
+			if a.TagNumber != 0 && b.TagNumber == 0 {
+				return -1 // a comes before b
+			}
+			return 0 // both are 0
 		}
-		// Handle cases with tag 0. Assuming 0 is the zero value and should be sorted appropriately
-		if a.TagNumber == 0 && b.TagNumber == 0 {
-			return 0 // Both are 0, consider them equal for sorting purposes
-		}
-		if a.TagNumber == 0 {
-			return 1 // Place 0 after non-zero tags
-		}
-		return -1 // Place non-zero tags before 0
+
+		// Standard comparison for valid tags (non-zero)
+		return int(a.TagNumber - b.TagNumber)
 	})
 
-	return newLeaderboardData, nil
+	// Filter out any entries with tag number 0 after sorting
+	validEntries := make([]leaderboardtypes.LeaderboardEntry, 0, len(newLeaderboardData))
+	for _, entry := range newLeaderboardData {
+		if entry.TagNumber != 0 {
+			validEntries = append(validEntries, entry)
+		} else {
+			s.logger.Warn("Filtering out leaderboard entry with tag number 0",
+				"user_id", string(entry.UserID),
+			)
+		}
+	}
+
+	return validEntries, nil
 }
 
 // FindTagByUserID is a helper function to find the tag associated with a Discord ID in the leaderboard data.
@@ -138,8 +165,8 @@ func (s *LeaderboardService) PrepareTagAssignment(
 	userID sharedtypes.DiscordID,
 	tagNumber sharedtypes.TagNumber,
 ) (leaderboardtypes.LeaderboardData, error) {
-	if tagNumber < 0 {
-		return nil, fmt.Errorf("invalid input: tag number cannot be negative")
+	if tagNumber <= 0 {
+		return nil, fmt.Errorf("invalid input: tag number must be greater than 0, got %d", tagNumber)
 	}
 
 	var userHasTag bool
@@ -204,8 +231,8 @@ func (s *LeaderboardService) PrepareTagUpdateForExistingUser(
 	newTagNumber sharedtypes.TagNumber,
 ) (leaderboardtypes.LeaderboardData, error) {
 	// Validate tag number
-	if newTagNumber < 0 {
-		return nil, fmt.Errorf("invalid input: tag number cannot be negative")
+	if newTagNumber <= 0 {
+		return nil, fmt.Errorf("invalid input: tag number must be greater than 0, got %d", newTagNumber)
 	}
 
 	// Find the user's current entry

@@ -74,6 +74,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					attr.String("reason", failedPayload.Reason),
 				)
 
+				// Create failure message for user stream
 				failureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
@@ -84,9 +85,23 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
 
+				// Create Discord-specific failure message
+				discordFailurePayload := &userevents.UserSignupFailedPayload{
+					Reason: failedPayload.Reason,
+				}
+				discordFailureMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					discordFailurePayload,
+					userevents.UserSignupFailed,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create discord failure message: %w", err)
+				}
+
 				h.metrics.RecordUserCreationFailure(ctx, failedPayload.Reason, "failed")
 
-				return []*message.Message{failureMsg}, nil
+				return []*message.Message{failureMsg, discordFailureMsg}, nil
 			}
 
 			// Now check for service error after handling any failure payload
@@ -111,6 +126,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					attr.String("user_id", string(userID)),
 				)
 
+				// Create the main user created message for the user stream
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
@@ -121,9 +137,20 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
 
+				// Create a Discord-specific signup success message for the discord stream
+				discordSuccessMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					successPayload,
+					userevents.UserSignupSuccess,
+				)
+				if err != nil {
+					span.RecordError(err)
+					return nil, fmt.Errorf("failed to create discord success message: %w", err)
+				}
+
 				h.metrics.RecordUserCreationSuccess(ctx, string(successPayload.UserID), "discord")
 
-				return []*message.Message{successMsg}, nil
+				return []*message.Message{successMsg, discordSuccessMsg}, nil
 			}
 
 			h.logger.WarnContext(ctx, "CreateUser returned no success or failure payload when error was nil",

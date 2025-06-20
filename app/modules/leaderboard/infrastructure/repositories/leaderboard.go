@@ -91,6 +91,11 @@ func (l *Leaderboard) HasTagNumber(tagNumber sharedtypes.TagNumber) bool {
 
 // AssignTag assigns a tag to a Discord ID, updates the leaderboard, and sets the source of the update.
 func (db *LeaderboardDBImpl) AssignTag(ctx context.Context, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source string, requestUpdateID sharedtypes.RoundID, requestingUserID sharedtypes.DiscordID) (sharedtypes.RoundID, error) {
+	// Validate that tag number is not 0
+	if tagNumber == 0 {
+		return sharedtypes.RoundID(uuid.Nil), fmt.Errorf("invalid tag assignment: tag number cannot be 0 for user %s", userID)
+	}
+
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return sharedtypes.RoundID(uuid.Nil), fmt.Errorf("failed to begin transaction: %w", err)
@@ -182,6 +187,10 @@ func (db *LeaderboardDBImpl) BatchAssignTags(ctx context.Context, assignments []
 
 	// Process all assignments
 	for _, assignment := range assignments {
+		// Validate that tag number is not 0
+		if assignment.TagNumber == 0 {
+			return fmt.Errorf("invalid tag assignment: tag number cannot be 0 for user %s", assignment.UserID)
+		}
 		tagMap[(assignment.TagNumber)] = assignment.UserID
 	}
 

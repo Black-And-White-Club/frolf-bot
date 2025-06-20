@@ -16,11 +16,25 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			discordReminderPayload := payload.(*roundevents.DiscordReminderPayload)
 
+			// Add debugging info to track duplicate processing
+			messageID := msg.UUID
+			deliveredCount := msg.Metadata.Get("Delivered")
+			retryCount := msg.Metadata.Get("retry_count")
+
 			h.logger.InfoContext(ctx, "Received RoundReminder event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", discordReminderPayload.RoundID),
 				attr.String("reminder_type", discordReminderPayload.ReminderType),
-				attr.String("delivered_count", msg.Metadata.Get("Delivered")), // Track delivery count
+				attr.String("message_id", messageID),
+				attr.String("delivered_count", deliveredCount),
+				attr.String("retry_count", retryCount),
+				attr.String("event_message_id", discordReminderPayload.EventMessageID),
+			)
+
+			// Check if this is a duplicate message by logging all metadata
+			h.logger.InfoContext(ctx, "Message metadata debug",
+				attr.String("message_id", messageID),
+				attr.Any("all_metadata", msg.Metadata),
 			)
 
 			// Call the service function to handle the event
@@ -58,6 +72,8 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				h.logger.InfoContext(ctx, "Round reminder processed successfully",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", discordPayload.RoundID),
+					attr.String("original_message_id", msg.UUID),
+					attr.Int("participants_to_notify", len(discordPayload.UserIDs)),
 				)
 
 				// Only publish Discord reminder if there are participants to notify
@@ -69,12 +85,23 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 					if err != nil {
 						return nil, fmt.Errorf("failed to create Discord reminder message: %w", err)
 					}
+
+					// Log the outgoing message details
+					h.logger.InfoContext(ctx, "Publishing Discord reminder message",
+						attr.String("original_message_id", msg.UUID),
+						attr.String("new_message_id", successMsg.UUID),
+						attr.String("topic", roundevents.DiscordRoundReminder),
+						attr.RoundID("round_id", discordPayload.RoundID),
+						attr.Int("participants", len(discordPayload.UserIDs)),
+					)
+
 					return []*message.Message{successMsg}, nil
 				} else {
 					// No participants to notify, but processing was successful
 					h.logger.InfoContext(ctx, "Round reminder processed but no participants to notify",
 						attr.CorrelationIDFromMsg(msg),
 						attr.RoundID("round_id", discordPayload.RoundID),
+						attr.String("original_message_id", msg.UUID),
 					)
 					return []*message.Message{}, nil
 				}

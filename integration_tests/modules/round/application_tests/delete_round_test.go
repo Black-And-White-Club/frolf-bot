@@ -234,12 +234,10 @@ func TestDeleteRound(t *testing.T) {
 					t.Errorf("Expected RoundDeletedPayload, got %T", returnedResult.Success)
 				}
 
-				// Verify the round state was set to DELETED (soft delete)
-				round, err := deps.DB.GetRound(ctx, deletedPayload.RoundID)
-				if err != nil {
-					t.Errorf("Expected round to still exist in DB but with DELETED state, got error: %v", err)
-				} else if round.State != roundtypes.RoundStateDeleted {
-					t.Errorf("Expected round state to be DELETED, but got: %v", round.State)
+				// Verify the round was actually deleted from the DB (not marked as deleted)
+				_, err := deps.DB.GetRound(ctx, deletedPayload.RoundID)
+				if err == nil {
+					t.Errorf("Expected round to be deleted from DB, but it still exists")
 				}
 			},
 		},
