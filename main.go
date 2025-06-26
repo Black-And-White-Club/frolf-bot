@@ -150,39 +150,39 @@ func main() {
 }
 
 // runMigrations handles database migration execution
-func runMigrations(logger observability.Logger) {
-	logger.Info("Running database migrations...")
+func runMigrations() {
+	fmt.Println("Running database migrations...")
 
 	// Load configuration
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
-		logger.Error("Failed to load config", attr.String("error", err.Error()))
+		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
 	// First, run River migrations
-	logger.Info("Running River queue migrations...")
+	fmt.Println("Running River queue migrations...")
 	dbPool, err := pgxpool.New(context.Background(), cfg.Postgres.DSN)
 	if err != nil {
-		logger.Error("Failed to connect to database for River migrations", attr.String("error", err.Error()))
+		fmt.Printf("Failed to connect to database for River migrations: %v\n", err)
 		os.Exit(1)
 	}
 	defer dbPool.Close()
 
 	migrator, err := rivermigrate.New(riverpgxv5.New(dbPool), nil)
 	if err != nil {
-		logger.Error("Failed to create River migrator", attr.String("error", err.Error()))
+		fmt.Printf("Failed to create River migrator: %v\n", err)
 		os.Exit(1)
 	}
 	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
 	if err != nil {
-		logger.Error("Failed to run River migrations", attr.String("error", err.Error()))
+		fmt.Printf("Failed to run River migrations: %v\n", err)
 		os.Exit(1)
 	}
-	logger.Info("River migrations completed successfully.")
+	fmt.Println("River migrations completed successfully.")
 
 	// Then run application migrations
-	logger.Info("Running application migrations...")
+	fmt.Println("Running application migrations...")
 	pgdb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(cfg.Postgres.DSN)))
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
