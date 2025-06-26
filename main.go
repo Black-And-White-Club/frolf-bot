@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,9 +13,28 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot/app"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
+	"github.com/uptrace/bun/migrate"
+
+	// Import for migrator creation
+	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
+	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
+	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
+	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
 func main() {
+	// Check for migrate command
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		runMigrations()
+		return
+	}
+
 	// Create initial context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -127,4 +147,75 @@ func main() {
 
 	logger.Info("Exiting main.")
 	os.Exit(0)
+}
+
+// runMigrations handles database migration execution
+func runMigrations() {
+	fmt.Println("Running database migrations...")
+
+	// Load configuration
+	cfg, err := config.LoadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// First, run River migrations
+	fmt.Println("Running River queue migrations...")
+	dbPool, err := pgxpool.New(context.Background(), cfg.Postgres.DSN)
+	if err != nil {
+		fmt.Printf("Failed to connect to database for River migrations: %v\n", err)
+		os.Exit(1)
+	}
+	defer dbPool.Close()
+
+	migrator, err := rivermigrate.New(riverpgxv5.New(dbPool), nil)
+	if err != nil {
+		fmt.Printf("Failed to create River migrator: %v\n", err)
+		os.Exit(1)
+	}
+	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
+	if err != nil {
+		fmt.Printf("Failed to run River migrations: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("River migrations completed successfully!")
+
+	// Then run application migrations
+	fmt.Println("Running application migrations...")
+	pgdb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(cfg.Postgres.DSN)))
+	db := bun.NewDB(pgdb, pgdialect.New())
+	defer db.Close()
+
+	// Create migrators for all modules
+	migrators := map[string]*migrate.Migrator{
+		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
+		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
+		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
+		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
+	}
+
+	// Initialize and run migrations for each module
+	for moduleName, migrator := range migrators {
+		fmt.Printf("Initializing migrations for %s module...\n", moduleName)
+		if err := migrator.Init(context.Background()); err != nil {
+			fmt.Printf("Failed to initialize %s migrations: %v\n", moduleName, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Running migrations for %s module...\n", moduleName)
+		group, err := migrator.Migrate(context.Background())
+		if err != nil {
+			fmt.Printf("Failed to run %s migrations: %v\n", moduleName, err)
+			os.Exit(1)
+		}
+
+		if group.IsZero() {
+			fmt.Printf("No new migrations for %s module\n", moduleName)
+		} else {
+			fmt.Printf("Successfully migrated %s module to %s\n", moduleName, group)
+		}
+	}
+
+	fmt.Println("All migrations completed successfully!")
 }
