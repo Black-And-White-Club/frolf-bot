@@ -1,0 +1,61 @@
+# Build artifacts
+bin/
+tmp/
+*.out
+*.log
+coverage.out
+reports/
+coverage-data/
+
+# Test data and containers
+unit_data/
+integration_tests/containers/
+postgres-data/
+
+# Git
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dependencies (will be downloaded during build)
+vendor/
+
+# Environment and local config files
+.env
+.env.local
+.env.*.local
+config.yaml
+
+# Documentation
+README.md
+docs/*.md
+
+# CI/CD
+.github/
+
+# Kubernetes manifests (handled by infrastructure repo)
+k8s/
+helm/
+manifests/
+
+# Docker
+.dockerignore
+Dockerfile*
+
+# Makefile (build tool, not needed in container)
+Makefile
