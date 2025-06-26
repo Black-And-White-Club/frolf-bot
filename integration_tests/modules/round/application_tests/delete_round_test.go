@@ -234,10 +234,34 @@ func TestDeleteRound(t *testing.T) {
 					t.Errorf("Expected RoundDeletedPayload, got %T", returnedResult.Success)
 				}
 
+<<<<<<< Updated upstream
 				// Verify the round was actually deleted from the DB (not marked as deleted)
 				_, err := deps.DB.GetRound(ctx, deletedPayload.RoundID)
 				if err == nil {
 					t.Errorf("Expected round to be deleted from DB, but it still exists")
+=======
+<<<<<<< Updated upstream
+				// Verify the round's state is DELETED in the DB
+				persistedRound, err := deps.DB.GetRound(ctx, deletedPayload.RoundID)
+				if err != nil {
+					t.Fatalf("Failed to fetch round from DB after deletion: %v", err)
+				}
+				if persistedRound == nil {
+					t.Fatalf("Expected round to be found in DB (marked deleted), but it was nil")
+				}
+				if persistedRound.State != roundtypes.RoundStateDeleted {
+					t.Errorf("Expected round state to be DELETED, but got %s", persistedRound.State)
+=======
+				// Verify the round was actually deleted (soft delete - state should be DELETED)
+				round, err := deps.DB.GetRound(ctx, deletedPayload.RoundID)
+				if err != nil {
+					t.Fatalf("Unexpected error getting round after deletion: %v", err)
+				}
+				t.Logf("DEBUG: Round after deletion - ID: %s, State: %s", round.ID, round.State)
+				if round.State != roundtypes.RoundStateDeleted {
+					t.Errorf("Expected round state to be DELETED, but got %s", round.State)
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 				}
 			},
 		},

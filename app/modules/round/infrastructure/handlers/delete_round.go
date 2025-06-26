@@ -93,6 +93,44 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 	return wrappedHandler(msg)
 }
 
+func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleRoundDeleteValidated",
+		&roundevents.RoundDeleteValidatedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			roundDeleteValidatedPayload := payload.(*roundevents.RoundDeleteValidatedPayload)
+
+			h.logger.InfoContext(ctx, "Received RoundDeleteValidated event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID),
+			)
+
+			// Convert validated payload to authorized payload
+			authorizedPayload := &roundevents.RoundDeleteAuthorizedPayload{
+				RoundID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID,
+			}
+
+			successMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				authorizedPayload,
+				roundevents.RoundDeleteAuthorized,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to create RoundDeleteAuthorized message",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to create RoundDeleteAuthorized message: %w", err)
+			}
+
+			return []*message.Message{successMsg}, nil
+		},
+	)
+
+	return wrappedHandler(msg)
+}
+
 func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundDeleteAuthorized",

@@ -16,6 +16,7 @@ type Handlers interface {
 	HandleParticipantRemovalRequest(msg *message.Message) ([]*message.Message, error)
 	HandleParticipantScoreUpdated(msg *message.Message) ([]*message.Message, error)
 	HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error)
+	HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error)
 	HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error)
 	HandleCreateRoundRequest(msg *message.Message) ([]*message.Message, error)
 	HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error)

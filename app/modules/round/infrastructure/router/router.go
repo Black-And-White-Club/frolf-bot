@@ -147,6 +147,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
 		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
 		roundevents.RoundDeleteRequest:                    handlers.HandleRoundDeleteRequest,
+		roundevents.RoundDeleteValidated:                  handlers.HandleRoundDeleteValidated,
 		roundevents.RoundDeleteAuthorized:                 handlers.HandleRoundDeleteAuthorized,
 		roundevents.RoundParticipantJoinRequest:           handlers.HandleParticipantJoinRequest,
 		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleParticipantJoinValidationRequest,
