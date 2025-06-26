@@ -43,7 +43,7 @@ config.yaml
 
 # Documentation
 README.md
-*.md
+docs/*.md
 
 # CI/CD
 .github/
