@@ -115,21 +115,6 @@ func (mr *MockHandlersMockRecorder) HandleRoundGetTagRequest(msg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundGetTagRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundGetTagRequest), msg)
 }
 
-// HandleTagAssignment mocks base method.
-func (m *MockHandlers) HandleTagAssignment(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagAssignment", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleTagAssignment indicates an expected call of HandleTagAssignment.
-func (mr *MockHandlersMockRecorder) HandleTagAssignment(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAssignment", reflect.TypeOf((*MockHandlers)(nil).HandleTagAssignment), msg)
-}
-
 // HandleTagAvailabilityCheckRequested mocks base method.
 func (m *MockHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()

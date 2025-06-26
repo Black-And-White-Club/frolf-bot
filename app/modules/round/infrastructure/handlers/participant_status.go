@@ -46,7 +46,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					attr.Any("failure_payload", result.Failure),
 				)
 
-				// Create failure message (assuming RoundParticipantStatusCheckError exists)
+				// Create failure message - should be ParticipantStatusCheckErrorPayload
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
@@ -68,9 +68,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("success_payload_type", fmt.Sprintf("%T", result.Success)), // Log the TYPE of the success payload
 					attr.Any("success_payload_content", result.Success),                 // Log the CONTENT of the success payload
-				)
-
-				// --- Check the Type of the Success Payload to Determine Next Topic ---
+				) // --- Check the Type of the Success Payload to Determine Next Topic ---
 				switch successPayload := result.Success.(type) {
 				case *roundevents.ParticipantRemovalRequestPayload: // Changed to pointer type
 					// If CheckParticipantStatus returned a Removal Payload, publish a Removal Request message
@@ -152,6 +150,38 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 				attr.String("user_id", string(participantJoinValidationRequestPayload.UserID)),
 				attr.String("response", string(participantJoinValidationRequestPayload.Response)),
 			)
+
+			// Validate input before calling service
+			if participantJoinValidationRequestPayload.UserID == "" {
+				h.logger.ErrorContext(ctx, "ParticipantJoinValidationRequest has empty UserID",
+					attr.CorrelationIDFromMsg(msg),
+				)
+
+				// Create error payload for empty user ID
+				errorPayload := &roundevents.RoundParticipantJoinErrorPayload{
+					ParticipantJoinRequest: &roundevents.ParticipantJoinRequestPayload{
+						RoundID:  participantJoinValidationRequestPayload.RoundID,
+						UserID:   participantJoinValidationRequestPayload.UserID,
+						Response: participantJoinValidationRequestPayload.Response,
+					},
+					Error: "User ID cannot be empty",
+				}
+
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					errorPayload,
+					roundevents.RoundParticipantJoinError,
+				)
+				if errMsg != nil {
+					h.logger.ErrorContext(ctx, "Failed to create failure message for empty user ID",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Error(errMsg),
+					)
+					return nil, fmt.Errorf("failed to create failure message for empty user ID: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
 
 			// Call the service function to handle the event
 			// Pass only the basic request details received by the handler.

@@ -94,11 +94,15 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						Error:   nil,
 					}, nil)
 
-				// CreateResultMessage for UserCreated
+				// CreateResultMessage for UserCreated (first call)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreated).
 					Return(message.NewMessage("user-created-id", []byte{}), nil)
+
+				// CreateResultMessage for UserSignupSuccess (second call)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserSignupSuccess).
+					Return(message.NewMessage("user-signup-success-id", []byte{}), nil)
 			},
-			want:    []*message.Message{message.NewMessage("user-created-id", []byte{})},
+			want:    []*message.Message{message.NewMessage("user-created-id", []byte{}), message.NewMessage("user-signup-success-id", []byte{})},
 			wantErr: false,
 		},
 		{
@@ -123,11 +127,15 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						Error:   nil,
 					}, nil)
 
-				// CreateResultMessage for UserCreationFailed
+				// CreateResultMessage for UserCreationFailed (first call)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreationFailed).
 					Return(message.NewMessage("user-failed-id", []byte{}), nil)
+
+				// CreateResultMessage for UserSignupFailed (second call)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserSignupFailed).
+					Return(message.NewMessage("user-signup-failed-id", []byte{}), nil)
 			},
-			want:    []*message.Message{message.NewMessage("user-failed-id", []byte{})},
+			want:    []*message.Message{message.NewMessage("user-failed-id", []byte{}), message.NewMessage("user-signup-failed-id", []byte{})},
 			wantErr: false,
 		},
 		{
@@ -173,12 +181,45 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						Error:   nil,
 					}, nil)
 
-				// CreateResultMessage error
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).
+				// CreateResultMessage error - the first call (UserCreated) fails
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreated).
 					Return(nil, fmt.Errorf("message error"))
 			},
 			wantErr:        true,
 			expectedErrMsg: "failed to create success message: message error",
+		},
+		{
+			name: "Error creating discord result message",
+			msg:  createSignupRequestMessage(testUserID, nil),
+			mockSetup: func() {
+				// Unmarshal Payload
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							UserID:    testUserID,
+							TagNumber: nil,
+						}
+						return nil
+					},
+				)
+				// Fix: CreateUser returns success result
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+					Return(userservice.UserOperationResult{
+						Success: &userevents.UserCreatedPayload{UserID: testUserID},
+						Failure: nil,
+						Error:   nil,
+					}, nil)
+
+				// First CreateResultMessage succeeds (UserCreated)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserCreated).
+					Return(message.NewMessage("user-created-id", []byte{}), nil)
+
+				// Second CreateResultMessage fails (UserSignupSuccess)
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserSignupSuccess).
+					Return(nil, fmt.Errorf("discord message error"))
+			},
+			wantErr:        true,
+			expectedErrMsg: "failed to create discord success message: discord message error",
 		},
 	}
 

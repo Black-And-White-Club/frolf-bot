@@ -1,4 +1,3 @@
-// models.go
 package rounddb
 
 import (

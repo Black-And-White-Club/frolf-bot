@@ -113,23 +113,62 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, roundID sharedtype
 	return updatedParticipants, nil
 }
 
-// UpdateRound updates an existing round in the database.
-func (db *RoundDBImpl) UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) error {
-	result, err := db.DB.NewUpdate().
-		Model(round).
+// convertToDomainRound converts a database Round model to domain Round model
+func convertToDomainRound(dbRound Round) *roundtypes.Round {
+	return &roundtypes.Round{
+		ID:             dbRound.ID,
+		Title:          dbRound.Title,
+		Description:    &dbRound.Description,
+		Location:       &dbRound.Location,
+		EventType:      dbRound.EventType,
+		StartTime:      &dbRound.StartTime,
+		Finalized:      dbRound.Finalized,
+		CreatedBy:      dbRound.CreatedBy,
+		State:          dbRound.State,
+		Participants:   dbRound.Participants,
+		EventMessageID: dbRound.EventMessageID,
+	}
+}
+
+// UpdateRound updates specific fields of an existing round in the database and returns the updated round.
+func (db *RoundDBImpl) UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) (*roundtypes.Round, error) {
+	// Convert domain model to database model for the update
+	dbRound := Round{
+		ID: roundID,
+	}
+
+	// Only set fields that have values in the domain model
+	if round.Title != "" {
+		dbRound.Title = round.Title
+	}
+	if round.Description != nil && *round.Description != "" {
+		dbRound.Description = *round.Description
+	}
+	if round.Location != nil && *round.Location != "" {
+		dbRound.Location = *round.Location
+	}
+	if round.StartTime != nil {
+		dbRound.StartTime = *round.StartTime
+	}
+	if round.EventType != nil {
+		dbRound.EventType = round.EventType
+	}
+
+	var updatedDbRound Round
+
+	// Now use the database model for both Model() and scan target
+	_, err := db.DB.NewUpdate().
+		Model(&dbRound).
+		OmitZero(). // This will ignore zero values
 		Where("id = ?", roundID).
-		Exec(ctx)
+		Returning("*").
+		Exec(ctx, &updatedDbRound)
 	if err != nil {
-		return fmt.Errorf("failed to update round: %w", err)
+		return nil, fmt.Errorf("failed to update round: %w", err)
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+
+	// Convert back to domain model and return COMPLETE round
+	return convertToDomainRound(updatedDbRound), nil
 }
 
 // DeleteRound "soft deletes" a round by setting its state to DELETED.
@@ -498,19 +537,18 @@ func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, roundID sharedt
 }
 
 // GetEventMessageID retrieves the EventMessageID for a given round.
-func (db *RoundDBImpl) GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error) {
-	var eventMessageID sharedtypes.RoundID
-
+func (db *RoundDBImpl) GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (string, error) {
+	var round Round
 	err := db.DB.NewSelect().
-		Model((*roundtypes.Round)(nil)). // Using nil because we only need one field
+		Model(&round).
 		Column("event_message_id").
 		Where("id = ?", roundID).
-		Scan(ctx, &eventMessageID)
+		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch EventMessageID for round %d: %w", roundID, err)
+		return "", fmt.Errorf("failed to get event message ID: %w", err)
 	}
 
-	return &eventMessageID, nil
+	return round.EventMessageID, nil // Return the string directly
 }
 
 // / UpdateRoundsAndParticipants updates multiple rounds and participants in a single transaction.

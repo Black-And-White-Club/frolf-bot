@@ -106,9 +106,16 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					updateResultPayload,
 					leaderboardevents.LeaderboardUpdated,
 				).Return(testMsg, nil)
+
+				// Expect the tag update message for scheduled rounds
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(), // The tag update payload (map[string]interface{})
+					leaderboardevents.TagUpdateForScheduledRounds,
+				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
+			want:    []*message.Message{testMsg, testMsg}, // Expect both success and tag update messages
 			wantErr: false,
 		},
 		{

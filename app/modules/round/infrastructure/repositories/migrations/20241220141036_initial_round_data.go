@@ -12,21 +12,23 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Creating round table...")
 
-		// Create the table using the model
+		// Create the round table using Bun model
 		_, err := db.NewCreateTable().Model((*rounddb.Round)(nil)).
 			IfNotExists().
 			Exec(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create round table: %w", err)
 		}
 
 		fmt.Println("Round table created successfully!")
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
-		fmt.Println("Dropping round table...")
+		fmt.Println("Rolling back round table...")
 
-		if _, err := db.NewDropTable().Model((*rounddb.Round)(nil)).IfExists().Cascade().Exec(ctx); err != nil {
-			return err
+		// Drop round table using Bun model
+		_, err := db.NewDropTable().Model((*rounddb.Round)(nil)).IfExists().Cascade().Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to drop round table: %w", err)
 		}
 
 		fmt.Println("Round table dropped successfully!")

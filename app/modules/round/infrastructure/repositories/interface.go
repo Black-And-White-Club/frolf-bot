@@ -12,7 +12,7 @@ import (
 type RoundDB interface {
 	CreateRound(ctx context.Context, round *roundtypes.Round) error
 	GetRound(ctx context.Context, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
-	UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) error
+	UpdateRound(ctx context.Context, roundID sharedtypes.RoundID, round *roundtypes.Round) (*roundtypes.Round, error)
 	DeleteRound(ctx context.Context, roundID sharedtypes.RoundID) error
 	UpdateParticipant(ctx context.Context, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error)
 	UpdateRoundState(ctx context.Context, roundID sharedtypes.RoundID, state roundtypes.RoundState) error
@@ -25,7 +25,7 @@ type RoundDB interface {
 	UpdateEventMessageID(ctx context.Context, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error)
 	GetParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error)
 	RemoveParticipant(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error)
-	GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (*sharedtypes.RoundID, error)
+	GetEventMessageID(ctx context.Context, roundID sharedtypes.RoundID) (string, error)
 	UpdateRoundsAndParticipants(ctx context.Context, updates []roundtypes.RoundUpdate) error
 	TagUpdates(ctx context.Context, bun bun.IDB, round *roundtypes.Round) error
 }

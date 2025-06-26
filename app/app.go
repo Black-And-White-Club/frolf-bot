@@ -168,7 +168,7 @@ func (app *App) Run(ctx context.Context) error {
 }
 
 func (app *App) Close() error {
-	// Modules' Close methods should handle closing their internal components,
+	// Modules' Close methods should handle closing their internal components
 	if app.UserModule != nil {
 		app.UserModule.Close()
 	}

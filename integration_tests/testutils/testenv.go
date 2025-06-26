@@ -89,7 +89,7 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	db := bundb.BunDB(sqlDB)
 	env.DB = db
 
-	if err := runMigrations(db); err != nil {
+	if err := runMigrationsWithConnStr(db, pgConnStr); err != nil {
 		db.Close()
 		cleanupContainers(ctx, pgContainer, natsContainer)
 		return fmt.Errorf("failed to run migrations: %w", err)

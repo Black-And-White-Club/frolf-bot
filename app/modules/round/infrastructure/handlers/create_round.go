@@ -238,9 +238,9 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			}
 
 			// 3. Publish the RoundScheduled event
-			// This event will be consumed by the (now refactored) ScheduleRoundEvents function
+			// This event will be consumed by the ScheduleRoundEvents function
 			scheduledMsg, err := h.helpers.CreateResultMessage(
-				msg, // Use the original message for metadata propagation (like correlation ID)
+				msg,
 				scheduledPayload,
 				roundevents.RoundEventMessageIDUpdated,
 			)

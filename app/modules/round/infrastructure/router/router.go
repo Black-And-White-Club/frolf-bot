@@ -147,6 +147,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
 		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
 		roundevents.RoundDeleteRequest:                    handlers.HandleRoundDeleteRequest,
+		roundevents.RoundDeleteValidated:                  handlers.HandleRoundDeleteValidated,
 		roundevents.RoundDeleteAuthorized:                 handlers.HandleRoundDeleteAuthorized,
 		roundevents.RoundParticipantJoinRequest:           handlers.HandleParticipantJoinRequest,
 		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleParticipantJoinValidationRequest,
@@ -164,7 +165,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
 		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
 		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
-		roundevents.TagUpdateForScheduledRounds:           handlers.HandleScheduledRoundTagUpdate,
+		sharedevents.TagUpdateForScheduledRounds:          handlers.HandleScheduledRoundTagUpdate,
 		roundevents.GetRoundRequest:                       handlers.HandleGetRoundRequest,
 		roundevents.RoundUpdated:                          handlers.HandleRoundScheduleUpdate,
 	}
@@ -175,19 +176,32 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 			handlerName,
 			topic,
 			r.subscriber,
-			"",  // No direct publish topic
-			nil, // No manual publisher
+			"",
+			nil,
 			func(msg *message.Message) ([]*message.Message, error) {
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					// Log the error and return it to Watermill for potential retries/dead-lettering.
 					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
-						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+						// Add specific logging for round reminder messages
+						if publishTopic == roundevents.DiscordRoundReminder {
+							r.logger.InfoContext(ctx, "🚀 Publishing Discord Round Reminder",
+								attr.String("original_message_id", msg.UUID),
+								attr.String("new_message_id", m.UUID),
+								attr.String("topic", publishTopic),
+								attr.String("handler_name", handlerName),
+							)
+						} else {
+							r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return",
+								attr.String("message_id", m.UUID),
+								attr.String("topic", publishTopic),
+							)
+						}
+
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
 							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
@@ -196,7 +210,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
 					}
 				}
-				return nil, nil // Return nil, nil to indicate successful processing and publishing
+				return nil, nil
 			},
 		)
 	}

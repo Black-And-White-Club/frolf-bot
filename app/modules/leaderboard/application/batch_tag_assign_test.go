@@ -43,12 +43,19 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						{UserID: "existing_user", TagNumber: 10},
 					},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+						{UserID: "user2", TagNumber: 2},
+						{UserID: "existing_user", TagNumber: 10},
+					},
+				}
 				mockDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(currentLeaderboard, nil)
 				mockDB.EXPECT().
 					UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(nil)
+					Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -62,10 +69,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
-				AssignmentCount:  2,
+				AssignmentCount:  3,
 				Assignments: []leaderboardevents.TagAssignmentInfo{
 					{UserID: "user1", TagNumber: 1},
 					{UserID: "user2", TagNumber: 2},
+					{UserID: "existing_user", TagNumber: 10},
 				},
 			},
 			expectedError: nil,
@@ -76,12 +84,17 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+					},
+				}
 				mockDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(currentLeaderboard, nil)
 				mockDB.EXPECT().
 					UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(nil)
+					Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceCreateUser,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -108,12 +121,18 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						{UserID: "user2", TagNumber: 6},
 					},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+						{UserID: "user2", TagNumber: 2},
+					},
+				}
 				mockDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(currentLeaderboard, nil)
 				mockDB.EXPECT().
 					UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(nil)
+					Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceProcessScores,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -162,12 +181,17 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user2", TagNumber: 2},
+					},
+				}
 				mockDB.EXPECT().
 					GetActiveLeaderboard(gomock.Any()).
 					Return(currentLeaderboard, nil)
 				mockDB.EXPECT().
 					UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(nil)
+					Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -199,7 +223,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 					Return(currentLeaderboard, nil)
 				mockDB.EXPECT().
 					UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(errors.New("database error"))
+					Return(nil, errors.New("database error"))
 			},
 			source: sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -245,6 +269,12 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 		{
 			name: "Empty assignments list",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{},
+				}
+				mockDB.EXPECT().
+					GetActiveLeaderboard(gomock.Any()).
+					Return(currentLeaderboard, nil)
 			},
 			source:              sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests:            []sharedtypes.TagAssignmentRequest{},
@@ -287,8 +317,13 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: "user_creation",
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -312,8 +347,13 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: "some_other_string",
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -352,8 +392,15 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						{UserID: "target_user", TagNumber: 1},
 					},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "target_user", TagNumber: 1},
+						{UserID: "user2", TagNumber: 2},
+						{UserID: "user1", TagNumber: 5},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -367,9 +414,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
 				RequestingUserID: "system",
 				BatchID:          "",
-				AssignmentCount:  1,
+				AssignmentCount:  3,
 				Assignments: []leaderboardevents.TagAssignmentInfo{
+					{UserID: "target_user", TagNumber: 1},
 					{UserID: "user2", TagNumber: 2},
+					{UserID: "user1", TagNumber: 5},
 				},
 			},
 			expectedError: nil,
@@ -398,7 +447,6 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			},
 			expectedError: nil, // Business logic error, not infrastructure error
 		},
-
 		{
 			name: "Single assignment - user already has tag (no-op)",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
@@ -407,8 +455,13 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						{UserID: "user1", TagNumber: 5},
 					},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 5},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceManual,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -434,8 +487,14 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+						{UserID: "user2", TagNumber: 2},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceCreateUser,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -463,8 +522,13 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 1},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSource("unknown_source"),
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -492,8 +556,13 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						{UserID: "user1", TagNumber: 10},
 					},
 				}
+				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{
+						{UserID: "user1", TagNumber: 5},
+					},
+				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			source: sharedtypes.ServiceUpdateSourceAdminBatch,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -520,7 +589,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 					LeaderboardData: leaderboardtypes.LeaderboardData{},
 				}
 				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("database error"))
+				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("database error"))
 			},
 			source: sharedtypes.ServiceUpdateSourceProcessScores,
 			requests: []sharedtypes.TagAssignmentRequest{
@@ -552,6 +621,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 
 			tt.mockDBSetup(mockDB)
 
+			// Set up expected values with actual IDs
 			if tt.expectedBatchPayload != nil {
 				tt.expectedBatchPayload.BatchID = tt.batchID.String()
 			}
@@ -580,6 +650,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 
 			got, err := s.ProcessTagAssignments(ctx, tt.source, tt.requests, tt.requestingUserID, tt.operationID, tt.batchID)
 
+			// Validate error expectations
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
@@ -592,47 +663,36 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				}
 			}
 
-			switch tt.expectedSuccessType {
-			case "batch":
+			// Validate success responses
+			if tt.expectedSuccessType != "" {
 				if got.Success == nil {
 					t.Errorf("expected success result, got: nil")
-				} else {
-					successPayload, ok := got.Success.(*leaderboardevents.BatchTagAssignedPayload)
+					return
+				}
+
+				switch tt.expectedSuccessType {
+				case "batch":
+					batchPayload, ok := got.Success.(*leaderboardevents.BatchTagAssignedPayload)
 					if !ok {
 						t.Errorf("expected result to be *leaderboardevents.BatchTagAssignedPayload, got: %T", got.Success)
 					} else {
-						validateBatchPayload(t, tt.expectedBatchPayload, successPayload)
+						validateBatchPayload(t, tt.expectedBatchPayload, batchPayload)
 					}
-				}
-
-			case "tag_assigned":
-				if got.Success == nil {
-					t.Errorf("expected success result, got: nil")
-				} else {
-					tagAssignedPayload, ok := got.Success.(*leaderboardevents.TagAssignedPayload)
+				case "tag_assigned":
+					tagPayload, ok := got.Success.(*leaderboardevents.TagAssignedPayload)
 					if !ok {
 						t.Errorf("expected result to be *leaderboardevents.TagAssignedPayload, got: %T", got.Success)
 					} else {
-						validateTagAssignedPayload(t, tt.expectedTagAssigned, tagAssignedPayload)
+						validateTagAssignedPayload(t, tt.expectedTagAssigned, tagPayload)
 					}
-				}
-
-			case "leaderboard_updated":
-				if got.Success == nil {
-					t.Errorf("expected success result, got: nil")
-				} else {
+				case "leaderboard_updated":
 					leaderboardPayload, ok := got.Success.(*leaderboardevents.LeaderboardUpdatedPayload)
 					if !ok {
 						t.Errorf("expected result to be *leaderboardevents.LeaderboardUpdatedPayload, got: %T", got.Success)
 					} else {
 						validateLeaderboardUpdatedPayload(t, tt.expectedLeaderboardUpdate, leaderboardPayload)
 					}
-				}
-
-			case "swap_requested":
-				if got.Success == nil {
-					t.Errorf("expected success result, got: nil")
-				} else {
+				case "swap_requested":
 					swapPayload, ok := got.Success.(*leaderboardevents.TagSwapRequestedPayload)
 					if !ok {
 						t.Errorf("expected result to be *leaderboardevents.TagSwapRequestedPayload, got: %T", got.Success)
@@ -642,6 +702,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				}
 			}
 
+			// Validate failure responses
 			if tt.expectedFailurePayload != nil {
 				if got.Failure == nil {
 					t.Errorf("expected failure result, got: nil")

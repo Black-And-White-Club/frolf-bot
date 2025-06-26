@@ -59,13 +59,13 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 
 				result := publishAndExpectTagUpdateSuccess(t, deps, deps.MessageCapture, payload)
 
-				// Validate specific results
-				if len(result.RoundIDs) != 2 {
-					t.Errorf("Expected 2 rounds to be updated, got %d. RoundIDs: %v", len(result.RoundIDs), result.RoundIDs)
+				// Validate specific results using the new payload structure
+				if len(result.UpdatedRounds) != 2 {
+					t.Errorf("Expected 2 rounds to be updated, got %d. UpdatedRounds: %v", len(result.UpdatedRounds), result.UpdatedRounds)
 				}
 
-				if len(result.Participants) != 2 {
-					t.Errorf("Expected 2 participants to be updated, got %d. Participants: %v", len(result.Participants), result.Participants)
+				if result.Summary.ParticipantsUpdated != 2 {
+					t.Errorf("Expected 2 participants to be updated, got %d", result.Summary.ParticipantsUpdated)
 				}
 
 				// Check that the correct rounds were updated
@@ -73,11 +73,11 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 					roundID1: false,
 					roundID2: false,
 				}
-				for _, roundID := range result.RoundIDs {
-					if _, exists := expectedRounds[roundID]; exists {
-						expectedRounds[roundID] = true
+				for _, roundInfo := range result.UpdatedRounds {
+					if _, exists := expectedRounds[roundInfo.RoundID]; exists {
+						expectedRounds[roundInfo.RoundID] = true
 					} else {
-						t.Errorf("Unexpected round ID in result: %s", roundID)
+						t.Errorf("Unexpected round ID in result: %s", roundInfo.RoundID)
 					}
 				}
 				for roundID, found := range expectedRounds {
@@ -90,10 +90,10 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 		{
 			name: "Success - Tag Update for Multiple Rounds with Same Participant",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				// Create multiple rounds with the same participant
+				// Create multiple upcoming rounds with the same participant
 				oldTag := sharedtypes.TagNumber(50)
-				helper.CreateRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
-				helper.CreateRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
+				helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
+				helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
 
 				// Create tag update payload
 				newTag := sharedtypes.TagNumber(123)
@@ -110,7 +110,7 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				// Create a round with a participant that won't match the tag update
 				oldTag := sharedtypes.TagNumber(75)
-				helper.CreateRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
+				helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
 
 				// Create tag update payload for a different user
 				newTag := sharedtypes.TagNumber(456)
@@ -119,20 +119,8 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 				}
 				payload := createScheduledRoundTagUpdatePayload(changedTags)
 
-				result := publishAndExpectTagUpdateSuccess(t, deps, deps.MessageCapture, payload)
-
-				// Validate that no updates were made
-				if len(result.RoundIDs) != 0 {
-					t.Errorf("Expected 0 rounds to be updated, got %d", len(result.RoundIDs))
-				}
-
-				if len(result.Participants) != 0 {
-					t.Errorf("Expected 0 participants to be updated, got %d", len(result.Participants))
-				}
-
-				if len(result.EventMessageIDs) != 0 {
-					t.Errorf("Expected 0 event message IDs, got %d", len(result.EventMessageIDs))
-				}
+				// When no rounds need updating, the handler returns empty message array, so no message is published
+				publishAndExpectNoTagUpdateMessages(t, deps, deps.MessageCapture, payload)
 			},
 		},
 		{
@@ -140,7 +128,7 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				// Create upcoming round with participant that should be updated
 				oldTag := sharedtypes.TagNumber(100)
-				helper.CreateRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
+				helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, user1ID, roundtypes.ResponseAccept, &oldTag)
 
 				// Create tag update payload
 				newTag := sharedtypes.TagNumber(789)
@@ -185,7 +173,12 @@ func createScheduledRoundTagUpdatePayload(changedTags map[sharedtypes.DiscordID]
 func publishScheduledRoundTagUpdateMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ScheduledRoundTagUpdatePayload) *message.Message {
 	t.Helper()
 
-	payloadBytes, err := json.Marshal(payload)
+	// The handler expects a map with a "changed_tags" key, not the direct struct
+	mapPayload := map[string]interface{}{
+		"changed_tags": payload.ChangedTags,
+	}
+
+	payloadBytes, err := json.Marshal(mapPayload)
 	if err != nil {
 		t.Fatalf("failed to marshal payload: %v", err)
 	}
@@ -219,36 +212,22 @@ func getTagUpdateErrorFromHandlerMessages(capture *testutils.MessageCapture) []*
 }
 
 // Validation functions - UNIQUE TO SCHEDULED ROUND TAG UPDATE TESTS
-func validateTagUpdateSuccessFromHandler(t *testing.T, msg *message.Message) *roundevents.DiscordRoundUpdatePayload {
+func validateTagUpdateSuccessFromHandler(t *testing.T, msg *message.Message) *roundevents.TagsUpdatedForScheduledRoundsPayload {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.DiscordRoundUpdatePayload](msg)
+	result, err := testutils.ParsePayload[roundevents.TagsUpdatedForScheduledRoundsPayload](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse tag update success message: %v", err)
 	}
 
 	// Validate the structure - these should never be nil, even if empty
-	if result.Participants == nil {
-		t.Error("Expected Participants to be initialized (not nil)")
-	}
-
-	if result.RoundIDs == nil {
-		t.Error("Expected RoundIDs to be initialized (not nil)")
-	}
-
-	if result.EventMessageIDs == nil {
-		t.Error("Expected EventMessageIDs to be initialized (not nil)")
-	}
-
-	// Validate that the arrays have consistent lengths
-	if len(result.RoundIDs) != len(result.EventMessageIDs) {
-		t.Errorf("RoundIDs and EventMessageIDs length mismatch: %d vs %d",
-			len(result.RoundIDs), len(result.EventMessageIDs))
+	if result.UpdatedRounds == nil {
+		t.Error("Expected UpdatedRounds to be initialized (not nil)")
 	}
 
 	// Log what we got for debugging
-	t.Logf("Tag update success: %d rounds, %d participants",
-		len(result.RoundIDs), len(result.Participants))
+	t.Logf("Tag update success: %d rounds updated, %d total processed, %d participants updated",
+		len(result.UpdatedRounds), result.Summary.TotalRoundsProcessed, result.Summary.ParticipantsUpdated)
 
 	return result
 }
@@ -267,7 +246,7 @@ func validateTagUpdateErrorFromHandler(t *testing.T, msg *message.Message) {
 }
 
 // Test expectation functions - UNIQUE TO SCHEDULED ROUND TAG UPDATE TESTS
-func publishAndExpectTagUpdateSuccess(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScheduledRoundTagUpdatePayload) *roundevents.DiscordRoundUpdatePayload {
+func publishAndExpectTagUpdateSuccess(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScheduledRoundTagUpdatePayload) *roundevents.TagsUpdatedForScheduledRoundsPayload {
 	publishScheduledRoundTagUpdateMessage(t, deps, &payload)
 
 	if !waitForTagUpdateSuccessFromHandler(capture, 1) {
@@ -279,6 +258,21 @@ func publishAndExpectTagUpdateSuccess(t *testing.T, deps *RoundHandlerTestDeps, 
 
 	// Return the result so test cases can do additional validation
 	return result
+}
+
+func publishAndExpectNoTagUpdateMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScheduledRoundTagUpdatePayload) {
+	publishScheduledRoundTagUpdateMessage(t, deps, &payload)
+
+	// Wait a bit to ensure no messages are published
+	time.Sleep(1 * time.Second)
+
+	successMsgs := getTagUpdateSuccessFromHandlerMessages(capture)
+	errorMsgs := getTagUpdateErrorFromHandlerMessages(capture)
+
+	if len(successMsgs) > 0 || len(errorMsgs) > 0 {
+		t.Errorf("Expected no messages when no rounds need updating, got %d success, %d error msgs",
+			len(successMsgs), len(errorMsgs))
+	}
 }
 
 func publishInvalidJSONAndExpectNoTagUpdateMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {

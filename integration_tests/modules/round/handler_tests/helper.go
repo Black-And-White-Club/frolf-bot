@@ -183,7 +183,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	testCtx, testCancel := context.WithCancel(env.Ctx)
 
 	// Use standard stream names that the EventBus recognizes
-	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
+	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score"}
 
 	// Additional cleanup after DeepCleanup
 	if err := env.ResetJetStreamState(testCtx, standardStreamNames...); err != nil {

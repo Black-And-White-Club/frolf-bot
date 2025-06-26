@@ -169,10 +169,11 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 		switch payload.Response {
 		case roundtypes.ResponseAccept, roundtypes.ResponseTentative:
 			tagLookupPayload := &roundevents.TagLookupRequestPayload{
-				RoundID:    payload.RoundID,
-				UserID:     payload.UserID,
-				Response:   payload.Response,
-				JoinedLate: payload.JoinedLate,
+				RoundID:          payload.RoundID,
+				UserID:           payload.UserID,
+				Response:         payload.Response,
+				OriginalResponse: payload.Response,
+				JoinedLate:       payload.JoinedLate,
 			}
 			s.logger.InfoContext(ctx, "Validation successful for Accept/Tentative - Returning TagLookupPayload (pointer)",
 				attr.ExtractCorrelationID(ctx),

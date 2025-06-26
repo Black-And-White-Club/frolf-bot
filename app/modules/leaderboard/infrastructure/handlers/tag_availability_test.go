@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
@@ -90,21 +91,23 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // Use gomock.Any() because we can't predict the UUID
-					leaderboardevents.LeaderboardTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequested,
 				).DoAndReturn(func(msg *message.Message, payload interface{}, eventType string) (*message.Message, error) {
 					// Verify payload type and source
-					assignPayload, ok := payload.(*leaderboardevents.TagAssignmentRequestedPayload)
+					assignPayload, ok := payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
 					if !ok {
-						t.Errorf("Expected TagAssignmentRequestedPayload but got %T", payload)
+						t.Errorf("Expected BatchTagAssignmentRequestedPayload but got %T", payload)
 					}
 
 					// Verify the important fields
-					if assignPayload.UserID != testUserID || assignPayload.TagNumber != &testTagNumber {
-						t.Errorf("TagAssignmentRequestedPayload has wrong UserID or TagNumber")
+					if len(assignPayload.Assignments) != 1 ||
+						assignPayload.Assignments[0].UserID != testUserID ||
+						assignPayload.Assignments[0].TagNumber != testTagNumber {
+						t.Errorf("BatchTagAssignmentRequestedPayload has wrong assignments")
 					}
 
-					if assignPayload.Source != string(sharedtypes.ServiceUpdateSourceCreateUser) {
-						t.Errorf("TagAssignmentRequestedPayload has wrong Source")
+					if assignPayload.RequestingUserID != "system" {
+						t.Errorf("BatchTagAssignmentRequestedPayload has wrong RequestingUserID")
 					}
 
 					return tagAssignmentMsg, nil
@@ -224,7 +227,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					leaderboardevents.LeaderboardTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequested,
 				).Return(nil, fmt.Errorf("failed to create tag assignment message"))
 			},
 			msg:            testMsg,

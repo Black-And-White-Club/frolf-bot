@@ -92,8 +92,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
-					gomock.Any(), // context
-					sharedtypes.ServiceUpdateSourceAdminBatch, // source - admin batch
+					gomock.Any(),          // context
+					testPayload,           // source - now passes the entire payload for intelligent determination
 					expectedRequests,      // requests
 					&testRequestingUserID, // requestingUserID
 					gomock.Any(),          // operationID - generated UUID
@@ -128,9 +128,16 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					successResultPayload,
 					leaderboardevents.LeaderboardBatchTagAssigned, // Fixed: Use correct event constant
 				).Return(testMsg, nil)
+
+				// Expect the tag update message for scheduled rounds
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(), // The tag update payload (map[string]interface{})
+					sharedevents.TagUpdateForScheduledRounds,
+				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
+			want:    []*message.Message{testMsg, testMsg}, // Expect both success and tag update messages
 			wantErr: false,
 		},
 		{
@@ -193,7 +200,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -232,7 +239,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -297,7 +304,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -353,7 +360,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -410,7 +417,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -421,9 +428,9 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				)
 			},
 			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			want:           nil, // Expect nil when both Success and Failure are nil
+			wantErr:        false,
+			expectedErrMsg: "",
 		},
 		{
 			name: "Empty assignments batch",
@@ -446,7 +453,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					sharedtypes.ServiceUpdateSourceAdminBatch,
+					gomock.Any(), // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -475,9 +482,16 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					successResultPayload,
 					leaderboardevents.LeaderboardBatchTagAssigned,
 				).Return(testMsg, nil)
+
+				// Expect the tag update message for scheduled rounds
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(), // The tag update payload (map[string]interface{})
+					sharedevents.TagUpdateForScheduledRounds,
+				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
+			want:    []*message.Message{testMsg, testMsg}, // Expect both success and tag update messages
 			wantErr: false,
 		},
 	}

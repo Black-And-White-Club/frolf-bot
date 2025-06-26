@@ -5,6 +5,8 @@ nats:
   url: "nats://my-nats.nats:4222"
 
 observability:
+  loki_url: "http://loki.observability:3100"
+  loki_tenant_id: "1"
   metrics_address: "localhost:4317"
   tempo_endpoint: "localhost:4317"
   tempo_insecure: true

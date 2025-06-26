@@ -98,9 +98,6 @@ func TestCheckParticipantStatus(t *testing.T) {
 				if removalPayload.UserID != sharedtypes.DiscordID("existing_participant_2") {
 					t.Errorf("Expected UserID to be 'existing_participant_2', got '%s'", removalPayload.UserID)
 				}
-				if removalPayload.RoundID != removalPayload.RoundID { // Self-check, but good for consistency
-					t.Errorf("Expected RoundID to match, got %s vs %s", removalPayload.RoundID, removalPayload.RoundID)
-				}
 			},
 		},
 		{

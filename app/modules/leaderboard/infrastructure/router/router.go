@@ -141,8 +141,7 @@ func (r *LeaderboardRouter) Configure(routerCtx context.Context, leaderboardServ
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
 	eventsToHandlers := map[string]message.HandlerFunc{
-		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested, // <-- FIXED!
-		leaderboardevents.LeaderboardTagAssignmentRequested: handlers.HandleTagAssignment,
+		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
 		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
 		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,
 		sharedevents.DiscordTagLookUpByUserIDRequest:        handlers.HandleGetTagByUserIDRequest,
@@ -157,14 +156,11 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 			handlerName,
 			topic,
 			r.subscriber,
-			"",  // No direct publisher configured here; handler wrapper publishes manually
-			nil, // Explicitly nil publisher
+			"",
+			nil,
 			func(msg *message.Message) ([]*message.Message, error) {
-				// Execute the actual handler logic which returns messages to be published
 				messages, err := handlerFunc(msg)
 				if err != nil {
-					// If the handler itself returned an error, log it and return it to Watermill
-					// for potential retries/dead-lettering. Do NOT attempt to publish messages.
 					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
 					return nil, err
 				}
@@ -175,7 +171,6 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
 
 						if err := r.publisher.Publish(publishTopic, m); err != nil {
-
 							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
 							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 						}

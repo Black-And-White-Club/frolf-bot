@@ -207,7 +207,6 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 	tag4 := sharedtypes.TagNumber(40)
 
 	score1 := sharedtypes.Score(50)
-	score2 := sharedtypes.Score(0) // For nil score
 	score3 := sharedtypes.Score(60)
 
 	tests := []struct {
@@ -228,10 +227,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				RoundData: roundtypes.Round{
 					ID: testRoundID,
 					Participants: []roundtypes.Participant{
-						{UserID: user1ID, TagNumber: &tag1, Score: &score1},
-						{UserID: user2ID, TagNumber: nil, Score: nil},       // Nil tag, nil score
-						{UserID: user3ID, TagNumber: &tag2, Score: &score3}, // Zero tag
-						{UserID: user4ID, TagNumber: &tag4, Score: nil},     // Valid tag, nil score
+						{UserID: user1ID, TagNumber: &tag1, Score: &score1}, // ✅ Has score - included
+						{UserID: user2ID, TagNumber: nil, Score: nil},       // ❌ No score - skipped
+						{UserID: user3ID, TagNumber: &tag2, Score: &score3}, // ✅ Has score - included
+						{UserID: user4ID, TagNumber: &tag4, Score: nil},     // ❌ No score - skipped
 					},
 				},
 			},
@@ -239,17 +238,40 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				Success: &roundevents.ProcessRoundScoresRequestPayload{
 					RoundID: testRoundID,
 					Scores: []roundevents.ParticipantScore{
+						// ✅ Only participants with scores are included
 						{UserID: user1ID, TagNumber: &tag1, Score: score1},
-						{UserID: user2ID, TagNumber: &tag2, Score: score2}, // Expect Tag 0, Score 0 for nil inputs
-						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Expect Tag 0 for explicit 0 input
-						{UserID: user4ID, TagNumber: &tag4, Score: score2}, // Expect Score 0 for nil input
+						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Zero tag becomes 0
 					},
 				},
 			},
 			expectedError: nil,
 		},
 		{
-			name: "success notifying score module with no participants",
+			name: "failure with no participants having scores",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// Mock GetRound call that happens in NotifyScoreModule
+				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+			},
+			payload: roundevents.RoundFinalizedPayload{
+				RoundID: testRoundID,
+				RoundData: roundtypes.Round{
+					ID: testRoundID,
+					Participants: []roundtypes.Participant{
+						{UserID: user1ID, TagNumber: &tag1, Score: nil}, // No score
+						{UserID: user2ID, TagNumber: nil, Score: nil},   // No score
+					},
+				},
+			},
+			expectedResult: RoundOperationResult{
+				Failure: &roundevents.RoundFinalizationErrorPayload{
+					RoundID: testRoundID,
+					Error:   "no participants with submitted scores found",
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "failure with empty participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
 				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
@@ -262,15 +284,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.ProcessRoundScoresRequestPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayload{
 					RoundID: testRoundID,
-					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
+					Error:   "no participants with submitted scores found",
 				},
 			},
 			expectedError: nil,
 		},
 		{
-			name: "success notifying score module with nil participants",
+			name: "failure with nil participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
 				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
@@ -283,9 +305,9 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.ProcessRoundScoresRequestPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayload{
 					RoundID: testRoundID,
-					Scores:  []roundevents.ParticipantScore{}, // Expect empty scores slice
+					Error:   "no participants with submitted scores found",
 				},
 			},
 			expectedError: nil,
@@ -363,6 +385,12 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			} else if tt.expectedResult.Failure != nil {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload.Error != expectedFailurePayload.Error {
+					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}
 			}
 		})

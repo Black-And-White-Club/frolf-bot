@@ -91,7 +91,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	os.Setenv("APP_ENV", "test")
 
 	// Use standard stream names that the EventBus recognizes
-	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score", "delayed"}
+	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score"}
 
 	// Clean up NATS consumers for all streams before starting the test
 	if err := env.ResetJetStreamState(env.Ctx, standardStreamNames...); err != nil {
