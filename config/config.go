@@ -86,7 +86,8 @@ func loadConfigFromEnv() (*Config, error) {
 	cfg.Observability.LokiTenantID = os.Getenv("LOKI_TENANT_ID")
 	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS")
 	if cfg.Observability.MetricsAddress == "" {
-		return nil, fmt.Errorf("METRICS_ADDRESS environment variable not set")
+		// Don't require metrics address - make it optional
+		cfg.Observability.MetricsAddress = ":9090" // Use a different port or make empty
 	}
 	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")
 	if cfg.Observability.TempoEndpoint == "" {

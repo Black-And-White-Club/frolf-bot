@@ -31,7 +31,7 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 			}, nil
 		}
 
-		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "Round not found for delete request",
 				attr.String("round_id", payload.RoundID.String()),
@@ -90,7 +90,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 		attr.RoundID("round_id", payload.RoundID),
 	)
 
-	round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+	round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "Cannot delete non-existent round",
 			attr.RoundID("round_id", payload.RoundID),
@@ -110,7 +110,7 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 	eventMessageID := round.EventMessageID
 
 	// Delete the round from the database
-	if err := s.RoundDB.DeleteRound(ctx, payload.RoundID); err != nil {
+	if err := s.RoundDB.DeleteRound(ctx, payload.GuildID, payload.RoundID); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to delete round from DB",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.Error(err),

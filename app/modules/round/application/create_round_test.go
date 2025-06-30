@@ -321,7 +321,8 @@ func TestRoundService_StoreRound(t *testing.T) {
 		{
 			name: "store round successfully",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(nil)
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(nil)
 			},
 			payload: roundevents.RoundEntityCreatedPayload{
 				Round: roundtypes.Round{
@@ -332,9 +333,10 @@ func TestRoundService_StoreRound(t *testing.T) {
 					CreatedBy:    sharedtypes.DiscordID("12345678"),
 					State:        roundtypes.RoundStateUpcoming,
 					Participants: []roundtypes.Participant{},
+					GuildID:      sharedtypes.GuildID("test-guild"),
 				},
 				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "",
+				DiscordGuildID:   "test-guild",
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundCreatedPayload{
@@ -345,6 +347,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 						Location:    roundtypes.LocationPtr("Test Location"),
 						StartTime:   (*sharedtypes.StartTime)(timePtr(time.Unix(1672531200, 0))),
 						UserID:      sharedtypes.DiscordID("12345678"),
+						// GuildID intentionally omitted: not a field of BaseRoundPayload
 					},
 					ChannelID: "Test Channel",
 				},
@@ -354,7 +357,8 @@ func TestRoundService_StoreRound(t *testing.T) {
 		{
 			name: "store round fails",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(errors.New("database error"))
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
 			},
 			payload: roundevents.RoundEntityCreatedPayload{
 				Round: roundtypes.Round{
@@ -365,9 +369,10 @@ func TestRoundService_StoreRound(t *testing.T) {
 					CreatedBy:    sharedtypes.DiscordID("12345678"),
 					State:        roundtypes.RoundStateUpcoming,
 					Participants: []roundtypes.Participant{},
+					GuildID:      sharedtypes.GuildID("test-guild"),
 				},
 				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "",
+				DiscordGuildID:   "test-guild",
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundCreationFailedPayload{
@@ -380,7 +385,8 @@ func TestRoundService_StoreRound(t *testing.T) {
 		{
 			name: "database error",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().CreateRound(gomock.Any(), gomock.Any()).Return(errors.New("database error"))
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
 			},
 			payload: roundevents.RoundEntityCreatedPayload{
 				Round: roundtypes.Round{
@@ -391,9 +397,10 @@ func TestRoundService_StoreRound(t *testing.T) {
 					CreatedBy:    sharedtypes.DiscordID("Test User"),
 					State:        roundtypes.RoundStateUpcoming,
 					Participants: []roundtypes.Participant{},
+					GuildID:      sharedtypes.GuildID("test-guild"),
 				},
 				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "",
+				DiscordGuildID:   "test-guild",
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundCreationFailedPayload{
@@ -416,6 +423,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 					CreatedBy:    sharedtypes.DiscordID(""),
 					State:        roundtypes.RoundStateUpcoming,
 					Participants: []roundtypes.Participant{},
+					// GuildID intentionally omitted for invalid data
 				},
 				DiscordChannelID: "Test Channel",
 				DiscordGuildID:   "",
@@ -446,7 +454,9 @@ func TestRoundService_StoreRound(t *testing.T) {
 				},
 			}
 
-			_, err := s.StoreRound(ctx, tt.payload)
+			// Use a dummy guildID for testing
+			guildID := sharedtypes.GuildID("test-guild")
+			_, err := s.StoreRound(ctx, guildID, tt.payload)
 
 			// Validate error presence
 			if tt.expectedError != nil {

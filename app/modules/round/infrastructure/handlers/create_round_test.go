@@ -397,7 +397,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		CreatedBy:   testUserID,
 	}
 
+	guildID := sharedtypes.GuildID("guild-123")
 	testPayload := &roundevents.RoundEntityCreatedPayload{
+		GuildID:          guildID,
 		Round:            testRound,
 		DiscordChannelID: "test-channel-id",
 		DiscordGuildID:   "test-guild-id",
@@ -435,7 +437,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",
@@ -501,7 +505,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",
@@ -528,7 +534,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",
@@ -585,7 +593,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",
@@ -626,7 +636,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",
@@ -657,7 +669,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
+					guildID,
 					roundevents.RoundEntityCreatedPayload{
+						GuildID:          guildID,
 						Round:            testRound,
 						DiscordChannelID: "test-channel-id",
 						DiscordGuildID:   "test-guild-id",

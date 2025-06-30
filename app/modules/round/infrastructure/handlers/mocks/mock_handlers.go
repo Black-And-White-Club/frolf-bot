@@ -220,6 +220,21 @@ func (mr *MockHandlersMockRecorder) HandleRoundDeleteRequest(msg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundDeleteRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundDeleteRequest), msg)
 }
 
+// HandleRoundDeleteValidated mocks base method.
+func (m *MockHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleRoundDeleteValidated", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleRoundDeleteValidated indicates an expected call of HandleRoundDeleteValidated.
+func (mr *MockHandlersMockRecorder) HandleRoundDeleteValidated(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundDeleteValidated", reflect.TypeOf((*MockHandlers)(nil).HandleRoundDeleteValidated), msg)
+}
+
 // HandleRoundEntityCreated mocks base method.
 func (m *MockHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()

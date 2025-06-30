@@ -99,14 +99,15 @@ func TestCorrectScore(t *testing.T) {
 					Score:     0,
 					TagNumber: nil,
 				}}
-				_, err = deps.Service.ProcessRoundScores(deps.Ctx, roundID, initial)
+				_, err = deps.Service.ProcessRoundScores(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID, initial)
 				if err != nil {
 					t.Fatalf("Failed to seed round with initial score: %v", err)
 				}
 			}
 
 			// Call CorrectScore
-			result, err := deps.Service.CorrectScore(deps.Ctx, roundID, user, tc.score, tc.tag)
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.CorrectScore(deps.Ctx, guildID, roundID, user, tc.score, tc.tag)
 
 			// Validate based on whether a failure payload is expected
 			if tc.expectFailurePayload {
@@ -147,7 +148,7 @@ func TestCorrectScore(t *testing.T) {
 			}
 
 			// Verify DB result
-			storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, roundID)
+			storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, guildID, roundID)
 			if err != nil {
 				t.Fatalf("Failed to retrieve scores: %v", err)
 			}

@@ -291,7 +291,9 @@ func TestGetLeaderboard(t *testing.T) {
 				}
 			}
 
-			result, err := deps.Service.GetLeaderboard(sharedCtx)
+			// Use a test guildID for all leaderboard retrievals
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.GetLeaderboard(sharedCtx, guildID)
 
 			// Check for direct error returned by the serviceWrapper
 			if tt.expectedError && err == nil {
@@ -594,7 +596,8 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				}
 			}
 
-			result, err := deps.Service.RoundGetTagByUserID(sharedCtx, tt.payload)
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.RoundGetTagByUserID(sharedCtx, guildID, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")
@@ -844,7 +847,8 @@ func TestGetTagByUserID(t *testing.T) {
 			}
 
 			// Call the service method with the UserID directly
-			result, err := deps.Service.GetTagByUserID(sharedCtx, tt.payload.UserID)
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.GetTagByUserID(sharedCtx, guildID, tt.payload.UserID)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

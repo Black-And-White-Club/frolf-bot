@@ -134,3 +134,5 @@ require (
 )
 
 replace google.golang.org/genproto => google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
+
+replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared

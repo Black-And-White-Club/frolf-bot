@@ -10,7 +10,7 @@ import (
 )
 
 // ProcessRoundScores processes scores received from the round module using the service wrapper.
-func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (ScoreOperationResult, error) {
+func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (ScoreOperationResult, error) {
 	s.metrics.RecordScoreProcessingAttempt(ctx, roundID)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
@@ -18,10 +18,11 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		attr.ExtractCorrelationID(ctx),
 		roundIDAttr,
 		attr.Int("num_scores", len(scores)),
+		attr.String("guild_id", string(guildID)),
 	)
 
 	return s.serviceWrapper(ctx, "ProcessRoundScores", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
-		processedScores, err := s.ProcessScoresForStorage(ctx, roundID, scores)
+		processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, scores)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to process scores for storage",
 				attr.ExtractCorrelationID(ctx),
@@ -36,6 +37,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 			// Return a failure payload for business logic errors from ProcessScoresForStorage
 			return ScoreOperationResult{
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: guildID,
 					RoundID: roundID,
 					Error:   err.Error(),
 				},
@@ -56,7 +58,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		s.metrics.RecordOperationDuration(ctx, "ExtractTagInformation", time.Duration(time.Since(extractStartTime).Seconds()))
 
 		dbStart := time.Now()
-		if err := s.ScoreDB.LogScores(ctx, roundID, processedScores, "auto"); err != nil {
+		if err := s.ScoreDB.LogScores(ctx, guildID, roundID, processedScores, "auto"); err != nil {
 			s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 			s.logger.ErrorContext(ctx, "Failed to log scores to database",
 				attr.ExtractCorrelationID(ctx),
@@ -71,6 +73,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 			// Return a failure payload for business logic errors from LogScores
 			return ScoreOperationResult{
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: guildID,
 					RoundID: roundID,
 					Error:   err.Error(),
 				},
@@ -95,6 +98,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, roundID sharedtyp
 		// Wrap the tagMappingPayload in the expected success struct
 		return ScoreOperationResult{
 			Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+				GuildID:     guildID,
 				RoundID:     roundID,
 				TagMappings: tagMappingPayload,
 			},

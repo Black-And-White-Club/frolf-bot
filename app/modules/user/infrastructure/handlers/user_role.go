@@ -18,6 +18,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			requestPayload := payload.(*userevents.UserRoleUpdateRequestPayload)
 			userID := requestPayload.UserID
+			guildID := requestPayload.GuildID
 			newRole := requestPayload.Role
 
 			h.logger.InfoContext(ctx, "Received UserRoleUpdateRequest event",
@@ -28,7 +29,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 			)
 
 			// Call service method
-			result, err := h.userService.UpdateUserRoleInDatabase(ctx, userID, newRole)
+			result, err := h.userService.UpdateUserRoleInDatabase(ctx, guildID, userID, newRole)
 
 			// Handle each outcome with a separate CreateResultMessage call
 			if result.Failure != nil {

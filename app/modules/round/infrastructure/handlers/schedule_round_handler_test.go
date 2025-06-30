@@ -30,7 +30,9 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 	testEventMessageID := "discord-msg-123"
 
 	// Payload for RoundScheduled event (input to HandleDiscordMessageIDUpdated)
+	guildID := sharedtypes.GuildID("guild-123")
 	testScheduledPayload := &roundevents.RoundScheduledPayload{
+		GuildID: guildID,
 		BaseRoundPayload: roundtypes.BaseRoundPayload{
 			RoundID:     testRoundID,
 			Title:       testTitle,
@@ -75,6 +77,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 
 				mockRoundService.EXPECT().ScheduleRoundEvents(
 					gomock.Any(),
+					guildID,
 					*testScheduledPayload, // Expect RoundScheduledPayload
 					testEventMessageID,    // Expect EventMessageID
 				).Return(
@@ -111,6 +114,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 
 				mockRoundService.EXPECT().ScheduleRoundEvents(
 					gomock.Any(),
+					guildID,
 					*testScheduledPayload,
 					testEventMessageID,
 				).Return(
@@ -135,6 +139,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 
 				mockRoundService.EXPECT().ScheduleRoundEvents(
 					gomock.Any(),
+					guildID,
 					*testScheduledPayload,
 					testEventMessageID,
 				).Return(
@@ -163,6 +168,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				}
 				mockRoundService.EXPECT().ScheduleRoundEvents(
 					gomock.Any(),
+					guildID,
 					*testScheduledPayload,
 					testEventMessageID,
 				).Return(
@@ -197,6 +203,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				}
 				mockRoundService.EXPECT().ScheduleRoundEvents(
 					gomock.Any(),
+					guildID,
 					*testScheduledPayload,
 					testEventMessageID,
 				).Return(

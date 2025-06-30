@@ -21,7 +21,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 		)
 
 		// Check if the user is already a participant
-		participant, err := s.RoundDB.GetParticipant(ctx, payload.RoundID, payload.UserID)
+		participant, err := s.RoundDB.GetParticipant(ctx, payload.GuildID, payload.RoundID, payload.UserID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get participant's current status",
 				attr.RoundID("round_id", payload.RoundID),
@@ -113,7 +113,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 				EventMessageID:         "",
 			}
 			if payload.RoundID != sharedtypes.RoundID(uuid.Nil) {
-				roundForError, getRoundErr := s.RoundDB.GetRound(ctx, payload.RoundID)
+				roundForError, getRoundErr := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 				if getRoundErr == nil {
 					failurePayload.EventMessageID = roundForError.EventMessageID
 				} else {
@@ -133,7 +133,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 			attr.ExtractCorrelationID(ctx),
 			attr.RoundID("round_id", payload.RoundID),
 		)
-		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.InfoContext(ctx, "Failed to fetch round during join validation - returning failure payload",
 				attr.ExtractCorrelationID(ctx),
@@ -222,7 +222,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 		)
 
 		// Get round details for EventMessageID before removal
-		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to fetch round during participant removal",
 				attr.RoundID("round_id", payload.RoundID),
@@ -238,7 +238,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 		}
 
 		// Remove participant and get updated participants list
-		updatedParticipants, err := s.RoundDB.RemoveParticipant(ctx, payload.RoundID, payload.UserID)
+		updatedParticipants, err := s.RoundDB.RemoveParticipant(ctx, payload.GuildID, payload.RoundID, payload.UserID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to remove participant from DB",
 				attr.RoundID("round_id", payload.RoundID),
@@ -378,7 +378,7 @@ func (s *RoundService) handleUnknownResponse(ctx context.Context, payload rounde
 // updateParticipantInDB handles the common DB operations and response construction
 func (s *RoundService) updateParticipantInDB(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload, participant roundtypes.Participant) (RoundOperationResult, error) {
 	// Get round details for EventMessageID
-	round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+	round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to fetch round details",
 			attr.RoundID("round_id", payload.RoundID),
@@ -394,7 +394,7 @@ func (s *RoundService) updateParticipantInDB(ctx context.Context, payload rounde
 	}
 
 	// Update participant in database
-	updatedParticipants, err := s.RoundDB.UpdateParticipant(ctx, payload.RoundID, participant)
+	updatedParticipants, err := s.RoundDB.UpdateParticipant(ctx, payload.GuildID, payload.RoundID, participant)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to update participant in DB",
 			attr.RoundID("round_id", payload.RoundID),

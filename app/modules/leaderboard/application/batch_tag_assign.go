@@ -19,6 +19,7 @@ import (
 // Accepts both string, enum, and payload types for source determination
 func (s *LeaderboardService) ProcessTagAssignments(
 	ctx context.Context,
+	guildID sharedtypes.GuildID,
 	source interface{}, // Accept string, enum, or payload for source determination
 	requests []sharedtypes.TagAssignmentRequest,
 	requestingUserID *sharedtypes.DiscordID,
@@ -61,9 +62,9 @@ func (s *LeaderboardService) ProcessTagAssignments(
 
 	return s.serviceWrapper(ctx, "ProcessTagAssignments", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// Get current leaderboard for validation
-		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
 		if err != nil {
-			return s.buildFailureResponse(sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
+			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
 		}
 
 		// Early return for empty requests - return current leaderboard state
@@ -79,21 +80,21 @@ func (s *LeaderboardService) ProcessTagAssignments(
 				}
 			}
 
-			return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
+			return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
 		}
 
 		// For single assignments, use utils methods for proper validation and swap detection
 		if len(requests) == 1 {
-			return s.processSingleAssignment(ctx, currentLeaderboard, requests[0], sourceType, requestingUserID, operationID, batchID)
+			return s.processSingleAssignment(ctx, guildID, currentLeaderboard, requests[0], sourceType, requestingUserID, operationID, batchID)
 		}
 
 		// Handle score processing differently - it's a complete leaderboard replacement
 		if sourceType == sharedtypes.ServiceUpdateSourceProcessScores {
-			return s.processScoreUpdate(ctx, currentLeaderboard, requests, sourceType, requestingUserID, operationID, batchID)
+			return s.processScoreUpdate(ctx, guildID, currentLeaderboard, requests, sourceType, requestingUserID, operationID, batchID)
 		}
 
 		// For other batch operations, validate each request using utils methods
-		validRequests, swapNeeded := s.validateBatchRequests(ctx, currentLeaderboard, requests)
+		validRequests, swapNeeded := s.validateBatchRequests(ctx, guildID, currentLeaderboard, requests)
 		if swapNeeded != nil {
 			return *swapNeeded, nil
 		}
@@ -110,7 +111,7 @@ func (s *LeaderboardService) ProcessTagAssignments(
 				}
 			}
 
-			return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
+			return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
 		}
 
 		// Convert to tag:user format and use GenerateUpdatedLeaderboard
@@ -123,12 +124,12 @@ func (s *LeaderboardService) ProcessTagAssignments(
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to generate updated leaderboard", attr.Any("error", err))
 			// Business logic error - return failure response with nil error
-			return s.buildFailureResponse(sourceType, requestingUserID, operationID, batchID, err.Error()), nil
+			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), nil
 		}
 
 		// Atomic leaderboard update
 		startTime := time.Now()
-		updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+		updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
 		s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
 
 		if err != nil {
@@ -137,7 +138,7 @@ func (s *LeaderboardService) ProcessTagAssignments(
 				attr.String("source", string(sourceType)),
 			)
 			// Infrastructure error - return failure response with the error
-			return s.buildFailureResponse(sourceType, requestingUserID, operationID, batchID, err.Error()), err
+			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), err
 		}
 
 		// Convert complete leaderboard to requests format for Discord client
@@ -155,7 +156,7 @@ func (s *LeaderboardService) ProcessTagAssignments(
 			attr.String("source", string(sourceType)),
 		)
 
-		return s.buildSuccessResponse(sourceType, requestingUserID, operationID, batchID, allRequests), nil
+		return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
 	})
 }
 
@@ -163,6 +164,7 @@ func (s *LeaderboardService) ProcessTagAssignments(
 // and don't need individual validation since they represent the authoritative final state
 func (s *LeaderboardService) processScoreUpdate(
 	ctx context.Context,
+	guildID sharedtypes.GuildID,
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	requests []sharedtypes.TagAssignmentRequest,
 	source sharedtypes.ServiceUpdateSource,
@@ -185,12 +187,12 @@ func (s *LeaderboardService) processScoreUpdate(
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to generate updated leaderboard for score processing", attr.Any("error", err))
 		// Business logic error - return failure response with nil error
-		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), nil
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
 	}
 
 	// Atomic leaderboard update
 	startTime := time.Now()
-	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
 	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessScoreUpdate", time.Since(startTime))
 
 	if err != nil {
@@ -198,7 +200,7 @@ func (s *LeaderboardService) processScoreUpdate(
 			attr.Any("error", err),
 		)
 		// Infrastructure error - return failure response with the error
-		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), err
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), err
 	}
 
 	// Convert complete leaderboard to requests format
@@ -215,12 +217,13 @@ func (s *LeaderboardService) processScoreUpdate(
 		attr.Int("total_leaderboard_entries", len(allRequests)),
 	)
 
-	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
+	return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
 }
 
 // processSingleAssignment uses utils methods for proper validation and error handling
 func (s *LeaderboardService) processSingleAssignment(
 	ctx context.Context,
+	guildID sharedtypes.GuildID,
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	request sharedtypes.TagAssignmentRequest,
 	source sharedtypes.ServiceUpdateSource,
@@ -235,7 +238,7 @@ func (s *LeaderboardService) processSingleAssignment(
 			attr.Int("tag_number", int(request.TagNumber)),
 		)
 		// Return failure response for invalid tag numbers
-		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, fmt.Sprintf("invalid tag number: %d", request.TagNumber)), nil
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, fmt.Sprintf("invalid tag number: %d", request.TagNumber)), nil
 	}
 
 	// Check if user exists in leaderboard
@@ -246,9 +249,9 @@ func (s *LeaderboardService) processSingleAssignment(
 
 	// Use appropriate utils method based on user existence
 	if userExists {
-		newLeaderboardData, err = s.PrepareTagUpdateForExistingUser(currentLeaderboard, request.UserID, request.TagNumber)
+		newLeaderboardData, err = s.PrepareTagUpdateForExistingUser(guildID, currentLeaderboard, request.UserID, request.TagNumber)
 	} else {
-		newLeaderboardData, err = s.PrepareTagAssignment(currentLeaderboard, request.UserID, request.TagNumber)
+		newLeaderboardData, err = s.PrepareTagAssignment(guildID, currentLeaderboard, request.UserID, request.TagNumber)
 	}
 
 	// Handle specific error types
@@ -273,7 +276,7 @@ func (s *LeaderboardService) processSingleAssignment(
 			attr.Int("tag_number", int(request.TagNumber)),
 		)
 		// Return failure response for other validation errors
-		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), nil
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
 	}
 
 	// No-op case (user already has the tag)
@@ -292,12 +295,12 @@ func (s *LeaderboardService) processSingleAssignment(
 			}
 		}
 
-		return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
+		return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
 	}
 
 	// Update leaderboard with the new data
 	startTime := time.Now()
-	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, newLeaderboardData, sharedtypes.RoundID(operationID))
+	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
 	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
 
 	if err != nil {
@@ -306,7 +309,7 @@ func (s *LeaderboardService) processSingleAssignment(
 			attr.String("user_id", string(request.UserID)),
 		)
 		// Infrastructure error - return failure response with the error
-		return s.buildFailureResponse(source, requestingUserID, operationID, batchID, err.Error()), err
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), err
 	}
 
 	// Convert complete leaderboard to requests format
@@ -324,12 +327,13 @@ func (s *LeaderboardService) processSingleAssignment(
 		attr.Int("total_leaderboard_entries", len(allRequests)),
 	)
 
-	return s.buildSuccessResponse(source, requestingUserID, operationID, batchID, allRequests), nil
+	return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
 }
 
 // validateBatchRequests validates all requests using utils methods and skips any that would require swaps
 func (s *LeaderboardService) validateBatchRequests(
 	ctx context.Context,
+	guildID sharedtypes.GuildID,
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	requests []sharedtypes.TagAssignmentRequest,
 ) ([]sharedtypes.TagAssignmentRequest, *LeaderboardOperationResult) {
@@ -341,9 +345,9 @@ func (s *LeaderboardService) validateBatchRequests(
 
 		var err error
 		if userExists {
-			_, err = s.PrepareTagUpdateForExistingUser(currentLeaderboard, request.UserID, request.TagNumber)
+			_, err = s.PrepareTagUpdateForExistingUser(guildID, currentLeaderboard, request.UserID, request.TagNumber)
 		} else {
-			_, err = s.PrepareTagAssignment(currentLeaderboard, request.UserID, request.TagNumber)
+			_, err = s.PrepareTagAssignment(guildID, currentLeaderboard, request.UserID, request.TagNumber)
 		}
 
 		if err != nil {
@@ -392,6 +396,7 @@ func getRequestingUserDisplayName(userID *sharedtypes.DiscordID) string {
 
 // buildSuccessResponse creates the appropriate success response based on the source
 func (s *LeaderboardService) buildSuccessResponse(
+	guildID sharedtypes.GuildID,
 	source sharedtypes.ServiceUpdateSource,
 	requestingUserID *sharedtypes.DiscordID,
 	operationID uuid.UUID,
@@ -441,6 +446,7 @@ func (s *LeaderboardService) buildSuccessResponse(
 
 // buildFailureResponse creates the appropriate failure response based on the source
 func (s *LeaderboardService) buildFailureResponse(
+	guildID sharedtypes.GuildID,
 	source sharedtypes.ServiceUpdateSource,
 	requestingUserID *sharedtypes.DiscordID,
 	operationID uuid.UUID,

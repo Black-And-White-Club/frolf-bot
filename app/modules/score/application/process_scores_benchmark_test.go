@@ -65,6 +65,7 @@ func generateScores(count int, tagPercentage int) []sharedtypes.ScoreInfo {
 // BenchmarkProcessRoundScores benchmarks the ProcessRoundScores method
 func BenchmarkProcessRoundScores(b *testing.B) {
 	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-1234")
 	roundID := sharedtypes.RoundID(uuid.New())
 
 	// Test with different sizes of score sets
@@ -82,7 +83,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().
-				LogScores(gomock.Any(), roundID, gomock.Any(), "auto").
+				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
 				Return(nil).
 				AnyTimes()
 
@@ -90,7 +91,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}
@@ -108,7 +109,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().
-				LogScores(gomock.Any(), roundID, gomock.Any(), "auto").
+				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
 				Return(nil).
 				AnyTimes()
 
@@ -116,7 +117,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}
@@ -134,7 +135,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().
-				LogScores(gomock.Any(), roundID, gomock.Any(), "auto").
+				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
 				Return(nil).
 				AnyTimes()
 
@@ -142,7 +143,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}

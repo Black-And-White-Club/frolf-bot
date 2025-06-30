@@ -161,6 +161,7 @@ func (e *TagSwapNeededError) Error() string {
 }
 
 func (s *LeaderboardService) PrepareTagAssignment(
+	guildID sharedtypes.GuildID,
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	userID sharedtypes.DiscordID,
 	tagNumber sharedtypes.TagNumber,
@@ -226,6 +227,7 @@ func (s *LeaderboardService) PrepareTagAssignment(
 // PrepareTagUpdateForExistingUser handles validation for updating a tag for a user
 // that already exists in the leaderboard
 func (s *LeaderboardService) PrepareTagUpdateForExistingUser(
+	guildID sharedtypes.GuildID,
 	currentLeaderboard *leaderboarddb.Leaderboard,
 	userID sharedtypes.DiscordID,
 	newTagNumber sharedtypes.TagNumber,

@@ -10,22 +10,26 @@ import (
 )
 
 // ProcessRoundStart handles the start of a round, updates participant data, updates DB, and notifies Discord.
+// Multi-guild: require guildID for all round operations
 func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ProcessRoundStart", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round start",
 			attr.RoundID("round_id", payload.RoundID),
+			attr.String("guild_id", string(payload.GuildID)),
 		)
 
 		// Fetch the round from DB
-		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get round from database",
 				attr.RoundID("round_id", payload.RoundID),
+				attr.String("guild_id", string(payload.GuildID)),
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
+					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
@@ -33,15 +37,17 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 		}
 
 		// Update the round state to "in progress" - call DB method directly
-		err = s.RoundDB.UpdateRoundState(ctx, payload.RoundID, roundtypes.RoundStateInProgress)
+		err = s.RoundDB.UpdateRoundState(ctx, payload.GuildID, payload.RoundID, roundtypes.RoundStateInProgress)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round state to in progress",
 				attr.RoundID("round_id", payload.RoundID),
+				attr.String("guild_id", string(payload.GuildID)),
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRoundState")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
+					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
@@ -61,6 +67,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 
 		// Use the payload data for the Discord event (not the DB data)
 		discordPayload := &roundevents.DiscordRoundStartPayload{
+			GuildID:        payload.GuildID,
 			RoundID:        round.ID,
 			Title:          payload.Title,        // Use payload title
 			Location:       payload.Location,     // Use payload location
@@ -71,6 +78,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 
 		s.logger.InfoContext(ctx, "Round start processed",
 			attr.RoundID("round_id", payload.RoundID),
+			attr.String("guild_id", string(payload.GuildID)),
 			attr.Int("participant_count", len(participants)),
 		)
 

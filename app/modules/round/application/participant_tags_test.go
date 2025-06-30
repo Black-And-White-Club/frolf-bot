@@ -89,10 +89,12 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 		{
 			name: "successful update with valid tags",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
-				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, gomock.Any()).Return(nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
+				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(nil)
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 					user1ID: &newTag1,
 					user2ID: &newTag2,
@@ -114,9 +116,11 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 		{
 			name: "error fetching rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(nil, errors.New("database error"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(nil, errors.New("database error"))
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 					user1ID: &newTag1,
 				},
@@ -136,10 +140,12 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 		{
 			name: "error updating rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetUpcomingRounds(ctx).Return(upcomingRounds, nil)
-				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, gomock.Any()).Return(errors.New("update failed"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
+				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(errors.New("update failed"))
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 					user1ID: &newTag1,
 				},

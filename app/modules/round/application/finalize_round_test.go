@@ -56,8 +56,9 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "success finalizing round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(testFinalizedRound, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(testFinalizedRound, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -66,6 +67,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 			payload: roundevents.AllScoresSubmittedPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundFinalizedPayload{
@@ -78,7 +80,8 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "failure updating round state",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -87,6 +90,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 			payload: roundevents.AllScoresSubmittedPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayload{
@@ -99,8 +103,9 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "failure fetching round after update",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().UpdateRoundState(ctx, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, dbGetError)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(nil, dbGetError)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -109,6 +114,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 			payload: roundevents.AllScoresSubmittedPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayload{
@@ -220,12 +226,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			name: "success notifying score module with various participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
 			},
 			payload: roundevents.RoundFinalizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
-					ID: testRoundID,
+					ID:      testRoundID,
+					GuildID: sharedtypes.GuildID("guild-123"),
 					Participants: []roundtypes.Participant{
 						{UserID: user1ID, TagNumber: &tag1, Score: &score1}, // ✅ Has score - included
 						{UserID: user2ID, TagNumber: nil, Score: nil},       // ❌ No score - skipped
@@ -250,12 +259,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			name: "failure with no participants having scores",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
 			},
 			payload: roundevents.RoundFinalizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
-					ID: testRoundID,
+					ID:      testRoundID,
+					GuildID: sharedtypes.GuildID("guild-123"),
 					Participants: []roundtypes.Participant{
 						{UserID: user1ID, TagNumber: &tag1, Score: nil}, // No score
 						{UserID: user2ID, TagNumber: nil, Score: nil},   // No score
@@ -274,12 +286,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			name: "failure with empty participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
 			},
 			payload: roundevents.RoundFinalizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
 					ID:           testRoundID,
+					GuildID:      sharedtypes.GuildID("guild-123"),
 					Participants: []roundtypes.Participant{}, // Empty slice
 				},
 			},
@@ -295,12 +310,15 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			name: "failure with nil participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// Mock GetRound call that happens in NotifyScoreModule
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
 			},
 			payload: roundevents.RoundFinalizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
 					ID:           testRoundID,
+					GuildID:      sharedtypes.GuildID("guild-123"),
 					Participants: nil, // Nil slice
 				},
 			},

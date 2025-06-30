@@ -29,7 +29,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 		{
 			name: "Successfully checks available tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(true, nil)
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(true, nil)
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
@@ -43,7 +44,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 		{
 			name: "Successfully checks unavailable tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(false, nil)
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(false, nil)
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
@@ -57,7 +59,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 		{
 			name: "Database error when checking tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), tagNumber).Return(false, errors.New("database error"))
+				guildID := sharedtypes.GuildID("test-guild")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(false, errors.New("database error"))
 			},
 			userID:         sharedtypes.DiscordID("test_user_id"),
 			tagNumber:      tagNumber,
@@ -97,7 +100,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 
 			ctx := context.Background()
 
-			got, got1, err := s.CheckTagAvailability(ctx, leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			guildID := sharedtypes.GuildID("test-guild")
+			got, got1, err := s.CheckTagAvailability(ctx, guildID, leaderboardevents.TagAvailabilityCheckRequestedPayload{
 				UserID:    tt.userID,
 				TagNumber: &tt.tagNumber,
 			})

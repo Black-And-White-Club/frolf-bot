@@ -19,6 +19,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			userSignupPayload := payload.(*userevents.UserSignupRequestPayload)
 
 			userID := userSignupPayload.UserID
+			guildID := userSignupPayload.GuildID
 
 			h.logger.InfoContext(ctx, "Received UserSignupRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -60,7 +61,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			ctx, span := h.tracer.Start(ctx, "CreateUser")
 			defer span.End()
 
-			result, err := h.userService.CreateUser(ctx, userID, nil)
+			result, err := h.userService.CreateUser(ctx, guildID, userID, nil)
 
 			if result.Failure != nil {
 				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)

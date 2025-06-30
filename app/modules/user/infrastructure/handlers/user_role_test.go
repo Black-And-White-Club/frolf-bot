@@ -24,11 +24,13 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testNewRole := sharedtypes.UserRoleEnum("admin")
 
 	testPayload := &userevents.UserRoleUpdateRequestPayload{
-		UserID: testUserID,
-		Role:   testNewRole,
+		GuildID: testGuildID,
+		UserID:  testUserID,
+		Role:    testNewRole,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
@@ -68,7 +70,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					Error:   "",
 				}
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
 					userservice.UserOperationResult{
 						Success: updateResultPayload,
 						Failure: nil,
@@ -105,7 +107,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					Error:   "user not found",
 				}
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
 					userservice.UserOperationResult{
 						Success: nil,
 						Failure: failurePayload,
@@ -145,7 +147,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testUserID, testNewRole).Return(
+				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
 					userservice.UserOperationResult{},
 					fmt.Errorf("service error"),
 				)

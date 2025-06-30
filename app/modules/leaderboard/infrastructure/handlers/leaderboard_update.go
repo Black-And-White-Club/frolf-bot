@@ -64,9 +64,10 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 				}
 			}
 
-			// Use the public interface method
+			// Use the public interface method, propagate guildID
 			result, err := h.leaderboardService.ProcessTagAssignments(
 				ctx,
+				sharedtypes.GuildID(requestPayload.GuildID), // Pass guildID explicitly
 				sharedtypes.ServiceUpdateSourceProcessScores,
 				assignments,
 				nil,                               // System operation

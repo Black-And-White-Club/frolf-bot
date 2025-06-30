@@ -419,7 +419,8 @@ func TestTagSwapRequested(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			result, err := deps.Service.TagSwapRequested(ctx, tt.payload)
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.TagSwapRequested(ctx, guildID, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

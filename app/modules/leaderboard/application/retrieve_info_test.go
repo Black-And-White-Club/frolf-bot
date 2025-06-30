@@ -38,15 +38,17 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB)
+		guildID        sharedtypes.GuildID
+		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
 		expectedResult *leaderboardevents.GetLeaderboardResponsePayload
 		expectedFail   *leaderboardevents.GetLeaderboardFailedPayload
 		expectedError  error
 	}{
 		{
-			name: "Successfully retrieves leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			name:    "Successfully retrieves leaderboard",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					ID: 1,
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{TagNumber: tag1, UserID: "user1"},
@@ -79,22 +81,22 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "Fails to fetch active leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, errors.New("database connection error"))
+			name:    "Fails to fetch active leaderboard",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, errors.New("database connection error"))
 			},
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.GetLeaderboardFailedPayload{
-				// FIX: Updated expected reason to match the service's behavior for general DB errors
 				Reason: "Database error when retrieving leaderboard",
 			},
 			expectedError: errors.New("database connection error"),
 		},
-		// New test case: Empty leaderboard
 		{
-			name: "Successfully retrieves empty leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			name:    "Successfully retrieves empty leaderboard",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					ID:              1,
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{},
 					IsActive:        true,
@@ -108,15 +110,15 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 			expectedFail:  nil,
 			expectedError: nil,
 		},
-		// New test case: Leaderboard with mixed tag numbers
 		{
-			name: "Successfully retrieves leaderboard with mixed tag numbers",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			name:    "Successfully retrieves leaderboard with mixed tag numbers",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					ID: 1,
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{TagNumber: tag1, UserID: "user1"},
-						{TagNumber: tag2, UserID: "user2"}, // Mixed tag number
+						{TagNumber: tag2, UserID: "user2"},
 					},
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceProcessScores,
@@ -134,7 +136,6 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 					},
 					{
 						TagNumber: func() sharedtypes.TagNumber {
-							// FIX: Updated expected tag number to match the mock DB return value
 							val := sharedtypes.TagNumber(2)
 							return val
 						}(),
@@ -145,25 +146,24 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 			expectedFail:  nil,
 			expectedError: nil,
 		},
-		// Add a test case for ErrNoActiveLeaderboard
 		{
-			name: "Handles no active leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
+			name:    "Handles no active leaderboard",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
 			},
 			expectedResult: nil,
 			expectedFail: &leaderboardevents.GetLeaderboardFailedPayload{
-				// The service specifically returns the error message for ErrNoActiveLeaderboard
 				Reason: leaderboarddbtypes.ErrNoActiveLeaderboard.Error(),
 			},
-			expectedError: nil, // The service handles this error and returns nil error
+			expectedError: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
-			tt.mockDBSetup(mockDB)
+			tt.mockDBSetup(mockDB, tt.guildID)
 
 			s := &LeaderboardService{
 				LeaderboardDB: mockDB,
@@ -175,14 +175,13 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 				},
 			}
 
-			got, err := s.GetLeaderboard(ctx)
+			got, err := s.GetLeaderboard(ctx, tt.guildID)
 
-			// Check if the returned error matches the expected error
+			// ...existing code...
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
 				} else if err.Error() != tt.expectedError.Error() {
-					// Check if the error message contains the expected substring
 					if !strings.Contains(err.Error(), tt.expectedError.Error()) {
 						t.Errorf("expected error to contain: %q, got: %q", tt.expectedError.Error(), err.Error())
 					}
@@ -205,7 +204,6 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 					return
 				}
 
-				// Use reflect.DeepEqual for comparing the success payloads
 				if !reflect.DeepEqual(successPayload, tt.expectedResult) {
 					t.Errorf("LeaderboardService.GetLeaderboard() result mismatch: got %v, want %v", successPayload, tt.expectedResult)
 				}
@@ -221,14 +219,12 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 					return
 				}
 
-				// FIX: Check against the correct failure payload type
 				failurePayload, ok := got.Failure.(*leaderboardevents.GetLeaderboardFailedPayload)
 				if !ok {
 					t.Errorf("Expected failure payload type *leaderboardevents.GetLeaderboardFailedPayload, got %T", got.Failure)
 					return
 				}
 
-				// Check if the reason contains the expected substring
 				if !strings.Contains(failurePayload.Reason, tt.expectedFail.Reason) {
 					t.Errorf("LeaderboardService.GetLeaderboard() failure reason mismatch: expected reason to contain %q, got %q",
 						tt.expectedFail.Reason, failurePayload.Reason)
@@ -253,22 +249,23 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 
 	tests := []struct {
 		name                string
+		guildID             sharedtypes.GuildID
 		payload             sharedevents.DiscordTagLookupRequestPayload
-		mockDBSetup         func(*leaderboarddb.MockLeaderboardDB)
+		mockDBSetup         func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
 		expectedResult      *sharedevents.DiscordTagLookupResultPayload
 		expectedFail        *sharedevents.DiscordTagLookupByUserIDFailedPayload
 		expectedError       error // Expected standard error return value
 		expectedResultError error // Expected error in the LeaderboardOperationResult struct
 	}{
 		{
-			name: "Successfully retrieves tag number",
+			name:    "Successfully retrieves tag number",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: sharedevents.DiscordTagLookupRequestPayload{
 				UserID: testUserID,
 			},
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				// FIX: Return a pointer to sharedtypes.TagNumber instead of *int
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
 				tagNumber := sharedtypes.TagNumber(5)
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(&tagNumber, nil)
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(&tagNumber, nil)
 			},
 			expectedResult: &sharedevents.DiscordTagLookupResultPayload{
 				TagNumber: func() *sharedtypes.TagNumber {
@@ -283,26 +280,27 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 			expectedResultError: nil,
 		},
 		{
-			name: "Fails to retrieve tag number due to unexpected DB error",
+			name:    "Fails to retrieve tag number due to unexpected DB error",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: sharedevents.DiscordTagLookupRequestPayload{
 				UserID: testUserID,
 			},
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, errors.New("unexpected DB error"))
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, errors.New("unexpected DB error"))
 			},
-			expectedResult: nil,
-			expectedFail:   nil, // The service returns the error in the Error field, not a failure payload
-			expectedError:  nil, // The service returns nil standard error for unexpected DB errors
-			// FIX: Expect the error in the LeaderboardOperationResult struct's Error field
+			expectedResult:      nil,
+			expectedFail:        nil,
+			expectedError:       nil,
 			expectedResultError: fmt.Errorf("failed to get tag by UserID: %w", errors.New("unexpected DB error")),
 		},
 		{
-			name: "User ID not found in database (sql.ErrNoRows)",
+			name:    "User ID not found in database (sql.ErrNoRows)",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: sharedevents.DiscordTagLookupRequestPayload{
 				UserID: testUserID,
 			},
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, sql.ErrNoRows)
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, sql.ErrNoRows)
 			},
 			expectedResult: &sharedevents.DiscordTagLookupResultPayload{
 				TagNumber: nil,
@@ -314,12 +312,13 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 			expectedResultError: nil,
 		},
 		{
-			name: "No active leaderboard found",
+			name:    "No active leaderboard found",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: sharedevents.DiscordTagLookupRequestPayload{
 				UserID: testUserID,
 			},
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
 			},
 			expectedResult: nil,
 			expectedFail: &sharedevents.DiscordTagLookupByUserIDFailedPayload{
@@ -329,12 +328,13 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 			expectedResultError: nil,
 		},
 		{
-			name: "Nil tag number returned (should not happen with sql.ErrNoRows handling, but testing robustness)",
+			name:    "Nil tag number returned (should not happen with sql.ErrNoRows handling, but testing robustness)",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: sharedevents.DiscordTagLookupRequestPayload{
 				UserID: testUserID,
 			},
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, nil)
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, nil)
 			},
 			expectedResult: &sharedevents.DiscordTagLookupResultPayload{
 				TagNumber: nil,
@@ -350,7 +350,7 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
-			tt.mockDBSetup(mockDB)
+			tt.mockDBSetup(mockDB, tt.guildID)
 
 			s := &LeaderboardService{
 				LeaderboardDB: mockDB,
@@ -362,9 +362,9 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 				},
 			}
 
-			got, err := s.GetTagByUserID(ctx, tt.payload.UserID) // Pass the UserID from the payload
+			got, err := s.GetTagByUserID(ctx, tt.guildID, tt.payload.UserID)
 
-			// Check if the returned standard error matches the expected standard error
+			// ...existing code...
 			if (err != nil) != (tt.expectedError != nil) {
 				t.Errorf("LeaderboardService.GetTagByUserID() standard error mismatch: got %v, wantErr %v", err, tt.expectedError)
 				return
@@ -373,12 +373,10 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 				return
 			}
 
-			// FIX: Check the Error field in the result struct
 			if tt.expectedResultError != nil {
 				if got.Error == nil {
 					t.Errorf("Expected result struct error: %v, got nil", tt.expectedResultError)
 				} else if got.Error.Error() != tt.expectedResultError.Error() {
-					// Check if the error message contains the expected substring
 					if !strings.Contains(got.Error.Error(), tt.expectedResultError.Error()) {
 						t.Errorf("Result struct error mismatch: expected error to contain: %q, got %q", tt.expectedResultError.Error(), got.Error.Error())
 					}
@@ -455,16 +453,18 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB)
+		guildID        sharedtypes.GuildID
+		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
 		requestPayload sharedevents.RoundTagLookupRequestPayload
 		expectedResult *sharedevents.RoundTagLookupResultPayload
 		expectedError  error
 	}{
 		{
-			name: "Successfully retrieves tag number",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+			name:    "Successfully retrieves tag number",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
 				tagNumber := sharedtypes.TagNumber(5)
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(&tagNumber, nil)
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(&tagNumber, nil)
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
@@ -482,18 +482,20 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "Fails to retrieve tag number (operational error)",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, errors.New("database connection error"))
+			name:    "Fails to retrieve tag number (operational error)",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, errors.New("database connection error"))
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: nil,
 			expectedError:  errors.New("failed to get tag by UserID (Round): database connection error"),
 		},
 		{
-			name: "User ID not found in database (sql.ErrNoRows)",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, sql.ErrNoRows)
+			name:    "User ID not found in database (sql.ErrNoRows)",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, sql.ErrNoRows)
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
@@ -508,19 +510,20 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "User ID not found in database (string match)",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, errors.New("user not found in DB"))
+			name:    "User ID not found in database (string match)",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, errors.New("user not found in DB"))
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: nil,
-			// FIX: Expect the standard error returned by the service's general error handling
-			expectedError: errors.New("failed to get tag by UserID (Round): user not found in DB"),
+			expectedError:  errors.New("failed to get tag by UserID (Round): user not found in DB"),
 		},
 		{
-			name: "Nil tag number returned from database",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, nil)
+			name:    "Nil tag number returned from database",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, nil)
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
@@ -528,16 +531,17 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 				RoundID:            testRoundID,
 				TagNumber:          nil,
 				Found:              false,
-				Error:              "", // Error should be empty string when err is nil
+				Error:              "",
 				OriginalResponse:   dummyRequestPayload.Response,
 				OriginalJoinedLate: dummyRequestPayload.JoinedLate,
 			},
 			expectedError: nil,
 		},
 		{
-			name: "Handles no active leaderboard (Round)",
-			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
-				mockDB.EXPECT().GetTagByUserID(gomock.Any(), testUserID).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
+			name:    "Handles no active leaderboard (Round)",
+			guildID: sharedtypes.GuildID("test-guild"),
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mockDB.EXPECT().GetTagByUserID(gomock.Any(), guildID, testUserID).Return(nil, leaderboarddbtypes.ErrNoActiveLeaderboard)
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: nil,
@@ -548,7 +552,7 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
-			tt.mockDBSetup(mockDB)
+			tt.mockDBSetup(mockDB, tt.guildID)
 
 			s := &LeaderboardService{
 				LeaderboardDB: mockDB,
@@ -560,7 +564,7 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 				},
 			}
 
-			got, err := s.RoundGetTagByUserID(ctx, tt.requestPayload)
+			got, err := s.RoundGetTagByUserID(ctx, tt.guildID, tt.requestPayload)
 
 			if (err != nil) != (tt.expectedError != nil) {
 				t.Errorf("LeaderboardService.RoundGetTagByUserID() standard error mismatch: got = %v, wantErr %v", err, tt.expectedError)

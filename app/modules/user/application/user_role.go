@@ -12,7 +12,7 @@ import (
 )
 
 // UpdateUserRoleInDatabase updates a user's role in the database and returns an operation result.
-func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error) {
+func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error) {
 	operationName := "HandleUpdateUserRole"
 
 	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
@@ -21,6 +21,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 			s.logger.ErrorContext(ctx, "Role validation failed",
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 				attr.String("new_role", string(newRole)),
 				attr.Error(validationErr),
 			)
@@ -38,10 +39,11 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 			}, nil
 		}
 
-		dbErr := s.UserDB.UpdateUserRole(ctx, userID, newRole)
+		dbErr := s.UserDB.UpdateUserRole(ctx, userID, guildID, newRole)
 		if dbErr != nil {
 			s.logger.ErrorContext(ctx, "Failed to update userrole",
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 				attr.String("new_role", string(newRole)),
 				attr.Error(dbErr),
 			)
@@ -66,6 +68,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 		s.logger.InfoContext(ctx, "User role updated successfully",
 			attr.String("user_id", string(userID)),
+			attr.String("guild_id", string(guildID)),
 			attr.String("new_role", string(newRole)),
 		)
 

@@ -105,7 +105,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			)
 
 			// Call the service function to handle the event
-			result, err := h.roundService.StoreRound(ctx, *roundEntityCreatedPayload)
+			result, err := h.roundService.StoreRound(ctx, roundEntityCreatedPayload.GuildID, *roundEntityCreatedPayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle RoundEntityCreated event",
 					attr.CorrelationIDFromMsg(msg),
@@ -196,7 +196,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 
 			// 1. Update the round in the database with the Discord message ID
 			// Call the service method which now returns the updated round object
-			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, roundID, discordMessageID)
+			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, updatePayload.GuildID, roundID, discordMessageID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to update round with Discord message ID via service",
 					attr.CorrelationIDFromMsg(msg),

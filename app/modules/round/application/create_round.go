@@ -105,7 +105,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 }
 
 // StoreRound stores a round in the database
-func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "StoreRound", payload.Round.ID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate round data
 		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
@@ -175,7 +175,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		)
 
 		// Store the round in the database
-		if err := s.RoundDB.CreateRound(ctx, &roundDB); err != nil {
+		if err := s.RoundDB.CreateRound(ctx, guildID, &roundDB); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "create_round")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundCreationFailedPayload{
@@ -219,14 +219,14 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 // UpdateRoundMessageID updates the Discord event message ID for a round in the database
 // and returns the updated Round object.
-func (s *RoundService) UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
 	result, err := s.serviceWrapper(ctx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
 			attr.RoundID("round_id", roundID),
 			attr.String("discord_message_id", discordMessageID),
 		)
 
-		round, dbErr := s.RoundDB.UpdateEventMessageID(ctx, roundID, discordMessageID)
+		round, dbErr := s.RoundDB.UpdateEventMessageID(ctx, guildID, roundID, discordMessageID)
 		if dbErr != nil {
 			s.metrics.RecordDBOperationError(ctx, "update_round_message_id")
 			s.logger.ErrorContext(ctx, "Failed to update Discord event message ID in DB",

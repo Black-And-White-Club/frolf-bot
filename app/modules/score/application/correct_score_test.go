@@ -17,6 +17,7 @@ import (
 
 func TestScoreService_CorrectScore(t *testing.T) {
 	ctx := context.Background()
+	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testScore := sharedtypes.Score(10)
@@ -43,7 +44,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			name: "Successfully corrects score",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
 				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testRoundID, sharedtypes.ScoreInfo{
+					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
 						Score:     testScore,
 						TagNumber: nil,
@@ -55,6 +56,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
 				Success: &scoreevents.ScoreUpdateSuccessPayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Score:   testScore,
@@ -66,7 +68,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			name: "Successfully corrects score with tag number",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
 				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testRoundID, sharedtypes.ScoreInfo{
+					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
 						Score:     testScore,
 						TagNumber: &testTag,
@@ -78,6 +80,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			tagNumber: &testTag,
 			expectedResult: ScoreOperationResult{
 				Success: &scoreevents.ScoreUpdateSuccessPayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Score:   testScore,
@@ -89,7 +92,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			name: "Fails due to database error",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
 				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testRoundID, sharedtypes.ScoreInfo{
+					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
 						Score:     testScore,
 						TagNumber: nil,
@@ -101,12 +104,11 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
 				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Error:   "database connection failed",
 				},
-				// The 'Error' field below was incorrect as ScoreOperationResult does not have it.
-				// Error: errors.New("database connection failed"),
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
 		},
@@ -114,7 +116,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			name: "Fails due to invalid tag number",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
 				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testRoundID, sharedtypes.ScoreInfo{
+					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
 						Score:     testScore,
 						TagNumber: &invalidTag,
@@ -126,12 +128,11 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			tagNumber: &invalidTag,
 			expectedResult: ScoreOperationResult{
 				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Error:   "invalid tag number",
 				},
-				// The 'Error' field below was incorrect as ScoreOperationResult does not have it.
-				// Error: errors.New("invalid tag number"),
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
 		},
@@ -159,7 +160,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 
 			tt.mockDBSetup(mockDB)
 
-			gotResult, err := s.CorrectScore(ctx, testRoundID, tt.userID, tt.score, tt.tagNumber)
+			gotResult, err := s.CorrectScore(ctx, testGuildID, testRoundID, tt.userID, tt.score, tt.tagNumber)
 
 			// Validate result
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
@@ -167,8 +168,19 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
 				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
 				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
-				if okGot && okExpected && *successGot != *successExpected {
-					t.Errorf("Mismatched success payload, got: %v, expected: %v", successGot, successExpected)
+				if okGot && okExpected {
+					if successGot.GuildID != successExpected.GuildID {
+						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
+					}
+					if successGot.RoundID != successExpected.RoundID {
+						t.Errorf("Mismatched RoundID, got: %v, expected: %v", successGot.RoundID, successExpected.RoundID)
+					}
+					if successGot.UserID != successExpected.UserID {
+						t.Errorf("Mismatched UserID, got: %v, expected: %v", successGot.UserID, successExpected.UserID)
+					}
+					if successGot.Score != successExpected.Score {
+						t.Errorf("Mismatched Score, got: %v, expected: %v", successGot.Score, successExpected.Score)
+					}
 				}
 			}
 
@@ -177,8 +189,19 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
 				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
 				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
-				if okGot && okExpected && *failureGot != *failureExpected {
-					t.Errorf("Mismatched failure payload, got: %v, expected: %v", failureGot, failureExpected)
+				if okGot && okExpected {
+					if failureGot.GuildID != failureExpected.GuildID {
+						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)
+					}
+					if failureGot.RoundID != failureExpected.RoundID {
+						t.Errorf("Mismatched RoundID, got: %v, expected: %v", failureGot.RoundID, failureExpected.RoundID)
+					}
+					if failureGot.UserID != failureExpected.UserID {
+						t.Errorf("Mismatched UserID, got: %v, expected: %v", failureGot.UserID, failureExpected.UserID)
+					}
+					if failureGot.Error != failureExpected.Error {
+						t.Errorf("Mismatched error message, got: %v, expected: %v", failureGot.Error, failureExpected.Error)
+					}
 				}
 			}
 

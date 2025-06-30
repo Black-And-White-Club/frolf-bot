@@ -22,6 +22,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 
 	mockDB := userdb.NewMockUserDB(ctrl)
 
@@ -40,7 +41,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			name: "Successfully retrieves user",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					GetUserByUserID(gomock.Any(), testUserID).
+					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
 					Return(&userdbtypes.User{
 						ID:     1,
 						UserID: testUserID,
@@ -64,7 +65,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			name: "User not found",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					GetUserByUserID(gomock.Any(), testUserID).
+					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
 					Return(nil, userdbtypes.ErrUserNotFound)
 			},
 			expectedOpResult: UserOperationResult{
@@ -82,7 +83,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				dbErr := errors.New("database connection failed")
 				mockDB.EXPECT().
-					GetUserByUserID(gomock.Any(), testUserID).
+					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
 					Return(nil, dbErr)
 			},
 			expectedOpResult: UserOperationResult{
@@ -115,7 +116,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				},
 			}
 
-			gotResult, gotErr := s.GetUser(ctx, testUserID)
+			gotResult, gotErr := s.GetUser(ctx, testGuildID, testUserID)
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
@@ -181,6 +182,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 
 	mockDB := userdb.NewMockUserDB(ctrl)
 
@@ -199,7 +201,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			name: "Successfully retrieves user role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					GetUserRole(gomock.Any(), testUserID).
+					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleAdmin, nil)
 			},
 			expectedOpResult: UserOperationResult{
@@ -217,7 +219,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				dbErr := errors.New("failed to retrieve user role")
 				mockDB.EXPECT().
-					GetUserRole(gomock.Any(), testUserID).
+					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleEnum(""), dbErr)
 			},
 			expectedOpResult: UserOperationResult{
@@ -234,7 +236,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			name: "Retrieved invalid user role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					GetUserRole(gomock.Any(), testUserID).
+					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleEnum("InvalidRole"), nil)
 			},
 			expectedOpResult: UserOperationResult{
@@ -267,7 +269,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 				},
 			}
 
-			gotResult, gotErr := s.GetUserRole(ctx, testUserID)
+			gotResult, gotErr := s.GetUserRole(ctx, testGuildID, testUserID)
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {

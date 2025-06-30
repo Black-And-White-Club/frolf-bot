@@ -84,7 +84,7 @@ func TestStoreRound(t *testing.T) {
 			},
 			validateDBState: func(t *testing.T, deps *RoundTestDeps, expectedRoundID sharedtypes.RoundID) {
 				// Retrieve the stored round using the ID returned in the success payload
-				storedRound, err := deps.DB.GetRound(deps.Ctx, expectedRoundID)
+				storedRound, err := deps.DB.GetRound(deps.Ctx, "test-guild", expectedRoundID)
 				if err != nil {
 					t.Fatalf("Failed to retrieve stored round from DB: %v", err)
 				}
@@ -233,7 +233,7 @@ func TestStoreRound(t *testing.T) {
 			// Initialize dependencies for each test, using the shared DB connection
 			deps := SetupTestRoundService(t)
 
-			result, err := deps.Service.StoreRound(deps.Ctx, tt.payload)
+			result, err := deps.Service.StoreRound(deps.Ctx, "test-guild", tt.payload)
 
 			// Extract the RoundID from the successful result for DB state validation
 			var expectedRoundID sharedtypes.RoundID

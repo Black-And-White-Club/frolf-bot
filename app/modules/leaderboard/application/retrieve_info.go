@@ -16,7 +16,7 @@ import (
 )
 
 // GetLeaderboard returns the active leaderboard.
-func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (LeaderboardOperationResult, error) {
 	// Record leaderboard retrieval attempt
 	s.metrics.RecordLeaderboardGetAttempt(ctx, "LeaderboardService")
 
@@ -26,7 +26,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 	return s.serviceWrapper(ctx, "GetLeaderboard", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		// 1. Get the active leaderboard from the database.
 		dbStartTime := time.Now()
-		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx)
+		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
 		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		s.metrics.RecordLeaderboardGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
@@ -79,7 +79,7 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context) (LeaderboardOpe
 	})
 }
 
-func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sharedevents.RoundTagLookupRequestPayload) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestPayload) (LeaderboardOperationResult, error) {
 	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
 	s.logger.InfoContext(ctx, "Tag retrieval triggered for user (Round)",
@@ -92,7 +92,7 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 
 	return s.serviceWrapper(ctx, "RoundGetTagByUserID", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		dbStartTime := time.Now()
-		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, payload.UserID)
+		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, guildID, payload.UserID)
 		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
@@ -186,7 +186,7 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, payload sh
 // GetTagByUserID returns the tag number for a given user ID.
 // This method is used by handlers that need a simple tag lookup result.
 // It now accepts a TagNumberRequestPayload struct.
-func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error) {
 	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
 	s.logger.InfoContext(ctx, "Tag retrieval triggered for user",
@@ -196,7 +196,7 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, userID sharedty
 
 	return s.serviceWrapper(ctx, "GetTagByUserID", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		dbStartTime := time.Now()
-		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, userID)
+		tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, guildID, userID)
 		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 

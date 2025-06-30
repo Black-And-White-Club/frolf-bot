@@ -30,7 +30,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 					Title:     "Round for status check",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -74,7 +74,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 					State:     roundtypes.RoundStateUpcoming,
 				})
 				roundForDBInsertion.Participants = []roundtypes.Participant{participant} // Set participant directly
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)                    // Create the round with the participant
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)      // Create the round with the participant
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -115,7 +115,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 					State:     roundtypes.RoundStateUpcoming,
 				})
 				roundForDBInsertion.Participants = []roundtypes.Participant{participant} // Set participant directly
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)                    // Create the round with the participant
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)      // Create the round with the participant
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -270,7 +270,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Round for validation (created)",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -315,7 +315,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Round for validation (in progress)",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -360,7 +360,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Round for validation (finalized)",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -434,7 +434,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Round for validation (empty user)",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -503,7 +503,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Round for validation (invalid response)",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -550,7 +550,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					Title:     "Default Round",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(deps.Ctx, &dummyRound)
+				err := deps.DB.CreateRound(deps.Ctx, "test-guild", &dummyRound)
 				if err != nil {
 					t.Fatalf("Failed to create default round for test setup: %v", err)
 				}

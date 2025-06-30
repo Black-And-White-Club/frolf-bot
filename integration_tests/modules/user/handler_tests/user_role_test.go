@@ -33,7 +33,8 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				userID := sharedtypes.DiscordID("user-to-update-role")
 				tagNum := sharedtypes.TagNumber(101)
 				// Use UserService.CreateUser to ensure the user exists in the database
-				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, userID, &tagNum)
+				guildID := sharedtypes.GuildID("test-guild")
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tagNum)
 				if createErr != nil || createResult.Success == nil {
 					t.Fatalf("Failed to create test user for role update: %v, result: %+v", createErr, createResult.Failure)
 				}

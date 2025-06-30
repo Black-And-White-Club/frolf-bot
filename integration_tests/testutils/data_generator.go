@@ -69,7 +69,7 @@ type Leaderboard struct {
 // GenerateUsers creates a specified number of test users
 func (g *TestDataGenerator) GenerateUsers(count int) []User {
 	users := make([]User, count)
-	roles := []UserRoleEnum{"Rattler", "Admin", "Moderator"}
+	roles := []UserRoleEnum{"User", "Editor", "Admin"}
 
 	for i := 0; i < count; i++ {
 		users[i] = User{

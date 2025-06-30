@@ -25,8 +25,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				attr.Int("tag_number", int(*tagAvailabilityCheckRequestedPayload.TagNumber)),
 			)
 
-			// Call the service function to handle the event
-			result, failure, err := h.leaderboardService.CheckTagAvailability(ctx, *tagAvailabilityCheckRequestedPayload)
+			// Call the service function to handle the event, propagate guildID
+			result, failure, err := h.leaderboardService.CheckTagAvailability(ctx, tagAvailabilityCheckRequestedPayload.GuildID, *tagAvailabilityCheckRequestedPayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle TagAvailabilityCheckRequested event",
 					attr.CorrelationIDFromMsg(msg),

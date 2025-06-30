@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -25,6 +26,7 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*mess
 
 			result, err := h.scoreService.CorrectScore(
 				ctx,
+				sharedtypes.GuildID(scoreUpdateRequestPayload.GuildID),
 				scoreUpdateRequestPayload.RoundID,
 				scoreUpdateRequestPayload.UserID,
 				scoreUpdateRequestPayload.Score,

@@ -194,7 +194,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 		)
 
 		// Update only the specified fields in the database - using the Round struct
-		updatedRound, err := s.RoundDB.UpdateRound(ctx, payload.RoundUpdateRequestPayload.RoundID, updateRound)
+		updatedRound, err := s.RoundDB.UpdateRound(ctx, payload.GuildID, payload.RoundUpdateRequestPayload.RoundID, updateRound)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round entity",
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
@@ -255,7 +255,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		)
 
 		// Step 2: Get EventMessageID for rescheduling
-		eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, payload.RoundID)
+		eventMessageID, err := s.RoundDB.GetEventMessageID(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get EventMessageID for rescheduling",
 				attr.RoundID("round_id", payload.RoundID),
@@ -270,7 +270,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		}
 
 		// Step 3: Get current round data to preserve fields not being updated
-		currentRound, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		currentRound, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get current round data for rescheduling",
 				attr.RoundID("round_id", payload.RoundID),
@@ -342,6 +342,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 			)
 
 			reminderPayload := roundevents.DiscordReminderPayload{
+				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
 				RoundTitle:     finalTitle,
@@ -383,6 +384,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		)
 
 		startPayload := roundevents.RoundStartedPayload{
+			GuildID:   payload.GuildID,
 			RoundID:   payload.RoundID,
 			Title:     finalTitle,
 			Location:  finalLocation,
@@ -411,6 +413,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		// Return success with the update payload
 		return RoundOperationResult{
 			Success: &roundevents.RoundScheduleUpdatePayload{
+				GuildID:   payload.GuildID,
 				RoundID:   payload.RoundID,
 				Title:     finalTitle,
 				Location:  finalLocation,

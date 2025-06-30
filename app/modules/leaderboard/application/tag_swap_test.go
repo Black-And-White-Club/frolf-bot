@@ -45,28 +45,27 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		guildID        sharedtypes.GuildID
 		payload        leaderboardevents.TagSwapRequestedPayload
-		mockSetup      func(*leaderboarddb.MockLeaderboardDB) // Pass mockDB to setup
+		mockSetup      func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
 		expectedResult *LeaderboardOperationResult
 		expectError    bool
 	}{
 		{
-			name: "Successful tag swap",
+			name:    "Successful tag swap",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard with both users present
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{UserID: requestorID, TagNumber: 1},
 						{UserID: targetID, TagNumber: 2},
 					},
-				}, nil).Times(1) // Expect this call once
-
-				// Mock the SwapTags call
-				mdb.EXPECT().SwapTags(gomock.Any(), requestorID, targetID).Return(nil).Times(1) // Expect this call once
+				}, nil).Times(1)
+				mdb.EXPECT().SwapTags(gomock.Any(), guildID, requestorID, targetID).Return(nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Success: &leaderboardevents.TagSwapProcessedPayload{
@@ -77,12 +76,13 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Cannot swap tag with self",
+			name:    "Cannot swap tag with self",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
-				TargetID:    requestorID, // Swap with self
+				TargetID:    requestorID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
 				// No DB calls should happen in this case
 			},
 			expectedResult: &LeaderboardOperationResult{
@@ -95,15 +95,14 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "No active leaderboard found",
+			name:    "No active leaderboard found",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard to return nil
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, nil).Times(1) // Expect this call once
-				// No further DB calls should happen
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -115,15 +114,14 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Database error while fetching leaderboard",
+			name:    "Database error while fetching leaderboard",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard to return an error
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(nil, errors.New("db error")).Times(1) // Expect this call once
-				// No further DB calls should happen
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, errors.New("db error")).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -135,19 +133,18 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Requestor does not have a tag",
+			name:    "Requestor does not have a tag",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
-				RequestorID: nonExistentID, // Requestor does not exist
+				RequestorID: nonExistentID,
 				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard with only the target user present
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{UserID: targetID, TagNumber: 2},
 					},
-				}, nil).Times(1) // Expect this call once
-				// No further DB calls should happen
+				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -159,19 +156,18 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Target does not have a tag",
+			name:    "Target does not have a tag",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
-				TargetID:    nonExistentID, // Target does not exist
+				TargetID:    nonExistentID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard with only the requestor present
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{UserID: requestorID, TagNumber: 1},
 					},
-				}, nil).Times(1) // Expect this call once
-				// No further DB calls should happen
+				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -183,17 +179,16 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Neither user has a tag",
+			name:    "Neither user has a tag",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
-				RequestorID: nonExistentID, // Requestor does not exist
-				TargetID:    targetID,      // Target does not exist (assuming targetID is not in the empty leaderboard)
+				RequestorID: nonExistentID,
+				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard with no users
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
-					LeaderboardData: []leaderboardtypes.LeaderboardEntry{}, // Empty leaderboard
-				}, nil).Times(1) // Expect this call once
-				// No further DB calls should happen
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
+					LeaderboardData: []leaderboardtypes.LeaderboardEntry{},
+				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -205,22 +200,20 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Database error while swapping tags",
+			name:    "Database error while swapping tags",
+			guildID: sharedtypes.GuildID("test-guild"),
 			payload: leaderboardevents.TagSwapRequestedPayload{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
-			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB) {
-				// Mock getting the active leaderboard with both users present
-				mdb.EXPECT().GetActiveLeaderboard(gomock.Any()).Return(&leaderboarddbtypes.Leaderboard{
+			mockSetup: func(mdb *leaderboarddb.MockLeaderboardDB, guildID sharedtypes.GuildID) {
+				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(&leaderboarddbtypes.Leaderboard{
 					LeaderboardData: []leaderboardtypes.LeaderboardEntry{
 						{UserID: requestorID, TagNumber: 1},
 						{UserID: targetID, TagNumber: 2},
 					},
-				}, nil).Times(1) // Expect this call once
-
-				// Mock the SwapTags call to return an error
-				mdb.EXPECT().SwapTags(gomock.Any(), requestorID, targetID).Return(errors.New("db error")).Times(1) // Expect this call once
+				}, nil).Times(1)
+				mdb.EXPECT().SwapTags(gomock.Any(), guildID, requestorID, targetID).Return(errors.New("db error")).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
 				Failure: &leaderboardevents.TagSwapFailedPayload{
@@ -235,21 +228,19 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset mock expectations for each test case
 			ctrl = gomock.NewController(t)
 			mockDB = leaderboarddb.NewMockLeaderboardDB(ctrl)
-			s.LeaderboardDB = mockDB // Update the service with the new mock
+			s.LeaderboardDB = mockDB
 			defer ctrl.Finish()
 
-			tt.mockSetup(mockDB) // Pass the mockDB to the setup function
+			tt.mockSetup(mockDB, tt.guildID)
 
-			got, err := s.TagSwapRequested(ctx, tt.payload)
+			got, err := s.TagSwapRequested(ctx, tt.guildID, tt.payload)
 
 			if (err != nil) != tt.expectError {
 				t.Errorf("Unexpected error: got %v, expected error? %v", err, tt.expectError)
 			}
 
-			// Compare results based on whether success or failure is expected
 			if tt.expectedResult.Success != nil {
 				expectedSuccess, ok := tt.expectedResult.Success.(*leaderboardevents.TagSwapProcessedPayload)
 				if !ok {
@@ -264,7 +255,6 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 					actualSuccess.TargetID != expectedSuccess.TargetID {
 					t.Errorf("Success result mismatch, got: %+v, expected: %+v", actualSuccess, expectedSuccess)
 				}
-				// Ensure Failure is nil
 				if got.Failure != nil {
 					t.Errorf("Expected success result, but Failure was not nil: %+v", got.Failure)
 				}
@@ -283,12 +273,10 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 					actualFailure.Reason != expectedFailure.Reason {
 					t.Errorf("Failure result mismatch, got: %+v, expected: %+v", actualFailure, expectedFailure)
 				}
-				// Ensure Success is nil
 				if got.Success != nil {
 					t.Errorf("Expected failure result, but Success was not nil: %+v", got.Success)
 				}
 			} else {
-				// Should not happen if expectedResult is properly set in test cases
 				t.Fatalf("Test setup error: expectedResult must have either Success or Failure set")
 			}
 		})

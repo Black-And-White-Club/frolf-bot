@@ -24,11 +24,13 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("33333333333333333")
 	testTagNumber := sharedtypes.TagNumber(1)
 
 	// Helper functions to create messages and payloads.
 	createSignupRequestMessage := func(userID sharedtypes.DiscordID, tagNumber *sharedtypes.TagNumber) *message.Message {
 		payload := &userevents.UserSignupRequestPayload{
+			GuildID:   testGuildID,
 			UserID:    userID,
 			TagNumber: tagNumber,
 		}
@@ -59,6 +61,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: &testTagNumber,
 						}
@@ -80,14 +83,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: nil,
 						}
 						return nil
 					},
 				)
-				// Fix: CreateUser returns UserOperationResult and error (2 values)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,
@@ -113,14 +116,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: nil,
 						}
 						return nil
 					},
 				)
-				// Fix: CreateUser returns UserOperationResult with failure
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
 					Return(userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayload{UserID: testUserID, Reason: "failed"},
@@ -146,14 +149,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: nil,
 						}
 						return nil
 					},
 				)
-				// Fix: CreateUser returns empty result and error
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
 					Return(userservice.UserOperationResult{}, fmt.Errorf("service error"))
 			},
 			wantErr:        true,
@@ -167,14 +170,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: nil,
 						}
 						return nil
 					},
 				)
-				// Fix: CreateUser returns success result
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,
@@ -196,14 +199,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*userevents.UserSignupRequestPayload) = userevents.UserSignupRequestPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: nil,
 						}
 						return nil
 					},
 				)
-				// Fix: CreateUser returns success result
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,

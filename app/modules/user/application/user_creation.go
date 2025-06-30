@@ -21,7 +21,7 @@ var (
 )
 
 // CreateUser creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error) {
+func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error) {
 	if ctx == nil {
 		return UserOperationResult{
 			Error: ErrNilContext,
@@ -48,7 +48,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.Dis
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
 	result, err := s.serviceWrapper(ctx, "CreateUser", userID, func(ctx context.Context) (UserOperationResult, error) {
-		user := userdb.User{UserID: userID}
+		user := userdb.User{UserID: userID, GuildID: guildID}
 
 		dbStart := time.Now()
 		err := s.UserDB.CreateUser(ctx, &user)
@@ -69,11 +69,13 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.Dis
 			if logLevel == "error" {
 				s.logger.ErrorContext(ctx, "Failed to create user",
 					attr.String("user_id", string(userID)),
+					attr.String("guild_id", string(guildID)),
 					attr.Error(domainErr),
 				)
 			} else {
 				s.logger.WarnContext(ctx, domainErr.Error(),
 					attr.String("user_id", string(userID)),
+					attr.String("guild_id", string(guildID)),
 					attr.String("original_error", err.Error()),
 				)
 			}
@@ -91,6 +93,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, userID sharedtypes.Dis
 			}, domainErr
 		}
 
+		// Success
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
 
 		return UserOperationResult{

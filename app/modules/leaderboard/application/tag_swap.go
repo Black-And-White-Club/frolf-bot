@@ -10,7 +10,7 @@ import (
 )
 
 // TagSwapRequested handles the TagSwapRequested event.
-func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error) {
 	s.metrics.RecordTagSwapAttempt(ctx, payload.RequestorID, payload.TargetID)
 
 	s.logger.InfoContext(ctx, "Tag swap triggered",
@@ -38,7 +38,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 		// --- End of moved check ---
 
 		startTime := time.Now()
-		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx) // Now this is called after the self-swap check
+		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID) // Now this is called after the self-swap check
 		s.metrics.RecordOperationDuration(ctx, "GetActiveLeaderboard", "TagSwapRequested", time.Duration(time.Since(startTime).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get active leaderboard",
@@ -92,7 +92,7 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, payload leade
 		}
 
 		startTime = time.Now()
-		err = s.LeaderboardDB.SwapTags(ctx, payload.RequestorID, payload.TargetID)
+		err = s.LeaderboardDB.SwapTags(ctx, guildID, payload.RequestorID, payload.TargetID)
 		s.metrics.RecordOperationDuration(ctx, "SwapTags", "TagSwapRequested", time.Duration(time.Since(startTime).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to swap tags in DB",

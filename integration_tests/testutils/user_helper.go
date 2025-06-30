@@ -22,7 +22,7 @@ func InsertUser(t *testing.T, db *bun.DB, userID sharedtypes.DiscordID, role sha
 	}
 	// If a role is not explicitly provided, use the default from the DB model or a sensible test default
 	if role == "" {
-		user.Role = sharedtypes.UserRoleRattler // Use the constant from sharedtypes
+		user.Role = sharedtypes.UserRoleUser // Use the constant from sharedtypes
 	}
 	_, err := db.NewInsert().Model(user).Exec(context.Background())
 	if err != nil {

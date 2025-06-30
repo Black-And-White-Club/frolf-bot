@@ -41,7 +41,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 						Score:     &scoreZero,
 					},
 				}
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -83,7 +83,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state
-				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to get round from DB: %v", err)
 				}
@@ -114,7 +114,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					Title:     "Round for nil tag participant",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -161,7 +161,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state - participant should be in DB with nil tag
-				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to get round from DB: %v", err)
 				}
@@ -204,7 +204,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 						Score:     &scoreZero,
 					},
 				}
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -248,7 +248,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state
-				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to get round from DB: %v", err)
 				}
@@ -346,7 +346,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					Title:     "Round for unknown response",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}

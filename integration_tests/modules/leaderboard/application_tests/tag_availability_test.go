@@ -303,7 +303,8 @@ func TestCheckTagAvailability(t *testing.T) {
 					t.Fatalf("Failed to set up test data: %v", setupErr)
 				}
 			}
-			successResult, failureResult, err := deps.Service.CheckTagAvailability(ctx, tt.payload)
+			guildID := sharedtypes.GuildID("test_guild")
+			successResult, failureResult, err := deps.Service.CheckTagAvailability(ctx, guildID, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

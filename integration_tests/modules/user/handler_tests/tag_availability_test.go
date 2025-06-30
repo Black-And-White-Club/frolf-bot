@@ -78,7 +78,7 @@ func TestHandleTagAvailable(t *testing.T) {
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Create the user that will cause the "already exists" error
 				// Use testutils.InsertUser to directly insert the user into the database
-				err := testutils.InsertUser(t, env.DB, "existing-tag-user", sharedtypes.UserRoleRattler)
+				err := testutils.InsertUser(t, env.DB, "existing-tag-user", sharedtypes.UserRoleUser)
 				if err != nil {
 					t.Fatalf("Failed to insert pre-existing user via testutils.InsertUser: %v", err)
 				}

@@ -5,10 +5,11 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // CheckTagAvailability checks the availability of a tag in the database.
-func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
 	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		s.logger.InfoContext(ctx, "Checking tag availability",
 			attr.ExtractCorrelationID(ctx),
@@ -16,7 +17,7 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, payload l
 			attr.String("tag_number", payload.TagNumber.String()),
 		)
 
-		available, err := s.LeaderboardDB.CheckTagAvailability(ctx, *payload.TagNumber)
+		available, err := s.LeaderboardDB.CheckTagAvailability(ctx, guildID, *payload.TagNumber)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to check tag availability",
 				attr.ExtractCorrelationID(ctx),

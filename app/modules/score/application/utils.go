@@ -10,7 +10,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
-func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
+func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
 	if len(scores) == 0 {
 		err := fmt.Errorf("cannot process empty score list")
 		s.logger.ErrorContext(ctx, "Empty score list provided",
@@ -23,6 +23,7 @@ func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, roundID shar
 
 	startTime := time.Now()
 	s.metrics.RecordOperationAttempt(ctx, "ProcessScoresForStorage", roundID)
+	// Optionally, record guildID in logs/metrics if needed
 
 	taggedCount, untaggedCount := 0, 0
 	for i := 0; i < len(scores); i++ {
@@ -45,6 +46,7 @@ func (s *ScoreService) ProcessScoresForStorage(ctx context.Context, roundID shar
 		scores[i].Score = sharedtypes.Score(intScore)
 
 		s.metrics.RecordPlayerScore(ctx, roundID, scores[i].UserID, scores[i].Score)
+		// Optionally, record guildID in logs/metrics if needed
 
 		if scores[i].TagNumber != nil {
 			s.metrics.RecordPlayerTag(ctx, roundID, scores[i].UserID, scores[i].TagNumber)

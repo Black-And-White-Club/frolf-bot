@@ -82,12 +82,12 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &round1)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round1)
 				if err != nil {
 					t.Fatalf("Failed to create round1 in DB for test setup: %v", err)
 				}
 
-				err = deps.DB.CreateRound(ctx, &round2)
+				err = deps.DB.CreateRound(ctx, "test-guild", &round2)
 				if err != nil {
 					t.Fatalf("Failed to create round2 in DB for test setup: %v", err)
 				}
@@ -163,7 +163,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				}
 
 				// Verify the rounds were actually updated in the database
-				rounds, err := deps.DB.GetUpcomingRounds(ctx)
+				rounds, err := deps.DB.GetUpcomingRounds(ctx, "test-guild")
 				if err != nil {
 					t.Fatalf("Failed to get upcoming rounds from DB: %v", err)
 				}
@@ -214,7 +214,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
@@ -278,7 +278,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
@@ -338,7 +338,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}

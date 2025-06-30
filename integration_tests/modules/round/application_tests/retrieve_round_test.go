@@ -83,7 +83,7 @@ func TestGetRound(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
@@ -107,7 +107,7 @@ func TestGetRound(t *testing.T) {
 
 				// Retrieve the original round from the DB to compare
 				// Assumed deps.DB.GetUpcomingRounds returns []*roundtypes.Round based on observed compiler error
-				rounds, err := deps.DB.GetUpcomingRounds(ctx)
+				rounds, err := deps.DB.GetUpcomingRounds(ctx, "test-guild")
 				if err != nil {
 					t.Fatalf("Failed to get rounds from DB for validation: %v", err)
 				}
@@ -242,7 +242,7 @@ func TestGetRound(t *testing.T) {
 				roundIDToFetch = tt.roundIDToFetch
 			}
 
-			result, err := deps.Service.GetRound(deps.Ctx, roundIDToFetch)
+			result, err := deps.Service.GetRound(deps.Ctx, "test-guild", roundIDToFetch)
 
 			if tt.expectedError {
 				if err == nil {

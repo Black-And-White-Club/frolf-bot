@@ -18,7 +18,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 		s.logger.InfoContext(ctx, "Attempting to update round state to finalized",
 			attr.StringUUID("round_id", payload.RoundID.String()),
 		)
-		if err := s.RoundDB.UpdateRoundState(ctx, payload.RoundID, rounddbState); err != nil {
+		if err := s.RoundDB.UpdateRoundState(ctx, payload.GuildID, payload.RoundID, rounddbState); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "update_round_state")
 			failurePayload := roundevents.RoundFinalizationErrorPayload{
 				RoundID: payload.RoundID,
@@ -32,7 +32,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 		}
 
 		// Fetch the finalized round data
-		round, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.metrics.RecordDBOperationError(ctx, "get_round")
 			failurePayload := roundevents.RoundFinalizationErrorPayload{
@@ -63,7 +63,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Check if round exists first
-		_, err := s.RoundDB.GetRound(ctx, payload.RoundID)
+		_, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "Round not found for score processing",
 				attr.StringUUID("round_id", payload.RoundID.String()),

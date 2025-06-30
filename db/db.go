@@ -1,10 +1,12 @@
 package db
 
 import (
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	sharedinterface "github.com/Black-And-White-Club/frolf-bot/app/shared/interfaces"
 )
 
 const (
@@ -18,4 +20,6 @@ type Database interface {
 	rounddb.RoundDB
 	scoredb.ScoreDB
 	userdb.UserDB
+	guilddb.GuildDB
+	sharedinterface.GuildConfigReader
 }

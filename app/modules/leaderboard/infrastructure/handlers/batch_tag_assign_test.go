@@ -92,12 +92,13 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
-					gomock.Any(),          // context
-					testPayload,           // source - now passes the entire payload for intelligent determination
-					expectedRequests,      // requests
-					&testRequestingUserID, // requestingUserID
-					gomock.Any(),          // operationID - generated UUID
-					batchID,               // batchID - parsed from payload
+					gomock.Any(),            // context
+					sharedtypes.GuildID(""), /* or set a test guildID if available */
+					testPayload,             // source
+					expectedRequests,        // requests
+					&testRequestingUserID,   // requestingUserID
+					gomock.Any(),            // operationID
+					batchID,                 // batchID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.BatchTagAssignedPayload{
@@ -200,7 +201,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), /* or set a test guildID if available */
+					gomock.Any(),
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -239,7 +241,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), // or set a test guildID if available
+					gomock.Any(),            // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -304,7 +307,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), // or set a test guildID if available
+					gomock.Any(),            // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -360,7 +364,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), // or set a test guildID if available
+					gomock.Any(),            // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -417,7 +422,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), // or set a test guildID if available
+					gomock.Any(),            // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),
@@ -453,7 +459,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				batchID, _ := uuid.Parse(testBatchID)
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
-					gomock.Any(), // Allow any payload type for source determination
+					sharedtypes.GuildID(""), // or set a test guildID if available
+					gomock.Any(),            // Allow any payload type for source determination
 					expectedRequests,
 					&testRequestingUserID,
 					gomock.Any(),

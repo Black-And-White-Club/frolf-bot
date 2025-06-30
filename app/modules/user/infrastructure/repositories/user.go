@@ -38,36 +38,31 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 }
 
 // UpdateUserRole updates the role of an existing user within a transaction.
-func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, role sharedtypes.UserRoleEnum) error {
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback() // Rollback is safe to call even if tx is committed
+	defer tx.Rollback()
 
 	if !role.IsValid() {
 		return fmt.Errorf("invalid user role: %s", role)
 	}
 
-	// Execute the update query and get the result
 	result, err := tx.NewUpdate().
 		Model((*User)(nil)).
 		Set("role = ?", role).
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
 		Exec(ctx)
 	if err != nil {
-		// Handle errors during query execution
 		return fmt.Errorf("failed to execute update user role query: %w", err)
 	}
 
-	// Check the number of rows affected
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		// Handle error getting rows affected
 		return fmt.Errorf("failed to get rows affected after update: %w", err)
 	}
 
-	// If no rows were affected, the user was not found
 	if rowsAffected == 0 {
 		return ErrUserNotFound
 	}
@@ -79,30 +74,30 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.Dis
 	return nil
 }
 
-// GetUserByUserID retrieves a user by their Discord ID.
-func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID) (*User, error) {
+// GetUserByUserID retrieves a user by their Discord ID and Guild ID.
+func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*User, error) {
 	user := &User{}
-	err := db.DB.NewSelect().Model(user).Where("user_id = ?", userID).Scan(ctx)
+	err := db.DB.NewSelect().Model(user).Where("user_id = ? AND guild_id = ?", userID, guildID).Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrUserNotFound // Now returning a specific error
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
 	return user, nil
 }
 
-// GetUserRole retrieves the role of a user by their Discord ID.
-func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (sharedtypes.UserRoleEnum, error) {
+// GetUserRole retrieves the role of a user by their Discord ID and Guild ID.
+func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error) {
 	user := &User{}
 	err := db.DB.NewSelect().
 		Model(user).
 		Column("role").
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
 		Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", ErrUserNotFound // Now returning a specific error
+			return "", ErrUserNotFound
 		}
 		return "", err
 	}

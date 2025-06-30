@@ -25,7 +25,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 				attr.String("discord_message_id", scheduledPayload.EventMessageID),
 			)
 
-			result, err := h.roundService.ScheduleRoundEvents(ctx, *scheduledPayload, scheduledPayload.EventMessageID)
+			result, err := h.roundService.ScheduleRoundEvents(ctx, scheduledPayload.GuildID, *scheduledPayload, scheduledPayload.EventMessageID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed during ScheduleRoundEvents service call",
 					attr.CorrelationIDFromMsg(msg),

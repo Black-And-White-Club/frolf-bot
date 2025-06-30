@@ -42,9 +42,10 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 				return nil, fmt.Errorf("invalid batch ID format: %w", err)
 			}
 
-			// Call service - let service determine the appropriate source
+			// Call service - propagate guildID
 			result, err := h.leaderboardService.ProcessTagAssignments(
 				ctx,
+				sharedtypes.GuildID(batchPayload.GuildID), // Pass guildID explicitly, cast to correct type
 				batchPayload, // Pass the entire payload for source determination
 				assignments,
 				&batchPayload.RequestingUserID,

@@ -19,20 +19,21 @@ import (
 func TestGetUser(t *testing.T) {
 	tests := []struct {
 		name             string
-		setupFn          func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID)
-		validateFn       func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error)
+		setupFn          func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID)
+		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error)
 		expectedSuccess  bool
 		expectedErrorMsg string
 		skipCleanup      bool
 	}{
 		{
 			name: "Success - User exists",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("12345678901234567")
 				tag := tagPtr(42)
 
 				// Create a user first
-				result, err := deps.Service.CreateUser(deps.Ctx, userID, tag)
+				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag)
 				if err != nil {
 					t.Fatalf("Failed to create user for test setup: %v", err)
 				}
@@ -40,9 +41,9 @@ func TestGetUser(t *testing.T) {
 					t.Fatalf("User creation failed in setup: %+v", result.Failure)
 				}
 
-				return deps.Ctx, userID
+				return deps.Ctx, guildID, userID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err != nil {
 					t.Fatalf("GetUser returned unexpected error: %v", err)
 				}
@@ -68,7 +69,7 @@ func TestGetUser(t *testing.T) {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.User.UserID)
 				}
 
-				expectedRole := sharedtypes.UserRoleEnum("Rattler")
+				expectedRole := sharedtypes.UserRoleEnum("User")
 				if successPayload.User.Role != expectedRole {
 					t.Errorf("Success payload Role mismatch: expected %q, got %q", expectedRole, successPayload.User.Role)
 				}
@@ -78,14 +79,15 @@ func TestGetUser(t *testing.T) {
 		},
 		{
 			name: "Failure - User does not exist",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("99999999999999999")
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database tables during setup: %v", err)
 				}
-				return deps.Ctx, userID
+				return deps.Ctx, guildID, userID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected nil standard error for non-existent user, got: %v", err)
 				}
@@ -115,10 +117,11 @@ func TestGetUser(t *testing.T) {
 		},
 		{
 			name: "Failure - Empty Discord ID",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
-				return deps.Ctx, sharedtypes.DiscordID("")
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
+				return deps.Ctx, guildID, sharedtypes.DiscordID("")
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err == nil {
 					t.Fatal("Expected error for empty Discord ID, got nil")
 				}
@@ -141,6 +144,7 @@ func TestGetUser(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var currentDeps TestDeps
 			var ctx context.Context
+			var guildID sharedtypes.GuildID
 			var userID sharedtypes.DiscordID
 			var result userservice.UserOperationResult
 			var err error
@@ -152,7 +156,7 @@ func TestGetUser(t *testing.T) {
 					t.Fatalf("Failed to clean database before test %q: %v", tc.name, err)
 				}
 
-				ctx, userID = tc.setupFn(t, currentDeps)
+				ctx, guildID, userID = tc.setupFn(t, currentDeps)
 			} else {
 				currentDeps = TestDeps{
 					Ctx: context.Background(),
@@ -164,12 +168,12 @@ func TestGetUser(t *testing.T) {
 						noop.NewTracerProvider().Tracer("test"),
 					),
 				}
-				ctx, userID = tc.setupFn(t, currentDeps)
+				ctx, guildID, userID = tc.setupFn(t, currentDeps)
 			}
 
-			result, err = currentDeps.Service.GetUser(ctx, userID)
+			result, err = currentDeps.Service.GetUser(ctx, guildID, userID)
 
-			tc.validateFn(t, currentDeps, userID, result, err)
+			tc.validateFn(t, currentDeps, guildID, userID, result, err)
 		})
 	}
 }
@@ -177,27 +181,28 @@ func TestGetUser(t *testing.T) {
 func TestGetUserRole(t *testing.T) {
 	tests := []struct {
 		name             string
-		setupFn          func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID)
-		validateFn       func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error)
+		setupFn          func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID)
+		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error)
 		expectedSuccess  bool
 		expectedErrorMsg string
 		skipCleanup      bool
 	}{
 		{
 			name: "Success - Valid user role",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("12345678901234567")
 				tag := tagPtr(42)
-				result, err := deps.Service.CreateUser(deps.Ctx, userID, tag)
+				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag)
 				if err != nil {
 					t.Fatalf("Failed to create user for test setup: %v", err)
 				}
 				if result.Success == nil {
 					t.Fatalf("User creation failed in setup: %+v", result.Failure)
 				}
-				return deps.Ctx, userID
+				return deps.Ctx, guildID, userID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err != nil {
 					t.Fatalf("GetUserRole returned unexpected error: %v", err)
 				}
@@ -217,7 +222,7 @@ func TestGetUserRole(t *testing.T) {
 				if successPayload.UserID != userID {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
 				}
-				expectedRole := sharedtypes.UserRoleEnum("Rattler")
+				expectedRole := sharedtypes.UserRoleEnum("User")
 				if successPayload.Role != expectedRole {
 					t.Errorf("Success payload Role mismatch: expected %q, got %q", expectedRole, successPayload.Role)
 				}
@@ -227,14 +232,15 @@ func TestGetUserRole(t *testing.T) {
 		},
 		{
 			name: "Failure - User does not exist",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("99999999999999999")
 				if err := testutils.CleanUserIntegrationTables(deps.Ctx, deps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database tables during setup: %v", err)
 				}
-				return deps.Ctx, userID
+				return deps.Ctx, guildID, userID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err != nil { // This line is failing
 					t.Fatalf("Expected nil standard error for non-existent user, got: %v", err) // This message will now show
 				}
@@ -264,11 +270,12 @@ func TestGetUserRole(t *testing.T) {
 		},
 		{
 			name: "Failure - Nil context",
-			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID) {
+			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID, sharedtypes.DiscordID) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("12345678901234567")
-				return nil, userID
+				return nil, guildID, userID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
 				if err == nil {
 					t.Fatal("Expected error for nil context, got nil")
 				}
@@ -282,6 +289,7 @@ func TestGetUserRole(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var currentDeps TestDeps
 			var ctx context.Context
+			var guildID sharedtypes.GuildID
 			var userID sharedtypes.DiscordID
 			var result userservice.UserOperationResult
 			var err error
@@ -291,7 +299,7 @@ func TestGetUserRole(t *testing.T) {
 				if err := testutils.CleanUserIntegrationTables(currentDeps.Ctx, currentDeps.BunDB); err != nil {
 					t.Fatalf("Failed to clean database before test %q: %v", tc.name, err)
 				}
-				ctx, userID = tc.setupFn(t, currentDeps)
+				ctx, guildID, userID = tc.setupFn(t, currentDeps)
 			} else {
 				currentDeps = TestDeps{
 					Ctx: context.Background(),
@@ -303,12 +311,12 @@ func TestGetUserRole(t *testing.T) {
 						noop.NewTracerProvider().Tracer("test"),
 					),
 				}
-				ctx, userID = tc.setupFn(t, currentDeps)
+				ctx, guildID, userID = tc.setupFn(t, currentDeps)
 			}
 
-			result, err = currentDeps.Service.GetUserRole(ctx, userID)
+			result, err = currentDeps.Service.GetUserRole(ctx, guildID, userID)
 
-			tc.validateFn(t, currentDeps, userID, result, err)
+			tc.validateFn(t, currentDeps, guildID, userID, result, err)
 		})
 	}
 }

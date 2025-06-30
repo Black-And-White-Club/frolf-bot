@@ -24,9 +24,11 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(1)
 
 	testPayload := &userevents.TagAvailablePayload{
+		GuildID:   testGuildID,
 		UserID:    testUserID,
 		TagNumber: testTagNumber,
 	}
@@ -61,9 +63,9 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
 						Error:   nil,
 					},
@@ -72,7 +74,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+					&userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 					userevents.UserCreated,
 				).Return(testMsg, nil)
 			},
@@ -90,10 +92,11 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
 					userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayload{
+							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: &testTagNumber,
 							Reason:    "failed",
@@ -105,7 +108,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreationFailedPayload{UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
+					&userevents.UserCreationFailedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
 					userevents.UserCreationFailed,
 				).Return(testMsg, nil)
 			},
@@ -133,7 +136,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
 					userservice.UserOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
@@ -152,16 +155,16 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber},
+						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
 						Error:   nil,
 					},
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayload{UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreated).Return(nil, fmt.Errorf("failed to create success message"))
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreated).Return(nil, fmt.Errorf("failed to create success message"))
 			},
 			msg:            testMsg,
 			wantErr:        true,
@@ -177,7 +180,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
 					userservice.UserOperationResult{},
 					nil,
 				)
@@ -225,9 +228,11 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	defer ctrl.Finish()
 
 	testUserID := sharedtypes.DiscordID("98765432109876543")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(2)
 
 	testPayload := &userevents.TagUnavailablePayload{
+		GuildID:   testGuildID,
 		UserID:    testUserID,
 		TagNumber: testTagNumber,
 	}
@@ -263,7 +268,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 				)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreationFailedPayload{UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
+					&userevents.UserCreationFailedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
 					userevents.UserCreationFailed,
 				).Return(testMsg, nil)
 			},

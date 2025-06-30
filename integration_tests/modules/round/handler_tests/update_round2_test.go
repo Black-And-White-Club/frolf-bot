@@ -34,7 +34,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				})
 
 				// Get original round for comparison
-				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get original round: %v", err)
 				}
@@ -66,7 +66,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
 
-				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get original round: %v", err)
 				}

@@ -18,6 +18,7 @@ type Leaderboard struct {
 	IsActive        bool                             `bun:"is_active,notnull"`
 	UpdateSource    sharedtypes.ServiceUpdateSource  `bun:"update_source"`
 	UpdateID        sharedtypes.RoundID              `bun:"update_id,type:uuid"`
+	GuildID         sharedtypes.GuildID              `bun:"guild_id,notnull"`
 }
 
 // BeforeInsert is a hook that generates a UUID for UpdateID before inserting a new record

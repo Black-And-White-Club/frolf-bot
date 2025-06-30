@@ -23,7 +23,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 			)
 
 			// Call the service function to handle the event
-			result, err := h.roundService.GetRound(ctx, getRoundRequestPayload.RoundID)
+			result, err := h.roundService.GetRound(ctx, getRoundRequestPayload.GuildID, getRoundRequestPayload.RoundID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle GetRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),

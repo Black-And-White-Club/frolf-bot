@@ -58,6 +58,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID argument required
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.GetLeaderboardResponsePayload{
@@ -103,6 +104,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
@@ -125,6 +127,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &leaderboardevents.GetLeaderboardResponsePayload{
@@ -161,6 +164,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Failure: &leaderboardevents.GetLeaderboardFailedPayload{
@@ -197,6 +201,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Failure: &leaderboardevents.GetLeaderboardFailedPayload{
@@ -223,6 +228,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetLeaderboard(
 					gomock.Any(),
+					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					nil,
@@ -318,6 +324,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				testTagNumber := sharedtypes.TagNumber(5) // Example found tag
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -362,6 +369,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a successful result (Tag Not Found)
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -398,7 +406,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to return an error
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
 				// No service or CreateResultMessage calls expected
-				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any()).Times(0)
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 			},
 			msg:            invalidMsg, // Use an invalid message
@@ -420,6 +428,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a system error
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{}, // No Success, Failure, or Error fields set
@@ -449,6 +458,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				testTagNumber := sharedtypes.TagNumber(5)
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -494,6 +504,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a successful result (Tag Not Found)
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -539,6 +550,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a business failure
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -581,6 +593,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a business failure
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -625,6 +638,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				serviceErr := fmt.Errorf("database connection failed")
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -664,6 +678,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				serviceErr := fmt.Errorf("database connection failed")
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -703,6 +718,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock the service call to return a result with no fields set
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{}, // All result fields are nil
@@ -723,7 +739,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to return an error indicating wrong type
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected RoundTagLookupRequestPayload"))
 				// No service or CreateResultMessage calls expected
-				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any()).Times(0)
+				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 			},
 			msg:            invalidMsg, // Use an invalid message
@@ -818,7 +834,8 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				// Update: Now expecting the service to be called with just the UserID
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
-					testUserID, // Just passing the UserID rather than payload struct
+					gomock.Any(), // guildID
+					testUserID,   // Just passing the UserID rather than payload struct
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
 						Success: &sharedevents.DiscordTagLookupResultPayload{
@@ -861,6 +878,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -914,6 +932,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
@@ -937,6 +956,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -980,6 +1000,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -1019,6 +1040,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -1053,6 +1075,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().GetTagByUserID(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},

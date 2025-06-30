@@ -56,7 +56,7 @@ func TestParticipantRemoval(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -125,7 +125,7 @@ func TestParticipantRemoval(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -200,7 +200,7 @@ func TestParticipantRemoval(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -297,7 +297,7 @@ func TestParticipantRemoval(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
@@ -353,7 +353,7 @@ func TestParticipantRemoval(t *testing.T) {
 					Title:     "Default Round",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(deps.Ctx, &dummyRound)
+				err := deps.DB.CreateRound(deps.Ctx, "test-guild", &dummyRound)
 				if err != nil {
 					t.Fatalf("Failed to create default round for test setup: %v", err)
 				}

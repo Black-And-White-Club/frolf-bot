@@ -194,7 +194,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				},
 			}
 
-			result, err := s.ScheduleRoundEvents(ctx, payload, tt.discordMessageID)
+			guildID := sharedtypes.GuildID("test-guild")
+			result, err := s.ScheduleRoundEvents(ctx, guildID, payload, tt.discordMessageID)
 
 			// Validate error
 			if tt.expectedError != nil {

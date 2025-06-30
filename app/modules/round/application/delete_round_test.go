@@ -43,33 +43,31 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 		{
 			name: "valid round delete request",
 			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
-				// ValidateRoundDeleteRequest calls GetRound to check authorization
-				mockDB.EXPECT().GetRound(gomock.Any(), gomock.Any()).Return(&roundtypes.Round{
-					ID:        sharedtypes.RoundID(uuid.New()),
+				guildID := sharedtypes.GuildID("guild-123")
+				roundID := sharedtypes.RoundID(uuid.MustParse("b236f541-e988-41b4-ab81-0e906f2ac270"))
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, roundID).Return(&roundtypes.Round{
+					ID:        roundID,
+					GuildID:   guildID,
 					CreatedBy: "Test User",
 				}, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No specific validator mocks needed for validation
 			},
-			payload: func() roundevents.RoundDeleteRequestPayload {
-				roundID := sharedtypes.RoundID(uuid.New())
-				return roundevents.RoundDeleteRequestPayload{
-					RoundID:              roundID,
-					RequestingUserUserID: "Test User",
-				}
-			}(),
-			expectedResult: func() RoundOperationResult {
-				roundID := sharedtypes.RoundID(uuid.New()) // This will be overwritten in the test
-				return RoundOperationResult{
-					Success: &roundevents.RoundDeleteValidatedPayload{
-						RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
-							RoundID:              roundID,
-							RequestingUserUserID: "Test User",
-						},
+			payload: roundevents.RoundDeleteRequestPayload{
+				GuildID:              sharedtypes.GuildID("guild-123"),
+				RoundID:              sharedtypes.RoundID(uuid.MustParse("b236f541-e988-41b4-ab81-0e906f2ac270")),
+				RequestingUserUserID: "Test User",
+			},
+			expectedResult: RoundOperationResult{
+				Success: &roundevents.RoundDeleteValidatedPayload{
+					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
+						GuildID:              sharedtypes.GuildID("guild-123"),
+						RoundID:              sharedtypes.RoundID(uuid.MustParse("b236f541-e988-41b4-ab81-0e906f2ac270")),
+						RequestingUserUserID: "Test User",
 					},
-				}
-			}(),
+				},
+			},
 			expectedError: nil,
 		},
 		{
@@ -80,12 +78,14 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
 			payload: roundevents.RoundDeleteRequestPayload{
+				GuildID:              sharedtypes.GuildID("guild-123"),
 				RoundID:              sharedtypes.RoundID(uuid.Nil), // Use uuid.Nil for empty UUID
 				RequestingUserUserID: "Test User",
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundDeleteErrorPayload{
 					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						GuildID:              sharedtypes.GuildID("guild-123"),
 						RoundID:              sharedtypes.RoundID(uuid.Nil),
 						RequestingUserUserID: "Test User",
 					},
@@ -102,17 +102,21 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
 			payload: func() roundevents.RoundDeleteRequestPayload {
+				guildID := sharedtypes.GuildID("guild-123")
 				roundID := sharedtypes.RoundID(uuid.New())
 				return roundevents.RoundDeleteRequestPayload{
+					GuildID:              guildID,
 					RoundID:              roundID,
 					RequestingUserUserID: "",
 				}
 			}(),
 			expectedResult: func() RoundOperationResult {
+				guildID := sharedtypes.GuildID("guild-123")
 				roundID := sharedtypes.RoundID(uuid.New()) // This will be overwritten in the test
 				return RoundOperationResult{
 					Failure: &roundevents.RoundDeleteErrorPayload{
 						RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+							GuildID:              guildID,
 							RoundID:              roundID,
 							RequestingUserUserID: "",
 						},
@@ -215,21 +219,25 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		{
 			name: "delete round successfully",
 			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				guildID := sharedtypes.GuildID("guild-123")
 				// Mock GetRound call to verify round exists
-				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{
+				mockDB.EXPECT().GetRound(ctx, guildID, gomock.Eq(id)).Return(&roundtypes.Round{
 					ID:             id,
+					GuildID:        guildID,
 					EventMessageID: "test-event-message-id",
 				}, nil)
-				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(nil)
+				mockDB.EXPECT().DeleteRound(ctx, guildID, gomock.Eq(id)).Return(nil)
 			},
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				mockQueue.EXPECT().CancelRoundJobs(ctx, gomock.Eq(id)).Return(nil)
 			},
 			payload: roundevents.RoundDeleteAuthorizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundDeletedPayload{
+					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        id,
 					EventMessageID: "test-event-message-id",
 				},
@@ -239,14 +247,16 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		{
 			name: "delete round fails - delete round error",
 			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				guildID := sharedtypes.GuildID("guild-123")
 				// Mock GetRound call to verify round exists
-				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{ID: id}, nil)
-				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(errors.New("delete round error"))
+				mockDB.EXPECT().GetRound(ctx, guildID, gomock.Eq(id)).Return(&roundtypes.Round{ID: id, GuildID: guildID}, nil)
+				mockDB.EXPECT().DeleteRound(ctx, guildID, gomock.Eq(id)).Return(errors.New("delete round error"))
 			},
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				// No queue calls expected when DB delete fails
 			},
 			payload: roundevents.RoundDeleteAuthorizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
@@ -260,21 +270,25 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		{
 			name: "delete round succeeds despite cancel queue jobs error",
 			mockDBSetup: func(mockDB *rounddbmocks.MockRoundDB) {
+				guildID := sharedtypes.GuildID("guild-123")
 				// Mock GetRound call to verify round exists
-				mockDB.EXPECT().GetRound(ctx, gomock.Eq(id)).Return(&roundtypes.Round{
+				mockDB.EXPECT().GetRound(ctx, guildID, gomock.Eq(id)).Return(&roundtypes.Round{
 					ID:             id,
+					GuildID:        guildID,
 					EventMessageID: "test-event-message-id",
 				}, nil)
-				mockDB.EXPECT().DeleteRound(ctx, gomock.Eq(id)).Return(nil)
+				mockDB.EXPECT().DeleteRound(ctx, guildID, gomock.Eq(id)).Return(nil)
 			},
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				mockQueue.EXPECT().CancelRoundJobs(ctx, gomock.Eq(id)).Return(errors.New("cancel queue jobs error"))
 			},
 			payload: roundevents.RoundDeleteAuthorizedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundDeletedPayload{
+					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        id,
 					EventMessageID: "test-event-message-id",
 				},
