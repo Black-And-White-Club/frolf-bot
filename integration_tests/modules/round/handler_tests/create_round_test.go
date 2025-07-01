@@ -112,20 +112,20 @@ func expectValidationFailure(t *testing.T, helper *testutils.RoundTestHelper, or
 }
 
 // expectNoMessages validates that no messages were published (for JSON errors)
-func expectNoMessages(t *testing.T, helper *testutils.RoundTestHelper, timeout time.Duration) {
-	t.Helper()
-	time.Sleep(timeout)
+// func expectNoMessages(t *testing.T, helper *testutils.RoundTestHelper, timeout time.Duration) {
+// 	t.Helper()
+// 	time.Sleep(timeout)
 
-	createdMsgs := helper.GetRoundCreatedMessages()
-	if len(createdMsgs) > 0 {
-		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreated, len(createdMsgs))
-	}
+// 	createdMsgs := helper.GetRoundCreatedMessages()
+// 	if len(createdMsgs) > 0 {
+// 		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreated, len(createdMsgs))
+// 	}
 
-	creationFailedMsgs := helper.GetRoundCreationFailedMessages()
-	if len(creationFailedMsgs) > 0 {
-		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreationFailed, len(creationFailedMsgs))
-	}
-}
+// 	creationFailedMsgs := helper.GetRoundCreationFailedMessages()
+// 	if len(creationFailedMsgs) > 0 {
+// 		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreationFailed, len(creationFailedMsgs))
+// 	}
+// }
 
 // TestHandleCreateRoundRequest runs integration tests for the create round handler
 func TestHandleCreateRoundRequest(t *testing.T) {

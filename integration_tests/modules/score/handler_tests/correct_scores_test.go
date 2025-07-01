@@ -122,6 +122,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID,
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(-3),
@@ -158,6 +159,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID, // This RoundID does not have a score record
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(-1),
@@ -204,6 +206,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
 				payload := scoreevents.ScoreUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID,
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
 					Score:   sharedtypes.Score(99999), // Intentionally invalid score

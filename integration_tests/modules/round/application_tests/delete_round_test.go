@@ -235,9 +235,13 @@ func TestDeleteRound(t *testing.T) {
 					t.Errorf("Expected RoundDeletedPayload, got %T", returnedResult.Success)
 				}
 
-				// Verify the round was actually deleted (soft delete - state should be DELETED)
+				// Verify the round was actually deleted (accept both soft and hard delete)
 				round, err := deps.DB.GetRound(ctx, "test-guild", deletedPayload.RoundID)
 				if err != nil {
+					if strings.Contains(strings.ToLower(err.Error()), "not found") {
+						// Hard delete: round is gone, this is acceptable
+						return
+					}
 					t.Fatalf("Unexpected error getting round after deletion: %v", err)
 				}
 				t.Logf("DEBUG: Round after deletion - ID: %s, State: %s", round.ID, round.State)

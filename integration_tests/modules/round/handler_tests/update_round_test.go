@@ -102,12 +102,20 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 					ChannelID:   "test_channel_123",
 					MessageID:   "test_message_456",
 					Timezone:    &timezone,
+					GuildID:     "test-guild",
 					Title:       &newTitle,
 					Description: &newDesc,
 					Location:    &newLocation,
 				}
 
-				result := publishAndExpectRoundUpdateValidated(t, deps, deps.MessageCapture, payload)
+				publishRoundUpdateRequestMessage(t, deps, &payload)
+
+				if !waitForRoundUpdateValidatedFromHandler(deps.MessageCapture, 1) {
+					t.Fatalf("Expected round update validated message from %s", roundevents.RoundUpdated)
+				}
+
+				msgs := getRoundUpdateValidatedFromHandlerMessages(deps.MessageCapture)
+				result := validateRoundUpdateValidatedFromHandler(t, msgs[0])
 
 				// Validate all fields are set
 				if result.Round.Title != newTitle {
@@ -237,6 +245,7 @@ func createRoundUpdateRequestPayload(
 		ChannelID: "test_channel_123", // Required Discord field
 		MessageID: "test_message_456", // Required Discord field
 		Timezone:  &timezone,          // Required for time parsing
+		GuildID:   "test-guild",
 	}
 
 	// Set optional fields if provided
@@ -285,25 +294,7 @@ func publishRoundUpdateRequestMessage(t *testing.T, deps *RoundHandlerTestDeps, 
 func publishAndExpectRoundUpdateValidated(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.UpdateRoundRequestedPayload) *roundevents.RoundEntityUpdatedPayload {
 	publishRoundUpdateRequestMessage(t, deps, &payload)
 
-	// Debug: Log what messages are captured
-	t.Logf("DEBUG: Waiting for round.updated message...")
-
 	if !waitForRoundUpdateValidatedFromHandler(capture, 1) {
-		// Debug: Show what messages we actually received on key topics
-		updatedMsgs := capture.GetMessages(roundevents.RoundUpdated)
-		validatedMsgs := capture.GetMessages(roundevents.RoundUpdateValidated)
-		errorMsgs := capture.GetMessages(roundevents.RoundUpdateError)
-
-		t.Logf("DEBUG: RoundUpdated messages: %d", len(updatedMsgs))
-		t.Logf("DEBUG: RoundUpdateValidated messages: %d", len(validatedMsgs))
-		t.Logf("DEBUG: RoundUpdateError messages: %d", len(errorMsgs))
-
-		if len(errorMsgs) > 0 {
-			for i, msg := range errorMsgs {
-				t.Logf("DEBUG: Error message %d: %s", i, string(msg.Payload))
-			}
-		}
-
 		t.Fatalf("Expected round update validated message from %s", roundevents.RoundUpdated)
 	}
 
@@ -388,10 +379,6 @@ func validateRoundUpdateValidatedFromHandler(t *testing.T, msg *message.Message)
 	if result.Round.CreatedBy == "" {
 		t.Error("Expected Round.CreatedBy to be set")
 	}
-
-	// Log what we got for debugging
-	t.Logf("Round entity updated for round: %s, title: %s",
-		result.Round.ID, result.Round.Title)
 
 	return result
 }

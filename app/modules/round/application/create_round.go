@@ -119,6 +119,8 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 		}
 
 		roundTypes := payload.Round
+		// Ensure GuildID is always set on the DB model for multi-tenant safety
+		roundTypes.GuildID = guildID
 		location := ""
 		if roundTypes.Location != nil {
 			location = string(*roundTypes.Location)
@@ -139,6 +141,7 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 			CreatedBy:    roundTypes.CreatedBy,
 			State:        roundTypes.State,
 			Participants: []roundtypes.Participant{},
+			GuildID:      guildID,
 		}
 
 		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {

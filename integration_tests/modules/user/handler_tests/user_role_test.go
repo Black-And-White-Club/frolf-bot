@@ -43,6 +43,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create the payload for the role update request
 				payload := userevents.UserRoleUpdateRequestPayload{
+					GuildID:     "test-guild",
 					UserID:      "user-to-update-role",
 					Role:        sharedtypes.UserRoleAdmin,
 					RequesterID: "requester-123",
@@ -105,6 +106,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create payload with an invalid role string
 				payload := userevents.UserRoleUpdateRequestPayload{
+					GuildID:     "test-guild",
 					UserID:      "any-user-id",
 					Role:        "invalid-role", // This will cause the failure
 					RequesterID: "requester-456",
@@ -168,6 +170,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create payload for a non-existent user
 				payload := userevents.UserRoleUpdateRequestPayload{
+					GuildID:     "test-guild",
 					UserID:      "non-existent-user-for-role-update",
 					Role:        sharedtypes.UserRoleAdmin,
 					RequesterID: "requester-789",

@@ -59,12 +59,13 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard record.
+				// Insert an initial active leaderboard record with correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{}, // Start with empty data
 					IsActive:        true,
 					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
+					GuildID:         "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -205,7 +206,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard with some existing data.
+				// Insert an initial active leaderboard with some existing data and correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_initial", TagNumber: 99},
@@ -213,6 +214,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -373,6 +375,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -472,7 +475,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard with user_with_tag having tag 1
+				// Insert an initial active leaderboard with user_with_tag having tag 1 and correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_with_tag", TagNumber: 1},
@@ -480,6 +483,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {

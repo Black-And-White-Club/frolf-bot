@@ -25,7 +25,6 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
-
 			if userSignupPayload.TagNumber != nil {
 				tagNumber := *userSignupPayload.TagNumber
 
@@ -39,6 +38,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				defer span.End()
 
 				eventPayload := &userevents.TagAvailabilityCheckRequestedPayload{
+					GuildID:   guildID,
 					TagNumber: tagNumber,
 					UserID:    userID,
 				}

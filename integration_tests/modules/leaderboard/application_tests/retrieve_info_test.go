@@ -51,6 +51,7 @@ func TestGetLeaderboard(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -64,6 +65,7 @@ func TestGetLeaderboard(t *testing.T) {
 					IsActive:     false,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(inactiveLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -228,6 +230,7 @@ func TestGetLeaderboard(t *testing.T) {
 					IsActive:        true,
 					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
+					GuildID:         "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -359,6 +362,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -439,6 +443,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -516,6 +521,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -658,6 +664,7 @@ func TestGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -723,6 +730,7 @@ func TestGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -783,6 +791,7 @@ func TestGetTagByUserID(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err := db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {

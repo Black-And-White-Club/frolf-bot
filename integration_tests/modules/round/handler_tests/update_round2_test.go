@@ -269,6 +269,7 @@ func createRoundUpdateValidatedPayload(
 	requestPayload := roundevents.RoundUpdateRequestPayload{}
 	requestPayload.RoundID = roundID
 	requestPayload.UserID = userID
+	requestPayload.GuildID = "test-guild" // Always set for multi-tenant correctness
 
 	// Set optional fields if provided
 	if title != nil {
@@ -288,6 +289,7 @@ func createRoundUpdateValidatedPayload(
 	}
 
 	return roundevents.RoundUpdateValidatedPayload{
+		GuildID:                   "test-guild",
 		RoundUpdateRequestPayload: requestPayload,
 	}
 }

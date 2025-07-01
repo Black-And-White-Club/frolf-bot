@@ -10,7 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleGetUser Request handles the GetUser Request event.
+// HandleGetUserRequest Request handles the GetUser Request event.
 func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetUserRequest",
@@ -24,6 +24,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			h.logger.InfoContext(ctx, "Received GetUserRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 			)
 
 			result, err := h.userService.GetUser(ctx, guildID, userID)

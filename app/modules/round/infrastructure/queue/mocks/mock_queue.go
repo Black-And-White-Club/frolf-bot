@@ -160,31 +160,31 @@ func (mr *MockQueueServiceMockRecorder) HealthCheck(ctx any) *gomock.Call {
 }
 
 // ScheduleRoundReminder mocks base method.
-func (m *MockQueueService) ScheduleRoundReminder(ctx context.Context, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error {
+func (m *MockQueueService) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScheduleRoundReminder", ctx, roundID, reminderTime, payload)
+	ret := m.ctrl.Call(m, "ScheduleRoundReminder", ctx, guildID, roundID, reminderTime, payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ScheduleRoundReminder indicates an expected call of ScheduleRoundReminder.
-func (mr *MockQueueServiceMockRecorder) ScheduleRoundReminder(ctx, roundID, reminderTime, payload any) *gomock.Call {
+func (mr *MockQueueServiceMockRecorder) ScheduleRoundReminder(ctx, guildID, roundID, reminderTime, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundReminder", reflect.TypeOf((*MockQueueService)(nil).ScheduleRoundReminder), ctx, roundID, reminderTime, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundReminder", reflect.TypeOf((*MockQueueService)(nil).ScheduleRoundReminder), ctx, guildID, roundID, reminderTime, payload)
 }
 
 // ScheduleRoundStart mocks base method.
-func (m *MockQueueService) ScheduleRoundStart(ctx context.Context, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error {
+func (m *MockQueueService) ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScheduleRoundStart", ctx, roundID, startTime, payload)
+	ret := m.ctrl.Call(m, "ScheduleRoundStart", ctx, guildID, roundID, startTime, payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ScheduleRoundStart indicates an expected call of ScheduleRoundStart.
-func (mr *MockQueueServiceMockRecorder) ScheduleRoundStart(ctx, roundID, startTime, payload any) *gomock.Call {
+func (mr *MockQueueServiceMockRecorder) ScheduleRoundStart(ctx, guildID, roundID, startTime, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundStart", reflect.TypeOf((*MockQueueService)(nil).ScheduleRoundStart), ctx, roundID, startTime, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleRoundStart", reflect.TypeOf((*MockQueueService)(nil).ScheduleRoundStart), ctx, guildID, roundID, startTime, payload)
 }
 
 // Start mocks base method.

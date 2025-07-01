@@ -16,11 +16,6 @@ func init() {
 			return err
 		}
 
-		// Insert initial leaderboard data using built-in UUID function
-		if _, err := db.Exec(`INSERT INTO leaderboards (leaderboard_data, is_active, update_id) VALUES ('[]', true, gen_random_uuid())`); err != nil {
-			return err
-		}
-
 		fmt.Println("Leaderboard table created successfully!")
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {

@@ -28,6 +28,7 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, guildID sharedtypes.Guild
 
 		return UserOperationResult{
 			Success: &userevents.GetUserResponsePayload{
+				GuildID: guildID,
 				User: &usertypes.UserData{
 					ID:     user.ID,
 					UserID: user.UserID,
@@ -47,8 +48,9 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, guildID sharedtypes.Guild
 			return UserOperationResult{
 				Success: nil,
 				Failure: &userevents.GetUserFailedPayload{
-					UserID: userID,
-					Reason: "user not found",
+					GuildID: guildID,
+					UserID:  userID,
+					Reason:  "user not found",
 				},
 				Error: nil,
 			}, nil
@@ -64,8 +66,9 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, guildID sharedtypes.Guild
 		return UserOperationResult{
 			Success: nil,
 			Failure: &userevents.GetUserFailedPayload{
-				UserID: userID,
-				Reason: "failed to retrieve user from database",
+				GuildID: guildID,
+				UserID:  userID,
+				Reason:  "failed to retrieve user from database",
 			},
 			Error: err,
 		}, err
@@ -92,8 +95,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 
 		return UserOperationResult{
 			Success: &userevents.GetUserRoleResponsePayload{
-				UserID: userID,
-				Role:   role,
+				GuildID: guildID,
+				UserID:  userID,
+				Role:    role,
 			},
 		}, nil
 	}
@@ -110,8 +114,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 			return UserOperationResult{
 				Success: nil,
 				Failure: &userevents.GetUserRoleFailedPayload{
-					UserID: userID,
-					Reason: "user not found",
+					GuildID: guildID,
+					UserID:  userID,
+					Reason:  "user not found",
 				},
 				Error: nil,
 			}, nil
@@ -127,8 +132,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 		return UserOperationResult{
 			Success: nil,
 			Failure: &userevents.GetUserRoleFailedPayload{
-				UserID: userID,
-				Reason: "failed to retrieve user role from database",
+				GuildID: guildID,
+				UserID:  userID,
+				Reason:  "failed to retrieve user role from database",
 			},
 			Error: err,
 		}, err
@@ -142,8 +148,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 		internalErr := errors.New("internal service error: unexpected nil success payload")
 		return UserOperationResult{
 			Failure: &userevents.GetUserRoleFailedPayload{
-				UserID: userID,
-				Reason: "internal service error",
+				GuildID: guildID,
+				UserID:  userID,
+				Reason:  "internal service error",
 			},
 			Error: internalErr,
 		}, internalErr
@@ -158,8 +165,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 		internalErr := errors.New("internal service error: unexpected success payload type")
 		return UserOperationResult{
 			Failure: &userevents.GetUserRoleFailedPayload{
-				UserID: userID,
-				Reason: "internal service error",
+				GuildID: guildID,
+				UserID:  userID,
+				Reason:  "internal service error",
 			},
 			Error: internalErr,
 		}, internalErr
@@ -176,8 +184,9 @@ func (s *UserServiceImpl) GetUserRole(ctx context.Context, guildID sharedtypes.G
 		return UserOperationResult{
 			Success: nil,
 			Failure: &userevents.GetUserRoleFailedPayload{
-				UserID: userID,
-				Reason: "user found but has invalid role",
+				GuildID: guildID,
+				UserID:  userID,
+				Reason:  "user found but has invalid role",
 			},
 			Error: nil,
 		}, nil

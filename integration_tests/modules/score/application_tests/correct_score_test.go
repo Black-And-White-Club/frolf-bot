@@ -69,7 +69,7 @@ func TestCorrectScore(t *testing.T) {
 			expectFailurePayload: true,
 			// Dynamically generate the expected error message
 			expectedFailureError: func(roundID sharedtypes.RoundID) string {
-				return fmt.Sprintf("score record not found for round %s", roundID)
+				return fmt.Sprintf("score record not found for round %s (guild test_guild)", roundID)
 			},
 		},
 	}

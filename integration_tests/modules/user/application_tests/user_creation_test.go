@@ -72,7 +72,7 @@ func TestCreateUser(t *testing.T) {
 					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.UserID)
 				}
 
-				expectedRole := sharedtypes.UserRoleEnum("Rattler")
+				expectedRole := sharedtypes.UserRoleEnum("User")
 				if retrievedUser.Role != expectedRole {
 					t.Errorf("Retrieved user Role mismatch: expected %q, got %q", expectedRole, retrievedUser.Role)
 				}

@@ -230,6 +230,7 @@ func createRoundStartedPayload(roundID sharedtypes.RoundID, title string, startT
 		Location:  location,
 		StartTime: sharedStartTime,
 		ChannelID: "test-channel-id",
+		GuildID:   "test-guild",
 	}
 }
 

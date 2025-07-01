@@ -20,7 +20,6 @@ func TestGetRound(t *testing.T) {
 	tests := []struct {
 		name                     string
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) sharedtypes.RoundID
-		roundIDToFetch           sharedtypes.RoundID
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
@@ -83,14 +82,14 @@ func TestGetRound(t *testing.T) {
 					},
 				}
 
+				round.GuildID = "test-guild"
 				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 				return round.ID
 			},
-			// Correctly convert uuid.Nil to sharedtypes.RoundID (which is a string alias)
-			roundIDToFetch:           sharedtypes.RoundID(uuid.Nil),
+			// roundIDToFetch removed; always use the ID returned by setupTestEnv
 			expectedError:            false,
 			expectedErrorMessagePart: "",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
@@ -204,7 +203,6 @@ func TestGetRound(t *testing.T) {
 				// No rounds are created for this test, as we want to test fetching a non-existent one.
 				return nonexistentRoundID
 			},
-			roundIDToFetch: nonexistentRoundID,
 			// Fix: The service returns nil error but uses Failure payload
 			expectedError:            false,
 			expectedErrorMessagePart: "",
@@ -238,10 +236,6 @@ func TestGetRound(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
 			roundIDToFetch := tt.setupTestEnv(deps.Ctx, deps)
-			if tt.roundIDToFetch != sharedtypes.RoundID(uuid.Nil) {
-				roundIDToFetch = tt.roundIDToFetch
-			}
-
 			result, err := deps.Service.GetRound(deps.Ctx, "test-guild", roundIDToFetch)
 
 			if tt.expectedError {

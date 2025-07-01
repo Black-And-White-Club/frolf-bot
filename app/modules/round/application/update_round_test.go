@@ -223,6 +223,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			payload: roundevents.RoundUpdateValidatedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -243,6 +244,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			payload: roundevents.RoundUpdateValidatedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -251,6 +253,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -265,6 +268,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			payload: roundevents.RoundUpdateValidatedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -273,6 +277,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -351,10 +356,10 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				}, nil)
 
 				// Expect reminder scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: RoundOperationResult{
 				Success: &roundevents.RoundScheduleUpdatePayload{

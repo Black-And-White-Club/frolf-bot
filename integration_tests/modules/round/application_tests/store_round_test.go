@@ -34,9 +34,10 @@ func TestStoreRound(t *testing.T) {
 				CreatedBy:    createdBy,
 				State:        roundtypes.RoundStateUpcoming,
 				Participants: []roundtypes.Participant{},
+				GuildID:      "test-guild",
 			},
 			DiscordChannelID: channelID,
-			DiscordGuildID:   "",
+			DiscordGuildID:   "test-guild",
 		}
 	}
 

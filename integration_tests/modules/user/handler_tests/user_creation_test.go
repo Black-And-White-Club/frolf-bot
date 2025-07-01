@@ -39,6 +39,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-notag-123")
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number
 				}
@@ -124,6 +125,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: &tagNumber,
 				}
@@ -219,6 +221,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-exists-789") // Same user ID as pre-created
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number, will attempt creation
 				}

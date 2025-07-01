@@ -32,16 +32,18 @@ func TestHandleGetUserRequest(t *testing.T) {
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Create a test user directly in the database for setup
 				userID := sharedtypes.DiscordID("test-get-user")
+				guildID := sharedtypes.GuildID("test-guild")
 				tagNum := sharedtypes.TagNumber(42)
-				err := testutils.InsertUser(t, env.DB, userID, sharedtypes.UserRoleUser) // Assuming a default role
+
+				err := testutils.InsertUser(t, env.DB, userID, guildID, sharedtypes.UserRoleUser) // Assuming a default role
 				if err != nil {
 					t.Fatalf("Failed to insert pre-existing user via testutils.InsertUser: %v", err)
 				}
+
 				// Optionally, set the tag number if needed for the user data
 				// Note: InsertUser might not directly support tag number, adjust as per your testutils.InsertUser
 				// If your UserData model requires a tag number at creation, you might need to use UserService.CreateUser
 				// For this test, we'll assume InsertUser is sufficient for existence.
-				guildID := sharedtypes.GuildID("test-guild")
 				_, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tagNum)
 				if createErr != nil {
 					log.Printf("Warning: Could not create user with tag number in setup, assuming user exists: %v", createErr)
@@ -52,7 +54,8 @@ func TestHandleGetUserRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("test-get-user")
 				payload := userevents.GetUserRequestPayload{
-					UserID: userID,
+					GuildID: "test-guild",
+					UserID:  userID,
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -100,7 +103,8 @@ func TestHandleGetUserRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("non-existent-user")
 				payload := userevents.GetUserRequestPayload{
-					UserID: userID,
+					GuildID: "test-guild",
+					UserID:  userID,
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -208,7 +212,8 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("test-role-user")
 				payload := userevents.GetUserRoleRequestPayload{
-					UserID: userID,
+					GuildID: "test-guild",
+					UserID:  userID,
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -256,7 +261,8 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("non-existent-role-user")
 				payload := userevents.GetUserRoleRequestPayload{
-					UserID: userID,
+					GuildID: "test-guild",
+					UserID:  userID,
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {

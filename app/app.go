@@ -15,6 +15,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/guild"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/score"
@@ -34,6 +35,7 @@ type App struct {
 	LeaderboardModule *leaderboard.Module
 	RoundModule       *round.Module
 	ScoreModule       *score.Module
+	GuildModule       *guild.Module
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
 	Helpers           utils.Helpers
@@ -130,6 +132,13 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
 	fmt.Println("DEBUG: Round module initialized successfully")
+
+	fmt.Println("DEBUG: Initializing guild module...")
+	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize guild module", attr.Error(err))
+		return fmt.Errorf("failed to initialize guild module: %w", err)
+	}
+	fmt.Println("DEBUG: Guild module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing score module...")
 	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
@@ -237,6 +246,9 @@ func (app *App) Close() error {
 	}
 	if app.RoundModule != nil {
 		app.RoundModule.Close()
+	}
+	if app.GuildModule != nil {
+		app.GuildModule.Close()
 	}
 	if app.ScoreModule != nil {
 		app.ScoreModule.Close()

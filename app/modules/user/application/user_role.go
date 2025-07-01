@@ -27,9 +27,9 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID 
 			)
 
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "validation_failed", newRole)
-
 			return UserOperationResult{
 				Failure: &userevents.UserRoleUpdateResultPayload{
+					GuildID: guildID,
 					UserID:  userID,
 					Role:    newRole, // Include the invalid role in the response
 					Success: false,
@@ -54,9 +54,9 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID 
 			}
 
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "database_error", newRole)
-
 			return UserOperationResult{
 				Failure: &userevents.UserRoleUpdateResultPayload{
+					GuildID: guildID,
 					UserID:  userID,
 					Role:    newRole,
 					Success: false,
@@ -76,6 +76,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID 
 
 		return UserOperationResult{
 			Success: &userevents.UserRoleUpdateResultPayload{
+				GuildID: guildID,
 				UserID:  userID,
 				Role:    newRole,
 				Success: true,

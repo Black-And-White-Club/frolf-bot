@@ -30,6 +30,7 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Round to be finalized",
 					State:     roundtypes.RoundStateInProgress,
 				})
+				roundForDBInsertion.GuildID = "test-guild"
 				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
@@ -37,17 +38,17 @@ func TestFinalizeRound(t *testing.T) {
 				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
+					GuildID:   "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				// Fixed: expecting pointer type
 				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
-					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizedPayload, got %T. Value: %#v", returnedResult.Success, returnedResult.Success)
 					return
 				}
 
@@ -147,24 +148,25 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Round for fetch failure test",
 					State:     roundtypes.RoundStateInProgress,
 				})
+				roundForDBInsertion.GuildID = "test-guild"
 				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				// Set up mock to simulate fetch failure after successful update
-				// This would require a mock DB implementation that can simulate partial failures
+				// In integration tests, we cannot simulate a fetch failure after update without a mock.
+				// This test expects normal operation and a successful result.
 				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
+					GuildID:   "test-guild",
 				}
 			},
-			expectedFailure: false, // This test assumes normal operation since we can't easily mock partial failure
+			expectedFailure: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// Fixed: expecting pointer type
 				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)

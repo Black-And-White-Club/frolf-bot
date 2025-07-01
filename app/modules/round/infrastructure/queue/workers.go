@@ -33,6 +33,7 @@ func NewRoundStartWorker(logger *slog.Logger, eventBus eventbus.EventBus, helper
 func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJob]) error {
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
+		attr.String("guild_id", string(job.Args.GuildID)),
 		attr.String("round_id", job.Args.RoundID),
 		attr.String("operation", "process_round_start_job"),
 		attr.String("job_kind", job.Kind),
@@ -78,6 +79,7 @@ func NewRoundReminderWorker(logger *slog.Logger, eventBus eventbus.EventBus, hel
 func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundReminderJob]) error {
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
+		attr.String("guild_id", string(job.Args.GuildID)),
 		attr.String("round_id", job.Args.RoundID),
 		attr.String("operation", "process_round_reminder_job"),
 		attr.String("job_kind", job.Kind),

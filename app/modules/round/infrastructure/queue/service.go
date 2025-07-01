@@ -29,9 +29,9 @@ type Metrics interface {
 // QueueService interface defines the contract for job scheduling operations
 type QueueService interface {
 	// ScheduleRoundStart schedules a round start job to be executed at the specified time
-	ScheduleRoundStart(ctx context.Context, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error
+	ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error
 	// ScheduleRoundReminder schedules a round reminder job to be executed at the specified time
-	ScheduleRoundReminder(ctx context.Context, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error
+	ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error
 	// CancelRoundJobs cancels all scheduled jobs for a specific round
 	CancelRoundJobs(ctx context.Context, roundID sharedtypes.RoundID) error
 	// GetScheduledJobs returns information about scheduled jobs for a round (for debugging)
@@ -174,7 +174,7 @@ func (s *Service) Stop(ctx context.Context) error {
 }
 
 // ScheduleRoundStart schedules a round start job to be executed at the specified time
-func (s *Service) ScheduleRoundStart(ctx context.Context, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error {
+func (s *Service) ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error {
 	start := time.Now()
 	s.metrics.RecordOperationAttempt(ctx, "schedule_round_start", "river")
 
@@ -198,6 +198,7 @@ func (s *Service) ScheduleRoundStart(ctx context.Context, roundID sharedtypes.Ro
 
 	// Create the job
 	job := RoundStartJob{
+		GuildID:   guildID,
 		RoundID:   roundID.String(),
 		RoundData: payload,
 	}
@@ -227,7 +228,7 @@ func (s *Service) ScheduleRoundStart(ctx context.Context, roundID sharedtypes.Ro
 }
 
 // ScheduleRoundReminder schedules a round reminder job to be executed at the specified time
-func (s *Service) ScheduleRoundReminder(ctx context.Context, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error {
+func (s *Service) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error {
 	start := time.Now()
 	s.metrics.RecordOperationAttempt(ctx, "schedule_round_reminder", "river")
 
@@ -252,6 +253,7 @@ func (s *Service) ScheduleRoundReminder(ctx context.Context, roundID sharedtypes
 
 	// Create the job
 	job := RoundReminderJob{
+		GuildID:   guildID,
 		RoundID:   roundID.String(),
 		RoundData: payload,
 	}

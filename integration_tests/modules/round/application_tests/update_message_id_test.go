@@ -41,6 +41,7 @@ func TestUpdateRoundMessageID(t *testing.T) {
 				})
 				roundForDBInsertion.EventMessageID = ""
 
+				roundForDBInsertion.GuildID = "test-guild"
 				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
@@ -108,6 +109,7 @@ func TestUpdateRoundMessageID(t *testing.T) {
 				})
 				roundForDBInsertion.EventMessageID = "old_message_id_abc"
 
+				roundForDBInsertion.GuildID = "test-guild"
 				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)

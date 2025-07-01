@@ -30,12 +30,12 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 
 	// Handle empty Discord ID
 	if userID == "" {
-		return createFailureResult(userID, tag, ErrInvalidDiscordID), ErrInvalidDiscordID
+		return createFailureResult(guildID, userID, tag, ErrInvalidDiscordID), ErrInvalidDiscordID
 	}
 
 	// Handle negative tag numbers
 	if tag != nil && *tag < 0 {
-		return createFailureResult(userID, tag, ErrNegativeTagNumber), ErrNegativeTagNumber
+		return createFailureResult(guildID, userID, tag, ErrNegativeTagNumber), ErrNegativeTagNumber
 	}
 
 	startTime := time.Now()
@@ -81,10 +81,10 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			}
 
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
-
 			// Return UserOperationResult with standardized failure
 			return UserOperationResult{
 				Failure: &userevents.UserCreationFailedPayload{
+					GuildID:   guildID,
 					UserID:    userID,
 					TagNumber: tag,
 					Reason:    domainErr.Error(),
@@ -98,6 +98,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 
 		return UserOperationResult{
 			Success: &userevents.UserCreatedPayload{
+				GuildID:   guildID,
 				UserID:    userID,
 				TagNumber: tag,
 			},
@@ -130,10 +131,11 @@ func translateDBError(err error) error {
 }
 
 // createFailureResult is a helper to create standardized failure results
-func createFailureResult(userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) UserOperationResult {
+func createFailureResult(guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) UserOperationResult {
 	return UserOperationResult{
 		Success: nil,
 		Failure: &userevents.UserCreationFailedPayload{
+			GuildID:   guildID,
 			UserID:    userID,
 			TagNumber: tag,
 			Reason:    err.Error(),

@@ -32,7 +32,7 @@ rollback-all:
 # Default to loading from .env file if DATABASE_URL is not set
 DB_URL ?= $(shell [ -f .env ] && grep '^DATABASE_URL=' .env | cut -d '=' -f2- | tr -d '"' || echo "")
 ifeq ($(DB_URL),)
-    $(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
+	$(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
 endif
 
 # Parse DATABASE_URL for psql components (for river-clean)
@@ -311,15 +311,15 @@ build-coverage:
 coverage-all: build-coverage
 	@echo "Running all tests with coverage across entire project..."
 	-mkdir -p $(REPORTS_DIR)
-    # Set environment variable for binary coverage
+	# Set environment variable for binary coverage
 	export GOCOVERDIR=$(REPORTS_DIR)/binary-coverage && \
 	mkdir -p $$GOCOVERDIR && \
 	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... && \
 	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
 	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-  	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/merged-coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-  	else \
-  		cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/merged-coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	else \
+		cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	fi
 	@echo ""
 	@echo "=========================================="
@@ -348,9 +348,9 @@ coverage-all-with-counts: build-coverage
 	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... -v && \
 	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
 	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-  	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	else \
-  	cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	fi
 	@echo ""
 	@echo "=========================================="
@@ -438,7 +438,12 @@ mocks-score:
 mocks-eventbus:
 	$(MOCKGEN) -source=../frolf-bot-shared/eventbus/eventbus.go -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
 
-mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score
+mocks-guild:
+	$(MOCKGEN) -source=./app/modules/guild/application/interface.go -destination=./app/modules/guild/application/mocks/mock_service.go -package=mocks
+	$(MOCKGEN) -source=./app/modules/guild/infrastructure/handlers/interface.go -destination=./app/modules/guild/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
+	$(MOCKGEN) -source=./app/modules/guild/infrastructure/repositories/interface.go -destination=./app/modules/guild/infrastructure/repositories/mocks/mock_db.go -package=mocks
+
+mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score mocks-guild
 
 build_version_ldflags := -X 'main.Version=$(shell git describe --tags --always)'
 

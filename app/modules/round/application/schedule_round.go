@@ -58,7 +58,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				EventMessageID: discordMessageID,
 			}
 
-			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
+			if err := s.QueueService.ScheduleRoundReminder(ctx, guildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule reminder job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
@@ -92,7 +92,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				StartTime: payload.StartTime,
 			}
 
-			if err := s.QueueService.ScheduleRoundStart(ctx, payload.RoundID, startTimeUTC, startPayload); err != nil {
+			if err := s.QueueService.ScheduleRoundStart(ctx, guildID, payload.RoundID, startTimeUTC, startPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule round start job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),

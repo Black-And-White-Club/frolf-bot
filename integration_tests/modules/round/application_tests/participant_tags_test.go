@@ -14,7 +14,6 @@ import (
 )
 
 // TestUpdateScheduledRoundsWithNewTags is the main test function for the service method.
-// TestUpdateScheduledRoundsWithNewTags is the main test function for the service method.
 func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -34,6 +33,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					Title:     "Upcoming Round 1",
 					State:     roundtypes.RoundStateUpcoming,
 				})
+				round1.GuildID = "test-guild"
+				round1.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round1.StartTime == nil || round1.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
@@ -63,6 +64,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					Title:     "Upcoming Round 2",
 					State:     roundtypes.RoundStateUpcoming,
 				})
+				round2.GuildID = "test-guild"
+				round2.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round2.StartTime == nil || round2.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(48 * time.Hour))
@@ -97,6 +100,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				newTag2 := sharedtypes.TagNumber(222)
 
 				return roundevents.ScheduledRoundTagUpdatePayload{
+					GuildID: "test-guild",
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"user1": &newTag1, // This user is in both rounds
 						"user2": &newTag2, // This user is only in round1
@@ -199,6 +203,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					Title:     "Upcoming Round",
 					State:     roundtypes.RoundStateUpcoming,
 				})
+				round.GuildID = "test-guild"
+				round.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round.StartTime == nil || round.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
@@ -222,6 +228,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				// Define tag changes for users not in any rounds
 				newTag := sharedtypes.TagNumber(999)
 				return roundevents.ScheduledRoundTagUpdatePayload{
+					GuildID: "test-guild",
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"nonexistent_user": &newTag,
 					},
@@ -264,6 +271,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					Title:     "Upcoming Round",
 					State:     roundtypes.RoundStateUpcoming,
 				})
+				round.GuildID = "test-guild"
+				round.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round.StartTime == nil || round.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
@@ -284,6 +293,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				}
 
 				return roundevents.ScheduledRoundTagUpdatePayload{
+					GuildID:     "test-guild",
 					ChangedTags: make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber),
 				}
 			},
@@ -324,6 +334,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					Title:     "Upcoming Round",
 					State:     roundtypes.RoundStateUpcoming,
 				})
+				round.GuildID = "test-guild"
+				round.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round.StartTime == nil || round.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
@@ -345,6 +357,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 
 				// Set tag to nil (removing the tag)
 				return roundevents.ScheduledRoundTagUpdatePayload{
+					GuildID: "test-guild",
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"user1": nil,
 					},

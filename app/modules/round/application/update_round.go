@@ -112,6 +112,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payloa
 
 		// Build the validated payload for the next step
 		validatedPayload := roundevents.RoundUpdateRequestPayload{
+			GuildID:   payload.GuildID, // Copy GuildID for multi-tenant correctness
 			RoundID:   payload.RoundID,
 			UserID:    payload.UserID,
 			StartTime: parsedStartTime, // Use parsed time (or nil if not provided)
@@ -194,7 +195,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 		)
 
 		// Update only the specified fields in the database - using the Round struct
-		updatedRound, err := s.RoundDB.UpdateRound(ctx, payload.GuildID, payload.RoundUpdateRequestPayload.RoundID, updateRound)
+		updatedRound, err := s.RoundDB.UpdateRound(ctx, payload.RoundUpdateRequestPayload.GuildID, payload.RoundUpdateRequestPayload.RoundID, updateRound)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round entity",
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
@@ -351,7 +352,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				EventMessageID: eventMessageID,
 			}
 
-			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
+			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.GuildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to reschedule reminder",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
@@ -391,7 +392,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 			StartTime: payload.StartTime,
 		}
 
-		if err := s.QueueService.ScheduleRoundStart(ctx, payload.RoundID, startTimeUTC, startPayload); err != nil {
+		if err := s.QueueService.ScheduleRoundStart(ctx, payload.GuildID, payload.RoundID, startTimeUTC, startPayload); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to reschedule round start",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),

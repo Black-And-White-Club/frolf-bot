@@ -32,6 +32,10 @@ func (h *RoundTestHelper) CreateRoundWithParticipants(t *testing.T, db bun.IDB, 
 		State:            roundtypes.RoundStateInProgress, // Default to in progress for score updates
 	}
 	roundData := generator.GenerateRoundWithConstraints(roundOptions)
+	// Ensure GuildID is always set for multi-tenant tests
+	roundData.GuildID = "test-guild"
+
+	// Defensive: Also set GuildID on DB model after conversion (in case of future changes)
 
 	// Create participants from the provided data
 	participants := make([]roundtypes.Participant, len(participantsData))
@@ -79,6 +83,7 @@ func (h *RoundTestHelper) CreateRoundWithParticipants(t *testing.T, db bun.IDB, 
 		State:          roundData.State,
 		Participants:   roundData.Participants,
 		EventMessageID: roundData.EventMessageID,
+		GuildID:        "test-guild", // Always set for multi-tenant tests
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
