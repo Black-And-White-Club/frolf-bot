@@ -106,6 +106,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 					"updated_at":   time.Now().UTC(),
 					"source":       "leaderboard_update",
 					"round_id":     requestPayload.RoundID,
+					"guild_id":     requestPayload.GuildID, // NEW: propagate guild_id
 				}
 
 				tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, leaderboardevents.TagUpdateForScheduledRounds)

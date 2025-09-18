@@ -7,6 +7,7 @@ import (
 	"os" // Import os for environment variable check
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -159,6 +160,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
 		sharedevents.RoundTagLookupFound:                  handlers.HandleTagNumberFound,
 		sharedevents.RoundTagLookupNotFound:               handlers.HandleTagNumberNotFound,
+		leaderboardevents.GetTagNumberFailed:              handlers.HandleTagNumberLookupFailed,
 		roundevents.RoundEntityCreated:                    handlers.HandleRoundEntityCreated,
 		roundevents.RoundParticipantStatusUpdateRequest:   handlers.HandleParticipantStatusUpdateRequest,
 		roundevents.RoundParticipantDeclined:              handlers.HandleParticipantDeclined,

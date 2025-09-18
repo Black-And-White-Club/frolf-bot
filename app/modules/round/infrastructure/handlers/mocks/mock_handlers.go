@@ -415,6 +415,21 @@ func (mr *MockHandlersMockRecorder) HandleTagNumberFound(msg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagNumberFound", reflect.TypeOf((*MockHandlers)(nil).HandleTagNumberFound), msg)
 }
 
+// HandleTagNumberLookupFailed mocks base method.
+func (m *MockHandlers) HandleTagNumberLookupFailed(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleTagNumberLookupFailed", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleTagNumberLookupFailed indicates an expected call of HandleTagNumberLookupFailed.
+func (mr *MockHandlersMockRecorder) HandleTagNumberLookupFailed(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagNumberLookupFailed", reflect.TypeOf((*MockHandlers)(nil).HandleTagNumberLookupFailed), msg)
+}
+
 // HandleTagNumberNotFound mocks base method.
 func (m *MockHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()

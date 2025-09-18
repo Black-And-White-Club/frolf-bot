@@ -16,7 +16,7 @@ import (
 )
 
 // ValidateAndProcessRoundUpdate validates and processes round update with time parsing (like create round)
-func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ValidateAndProcessRoundUpdate", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Validating and processing round update request",
 			attr.ExtractCorrelationID(ctx),
@@ -34,55 +34,59 @@ func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payloa
 			errs = append(errs, "at least one field to update must be provided")
 		}
 
-		// Process time string if provided (exactly like create round)
+		// Process time string if provided (exactly like create round) with nil-safe timezone handling
 		var parsedStartTime *sharedtypes.StartTime
 		if payload.StartTime != nil && *payload.StartTime != "" {
-			s.logger.InfoContext(ctx, "Processing time string for round update",
-				attr.ExtractCorrelationID(ctx),
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("time_string", *payload.StartTime),
-				attr.String("timezone", string(*payload.Timezone)),
-			)
-
-			// Use time parser exactly like create round
-			parsedTimeUnix, err := timeParser.ParseUserTimeInput(
-				*payload.StartTime,
-				*payload.Timezone,
-				roundutil.RealClock{},
-			)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "Time parsing failed for round update",
+			if payload.Timezone == nil || *payload.Timezone == "" {
+				errs = append(errs, "timezone is required when providing start time")
+			} else {
+				s.logger.InfoContext(ctx, "Processing time string for round update",
 					attr.ExtractCorrelationID(ctx),
 					attr.RoundID("round_id", payload.RoundID),
 					attr.String("time_string", *payload.StartTime),
-					attr.Error(err),
+					attr.String("timezone", string(*payload.Timezone)),
 				)
-				s.metrics.RecordTimeParsingError(ctx)
-				errs = append(errs, fmt.Sprintf("time parsing failed: %v", err))
-			} else {
-				// Convert and validate parsed time (like create round)
-				parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
-				currentTime := time.Now().UTC()
 
-				if parsedTime.Before(currentTime) {
-					s.logger.InfoContext(ctx, "Parsed time is in the past",
+				// Use time parser exactly like create round
+				parsedTimeUnix, err := timeParser.ParseUserTimeInput(
+					*payload.StartTime,
+					*payload.Timezone,
+					clock,
+				)
+				if err != nil {
+					s.logger.ErrorContext(ctx, "Time parsing failed for round update",
 						attr.ExtractCorrelationID(ctx),
 						attr.RoundID("round_id", payload.RoundID),
-						attr.String("parsed_time", parsedTime.Format(time.RFC3339)),
+						attr.String("time_string", *payload.StartTime),
+						attr.Error(err),
 					)
-					s.metrics.RecordValidationError(ctx)
-					errs = append(errs, "start time cannot be in the past")
+					s.metrics.RecordTimeParsingError(ctx)
+					errs = append(errs, fmt.Sprintf("time parsing failed: %v", err))
 				} else {
-					// Success - store parsed time
-					startTime := sharedtypes.StartTime(parsedTime)
-					parsedStartTime = &startTime
-					s.metrics.RecordTimeParsingSuccess(ctx)
+					// Convert and validate parsed time (like create round)
+					parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
+					currentTime := time.Now().UTC()
 
-					s.logger.InfoContext(ctx, "Time parsing successful for round update",
-						attr.ExtractCorrelationID(ctx),
-						attr.RoundID("round_id", payload.RoundID),
-						attr.String("parsed_time_utc", parsedTime.Format(time.RFC3339)),
-					)
+					if parsedTime.Before(currentTime) {
+						s.logger.InfoContext(ctx, "Parsed time is in the past",
+							attr.ExtractCorrelationID(ctx),
+							attr.RoundID("round_id", payload.RoundID),
+							attr.String("parsed_time", parsedTime.Format(time.RFC3339)),
+						)
+						s.metrics.RecordValidationError(ctx)
+						errs = append(errs, "start time cannot be in the past")
+					} else {
+						// Success - store parsed time
+						startTime := sharedtypes.StartTime(parsedTime)
+						parsedStartTime = &startTime
+						s.metrics.RecordTimeParsingSuccess(ctx)
+
+						s.logger.InfoContext(ctx, "Time parsing successful for round update",
+							attr.ExtractCorrelationID(ctx),
+							attr.RoundID("round_id", payload.RoundID),
+							attr.String("parsed_time_utc", parsedTime.Format(time.RFC3339)),
+						)
+					}
 				}
 			}
 		}
@@ -137,6 +141,11 @@ func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payloa
 			},
 		}, nil
 	})
+}
+
+// Backwards-compatible wrapper using the real clock.
+func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+	return s.ValidateAndProcessRoundUpdateWithClock(ctx, payload, timeParser, roundutil.RealClock{})
 }
 
 // UpdateRoundEntity updates the round entity with the validated and parsed values
@@ -227,6 +236,17 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
 func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateScheduledRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		if payload.GuildID == "" {
+			s.logger.ErrorContext(ctx, "GuildID missing in RoundScheduleUpdatePayload; aborting reschedule to prevent orphaned jobs",
+				attr.RoundID("round_id", payload.RoundID),
+			)
+			return RoundOperationResult{
+				Failure: &roundevents.RoundUpdateErrorPayload{
+					RoundUpdateRequest: nil,
+					Error:              "guild id missing for scheduled round update",
+				},
+			}, nil
+		}
 		s.logger.InfoContext(ctx, "Processing scheduled round update",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.String("title", string(payload.Title)),
@@ -351,6 +371,13 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				StartTime:      payload.StartTime,
 				EventMessageID: eventMessageID,
 			}
+			// Enrich with guild config to embed DiscordChannelID if available
+			if cfg := s.getGuildConfigForEnrichment(ctx, payload.GuildID); cfg != nil && cfg.EventChannelID != "" {
+				reminderPayload.DiscordChannelID = cfg.EventChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into rescheduled reminder payload",
+					attr.String("channel_id", cfg.EventChannelID),
+				)
+			}
 
 			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.GuildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to reschedule reminder",
@@ -390,6 +417,11 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 			Title:     finalTitle,
 			Location:  finalLocation,
 			StartTime: payload.StartTime,
+		}
+		if cfg := s.getGuildConfigForEnrichment(ctx, payload.GuildID); cfg != nil && cfg.EventChannelID != "" {
+			// Only set if struct supports this field (guarded by build attempt)
+			// (If RoundStartedPayload lacks DiscordChannelID in this version, this assignment will be a no-op compile removal.)
+			// startPayload.DiscordChannelID = cfg.EventChannelID
 		}
 
 		if err := s.QueueService.ScheduleRoundStart(ctx, payload.GuildID, payload.RoundID, startTimeUTC, startPayload); err != nil {

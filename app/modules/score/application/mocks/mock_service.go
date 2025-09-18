@@ -57,6 +57,21 @@ func (mr *MockServiceMockRecorder) CorrectScore(ctx, guildID, roundID, userID, s
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CorrectScore", reflect.TypeOf((*MockService)(nil).CorrectScore), ctx, guildID, roundID, userID, score, tagNumber)
 }
 
+// GetScoresForRound mocks base method.
+func (m *MockService) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetScoresForRound", ctx, guildID, roundID)
+	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetScoresForRound indicates an expected call of GetScoresForRound.
+func (mr *MockServiceMockRecorder) GetScoresForRound(ctx, guildID, roundID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScoresForRound", reflect.TypeOf((*MockService)(nil).GetScoresForRound), ctx, guildID, roundID)
+}
+
 // ProcessRoundScores mocks base method.
 func (m *MockService) ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (scoreservice.ScoreOperationResult, error) {
 	m.ctrl.T.Helper()

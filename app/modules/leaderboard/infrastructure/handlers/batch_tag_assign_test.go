@@ -75,6 +75,12 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						// Set metadata to trigger scheduled rounds update path
+						if msg.Metadata == nil {
+							msg.Metadata = make(message.Metadata)
+						}
+						msg.Metadata.Set("source", "discord_claim")
+						msg.Metadata.Set("single_assignment", "true")
 						return nil
 					},
 				)
@@ -450,6 +456,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
 						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *emptyPayload
+						if msg.Metadata == nil {
+							msg.Metadata = make(message.Metadata)
+						}
+						msg.Metadata.Set("source", "discord_claim")
+						msg.Metadata.Set("single_assignment", "true")
 						return nil
 					},
 				)
@@ -498,7 +509,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg, testMsg}, // Expect both success and tag update messages
+			want:    []*message.Message{testMsg, testMsg},
 			wantErr: false,
 		},
 	}

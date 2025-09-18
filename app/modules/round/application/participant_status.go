@@ -418,6 +418,7 @@ func (s *RoundService) updateParticipantInDB(ctx context.Context, payload rounde
 	}
 
 	joinedPayload := &roundevents.ParticipantJoinedPayload{
+		GuildID:               payload.GuildID, // Ensure GuildID populated for downstream consumers
 		RoundID:               payload.RoundID,
 		AcceptedParticipants:  accepted,
 		DeclinedParticipants:  declined,

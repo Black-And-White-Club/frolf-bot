@@ -10,46 +10,47 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleCreateGuildConfig handles the CreateGuildConfigRequested event.
-func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*message.Message, error) {
+// HandleGuildSetup handles the guild.setup event from Discord.
+// This event is published when Discord completes guild setup and contains
+// all the necessary configuration data to create a guild config in the backend.
+func (h *GuildHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
-		"HandleCreateGuildConfig",
-		&guildevents.GuildConfigRequestedPayload{},
+		"HandleGuildSetup",
+		&guildevents.GuildConfigRequestedPayload{}, // Using the same payload structure as create config
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			createPayload := payload.(*guildevents.GuildConfigRequestedPayload)
+			setupPayload := payload.(*guildevents.GuildConfigRequestedPayload)
 
-			h.logger.InfoContext(ctx, "Received CreateGuildConfigRequested event",
+			h.logger.InfoContext(ctx, "Received guild.setup event",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("guild_id", string(createPayload.GuildID)),
+				attr.String("guild_id", string(setupPayload.GuildID)),
 			)
 
-			// Convert payload to shared config type
+			// Convert setup payload to shared config type
 			config := &guildtypes.GuildConfig{
-				GuildID:              createPayload.GuildID,
-				SignupChannelID:      createPayload.SignupChannelID,
-				SignupMessageID:      createPayload.SignupMessageID,
-				EventChannelID:       createPayload.EventChannelID,
-				LeaderboardChannelID: createPayload.LeaderboardChannelID,
-				UserRoleID:           createPayload.UserRoleID,
-				EditorRoleID:         createPayload.EditorRoleID,
-				AdminRoleID:          createPayload.AdminRoleID,
-				SignupEmoji:          createPayload.SignupEmoji,
-				AutoSetupCompleted:   createPayload.AutoSetupCompleted,
-				SetupCompletedAt:     createPayload.SetupCompletedAt,
-				// Add more fields as needed
+				GuildID:              setupPayload.GuildID,
+				SignupChannelID:      setupPayload.SignupChannelID,
+				SignupMessageID:      setupPayload.SignupMessageID,
+				EventChannelID:       setupPayload.EventChannelID,
+				LeaderboardChannelID: setupPayload.LeaderboardChannelID,
+				UserRoleID:           setupPayload.UserRoleID,
+				EditorRoleID:         setupPayload.EditorRoleID,
+				AdminRoleID:          setupPayload.AdminRoleID,
+				SignupEmoji:          setupPayload.SignupEmoji,
+				AutoSetupCompleted:   setupPayload.AutoSetupCompleted,
+				SetupCompletedAt:     setupPayload.SetupCompletedAt,
 			}
 
 			result, err := h.guildService.CreateGuildConfig(ctx, config)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle CreateGuildConfigRequested event",
+				h.logger.ErrorContext(ctx, "Failed to handle guild.setup event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-				return nil, fmt.Errorf("failed to handle CreateGuildConfigRequested event: %w", err)
+				return nil, fmt.Errorf("failed to handle guild.setup event: %w", err)
 			}
 
 			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Create guild config request failed",
+				h.logger.InfoContext(ctx, "Guild setup config creation failed",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
@@ -67,15 +68,15 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 					failureMsg.Metadata.Set("guild_id", guildID)
 				}
 				// Also set it from the payload as a fallback
-				if createPayload != nil {
-					failureMsg.Metadata.Set("guild_id", string(createPayload.GuildID))
+				if setupPayload != nil {
+					failureMsg.Metadata.Set("guild_id", string(setupPayload.GuildID))
 				}
 
 				return []*message.Message{failureMsg}, nil
 			}
 
 			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Create guild config request successful", attr.CorrelationIDFromMsg(msg))
+				h.logger.InfoContext(ctx, "Guild setup config creation successful", attr.CorrelationIDFromMsg(msg))
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
@@ -90,8 +91,8 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 					successMsg.Metadata.Set("guild_id", guildID)
 				}
 				// Also set it from the payload as a fallback
-				if createPayload != nil {
-					successMsg.Metadata.Set("guild_id", string(createPayload.GuildID))
+				if setupPayload != nil {
+					successMsg.Metadata.Set("guild_id", string(setupPayload.GuildID))
 				}
 
 				return []*message.Message{successMsg}, nil

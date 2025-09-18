@@ -35,10 +35,24 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			}, nil // Return nil error as this is a handled business validation failure
 		}
 
+		// Preserve existing tag number if not provided
+		effectiveTag := tagNumber
+		if effectiveTag == nil {
+			if existing, err := s.ScoreDB.GetScoresForRound(ctx, guildID, roundID); err == nil {
+				for _, si := range existing {
+					if si.UserID == userID && si.TagNumber != nil {
+						tn := *si.TagNumber
+						effectiveTag = &tn
+						break
+					}
+				}
+			}
+		}
+
 		scoreInfo := sharedtypes.ScoreInfo{
 			UserID:    userID,
 			Score:     score,
-			TagNumber: tagNumber,
+			TagNumber: effectiveTag,
 		}
 		dbStart := time.Now()
 		err := s.ScoreDB.UpdateOrAddScore(ctx, guildID, roundID, scoreInfo)

@@ -46,15 +46,15 @@ func (db *LeaderboardDBImpl) GetActiveLeaderboard(ctx context.Context, guildID s
 // CreateLeaderboard creates a new leaderboard entry and returns its ID.
 func (db *LeaderboardDBImpl) CreateLeaderboard(ctx context.Context, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (int64, error) {
 	leaderboard.GuildID = guildID
-	result, err := db.DB.NewInsert().Model(leaderboard).Exec(ctx)
+	// Use Bun's Returning to get the inserted ID
+	_, err := db.DB.NewInsert().
+		Model(leaderboard).
+		Returning("id").
+		Exec(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to create leaderboard: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get ID of newly created leaderboard: %w", err)
-	}
-	return id, nil
+	return leaderboard.ID, nil
 }
 
 // DeactivateLeaderboard deactivates the specified leaderboard.
@@ -69,19 +69,53 @@ func (db *LeaderboardDBImpl) DeactivateLeaderboard(ctx context.Context, guildID 
 }
 
 // CheckTagAvailability checks if a tag number is currently available in the active leaderboard.
-func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, tagNumber sharedtypes.TagNumber) (bool, error) {
+// It returns a detailed result indicating availability and the specific reason if unavailable:
+// 1. The specific tag is already taken by someone else, OR
+// 2. The user already has any tag in the leaderboard (no duplicate signups)
+func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (TagAvailabilityResult, error) {
 	leaderboard, err := db.GetActiveLeaderboard(ctx, guildID)
 	if err != nil {
-		// Propagate the error from GetActiveLeaderboard
-		return false, fmt.Errorf("failed to get active leaderboard for tag availability check: %w", err)
+		// If no active leaderboard exists, propagate the specific error so callers
+		// can surface a failure (integration tests expect an error in this case).
+		if errors.Is(err, ErrNoActiveLeaderboard) {
+			return TagAvailabilityResult{Available: false}, ErrNoActiveLeaderboard
+		}
+		// Propagate other database errors
+		return TagAvailabilityResult{Available: false}, fmt.Errorf("failed to get active leaderboard for tag availability check: %w", err)
 	}
-	return !leaderboard.HasTagNumber(tagNumber), nil
+
+	// Check if the user already has any tag (prevent duplicate signups)
+	if leaderboard.HasUserID(userID) {
+		return TagAvailabilityResult{
+			Available: false,
+			Reason:    "user already has a tag",
+		}, nil
+	}
+
+	// Check if the specific tag is available
+	if leaderboard.HasTagNumber(tagNumber) {
+		return TagAvailabilityResult{
+			Available: false,
+			Reason:    "tag already taken",
+		}, nil
+	}
+
+	return TagAvailabilityResult{Available: true}, nil
 }
 
 func (l *Leaderboard) HasTagNumber(tagNumber sharedtypes.TagNumber) bool {
 	for _, entry := range l.LeaderboardData {
 		// Safely check if TagNumber is not nil before dereferencing
 		if entry.TagNumber != 0 && entry.TagNumber == tagNumber {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *Leaderboard) HasUserID(userID sharedtypes.DiscordID) bool {
+	for _, entry := range l.LeaderboardData {
+		if entry.UserID == userID {
 			return true
 		}
 	}

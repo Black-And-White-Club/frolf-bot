@@ -2,6 +2,7 @@ package guilddb
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
@@ -17,6 +18,9 @@ func (db *GuildDBImpl) GetConfig(ctx context.Context, guildID sharedtypes.GuildI
 	var config GuildConfig
 	err := db.DB.NewSelect().Model(&config).Where("guild_id = ?", guildID).Scan(ctx)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Config not found, return nil without error
+		}
 		return nil, err
 	}
 	return toSharedModel(&config), nil

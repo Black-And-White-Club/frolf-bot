@@ -62,6 +62,37 @@ func LoadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// --- OVERRIDE WITH ENV VARS IF PRESENT ---
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Postgres.DSN = v
+	}
+	if v := os.Getenv("NATS_URL"); v != "" {
+		cfg.NATS.URL = v
+	}
+	if v := os.Getenv("LOKI_URL"); v != "" {
+		cfg.Observability.LokiURL = v
+	}
+	if v := os.Getenv("LOKI_TENANT_ID"); v != "" {
+		cfg.Observability.LokiTenantID = v
+	}
+	if v := os.Getenv("METRICS_ADDRESS"); v != "" {
+		cfg.Observability.MetricsAddress = v
+	}
+	if v := os.Getenv("TEMPO_ENDPOINT"); v != "" {
+		cfg.Observability.TempoEndpoint = v
+	}
+	if v := os.Getenv("ENV"); v != "" {
+		cfg.Observability.Environment = v
+	}
+	if v := os.Getenv("TEMPO_INSECURE"); v != "" {
+		cfg.Observability.TempoInsecure = v == "true"
+	}
+	if v := os.Getenv("TEMPO_SAMPLE_RATE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Observability.TempoSampleRate = f
+		}
+	}
+
 	return &cfg, nil
 }
 

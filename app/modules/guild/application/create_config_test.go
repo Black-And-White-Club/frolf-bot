@@ -46,7 +46,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 		{
 			name: "success",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(nil, errors.New("sql: no rows in result set"))
+				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(nil, nil)
 				m.EXPECT().SaveConfig(gomock.Any(), validConfig).Return(nil)
 			},
 			config: validConfig,
@@ -61,7 +61,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 		{
 			name: "db error",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-2")).Return(nil, errors.New("sql: no rows in result set"))
+				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-2")).Return(nil, nil)
 				m.EXPECT().SaveConfig(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
 			},
 			config: &guildtypes.GuildConfig{

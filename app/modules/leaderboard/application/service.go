@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -24,6 +25,12 @@ type LeaderboardService struct {
 	metrics        leaderboardmetrics.LeaderboardMetrics
 	tracer         trace.Tracer
 	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	guildConfigProvider GuildConfigProvider
+}
+
+// GuildConfigProvider supplies guild config for enrichment.
+type GuildConfigProvider interface {
+    GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -45,6 +52,24 @@ func NewLeaderboardService(
 			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
 		},
 	}
+}
+
+// WithGuildConfigProvider injects provider (fluent style)
+func (s *LeaderboardService) WithGuildConfigProvider(p GuildConfigProvider) *LeaderboardService {
+	s.guildConfigProvider = p
+	return s
+}
+
+func (s *LeaderboardService) getGuildConfigForEnrichment(ctx context.Context, guildID sharedtypes.GuildID) *guildtypes.GuildConfig {
+	if s.guildConfigProvider == nil || guildID == "" {
+		return nil
+	}
+	cfg, err := s.guildConfigProvider.GetConfig(ctx, guildID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Leaderboard enrichment config fetch failed", attr.String("guild_id", string(guildID)), attr.Error(err))
+		return nil
+	}
+	return cfg
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.

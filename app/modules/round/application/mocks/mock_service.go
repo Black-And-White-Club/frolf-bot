@@ -18,6 +18,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -328,6 +329,36 @@ func (m *MockService) ValidateAndProcessRoundUpdate(ctx context.Context, payload
 func (mr *MockServiceMockRecorder) ValidateAndProcessRoundUpdate(ctx, payload, timeParser any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRoundUpdate", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRoundUpdate), ctx, payload, timeParser)
+}
+
+// ValidateAndProcessRoundUpdateWithClock mocks base method.
+func (m *MockService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateAndProcessRoundUpdateWithClock", ctx, payload, timeParser, clock)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateAndProcessRoundUpdateWithClock indicates an expected call of ValidateAndProcessRoundUpdateWithClock.
+func (mr *MockServiceMockRecorder) ValidateAndProcessRoundUpdateWithClock(ctx, payload, timeParser, clock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRoundUpdateWithClock", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRoundUpdateWithClock), ctx, payload, timeParser, clock)
+}
+
+// ValidateAndProcessRoundWithClock mocks base method.
+func (m *MockService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateAndProcessRoundWithClock", ctx, payload, timeParser, clock)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateAndProcessRoundWithClock indicates an expected call of ValidateAndProcessRoundWithClock.
+func (mr *MockServiceMockRecorder) ValidateAndProcessRoundWithClock(ctx, payload, timeParser, clock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndProcessRoundWithClock", reflect.TypeOf((*MockService)(nil).ValidateAndProcessRoundWithClock), ctx, payload, timeParser, clock)
 }
 
 // ValidateParticipantJoinRequest mocks base method.

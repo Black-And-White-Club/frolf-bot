@@ -70,6 +70,21 @@ func (mr *MockHandlersMockRecorder) HandleDeleteGuildConfig(msg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDeleteGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleDeleteGuildConfig), msg)
 }
 
+// HandleGuildSetup mocks base method.
+func (m *MockHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleGuildSetup", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleGuildSetup indicates an expected call of HandleGuildSetup.
+func (mr *MockHandlersMockRecorder) HandleGuildSetup(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildSetup", reflect.TypeOf((*MockHandlers)(nil).HandleGuildSetup), msg)
+}
+
 // HandleRetrieveGuildConfig mocks base method.
 func (m *MockHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()

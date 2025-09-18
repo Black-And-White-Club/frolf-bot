@@ -25,12 +25,16 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 		if payload.Score == nil {
 			errs = append(errs, "score cannot be empty")
 		}
+		// Note: GuildID may be absent on some incoming events; allow validation to pass
+		// and rely on downstream handlers or DB operations to resolve or enforce it.
 		// Add more validation rules as needed...
 
 		if len(errs) > 0 {
 			err := fmt.Errorf("validation errors: %s", strings.Join(errs, "; "))
 			s.logger.ErrorContext(ctx, "Score update request validation failed",
 				attr.RoundID("round_id", payload.RoundID),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.String("participant", string(payload.Participant)),
 				attr.Error(err),
 			)
 			return RoundOperationResult{

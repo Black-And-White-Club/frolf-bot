@@ -44,10 +44,41 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			name: "Successfully corrects score",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
 				mockDB.EXPECT().
+					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
+					Return([]sharedtypes.ScoreInfo{}, nil)
+				mockDB.EXPECT().
 					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
 						Score:     testScore,
 						TagNumber: nil,
+					}).
+					Return(nil)
+			},
+			userID:    testUserID,
+			score:     testScore,
+			tagNumber: nil,
+			expectedResult: ScoreOperationResult{
+				Success: &scoreevents.ScoreUpdateSuccessPayload{
+					GuildID: testGuildID,
+					RoundID: testRoundID,
+					UserID:  testUserID,
+					Score:   testScore,
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "Preserves existing tag when none provided",
+			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+				existingTag := sharedtypes.TagNumber(7)
+				mockDB.EXPECT().
+					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
+					Return([]sharedtypes.ScoreInfo{{UserID: testUserID, Score: 12, TagNumber: &existingTag}}, nil)
+				mockDB.EXPECT().
+					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
+						UserID:    testUserID,
+						Score:     testScore,
+						TagNumber: &existingTag,
 					}).
 					Return(nil)
 			},
@@ -91,6 +122,9 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		{
 			name: "Fails due to database error",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+				mockDB.EXPECT().
+					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
+					Return([]sharedtypes.ScoreInfo{}, nil)
 				mockDB.EXPECT().
 					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,

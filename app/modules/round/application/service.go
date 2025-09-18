@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
@@ -28,6 +29,12 @@ type RoundService struct {
 	tracer         trace.Tracer
 	roundValidator roundutil.RoundValidator
 	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error)
+	guildConfigProvider GuildConfigProvider // optional provider for enrichment
+}
+
+// GuildConfigProvider supplies guild config for enrichment (DB-backed, no events)
+type GuildConfigProvider interface {
+    GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 }
 
 // Constructor takes the concrete implementation
@@ -52,6 +59,12 @@ func NewRoundService(
 			return serviceWrapper(ctx, operationName, roundID, serviceFunc, logger, metrics, tracer)
 		},
 	}
+}
+
+// WithGuildConfigProvider injects a provider (fluent style)
+func (s *RoundService) WithGuildConfigProvider(p GuildConfigProvider) *RoundService {
+	s.guildConfigProvider = p
+	return s
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
@@ -122,4 +135,22 @@ type RoundOperationResult struct {
 	Success interface{}
 	Failure interface{}
 	Error   error
+}
+
+// getGuildConfigForEnrichment attempts to retrieve a guild config for adding config fragments
+// to outbound round events. This is a placeholder; wire in actual retrieval (e.g., injected
+// GuildConfigProvider) later. Returning nil is safe: enrichment is optional.
+func (s *RoundService) getGuildConfigForEnrichment(ctx context.Context, guildID sharedtypes.GuildID) *guildtypes.GuildConfig {
+	if s.guildConfigProvider == nil || guildID == "" {
+		return nil
+	}
+	cfg, err := s.guildConfigProvider.GetConfig(ctx, guildID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Guild config enrichment fetch failed",
+			attr.String("guild_id", string(guildID)),
+			attr.Error(err),
+		)
+		return nil
+	}
+	return cfg
 }

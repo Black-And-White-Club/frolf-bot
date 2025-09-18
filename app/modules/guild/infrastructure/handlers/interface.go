@@ -8,4 +8,5 @@ type Handlers interface {
 	HandleRetrieveGuildConfig(msg *message.Message) ([]*message.Message, error)
 	HandleUpdateGuildConfig(msg *message.Message) ([]*message.Message, error)
 	HandleDeleteGuildConfig(msg *message.Message) ([]*message.Message, error)
+	HandleGuildSetup(msg *message.Message) ([]*message.Message, error)
 }

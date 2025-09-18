@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -27,10 +29,12 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 				attr.String("location", string(createRoundRequestedPayload.Location)),
 				attr.String("start_time", string(createRoundRequestedPayload.StartTime)),
 				attr.String("user_id", string(createRoundRequestedPayload.UserID)),
+				attr.String("guild_id", fmt.Sprintf("%v", createRoundRequestedPayload.GuildID)), // Explicitly log guild_id
 			)
 
-			// Call the service function to handle the event
-			result, err := h.roundService.ValidateAndProcessRound(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser())
+			// Determine anchor clock (submitted_at metadata) for deterministic relative parsing
+			clock := h.extractAnchorClock(msg)
+			result, err := h.roundService.ValidateAndProcessRoundWithClock(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser(), clock)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle CreateRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),
@@ -84,6 +88,17 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 
 	// Execute the wrapped handler with the message
 	return wrappedHandler(msg)
+}
+
+// extractAnchorClock builds an AnchorClock from message metadata if available; falls back to RealClock.
+func (h *RoundHandlers) extractAnchorClock(msg *message.Message) roundutil.Clock {
+	submittedAt := msg.Metadata.Get("submitted_at")
+	if submittedAt != "" {
+		if t, err := time.Parse(time.RFC3339, submittedAt); err == nil {
+			return roundutil.NewAnchorClock(t)
+		}
+	}
+	return roundutil.RealClock{}
 }
 
 // HandleRoundEntityCreated handles the RoundEntityCreated event.
@@ -225,7 +240,11 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			)
 
 			// 2. Construct the RoundScheduledPayload using the updated round object
+			// IMPORTANT: include GuildID so downstream scheduling (ScheduleRoundEvents -> ScheduleRoundReminder/Start)
+			// has tenant scope. Previously this was omitted, resulting in empty guild_id in reminder jobs
+			// and failing participant lookups (round not found with empty guild_id).
 			scheduledPayload := roundevents.RoundScheduledPayload{
+				GuildID: updatePayload.GuildID,
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     updatedRound.ID,
 					Title:       updatedRound.Title,

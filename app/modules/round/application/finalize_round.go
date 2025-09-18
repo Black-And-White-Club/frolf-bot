@@ -129,7 +129,9 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 
 		// Prepare the success payload containing the request for the Score Module
 		processScoresPayload := roundevents.ProcessRoundScoresRequestPayload{
-			RoundID: round.ID,
+			GuildID: payload.GuildID,
+			// Use the authoritative RoundID from the event payload to avoid zero UUID writes
+			RoundID: payload.RoundID,
 			Scores:  scores,
 		}
 		s.logger.InfoContext(ctx, "Prepared score data for Score Module",

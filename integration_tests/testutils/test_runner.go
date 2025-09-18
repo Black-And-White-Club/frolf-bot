@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
@@ -31,6 +32,11 @@ type TestCase struct {
 	MessageTimeout time.Duration
 	// DeleteConsumerFn is a function that cleans up NATS consumers
 	DeleteConsumerFn func(env *TestEnvironment, topic string, consumerName string) error
+
+	// Bus allows overriding the EventBus used for subscriptions in this test case.
+	// If nil, env.EventBus is used. This is useful when a module under test publishes
+	// on a module-specific EventBus, and the test should subscribe on the same bus.
+	Bus eventbus.EventBus
 }
 
 // sanitizeForNATS removes characters that aren't allowed in NATS subject names
@@ -118,14 +124,21 @@ func RunTest(t *testing.T, tc TestCase, env *TestEnvironment) {
 		}
 	})
 
+	// Choose the event bus for subscriptions
+	bus := tc.Bus
+	if bus == nil {
+		bus = env.EventBus
+	}
+
 	// Setup subscribers for all expected topics
 	for _, topic := range tc.ExpectedTopics {
 		// Generate consumer name for this topic and test
 		consumerName := fmt.Sprintf("test-%s-%s", sanitizeForNATS(topic), testID)
 		consumersByTopic[topic] = consumerName
 
-		// Access EventBus through the environment
-		msgCh, err := env.EventBus.Subscribe(subCtx, topic)
+		// Access EventBus through the environment with a unique consumer durable name
+		subCtxWithConsumer := context.WithValue(subCtx, "eventbus_consumer_name", consumerName)
+		msgCh, err := bus.Subscribe(subCtxWithConsumer, topic)
 		if err != nil {
 			t.Fatalf("Failed to subscribe to topic %q: %v", topic, err)
 		}

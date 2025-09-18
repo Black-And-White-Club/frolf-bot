@@ -73,18 +73,18 @@ func (mr *MockLeaderboardDBMockRecorder) BatchAssignTags(ctx, guildID, assignmen
 }
 
 // CheckTagAvailability mocks base method.
-func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, tagNumber sharedtypes.TagNumber) (bool, error) {
+func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (leaderboarddb.TagAvailabilityResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, guildID, tagNumber)
-	ret0, _ := ret[0].(bool)
+	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, guildID, userID, tagNumber)
+	ret0, _ := ret[0].(leaderboarddb.TagAvailabilityResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckTagAvailability indicates an expected call of CheckTagAvailability.
-func (mr *MockLeaderboardDBMockRecorder) CheckTagAvailability(ctx, guildID, tagNumber any) *gomock.Call {
+func (mr *MockLeaderboardDBMockRecorder) CheckTagAvailability(ctx, guildID, userID, tagNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockLeaderboardDB)(nil).CheckTagAvailability), ctx, guildID, tagNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockLeaderboardDB)(nil).CheckTagAvailability), ctx, guildID, userID, tagNumber)
 }
 
 // CreateLeaderboard mocks base method.

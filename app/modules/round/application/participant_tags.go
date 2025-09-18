@@ -79,6 +79,9 @@ func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(ctx context.Co
 func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error) {
 	// Use RoundID(uuid.Nil) for serviceWrapper, but propagate GuildID everywhere else
 	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
+		if payload.GuildID == "" {
+			s.logger.WarnContext(ctx, "UpdateScheduledRoundsWithNewTags invoked without guild_id; will not retrieve rounds")
+		}
 		if len(payload.ChangedTags) == 0 {
 			s.logger.InfoContext(ctx, "No tag changes received - operation completed")
 			return RoundOperationResult{
@@ -153,6 +156,9 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			totalParticipantsUpdated += participantsWithChanges
 
 			updatedRounds[i] = roundevents.RoundUpdateInfo{
+				// BUGFIX: GuildID was previously omitted, causing downstream Discord tag update logic
+				// to fail resolving guild configuration (empty guild ID) and silently skip updates.
+				GuildID:             payload.GuildID,
 				RoundID:             update.RoundID,
 				EventMessageID:      update.EventMessageID,
 				Title:               update.Round.Title,

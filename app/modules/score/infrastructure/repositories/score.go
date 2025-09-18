@@ -25,7 +25,7 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, guildID sharedtypes.GuildI
 	res, err := db.DB.NewInsert().
 		Model(&scoreToLog).
 		On("CONFLICT (id) DO UPDATE").
-		Set("round_data = EXCLUDED.round_data, source = EXCLUDED.source").
+		Set("round_data = EXCLUDED.round_data, source = EXCLUDED.source, guild_id = EXCLUDED.guild_id").
 		Exec(ctx)
 
 	fmt.Printf("[DEBUG LogScores] Insert/Update Executed for RoundID %s. Error: %v, Result: %+v\n", roundID, err, res)
@@ -75,10 +75,38 @@ func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, guildID sharedtypes
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			// Attempt self-heal: locate any row by round ID regardless of guild and set guild_id if missing
+			var anyRound Score
+			errByID := db.DB.NewSelect().
+				Model(&anyRound).
+				Where("id = ?", roundID).
+				Scan(ctx)
+			if errByID == nil {
+				if string(anyRound.GuildID) == "" {
+					// Update the existing row to attach the correct guild_id
+					anyRound.GuildID = guildID
+					if _, updErr := db.DB.NewUpdate().
+						Model(&anyRound).
+						Where("id = ?", roundID).
+						Column("guild_id").
+						Exec(ctx); updErr == nil {
+						// Retry original lookup now that guild_id is set
+						errRetry := db.DB.NewSelect().
+							Model(&score).
+							Where("id = ? AND guild_id = ?", roundID, guildID).
+							Scan(ctx)
+						if errRetry == nil {
+							goto SCORE_LOADED
+						}
+					}
+				}
+			}
 			return fmt.Errorf("score record not found for round %s (guild %s)", roundID, guildID)
 		}
 		return fmt.Errorf("failed to fetch score record for add/update: %w", err)
 	}
+
+SCORE_LOADED:
 
 	exists := false
 	for i, existingScoreInfo := range score.RoundData {

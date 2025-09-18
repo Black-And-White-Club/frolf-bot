@@ -178,6 +178,7 @@ func (app *App) Run(ctx context.Context) error {
 
 	go func() {
 		fmt.Println("DEBUG: Starting Watermill router...")
+		fmt.Println("DEBUG: About to call app.Router.Run() - this should block until router is ready")
 		if err := app.Router.Run(routerRunCtx); err != nil && err != context.Canceled {
 			fmt.Printf("DEBUG: Watermill router failed with error: %v\n", err)
 			app.Observability.Provider.Logger.Error("Error running Watermill router", attr.Error(err))
@@ -214,10 +215,13 @@ func (app *App) Run(ctx context.Context) error {
 		}
 	}()
 
+	fmt.Println("DEBUG: Waiting for router to signal it's running...")
 	select {
 	case <-app.Router.Running():
+		fmt.Println("DEBUG: Router signaled it's running successfully!")
 		app.Observability.Provider.Logger.Info("Main router started and running")
 	case <-time.After(30 * time.Second): // Increased from 5 to 30 seconds
+		fmt.Println("DEBUG: Timeout waiting for router to start - this is a critical error")
 		app.Observability.Provider.Logger.Error("Timeout waiting for main router to start")
 		cancel()
 		return fmt.Errorf("timeout waiting for main router to start")

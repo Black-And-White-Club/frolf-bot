@@ -40,6 +40,21 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 	return m.recorder
 }
 
+// HandleBulkCorrectScoreRequest mocks base method.
+func (m *MockHandlers) HandleBulkCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleBulkCorrectScoreRequest", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleBulkCorrectScoreRequest indicates an expected call of HandleBulkCorrectScoreRequest.
+func (mr *MockHandlersMockRecorder) HandleBulkCorrectScoreRequest(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBulkCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleBulkCorrectScoreRequest), msg)
+}
+
 // HandleCorrectScoreRequest mocks base method.
 func (m *MockHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
@@ -68,4 +83,19 @@ func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]
 func (mr *MockHandlersMockRecorder) HandleProcessRoundScoresRequest(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleProcessRoundScoresRequest", reflect.TypeOf((*MockHandlers)(nil).HandleProcessRoundScoresRequest), msg)
+}
+
+// HandleReprocessAfterScoreUpdate mocks base method.
+func (m *MockHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleReprocessAfterScoreUpdate", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleReprocessAfterScoreUpdate indicates an expected call of HandleReprocessAfterScoreUpdate.
+func (mr *MockHandlersMockRecorder) HandleReprocessAfterScoreUpdate(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleReprocessAfterScoreUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleReprocessAfterScoreUpdate), msg)
 }

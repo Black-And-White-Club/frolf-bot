@@ -17,7 +17,7 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 			attr.String("tag_number", payload.TagNumber.String()),
 		)
 
-		available, err := s.LeaderboardDB.CheckTagAvailability(ctx, guildID, *payload.TagNumber)
+		availabilityResult, err := s.LeaderboardDB.CheckTagAvailability(ctx, guildID, payload.UserID, *payload.TagNumber)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to check tag availability",
 				attr.ExtractCorrelationID(ctx),
@@ -33,6 +33,7 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 					UserID:    payload.UserID,
 					TagNumber: payload.TagNumber,
 					Reason:    "failed to check tag availability",
+					GuildID:   guildID, // Patch: propagate guild_id
 				},
 			}, err
 		}
@@ -41,16 +42,19 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 			attr.ExtractCorrelationID(ctx),
 			attr.String("user_id", string(payload.UserID)),
 			attr.String("tag_number", payload.TagNumber.String()),
-			attr.Bool("is_available", available),
+			attr.Bool("is_available", availabilityResult.Available),
+			attr.String("reason", availabilityResult.Reason),
 		)
 
-		s.metrics.RecordTagAvailabilityCheck(ctx, available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
+		s.metrics.RecordTagAvailabilityCheck(ctx, availabilityResult.Available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
 
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.TagAvailabilityCheckResultPayload{
 				UserID:    payload.UserID,
 				TagNumber: payload.TagNumber,
-				Available: available,
+				Available: availabilityResult.Available,
+				Reason:    availabilityResult.Reason,
+				GuildID:   guildID, // Patch: propagate guild_id
 			},
 		}, nil
 	})

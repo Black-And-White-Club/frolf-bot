@@ -74,7 +74,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -83,7 +83,8 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
-					gomock.Any(),
+					gomock.Any(), // time parser
+					gomock.Any(), // clock
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.RoundCreatedPayload{
@@ -143,7 +144,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -152,6 +153,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -173,7 +175,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -182,6 +184,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
@@ -233,7 +236,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -242,6 +245,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
@@ -279,7 +283,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -288,6 +292,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
@@ -314,7 +319,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRound(
+				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
 					roundevents.CreateRoundRequestedPayload{
 						Title:       testTitle,
@@ -323,6 +328,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 						StartTime:   testStartTimeString,
 						UserID:      testUserID,
 					},
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},

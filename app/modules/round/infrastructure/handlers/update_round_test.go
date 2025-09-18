@@ -66,11 +66,12 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					},
 				)
 
-				// Updated: Call ValidateAndProcessRoundUpdate with timeParser
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdate(
+				// Updated: Call ValidateAndProcessRoundUpdateWithClock with timeParser and clock
+				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
 					gomock.Any(),
 					*testPayload,
-					gomock.Any(), // ← timeParser parameter
+					gomock.Any(), // timeParser
+					gomock.Any(), // clock
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.RoundUpdateValidatedPayload{
@@ -115,10 +116,11 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				)
 
 				// Updated: Method name and parameters
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdate(
+				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
 					gomock.Any(),
 					*testPayload,
-					gomock.Any(), // ← timeParser parameter
+					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("internal service error"),
@@ -139,9 +141,10 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdate(
+				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
 					gomock.Any(),
 					*testPayload,
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
@@ -177,9 +180,10 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdate(
+				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
 					gomock.Any(),
 					*testPayload,
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{}, // Return empty result
@@ -201,9 +205,10 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					},
 				)
 
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdate(
+				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
 					gomock.Any(),
 					*testPayload,
+					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{

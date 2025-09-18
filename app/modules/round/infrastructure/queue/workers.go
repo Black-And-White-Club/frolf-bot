@@ -41,11 +41,21 @@ func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJo
 
 	ctxLogger.Info("Processing round start job")
 
+	// Defensive enrichment: ensure GuildID is present in payload (older jobs may have been scheduled before GuildID population patch)
+	if job.Args.RoundData.GuildID == "" && job.Args.GuildID != "" {
+		job.Args.RoundData.GuildID = job.Args.GuildID
+	}
+
 	// Create Watermill message using helpers (same as your handlers)
 	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundStarted)
 	if err != nil {
 		ctxLogger.Error("Failed to create round started message", attr.Error(err))
 		return fmt.Errorf("failed to create round started message: %w", err)
+	}
+
+	// Add guild_id metadata if missing
+	if msg.Metadata.Get("guild_id") == "" && job.Args.GuildID != "" {
+		msg.Metadata.Set("guild_id", string(job.Args.GuildID))
 	}
 
 	// Publish using your eventbus interface - it expects topic and messages
@@ -87,11 +97,31 @@ func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundRemi
 
 	ctxLogger.Info("Processing round reminder job")
 
+	// Defensive enrichment: ensure GuildID & DiscordGuildID present (jobs scheduled pre-patch may lack these)
+	if job.Args.RoundData.GuildID == "" && job.Args.GuildID != "" {
+		job.Args.RoundData.GuildID = job.Args.GuildID
+	}
+	if job.Args.RoundData.DiscordGuildID == "" && job.Args.GuildID != "" {
+		job.Args.RoundData.DiscordGuildID = string(job.Args.GuildID)
+	}
+
 	// Create Watermill message using helpers (same as your handlers)
 	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundReminder)
 	if err != nil {
 		ctxLogger.Error("Failed to create round reminder message", attr.Error(err))
 		return fmt.Errorf("failed to create round reminder message: %w", err)
+	}
+
+	// Instrumentation: log payload guild/round IDs actually embedded in message payload
+	ctxLogger.Debug("Round reminder payload debug",
+		attr.String("payload_guild_id", string(job.Args.RoundData.GuildID)),
+		attr.RoundID("payload_round_id", job.Args.RoundData.RoundID),
+		attr.String("reminder_type", job.Args.RoundData.ReminderType),
+	)
+
+	// Add guild_id metadata if missing
+	if msg.Metadata.Get("guild_id") == "" && job.Args.GuildID != "" {
+		msg.Metadata.Set("guild_id", string(job.Args.GuildID))
 	}
 
 	// Publish using your eventbus interface - it expects topic and messages

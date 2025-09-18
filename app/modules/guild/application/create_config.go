@@ -52,12 +52,11 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 	// Check if config already exists
 	existing, err := s.GuildDB.GetConfig(ctx, guildID)
 	if err != nil {
-		// If not found, continue; otherwise, fail
-		if err.Error() != "sql: no rows in result set" {
-			return createGuildConfigFailureResult(guildID, config, err), err
-		}
+		// Database error occurred during lookup
+		return createGuildConfigFailureResult(guildID, config, err), err
 	}
 	if existing != nil {
+		// Config already exists
 		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigAlreadyExists), ErrGuildConfigAlreadyExists
 	}
 

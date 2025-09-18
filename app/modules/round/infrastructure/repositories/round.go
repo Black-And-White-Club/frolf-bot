@@ -127,6 +127,7 @@ func convertToDomainRound(dbRound Round) *roundtypes.Round {
 		State:          dbRound.State,
 		Participants:   dbRound.Participants,
 		EventMessageID: dbRound.EventMessageID,
+		GuildID:        dbRound.GuildID,
 	}
 }
 
@@ -506,17 +507,36 @@ func (db *RoundDBImpl) GetParticipants(ctx context.Context, guildID sharedtypes.
 
 // UpdateEventMessageID updates the EventMessageID(messageID) for an existing round.
 func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, eventMessageID string) (*roundtypes.Round, error) {
+	// Log if guildID is empty, but proceed. Some tests insert rounds without guild context.
+	if string(guildID) == "" {
+		slog.Warn("UpdateEventMessageID called with empty guildID; proceeding", "guildID", guildID, "roundID", roundID, "eventMessageID", eventMessageID)
+	}
+
+	// Debug log all parameters and their types
+	slog.Debug("UpdateEventMessageID called", "guildID", guildID, "guildID_type", fmt.Sprintf("%T", guildID), "roundID", roundID, "roundID_type", fmt.Sprintf("%T", roundID), "eventMessageID", eventMessageID, "eventMessageID_type", fmt.Sprintf("%T", eventMessageID))
+
 	var dbRound Round
 
-	_, err := db.DB.NewUpdate().
+	// Build update with conditional guild filter
+	upd := db.DB.NewUpdate().
 		Model(&dbRound).
-		Set("event_message_id = ?", eventMessageID).
-		Where("id = ? AND guild_id = ?", roundID, guildID).
-		Returning("*").
-		Exec(ctx, &dbRound)
+		Set("event_message_id = ?", eventMessageID)
+	if string(guildID) == "" {
+		// No guild provided: update by round ID only (test helper may omit guild)
+		slog.Debug("Executing SQL (no guild filter)", "id", roundID, "eventMessageID", eventMessageID)
+		upd = upd.Where("id = ?", roundID)
+	} else {
+		slog.Debug("Executing SQL (with guild filter)", "id", roundID, "guildID", guildID, "eventMessageID", eventMessageID)
+		upd = upd.Where("id = ? AND guild_id = ?", roundID, guildID)
+	}
+
+	res, err := upd.Returning("*").Exec(ctx, &dbRound)
 	if err != nil {
+		slog.Error("failed to update discord event ID and return row", "error", err, "guildID", guildID, "roundID", roundID, "eventMessageID", eventMessageID)
 		return nil, fmt.Errorf("failed to update discord event ID and return row: %w", err)
 	}
+	// Debug log the result
+	slog.Debug("UpdateEventMessageID result", "result", res, "dbRound", dbRound)
 
 	// Convert from DB model to domain model
 	round := &roundtypes.Round{

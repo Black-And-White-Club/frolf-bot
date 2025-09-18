@@ -103,6 +103,9 @@ func NewUserRouter(
 // It conditionally adds metrics middleware and registers handlers.
 // It now accepts a context for the router run.
 func (r *UserRouter) Configure(routerCtx context.Context, userService userservice.Service, eventbus eventbus.EventBus, userMetrics usermetrics.UserMetrics) error {
+	// Add explicit debug logging that will definitely show up
+	fmt.Printf("DEBUG: UserRouter.Configure() called - starting handler registration\n")
+
 	// Add logging before the conditional check for adding middleware
 	r.logger.Info("Configure: Checking metricsEnabled before adding middleware",
 		"metricsEnabled", r.metricsEnabled,
@@ -133,15 +136,18 @@ func (r *UserRouter) Configure(routerCtx context.Context, userService userservic
 	)
 
 	// Register the event handlers with the router, passing the routerCtx.
+	fmt.Printf("DEBUG: About to call RegisterHandlers() for user module\n")
 	if err := r.RegisterHandlers(routerCtx, userHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
+	fmt.Printf("DEBUG: RegisterHandlers() completed successfully for user module\n")
 	return nil
 }
 
 // RegisterHandlers registers event handlers.
 // It now accepts a context.
 func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers.Handlers) error {
+	fmt.Printf("DEBUG: RegisterHandlers() called for user module\n")
 	r.logger.InfoContext(ctx, "Entering Register Handlers for User")
 
 	// Map event topics to their corresponding handler functions.
@@ -158,6 +164,7 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 		attr.String("TagAvailable_constant", userevents.TagAvailable))
 
 	for topic, handlerFunc := range eventsToHandlers {
+		fmt.Printf("DEBUG: Registering handler for topic: %s\n", topic)
 		// Use the context passed to RegisterHandlers
 		r.logger.InfoContext(ctx, "Setting up subscription",
 			attr.String("topic", topic),

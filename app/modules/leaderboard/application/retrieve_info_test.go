@@ -468,8 +468,9 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
-				UserID:  testUserID,
-				RoundID: testRoundID,
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test-guild")},
+				UserID:        testUserID,
+				RoundID:       testRoundID,
 				TagNumber: func() *sharedtypes.TagNumber {
 					val := sharedtypes.TagNumber(5)
 					return &val
@@ -499,6 +500,7 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
+				ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test-guild")},
 				UserID:             testUserID,
 				RoundID:            testRoundID,
 				TagNumber:          nil,
@@ -527,6 +529,7 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: &sharedevents.RoundTagLookupResultPayload{
+				ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test-guild")},
 				UserID:             testUserID,
 				RoundID:            testRoundID,
 				TagNumber:          nil,

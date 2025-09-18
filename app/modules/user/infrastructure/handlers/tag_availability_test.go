@@ -235,6 +235,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 		GuildID:   testGuildID,
 		UserID:    testUserID,
 		TagNumber: testTagNumber,
+		Reason:    "tag not available",
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-unavailable-id", payloadBytes)

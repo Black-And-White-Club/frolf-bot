@@ -75,6 +75,7 @@ func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandle
 		guildevents.GuildConfigRetrievalRequested: handlers.HandleRetrieveGuildConfig,
 		guildevents.GuildConfigUpdateRequested:    handlers.HandleUpdateGuildConfig,
 		guildevents.GuildConfigDeletionRequested:  handlers.HandleDeleteGuildConfig,
+		"guild.setup":                             handlers.HandleGuildSetup,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

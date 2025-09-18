@@ -96,7 +96,9 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sh
 		s.metrics.RecordOperationDuration(ctx, "GetTagByUserID", "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 		s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Duration(time.Since(dbStartTime).Seconds()))
 
+		// Initialize result payload with GuildID so downstream consumers always have it
 		resultPayload := sharedevents.RoundTagLookupResultPayload{
+			ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: guildID},
 			UserID:             payload.UserID,
 			RoundID:            payload.RoundID,
 			OriginalResponse:   payload.Response,
@@ -116,9 +118,10 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sh
 
 				return LeaderboardOperationResult{
 					Failure: &sharedevents.RoundTagLookupFailedPayload{
-						UserID:  payload.UserID,
-						RoundID: payload.RoundID,
-						Reason:  "No active leaderboard found",
+						ScopedGuildID: sharedevents.ScopedGuildID{GuildID: guildID},
+						UserID:        payload.UserID,
+						RoundID:       payload.RoundID,
+						Reason:        "No active leaderboard found",
 					},
 				}, nil // Return nil standard error as this is a handled business error
 			}

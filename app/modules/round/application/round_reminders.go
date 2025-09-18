@@ -45,6 +45,21 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 			}
 		}
 
+		// Enrich channel ID if missing before constructing outbound payload
+		channelID := payload.DiscordChannelID
+		if channelID == "" {
+			if cfg := s.getGuildConfigForEnrichment(ctx, payload.GuildID); cfg != nil && cfg.EventChannelID != "" {
+				channelID = cfg.EventChannelID
+				s.logger.DebugContext(ctx, "Enriched missing DiscordChannelID for reminder from config cache",
+					attr.String("channel_id", channelID),
+				)
+			} else {
+				s.logger.WarnContext(ctx, "DiscordChannelID missing for reminder and no config fallback available",
+					attr.String("guild_id", string(payload.GuildID)),
+				)
+			}
+		}
+
 		// Create the Discord notification payload with filtered participants
 		discordPayload := &roundevents.DiscordReminderPayload{
 			GuildID:          payload.GuildID,
@@ -55,7 +70,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 			UserIDs:          userIDs, // This could be empty
 			ReminderType:     payload.ReminderType,
 			EventMessageID:   payload.EventMessageID,
-			DiscordChannelID: payload.DiscordChannelID,
+			DiscordChannelID: channelID,
 			DiscordGuildID:   payload.DiscordGuildID,
 		}
 

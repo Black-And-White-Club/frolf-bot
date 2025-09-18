@@ -9,6 +9,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	leaderboardiface "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -30,13 +31,16 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			name: "Successfully checks available tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(true, nil)
+				userID := sharedtypes.DiscordID("test_user_id")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, userID, tagNumber).Return(leaderboardiface.TagAvailabilityResult{Available: true, Reason: ""}, nil)
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
 			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
+				Available: true,
+				GuildID:   sharedtypes.GuildID("test-guild"),
 			},
 			expectedFail:  nil,
 			expectedError: nil,
@@ -45,13 +49,16 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			name: "Successfully checks unavailable tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(false, nil)
+				userID := sharedtypes.DiscordID("test_user_id")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, userID, tagNumber).Return(leaderboardiface.TagAvailabilityResult{Available: false, Reason: ""}, nil)
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
 			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
+				Available: false,
+				GuildID:   sharedtypes.GuildID("test-guild"),
 			},
 			expectedFail:  nil,
 			expectedError: nil,
@@ -60,7 +67,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			name: "Database error when checking tag",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, tagNumber).Return(false, errors.New("database error"))
+				userID := sharedtypes.DiscordID("test_user_id")
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, userID, tagNumber).Return(leaderboardiface.TagAvailabilityResult{Available: false, Reason: ""}, errors.New("database error"))
 			},
 			userID:         sharedtypes.DiscordID("test_user_id"),
 			tagNumber:      tagNumber,
@@ -69,8 +77,27 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
 				Reason:    "failed to check tag availability",
+				GuildID:   sharedtypes.GuildID("test-guild"),
 			},
 			expectedError: errors.New("database error"),
+		},
+		{
+			name: "User already has a tag (duplicate signup attempt)",
+			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
+				guildID := sharedtypes.GuildID("test-guild")
+				userID := sharedtypes.DiscordID("test_user_id")
+				// Return unavailable when user already has a tag (prevents duplicate signup)
+				mockDB.EXPECT().CheckTagAvailability(gomock.Any(), guildID, userID, tagNumber).Return(leaderboardiface.TagAvailabilityResult{Available: false, Reason: ""}, nil)
+			},
+			userID:    sharedtypes.DiscordID("test_user_id"),
+			tagNumber: tagNumber,
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+				UserID:    sharedtypes.DiscordID("test_user_id"),
+				TagNumber: &tagNumber,
+				Available: false,
+			},
+			expectedFail:  nil,
+			expectedError: nil,
 		},
 	}
 
@@ -109,7 +136,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			if tt.expectedResult != nil {
 				if got == nil {
 					t.Errorf("Expected success payload, got nil")
-				} else if got.UserID != tt.expectedResult.UserID || *got.TagNumber != *tt.expectedResult.TagNumber {
+				} else if got.UserID != tt.expectedResult.UserID || *got.TagNumber != *tt.expectedResult.TagNumber || got.Available != tt.expectedResult.Available {
 					t.Errorf("Mismatched success payload, got: %+v, expected: %+v", got, tt.expectedResult)
 				}
 			} else if got != nil {

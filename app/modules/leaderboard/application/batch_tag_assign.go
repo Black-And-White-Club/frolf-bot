@@ -2,6 +2,7 @@ package leaderboardservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -64,7 +65,35 @@ func (s *LeaderboardService) ProcessTagAssignments(
 		// Get current leaderboard for validation
 		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
 		if err != nil {
-			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
+			// If no active leaderboard exists and this is for user creation, create an empty one
+			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) && sourceType == sharedtypes.ServiceUpdateSourceCreateUser {
+				s.logger.InfoContext(ctx, "No active leaderboard found for user creation, creating empty leaderboard",
+					attr.String("guild_id", string(guildID)),
+				)
+
+				// Create an empty leaderboard
+				emptyLeaderboard := &leaderboarddb.Leaderboard{
+					LeaderboardData: leaderboardtypes.LeaderboardData{},
+					IsActive:        true,
+					UpdateSource:    sharedtypes.ServiceUpdateSourceCreateUser,
+					UpdateID:        sharedtypes.RoundID(operationID),
+					GuildID:         guildID,
+				}
+
+				_, createErr := s.LeaderboardDB.CreateLeaderboard(ctx, guildID, emptyLeaderboard)
+				if createErr != nil {
+					s.logger.ErrorContext(ctx, "Failed to create initial leaderboard",
+						attr.String("guild_id", string(guildID)),
+						attr.Error(createErr),
+					)
+					return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to create initial leaderboard"), createErr
+				}
+
+				// Use the newly created empty leaderboard
+				currentLeaderboard = emptyLeaderboard
+			} else {
+				return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
+			}
 		}
 
 		// Early return for empty requests - return current leaderboard state
@@ -244,6 +273,15 @@ func (s *LeaderboardService) processSingleAssignment(
 	// Check if user exists in leaderboard
 	userExists := s.userExistsInLeaderboard(currentLeaderboard, request.UserID)
 
+	// Prevent duplicate signups: if this is user creation and user already has a tag, fail
+	if source == sharedtypes.ServiceUpdateSourceCreateUser && userExists {
+		s.logger.WarnContext(ctx, "User signup blocked - user already has a tag",
+			attr.String("user_id", string(request.UserID)),
+			attr.String("source", string(source)),
+		)
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, "user already has a tag, cannot sign up again"), nil
+	}
+
 	var newLeaderboardData leaderboardtypes.LeaderboardData
 	var err error
 
@@ -413,33 +451,34 @@ func (s *LeaderboardService) buildSuccessResponse(
 		}
 
 	case sharedtypes.ServiceUpdateSourceCreateUser:
-		// Single user creation returns individual tag assigned event
+		// For single user creation flows, emit TagAssigned for backward compatibility
 		if len(completedRequests) == 1 {
-			request := completedRequests[0]
+			req := completedRequests[0]
+			tn := req.TagNumber
 			return LeaderboardOperationResult{
 				Success: &leaderboardevents.TagAssignedPayload{
-					UserID:       request.UserID,
-					TagNumber:    &request.TagNumber,
+					UserID:       req.UserID,
+					TagNumber:    &tn,
 					AssignmentID: sharedtypes.RoundID(operationID),
-					Source:       string(source),
+					Source:       "create_user",
 				},
 			}
 		}
-		// Multiple assignments use batch response
+		// Otherwise, return batch response
 		return LeaderboardOperationResult{
-			Success: createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID),
+			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
 		}
 
 	case sharedtypes.ServiceUpdateSourceAdminBatch, sharedtypes.ServiceUpdateSourceManual:
 		// Admin operations return batch assigned event
 		return LeaderboardOperationResult{
-			Success: createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID),
+			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
 		}
 
 	default:
 		// Fallback to batch response for unknown sources
 		return LeaderboardOperationResult{
-			Success: createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID),
+			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
 		}
 	}
 }
@@ -476,18 +515,24 @@ func (s *LeaderboardService) buildFailureResponse(
 }
 
 // createBatchAssignedPayload creates a batch assigned payload from requests
-func createBatchAssignedPayload(
+func (s *LeaderboardService) createBatchAssignedPayload(
 	requests []sharedtypes.TagAssignmentRequest,
 	requestingUser sharedtypes.DiscordID,
 	batchID uuid.UUID,
+	guildID sharedtypes.GuildID,
 ) *leaderboardevents.BatchTagAssignedPayload {
 	if len(requests) == 0 {
-		return &leaderboardevents.BatchTagAssignedPayload{
+		payload := &leaderboardevents.BatchTagAssignedPayload{
+			GuildID:          guildID,
 			RequestingUserID: requestingUser,
 			BatchID:          batchID.String(),
 			AssignmentCount:  0,
 			Assignments:      []leaderboardevents.TagAssignmentInfo{},
 		}
+		if cfg := s.getGuildConfigForEnrichment(context.Background(), guildID); cfg != nil {
+			payload.Config = sharedevents.NewGuildConfigFragment(cfg)
+		}
+		return payload
 	}
 
 	assignments := make([]leaderboardevents.TagAssignmentInfo, len(requests))
@@ -498,10 +543,15 @@ func createBatchAssignedPayload(
 		}
 	}
 
-	return &leaderboardevents.BatchTagAssignedPayload{
+	payload := &leaderboardevents.BatchTagAssignedPayload{
+		GuildID:          guildID,
 		RequestingUserID: requestingUser,
 		BatchID:          batchID.String(),
 		AssignmentCount:  len(requests),
 		Assignments:      assignments,
 	}
+	if cfg := s.getGuildConfigForEnrichment(context.Background(), guildID); cfg != nil {
+		payload.Config = sharedevents.NewGuildConfigFragment(cfg)
+	}
+	return payload
 }

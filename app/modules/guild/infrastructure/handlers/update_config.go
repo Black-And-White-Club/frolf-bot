@@ -61,6 +61,16 @@ func (h *GuildHandlers) HandleUpdateGuildConfig(msg *message.Message) ([]*messag
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
+
+				// Preserve guild_id metadata for Discord side
+				if guildID := msg.Metadata.Get("guild_id"); guildID != "" {
+					failureMsg.Metadata.Set("guild_id", guildID)
+				}
+				// Also set it from the payload as a fallback
+				if updatePayload != nil {
+					failureMsg.Metadata.Set("guild_id", string(updatePayload.GuildID))
+				}
+
 				return []*message.Message{failureMsg}, nil
 			}
 
@@ -74,6 +84,16 @@ func (h *GuildHandlers) HandleUpdateGuildConfig(msg *message.Message) ([]*messag
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
+
+				// Preserve guild_id metadata for Discord side
+				if guildID := msg.Metadata.Get("guild_id"); guildID != "" {
+					successMsg.Metadata.Set("guild_id", guildID)
+				}
+				// Also set it from the payload as a fallback
+				if updatePayload != nil {
+					successMsg.Metadata.Set("guild_id", string(updatePayload.GuildID))
+				}
+
 				return []*message.Message{successMsg}, nil
 			}
 

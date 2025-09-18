@@ -30,6 +30,7 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-123")
 	mockDB := rounddb.NewMockRoundDB(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
@@ -51,13 +52,16 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayload{
+				GuildID:     guildID,
 				RoundID:     testScoreRoundID,
 				Participant: testParticipant,
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.ScoreUpdateValidatedPayload{
+					GuildID: guildID,
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+						GuildID:     guildID,
 						RoundID:     testScoreRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
@@ -72,13 +76,16 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayload{
+				GuildID:     guildID,
 				RoundID:     sharedtypes.RoundID(uuid.Nil),
 				Participant: testParticipant,
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
+						GuildID:     guildID,
 						RoundID:     sharedtypes.RoundID(uuid.Nil),
 						Participant: testParticipant,
 						Score:       &testScore,
@@ -94,13 +101,16 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayload{
+				GuildID:     guildID,
 				RoundID:     testScoreRoundID,
 				Participant: "",
 				Score:       &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
+						GuildID:     guildID,
 						RoundID:     testScoreRoundID,
 						Participant: "",
 						Score:       &testScore,
@@ -116,13 +126,16 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayload{
+				GuildID:     guildID,
 				RoundID:     testScoreRoundID,
 				Participant: testParticipant,
 				Score:       nil,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
+						GuildID:     guildID,
 						RoundID:     testScoreRoundID,
 						Participant: testParticipant,
 						Score:       nil,
@@ -138,13 +151,16 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayload{
+				GuildID:     guildID,
 				RoundID:     sharedtypes.RoundID(uuid.Nil),
 				Participant: "",
 				Score:       nil,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayload{
+						GuildID:     guildID,
 						RoundID:     sharedtypes.RoundID(uuid.Nil),
 						Participant: "",
 						Score:       nil,

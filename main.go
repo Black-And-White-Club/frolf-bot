@@ -4,8 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,13 +26,31 @@ import (
 	"github.com/uptrace/bun/migrate"
 
 	// Import for migrator creation
+	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
+// --- Minimal health server for Kubernetes probes ---
+func startHealthServer() {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+	go func() {
+		log.Println("Starting health server on :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("Health server failed: %v", err)
+		}
+	}()
+}
+
 func main() {
+	// Start health server for Kubernetes probes
+	startHealthServer()
+
 	// Check for migrate command
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		runMigrations()
@@ -69,7 +91,10 @@ func main() {
 	}
 	fmt.Println("DEBUG: Observability initialized successfully")
 
-	logger := obs.Provider.Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // or your preferred level
+	}))
+	obs.Provider.Logger = logger // Ensure all modules/services use the overridden logger
 	fmt.Println("DEBUG: About to initialize application...")
 
 	// --- Application Initialization ---
@@ -211,8 +236,13 @@ func runMigrations() {
 	}
 	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
 	if err != nil {
-		fmt.Printf("Failed to run River migrations: %v\n", err)
-		os.Exit(1)
+		// Check if this is just a "table already exists" error which is safe to ignore
+		if strings.Contains(err.Error(), "already exists") && strings.Contains(err.Error(), "river_migration") {
+			fmt.Println("River migration table already exists, skipping migration...")
+		} else {
+			fmt.Printf("Failed to run River migrations: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	fmt.Println("River migrations completed successfully.")
 
@@ -224,6 +254,7 @@ func runMigrations() {
 
 	// Create migrators for all modules
 	migrators := map[string]*migrate.Migrator{
+		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations),
 		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
 		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),

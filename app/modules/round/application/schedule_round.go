@@ -50,12 +50,32 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 			)
 
 			reminderPayload := roundevents.DiscordReminderPayload{
+				GuildID:        guildID, // Multi-tenant scope required downstream
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
 				RoundTitle:     payload.Title,
 				Location:       payload.Location,
 				StartTime:      payload.StartTime,
 				EventMessageID: discordMessageID,
+				// DiscordGuildID duplicates GuildID as raw string for Discord service convenience
+				DiscordGuildID: string(guildID),
+			}
+
+			// Channel enrichment precedence:
+			// 1. Config fragment event channel
+			// 2. ChannelID present on scheduling payload (if RoundScheduledPayload now carries it)
+			// 3. Guild config provider
+			if payload.Config != nil && payload.Config.EventChannelID != "" {
+				reminderPayload.DiscordChannelID = payload.Config.EventChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from payload.Config)", attr.String("channel_id", payload.Config.EventChannelID))
+			} else if payload.ChannelID != "" {
+				reminderPayload.DiscordChannelID = payload.ChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from payload.ChannelID)", attr.String("channel_id", payload.ChannelID))
+			} else if cfg := s.getGuildConfigForEnrichment(ctx, guildID); cfg != nil && cfg.EventChannelID != "" {
+				reminderPayload.DiscordChannelID = cfg.EventChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from guild config provider)", attr.String("channel_id", cfg.EventChannelID))
+			} else {
+				s.logger.WarnContext(ctx, "No event channel ID available to embed in reminder payload", attr.String("guild_id", string(guildID)))
 			}
 
 			if err := s.QueueService.ScheduleRoundReminder(ctx, guildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
@@ -86,6 +106,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 			)
 
 			startPayload := roundevents.RoundStartedPayload{
+				GuildID:   guildID, // Ensure downstream start processing has tenant scope
 				RoundID:   payload.RoundID,
 				Title:     payload.Title,
 				Location:  payload.Location,
@@ -114,6 +135,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 		// Return success with the original payload
 		return RoundOperationResult{
 			Success: &roundevents.RoundScheduledPayload{
+				GuildID: guildID, // ensure guild scope propagates for downstream handlers
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     payload.RoundID,
 					Title:       payload.Title,
@@ -122,6 +144,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 					StartTime:   payload.StartTime,
 				},
 				EventMessageID: discordMessageID,
+				ChannelID:      payload.ChannelID, // propagate for downstream enrichment
 			},
 		}, nil
 	})
