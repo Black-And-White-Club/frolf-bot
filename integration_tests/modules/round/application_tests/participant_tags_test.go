@@ -64,7 +64,6 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					State:     roundtypes.RoundStateUpcoming,
 				})
 				round2.GuildID = "test-guild"
-				round2.GuildID = "test-guild"
 				// Ensure start_time is set (required field) - check if it's nil or zero
 				if round2.StartTime == nil || round2.StartTime.AsTime().IsZero() {
 					startTime := sharedtypes.StartTime(time.Now().Add(48 * time.Hour))
