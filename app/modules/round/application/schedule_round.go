@@ -7,11 +7,12 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
 // It handles cases where the round start time might be too close for certain reminders.
-func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error) {
+func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ScheduleRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round scheduling",
 			attr.RoundID("round_id", payload.RoundID),
@@ -49,15 +50,35 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 			)
 
 			reminderPayload := roundevents.DiscordReminderPayload{
+				GuildID:        guildID, // Multi-tenant scope required downstream
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
 				RoundTitle:     payload.Title,
 				Location:       payload.Location,
 				StartTime:      payload.StartTime,
 				EventMessageID: discordMessageID,
+				// DiscordGuildID duplicates GuildID as raw string for Discord service convenience
+				DiscordGuildID: string(guildID),
 			}
 
-			if err := s.QueueService.ScheduleRoundReminder(ctx, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
+			// Channel enrichment precedence:
+			// 1. Config fragment event channel
+			// 2. ChannelID present on scheduling payload (if RoundScheduledPayload now carries it)
+			// 3. Guild config provider
+			if payload.Config != nil && payload.Config.EventChannelID != "" {
+				reminderPayload.DiscordChannelID = payload.Config.EventChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from payload.Config)", attr.String("channel_id", payload.Config.EventChannelID))
+			} else if payload.ChannelID != "" {
+				reminderPayload.DiscordChannelID = payload.ChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from payload.ChannelID)", attr.String("channel_id", payload.ChannelID))
+			} else if cfg := s.getGuildConfigForEnrichment(ctx, guildID); cfg != nil && cfg.EventChannelID != "" {
+				reminderPayload.DiscordChannelID = cfg.EventChannelID
+				s.logger.DebugContext(ctx, "Embedding event channel ID into reminder payload (from guild config provider)", attr.String("channel_id", cfg.EventChannelID))
+			} else {
+				s.logger.WarnContext(ctx, "No event channel ID available to embed in reminder payload", attr.String("guild_id", string(guildID)))
+			}
+
+			if err := s.QueueService.ScheduleRoundReminder(ctx, guildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule reminder job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
@@ -85,13 +106,14 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 			)
 
 			startPayload := roundevents.RoundStartedPayload{
+				GuildID:   guildID, // Ensure downstream start processing has tenant scope
 				RoundID:   payload.RoundID,
 				Title:     payload.Title,
 				Location:  payload.Location,
 				StartTime: payload.StartTime,
 			}
 
-			if err := s.QueueService.ScheduleRoundStart(ctx, payload.RoundID, startTimeUTC, startPayload); err != nil {
+			if err := s.QueueService.ScheduleRoundStart(ctx, guildID, payload.RoundID, startTimeUTC, startPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule round start job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
@@ -113,6 +135,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 		// Return success with the original payload
 		return RoundOperationResult{
 			Success: &roundevents.RoundScheduledPayload{
+				GuildID: guildID, // ensure guild scope propagates for downstream handlers
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     payload.RoundID,
 					Title:       payload.Title,
@@ -121,6 +144,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, payload roundeve
 					StartTime:   payload.StartTime,
 				},
 				EventMessageID: discordMessageID,
+				ChannelID:      payload.ChannelID, // propagate for downstream enrichment
 			},
 		}, nil
 	})

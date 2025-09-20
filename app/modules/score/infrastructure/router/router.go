@@ -107,6 +107,10 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 	eventsToHandlers := map[string]message.HandlerFunc{
 		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
 		scoreevents.ScoreUpdateRequest:        handlers.HandleCorrectScoreRequest,
+		scoreevents.ScoreBulkUpdateRequest:    handlers.HandleBulkCorrectScoreRequest,
+		// Reprocessing triggers after overrides
+		scoreevents.ScoreUpdateSuccess:     handlers.HandleReprocessAfterScoreUpdate,
+		scoreevents.ScoreBulkUpdateSuccess: handlers.HandleReprocessAfterScoreUpdate,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

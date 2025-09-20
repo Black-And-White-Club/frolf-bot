@@ -25,12 +25,14 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("user1")
 	testScore := sharedtypes.Score(72)
 	testTagNumber := sharedtypes.TagNumber(1)
 
 	testProcessRoundScoresRequestPayload := &scoreevents.ProcessRoundScoresRequestPayload{
+		GuildID: testGuildID,
 		RoundID: testRoundID,
 		Scores: []sharedtypes.ScoreInfo{
 			{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
@@ -69,11 +71,13 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+							GuildID: testGuildID,
 							RoundID: testRoundID,
 							TagMappings: []sharedtypes.TagMapping{
 								{DiscordID: testUserID, TagNumber: testTagNumber},
@@ -128,12 +132,14 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				// Service returns proper failure payload
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Error:   "internal service error",
 				}
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
@@ -165,11 +171,13 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+							GuildID:     testGuildID,
 							RoundID:     testRoundID,
 							TagMappings: []sharedtypes.TagMapping{},
 						},
@@ -200,12 +208,14 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				// Service returns proper failure payload
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Error:   "internal service error",
 				}
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
@@ -238,6 +248,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
@@ -262,6 +273,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(
@@ -271,6 +283,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				// Handler creates failure payload from direct error
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Error:   "direct service error",
 				}
@@ -297,6 +310,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
 				).Return(

@@ -28,6 +28,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 		{
 			name: "Success - Update user role",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, sharedtypes.UserRoleEnum) {
+				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("123456789012345678")
 				newRole := sharedtypes.UserRoleAdmin
 
@@ -36,8 +37,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				}
 
 				// Create a user first
-				// Assuming CreateUser exists and works in your service
-				createResult, createErr := deps.Service.CreateUser(deps.Ctx, userID, tagPtr(1)) // Assuming tagPtr exists
+				createResult, createErr := deps.Service.CreateUser(deps.Ctx, guildID, userID, tagPtr(1))
 				if createErr != nil {
 					t.Fatalf("Failed to create user for test setup: %v", createErr)
 				}
@@ -74,7 +74,8 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				}
 
 				// Verify the role was actually updated in the database
-				getUserResult, getUserErr := deps.Service.GetUser(deps.Ctx, userID)
+				guildID := sharedtypes.GuildID("test-guild")
+				getUserResult, getUserErr := deps.Service.GetUser(deps.Ctx, guildID, userID)
 				if getUserErr != nil {
 					t.Fatalf("Failed to retrieve user after update: %v", getUserErr)
 				}
@@ -228,7 +229,8 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				ctx, userID, newRole = tc.setupFn(t, currentDeps)
 			}
 
-			result, err = currentDeps.Service.UpdateUserRoleInDatabase(ctx, userID, newRole)
+			guildID := sharedtypes.GuildID("test-guild")
+			result, err = currentDeps.Service.UpdateUserRoleInDatabase(ctx, guildID, userID, newRole)
 
 			tc.validateFn(t, currentDeps, userID, newRole, result, err)
 

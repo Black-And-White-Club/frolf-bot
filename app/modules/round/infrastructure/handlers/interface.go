@@ -28,6 +28,7 @@ type Handlers interface {
 	HandleScheduledRoundTagUpdate(msg *message.Message) ([]*message.Message, error)
 	HandleTagNumberFound(msg *message.Message) ([]*message.Message, error)
 	HandleTagNumberNotFound(msg *message.Message) ([]*message.Message, error)
+	HandleTagNumberLookupFailed(msg *message.Message) ([]*message.Message, error)
 	HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error)
 	HandleParticipantDeclined(msg *message.Message) ([]*message.Message, error)
 	HandleParticipantStatusUpdateRequest(msg *message.Message) ([]*message.Message, error)

@@ -7,6 +7,7 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -20,8 +21,9 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 				attr.CorrelationIDFromMsg(msg),
 			)
 
-			// Call the service function to get the leaderboard
-			result, err := h.leaderboardService.GetLeaderboard(ctx)
+			// Call the service function to get the leaderboard, propagate guildID
+			payloadTyped := payload.(*leaderboardevents.GetLeaderboardRequestPayload)
+			result, err := h.leaderboardService.GetLeaderboard(ctx, payloadTyped.GuildID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to get leaderboard",
 					attr.CorrelationIDFromMsg(msg),
@@ -95,7 +97,7 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 				attr.Any("joined_late", tagLookupRequestPayload.JoinedLate),
 			)
 
-			result, err := h.leaderboardService.RoundGetTagByUserID(ctx, *tagLookupRequestPayload)
+			result, err := h.leaderboardService.RoundGetTagByUserID(ctx, sharedtypes.GuildID(tagLookupRequestPayload.GuildID), *tagLookupRequestPayload)
 			// ServiceWrapper returns error for unexpected system errors.
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed during RoundGetTagByUserID service call",
@@ -262,8 +264,8 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				attr.String("user_id", string(tagNumberRequestPayload.UserID)),
 			)
 
-			// Call the service method with the UserID directly
-			result, err := h.leaderboardService.GetTagByUserID(ctx, tagNumberRequestPayload.UserID)
+			// Call the service method with the UserID and GuildID
+			result, err := h.leaderboardService.GetTagByUserID(ctx, sharedtypes.GuildID(tagNumberRequestPayload.GuildID), tagNumberRequestPayload.UserID)
 			// Check for system errors returned directly by the service call first.
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed during GetTagByUserID service call (system error)",

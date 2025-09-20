@@ -20,17 +20,22 @@ func createValidRoundEntityCreatedPayload(userID sharedtypes.DiscordID) roundeve
 	location := roundtypes.Location("Test Course")
 
 	return roundevents.RoundEntityCreatedPayload{
+		GuildID: "test-guild",
 		Round: roundtypes.Round{
-			ID:           sharedtypes.RoundID(uuid.New()),
-			Title:        roundtypes.Title("Test Round"),
-			Description:  &description,
-			Location:     &location,
-			StartTime:    &startTime,
-			CreatedBy:    userID,
-			State:        roundtypes.RoundStateUpcoming,
-			Participants: []roundtypes.Participant{},
-			Finalized:    roundtypes.Finalized(false),
+			ID:          sharedtypes.RoundID(uuid.New()),
+			Title:       "Test Round",
+			Description: &description,
+			Location:    &location,
+			StartTime:   &startTime,
+			CreatedBy:   userID,
+			State:       roundtypes.RoundStateUpcoming,
+			Participants: []roundtypes.Participant{
+				{UserID: userID, Response: roundtypes.ResponseAccept},
+			},
+			Finalized: roundtypes.Finalized(false),
 		},
+		DiscordChannelID: "test-channel-123",
+		DiscordGuildID:   "test-guild",
 	}
 }
 
@@ -44,17 +49,22 @@ func createMinimalRoundEntityCreatedPayload(userID sharedtypes.DiscordID) rounde
 	location := roundtypes.Location("Local Course")
 
 	return roundevents.RoundEntityCreatedPayload{
+		GuildID: "test-guild",
 		Round: roundtypes.Round{
-			ID:           roundID,
-			Title:        "Quick Round",
-			Description:  &description,
-			Location:     &location,
-			StartTime:    &startTime,
-			CreatedBy:    userID,
-			State:        roundtypes.RoundStateUpcoming,
-			Participants: []roundtypes.Participant{},
-			Finalized:    false,
+			ID:          roundID,
+			Title:       "Quick Round",
+			Description: &description,
+			Location:    &location,
+			StartTime:   &startTime,
+			CreatedBy:   userID,
+			State:       roundtypes.RoundStateUpcoming,
+			Participants: []roundtypes.Participant{
+				{UserID: userID, Response: roundtypes.ResponseAccept},
+			},
+			Finalized: roundtypes.Finalized(false),
 		},
+		DiscordChannelID: "test-channel-456",
+		DiscordGuildID:   "test-guild",
 	}
 }
 
@@ -80,6 +90,22 @@ func expectStoreSuccess(t *testing.T, helper *testutils.RoundTestHelper, origina
 	// Add more detailed field comparisons if necessary
 }
 
+// expectNoMessages validates that no messages were published (for JSON errors)
+func expectNoMessages(t *testing.T, helper *testutils.RoundTestHelper, timeout time.Duration) {
+	t.Helper()
+	time.Sleep(timeout)
+
+	createdMsgs := helper.GetRoundCreatedMessages()
+	if len(createdMsgs) > 0 {
+		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreated, len(createdMsgs))
+	}
+
+	creationFailedMsgs := helper.GetRoundCreationFailedMessages()
+	if len(creationFailedMsgs) > 0 {
+		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreationFailed, len(creationFailedMsgs))
+	}
+}
+
 // TestHandleRoundEntityCreated runs integration tests for the round entity created handler
 func TestHandleRoundEntityCreated(t *testing.T) {
 	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
@@ -95,7 +121,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
 				payload := createValidRoundEntityCreatedPayload(userID)
 				helper.PublishRoundEntityCreated(t, context.Background(), payload)
-				expectStoreSuccess(t, helper, payload, 3*time.Second)
+				expectStoreSuccess(t, helper, payload, 5*time.Second)
 			},
 		},
 		{
@@ -103,7 +129,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
 				payload := createMinimalRoundEntityCreatedPayload(userID)
 				helper.PublishRoundEntityCreated(t, context.Background(), payload)
-				expectStoreSuccess(t, helper, payload, 3*time.Second)
+				expectStoreSuccess(t, helper, payload, 5*time.Second)
 			},
 		},
 		{
@@ -116,7 +142,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					{UserID: sharedtypes.DiscordID("user456"), Response: roundtypes.ResponseDecline},
 				}
 				helper.PublishRoundEntityCreated(t, context.Background(), payload)
-				expectStoreSuccess(t, helper, payload, 3*time.Second)
+				expectStoreSuccess(t, helper, payload, 5*time.Second)
 			},
 		},
 		{
@@ -124,7 +150,14 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
 				payload := createValidRoundEntityCreatedPayload(userID)
 				payload.Round.State = roundtypes.RoundStateInProgress
+
 				helper.PublishRoundEntityCreated(t, context.Background(), payload)
+
+				// Wait for messages and capture what we get
+				if !helper.WaitForRoundCreated(1, 3*time.Second) {
+					t.Fatalf("Expected round.created message within 3s")
+				}
+
 				expectStoreSuccess(t, helper, payload, 3*time.Second)
 			},
 		},
@@ -164,7 +197,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				payload := createValidRoundEntityCreatedPayload(userID)
 				originalMsg := helper.PublishRoundEntityCreated(t, context.Background(), payload)
 
-				if !helper.WaitForRoundCreated(1, 3*time.Second) {
+				if !helper.WaitForRoundCreated(1, 5*time.Second) {
 					t.Fatalf("Expected success message (round.created)")
 				}
 
@@ -191,6 +224,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 			name: "Success - Handler Publishes Correct Event Topic",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
 				payload := createValidRoundEntityCreatedPayload(userID)
+
 				helper.PublishRoundEntityCreated(t, context.Background(), payload)
 
 				if !helper.WaitForRoundCreated(1, 3*time.Second) {

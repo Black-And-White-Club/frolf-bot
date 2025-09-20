@@ -8,4 +8,6 @@ import (
 type Handlers interface {
 	HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error)
 	HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error)
+	HandleBulkCorrectScoreRequest(msg *message.Message) ([]*message.Message, error)
+	HandleReprocessAfterScoreUpdate(msg *message.Message) ([]*message.Message, error)
 }

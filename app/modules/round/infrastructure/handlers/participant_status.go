@@ -8,6 +8,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -20,12 +21,13 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			// The payload variable is the unmarshalled ParticipantJoinRequestPayload
 			participantJoinRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayload)
 
-			// Log the incoming payload to this handler
+			// Log the incoming payload to this handler, including guild_id
 			h.logger.InfoContext(ctx, "Received ParticipantJoinRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("round_id", participantJoinRequestPayload.RoundID.String()),
 				attr.String("user_id", string(participantJoinRequestPayload.UserID)),
-				attr.String("response", string(participantJoinRequestPayload.Response)), // Log the response received here
+				attr.String("response", string(participantJoinRequestPayload.Response)),           // Log the response received here
+				attr.String("guild_id", fmt.Sprintf("%v", participantJoinRequestPayload.GuildID)), // Explicitly log guild_id
 			)
 
 			// Call the service function to check participant status
@@ -36,6 +38,29 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					attr.Any("error", err),
 				)
 				return nil, fmt.Errorf("CheckParticipantStatus service failed: %w", err) // Return the specific error
+			}
+
+			// Patch: Ensure guild_id is propagated in all outgoing payloads
+			if result.Success != nil {
+				switch successPayload := result.Success.(type) {
+				case *roundevents.ParticipantJoinValidationRequestPayload:
+					// If the payload is missing guild_id, set it from the incoming request
+					if successPayload.GuildID == "" {
+						successPayload.GuildID = participantJoinRequestPayload.GuildID
+						h.logger.WarnContext(ctx, "Patched missing guild_id in ParticipantJoinValidationRequestPayload",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("guild_id", string(successPayload.GuildID)),
+						)
+					}
+				case *roundevents.ParticipantRemovalRequestPayload:
+					if successPayload.GuildID == "" {
+						successPayload.GuildID = participantJoinRequestPayload.GuildID
+						h.logger.WarnContext(ctx, "Patched missing guild_id in ParticipantRemovalRequestPayload",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("guild_id", string(successPayload.GuildID)),
+						)
+					}
+				}
 			}
 
 			// --- Handle Service Result ---
@@ -184,12 +209,12 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 			}
 
 			// Call the service function to handle the event
-			// Pass only the basic request details received by the handler.
-			// The service will determine JoinedLate and include it in the return payload.
+			// Pass all relevant fields, including GuildID, to the service.
 			result, err := h.roundService.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayload{
 				RoundID:  participantJoinValidationRequestPayload.RoundID,
 				UserID:   participantJoinValidationRequestPayload.UserID,
 				Response: participantJoinValidationRequestPayload.Response,
+				GuildID:  participantJoinValidationRequestPayload.GuildID, // Ensure guild_id is propagated
 			})
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed during ValidateParticipantJoinRequest service call",
@@ -238,6 +263,14 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 						)
 						return nil, err
 					}
+					// Patch: Ensure guild_id is present in outgoing DECLINE payload
+					if updateRequest.GuildID == "" {
+						updateRequest.GuildID = participantJoinValidationRequestPayload.GuildID
+						h.logger.WarnContext(ctx, "Patched missing guild_id in DECLINE ParticipantJoinRequestPayload",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("guild_id", string(updateRequest.GuildID)),
+						)
+					}
 
 					h.logger.InfoContext(ctx, "Validation successful for DECLINE - Preparing StatusUpdateRequest",
 						attr.CorrelationIDFromMsg(msg),
@@ -272,6 +305,14 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 							attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
 						)
 						return nil, err
+					}
+					// Patch: Ensure guild_id is present in outgoing ACCEPT/TENTATIVE payload
+					if tagLookupRequest.GuildID == "" {
+						tagLookupRequest.GuildID = participantJoinValidationRequestPayload.GuildID
+						h.logger.WarnContext(ctx, "Patched missing guild_id in TagLookupRequestPayload",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("guild_id", string(tagLookupRequest.GuildID)),
+						)
 					}
 
 					h.logger.InfoContext(ctx, "Validation successful for ACCEPT/TENTATIVE - Preparing TagLookupRequest",
@@ -398,6 +439,13 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Messag
 					return nil, fmt.Errorf("failed to create RoundParticipantJoined message: %w", err)
 				}
 
+				// Patch: copy EventMessageID into metadata for discord consumer fallback
+				if pj, ok := result.Success.(*roundevents.ParticipantJoinedPayload); ok {
+					if pj.EventMessageID != "" && successMsg.Metadata.Get("discord_message_id") == "" {
+						successMsg.Metadata.Set("discord_message_id", pj.EventMessageID)
+					}
+				}
+
 				// Log the message being published
 				h.logger.InfoContext(ctx, "Publishing RoundParticipantJoined message for Discord",
 					attr.CorrelationIDFromMsg(msg),
@@ -522,7 +570,18 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 				TagNumber:  tagLookupResultPayload.TagNumber,
 				JoinedLate: tagLookupResultPayload.OriginalJoinedLate,
 				Response:   tagLookupResultPayload.OriginalResponse,
+				GuildID:    tagLookupResultPayload.GuildID, // Patch: propagate guild_id from tag lookup result
 			}
+			// DEBUG: Log the full updatePayload before calling handleParticipantUpdate
+			h.logger.InfoContext(ctx, "DEBUG: updatePayload before handleParticipantUpdate",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("guild_id", fmt.Sprintf("%v", updatePayload.GuildID)),
+				attr.String("round_id", updatePayload.RoundID.String()),
+				attr.String("user_id", string(updatePayload.UserID)),
+				attr.Any("tag_number", updatePayload.TagNumber),
+				attr.Any("joined_late", updatePayload.JoinedLate),
+				attr.String("response", string(updatePayload.Response)),
+			)
 
 			// Call the helper method to update participant status.
 			// Pass the constructed payload and the original response from the result payload.
@@ -563,6 +622,7 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 				TagNumber:  nil,
 				JoinedLate: tagLookupResultPayload.OriginalJoinedLate,
 				Response:   tagLookupResultPayload.OriginalResponse,
+				GuildID:    tagLookupResultPayload.GuildID, // Patch: propagate guild_id from tag lookup result
 			}
 
 			return h.handleParticipantUpdate(ctx, msg, updatePayload, tagLookupResultPayload.OriginalResponse)
@@ -611,6 +671,47 @@ func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*mess
 	return wrappedHandler(msg)
 }
 
+// HandleTagNumberLookupFailed handles a failure from the leaderboard tag lookup (e.g., no active leaderboard).
+// We treat this as a non-fatal condition for joining a round: proceed without a tag number.
+func (h *RoundHandlers) HandleTagNumberLookupFailed(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleTagNumberLookupFailed",
+		&sharedevents.RoundTagLookupFailedPayload{}, // Correct payload includes round_id & user_id
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			failurePayload := payload.(*sharedevents.RoundTagLookupFailedPayload)
+
+			// Use the payload fields directly (previous version relied on metadata + wrong struct, losing IDs)
+			if (failurePayload.RoundID == sharedtypes.RoundID{}) || failurePayload.UserID == "" { // Defensive: should not happen
+				h.logger.WarnContext(ctx, "Tag lookup failed payload missing round_id or user_id; skipping fallback participant update",
+					attr.CorrelationIDFromMsg(msg),
+					attr.RoundID("round_id", failurePayload.RoundID),
+					attr.String("user_id", string(failurePayload.UserID)),
+					attr.String("reason", failurePayload.Reason),
+				)
+				return nil, nil
+			}
+
+			h.logger.InfoContext(ctx, "Handling tag lookup failure as join success without tag",
+				attr.CorrelationIDFromMsg(msg),
+				attr.RoundID("round_id", failurePayload.RoundID),
+				attr.String("user_id", string(failurePayload.UserID)),
+				attr.String("reason", failurePayload.Reason),
+			)
+
+			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+				GuildID:   failurePayload.GuildID,
+				RoundID:   failurePayload.RoundID,
+				UserID:    failurePayload.UserID,
+				Response:  roundtypes.ResponseAccept, // TODO: preserve original response by extending failure payload
+				TagNumber: nil,
+			}
+
+			return h.handleParticipantUpdate(ctx, msg, updatePayload, roundtypes.ResponseAccept)
+		},
+	)
+	return wrappedHandler(msg)
+}
+
 // handleParticipantUpdate is a helper function to process participant status updates triggered by various events.
 func (h *RoundHandlers) handleParticipantUpdate(
 	ctx context.Context,
@@ -618,6 +719,14 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	updatePayload *roundevents.ParticipantJoinRequestPayload,
 	originalResponse roundtypes.Response,
 ) ([]*message.Message, error) {
+	// Patch: Ensure guild_id is present in outgoing updatePayload
+	if updatePayload.GuildID == "" {
+		// Try to extract guild_id from context or log a warning
+		h.logger.WarnContext(ctx, "Patched missing guild_id in updatePayload for handleParticipantUpdate",
+			attr.CorrelationIDFromMsg(msg),
+			attr.String("guild_id", ""),
+		)
+	}
 	// Call the service function to update participant status
 	updateResult, updateErr := h.roundService.UpdateParticipantStatus(ctx, *updatePayload)
 	if updateErr != nil {

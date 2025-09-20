@@ -4,8 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"log/slog"
+	"net/http"
+	pprof "net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,17 +27,67 @@ import (
 	"github.com/uptrace/bun/migrate"
 
 	// Import for migrator creation
+	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
+// --- Minimal health server for Kubernetes probes ---
+func startHealthServer() {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+	go func() {
+		log.Println("Starting health server on :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("Health server failed: %v", err)
+		}
+	}()
+}
+
+// --- Optional pprof server for on-demand profiling ---
+func startPprofIfEnabled() {
+	if os.Getenv("PPROF_ENABLED") != "true" {
+		return
+	}
+	addr := os.Getenv("PPROF_ADDR")
+	if addr == "" {
+		addr = ":6060"
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	go func() {
+		log.Printf("pprof enabled on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Printf("pprof server stopped: %v", err)
+		}
+	}()
+}
+
 func main() {
+	// Start health server for Kubernetes probes
+	startHealthServer()
+	// Optionally start pprof for profiling
+	startPprofIfEnabled()
+
 	// Check for migrate command
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		runMigrations()
 		return
+	}
+
+	// Auto-run migrations only if explicitly enabled (for development)
+	if os.Getenv("AUTO_MIGRATE") == "true" {
+		fmt.Println("DEBUG: AUTO_MIGRATE=true, running migrations on startup...")
+		runMigrations()
+		fmt.Println("DEBUG: Migrations completed, starting main application...")
 	}
 
 	// Create initial context
@@ -40,31 +95,42 @@ func main() {
 	defer cancel()
 
 	// --- Configuration Loading ---
+	fmt.Println("DEBUG: Starting configuration loading...")
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("DEBUG: Config loaded successfully. NATS_URL: %s, TEMPO_ENDPOINT: %s\n", cfg.NATS.URL, cfg.Observability.TempoEndpoint)
 
 	// --- Observability Initialization ---
+	fmt.Println("DEBUG: Starting observability initialization...")
 	obsConfig := config.ToObsConfig(cfg)
 	obsConfig.Version = "1.0.0"
 
 	obs, err := observability.Init(ctx, obsConfig)
 	if err != nil {
-		fmt.Printf("Failed to initialize observability: %v\n", err)
+		fmt.Printf("DEBUG: Observability initialization failed: %v\n", err)
+		fmt.Printf("DEBUG: Config details - Tempo: %s, Loki: %s, Metrics: %s\n",
+			obsConfig.TempoEndpoint, obsConfig.LokiURL, obsConfig.MetricsAddress)
 		os.Exit(1)
 	}
+	fmt.Println("DEBUG: Observability initialized successfully")
 
-	logger := obs.Provider.Logger
-	logger.Info("Observability initialized successfully")
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // or your preferred level
+	}))
+	obs.Provider.Logger = logger // Ensure all modules/services use the overridden logger
+	fmt.Println("DEBUG: About to initialize application...")
 
 	// --- Application Initialization ---
 	application := &app.App{}
 	if err := application.Initialize(ctx, cfg, *obs); err != nil {
+		fmt.Printf("DEBUG: Application initialization failed: %v\n", err)
 		logger.Error("Failed to initialize application", attr.Error(err))
 		os.Exit(1)
 	}
+	fmt.Println("DEBUG: Application initialized successfully")
 	logger.Info("Application initialized successfully")
 
 	// --- Graceful Shutdown Setup ---
@@ -76,11 +142,14 @@ func main() {
 	go func() {
 		select {
 		case sig := <-interrupt:
+			fmt.Printf("DEBUG: Received signal: %s\n", sig.String())
 			logger.Info("Received signal", attr.String("signal", sig.String()))
 		case <-ctx.Done():
+			fmt.Println("DEBUG: Context was cancelled from elsewhere")
 			logger.Info("Application context cancelled")
 		}
 
+		fmt.Println("DEBUG: Initiating graceful shutdown...")
 		logger.Info("Initiating graceful shutdown...")
 		cancel()
 
@@ -122,20 +191,37 @@ func main() {
 	}()
 
 	// --- Run Application ---
+	fmt.Println("DEBUG: Starting application run loop...")
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("DEBUG: Application panicked: %v\n", r)
+				logger.Error("Application panicked", attr.String("panic", fmt.Sprintf("%v", r)))
+				cancel()
+			}
+		}()
+
 		logger.Info("Starting application run loop")
 		if err := application.Run(ctx); err != nil && err != context.Canceled {
+			fmt.Printf("DEBUG: Application run failed: %v\n", err)
 			logger.Error("Application run failed", attr.Error(err))
 			cancel()
+		} else if err == context.Canceled {
+			fmt.Println("DEBUG: Application run stopped due to context cancellation")
+			logger.Info("Application run stopped due to context cancellation")
 		} else {
+			fmt.Println("DEBUG: Application run loop finished normally (this should not happen unless context cancelled)")
 			logger.Info("Application run loop finished")
 		}
 	}()
 
 	logger.Info("Application is running. Press Ctrl+C to gracefully shut down.")
+	fmt.Println("DEBUG: Application startup complete, waiting for shutdown signal...")
 
 	// --- Wait for Shutdown Signal ---
+	fmt.Println("DEBUG: Waiting for shutdown signal...")
 	<-ctx.Done()
+	fmt.Println("DEBUG: Context cancelled, beginning shutdown sequence...")
 
 	// --- Final Wait for Cleanup ---
 	select {
@@ -176,8 +262,13 @@ func runMigrations() {
 	}
 	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
 	if err != nil {
-		fmt.Printf("Failed to run River migrations: %v\n", err)
-		os.Exit(1)
+		// Check if this is just a "table already exists" error which is safe to ignore
+		if strings.Contains(err.Error(), "already exists") && strings.Contains(err.Error(), "river_migration") {
+			fmt.Println("River migration table already exists, skipping migration...")
+		} else {
+			fmt.Printf("Failed to run River migrations: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	fmt.Println("River migrations completed successfully.")
 
@@ -189,6 +280,7 @@ func runMigrations() {
 
 	// Create migrators for all modules
 	migrators := map[string]*migrate.Migrator{
+		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations),
 		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
 		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),

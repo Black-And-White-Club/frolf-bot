@@ -82,7 +82,8 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				}
 
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
-					gomock.Any(), // context
+					gomock.Any(),            // context
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores, // source - score processing
 					expectedRequests,              // requests
 					(*sharedtypes.DiscordID)(nil), // requestingUserID - system operation
@@ -195,6 +196,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
 					(*sharedtypes.DiscordID)(nil),
@@ -233,6 +235,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
 					(*sharedtypes.DiscordID)(nil),
@@ -285,6 +288,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
 					(*sharedtypes.DiscordID)(nil),
@@ -340,6 +344,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				// It doesn't try to create a failure message
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
 					(*sharedtypes.DiscordID)(nil),
@@ -378,6 +383,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().ProcessTagAssignments(
 					gomock.Any(),
+					sharedtypes.GuildID(""), /* or set a test guildID if available */ // guildID
 					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
 					(*sharedtypes.DiscordID)(nil),

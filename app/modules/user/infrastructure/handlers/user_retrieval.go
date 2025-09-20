@@ -10,7 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// HandleGetUser Request handles the GetUser Request event.
+// HandleGetUserRequest Request handles the GetUser Request event.
 func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetUserRequest",
@@ -19,13 +19,15 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			getUserPayload := payload.(*userevents.GetUserRequestPayload)
 
 			userID := getUserPayload.UserID
+			guildID := getUserPayload.GuildID
 
 			h.logger.InfoContext(ctx, "Received GetUserRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 			)
 
-			result, err := h.userService.GetUser(ctx, userID)
+			result, err := h.userService.GetUser(ctx, guildID, userID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Technical error from GetUser service call",
 					attr.CorrelationIDFromMsg(msg),
@@ -114,13 +116,14 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			getUserRolePayload := payload.(*userevents.GetUserRoleRequestPayload)
 
 			userID := getUserRolePayload.UserID
+			guildID := getUserRolePayload.GuildID
 
 			h.logger.InfoContext(ctx, "Received GetUserRoleRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
 
-			result, err := h.userService.GetUserRole(ctx, userID)
+			result, err := h.userService.GetUserRole(ctx, guildID, userID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Technical error from GetUserRole service call",
 					attr.CorrelationIDFromMsg(msg),

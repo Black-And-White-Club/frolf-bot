@@ -22,6 +22,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testRole := sharedtypes.UserRoleAdmin
 	invalidRole := sharedtypes.UserRoleEnum("InvalidRole")
 	dbErr := errors.New("database connection failed")
@@ -44,7 +45,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			name: "Successfully updates user role",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
 					Return(nil)
 			},
 			newRole: testRole,
@@ -82,7 +83,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			name: "Fails due to user not found",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
 					Return(userdbtypes.ErrUserNotFound)
 			},
 			newRole: testRole,
@@ -103,7 +104,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			name: "Fails due to database error",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
-					UpdateUserRole(gomock.Any(), testUserID, testRole).
+					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
 					Return(dbErr)
 			},
 			newRole: testRole,
@@ -140,7 +141,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				},
 			}
 
-			gotResult, gotErr := s.UpdateUserRoleInDatabase(ctx, testUserID, tt.newRole)
+			gotResult, gotErr := s.UpdateUserRoleInDatabase(ctx, testGuildID, testUserID, tt.newRole)
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {

@@ -64,9 +64,10 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 				}
 			}
 
-			// Use the public interface method
+			// Use the public interface method, propagate guildID
 			result, err := h.leaderboardService.ProcessTagAssignments(
 				ctx,
+				sharedtypes.GuildID(requestPayload.GuildID), // Pass guildID explicitly
 				sharedtypes.ServiceUpdateSourceProcessScores,
 				assignments,
 				nil,                               // System operation
@@ -105,6 +106,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 					"updated_at":   time.Now().UTC(),
 					"source":       "leaderboard_update",
 					"round_id":     requestPayload.RoundID,
+					"guild_id":     requestPayload.GuildID, // NEW: propagate guild_id
 				}
 
 				tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, leaderboardevents.TagUpdateForScheduledRounds)

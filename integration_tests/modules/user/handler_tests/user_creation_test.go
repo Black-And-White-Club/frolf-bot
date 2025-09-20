@@ -39,6 +39,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-notag-123")
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number
 				}
@@ -61,16 +62,17 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				userID := sharedtypes.DiscordID("testuser-notag-123")
 				// Use WaitFor for eventual consistency in DB
 				var createdUser *usertypes.UserData
+				guildID := sharedtypes.GuildID("test-guild")
 				err := testutils.WaitFor(5*time.Second, 100*time.Millisecond, func() error {
-					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
+					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
 					if getUserErr != nil {
-						return fmt.Errorf("service returned error: %w", getUserErr) // Propagate technical errors
+						return fmt.Errorf("service returned error: %w", getUserErr)
 					}
 					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User == nil {
-						return errors.New("user not found in DB yet or success payload is nil") // Keep waiting
+						return errors.New("user not found in DB yet or success payload is nil")
 					}
 					createdUser = getUserResult.Success.(*userevents.GetUserResponsePayload).User
-					return nil // Success, user found
+					return nil
 				})
 				if err != nil {
 					t.Fatalf("User not found in database after waiting: %v", err)
@@ -123,6 +125,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: &tagNumber,
 				}
@@ -145,7 +148,8 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				tagNumber := sharedtypes.TagNumber(24)
 
 				// Verify user is NOT created in the database (via service call)
-				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
+				guildID := sharedtypes.GuildID("test-guild")
+				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
 				// Expecting an error or a failure payload indicating "not found"
 				if getUserErr == nil { // No technical error, now check business result
 					if getUserResult.Success != nil {
@@ -206,7 +210,8 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				userID := sharedtypes.DiscordID("testuser-exists-789")
 				tag := sharedtypes.TagNumber(23) // Dummy tag for pre-creation
 				// Use the service from the user module to create the user
-				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, userID, &tag) // Use env.Ctx
+				guildID := sharedtypes.GuildID("test-guild")
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tag) // Use env.Ctx
 				if createErr != nil || createResult.Success == nil {
 					t.Fatalf("Failed to pre-create user for test setup: %v, result: %+v", createErr, createResult.Failure)
 				}
@@ -216,6 +221,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-exists-789") // Same user ID as pre-created
 				payload := userevents.UserSignupRequestPayload{
+					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number, will attempt creation
 				}
@@ -236,7 +242,8 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// 1. Verify user still exists (no change expected from signup attempt)
 				userID := sharedtypes.DiscordID("testuser-exists-789")
-				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, userID) // Use env.Ctx
+				guildID := sharedtypes.GuildID("test-guild")
+				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
 				// Expect no technical error and a successful result (user was already there)
 				if getUserErr != nil {
 					t.Fatalf("Expected GetUser to succeed for existing user, but got error: %v", getUserErr)

@@ -221,7 +221,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "valid update",
 			payload: roundevents.RoundUpdateValidatedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -240,7 +242,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "invalid update - round not found",
 			payload: roundevents.RoundUpdateValidatedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -249,6 +253,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -261,7 +266,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "invalid update - update failed",
 			payload: roundevents.RoundUpdateValidatedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -270,6 +277,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayload{
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -286,16 +294,19 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			switch tt.name {
 			case "valid update":
 				// Updated: Implementation only calls UpdateRound, not GetRound first
-				mockDB.EXPECT().UpdateRound(gomock.Any(), tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(&roundtypes.Round{
 					ID:    tt.payload.RoundUpdateRequestPayload.RoundID,
 					Title: tt.payload.RoundUpdateRequestPayload.Title,
 				}, nil)
 			case "invalid update - round not found":
 				// Updated: Implementation calls UpdateRound which can return "round not found" error
-				mockDB.EXPECT().UpdateRound(gomock.Any(), tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("round not found"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("round not found"))
 			case "invalid update - update failed":
 				// Updated: Implementation calls UpdateRound which can return "update failed" error
-				mockDB.EXPECT().UpdateRound(gomock.Any(), tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("update failed"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("update failed"))
 			}
 
 			got, err := s.UpdateRoundEntity(context.Background(), tt.payload)
@@ -324,6 +335,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 		{
 			name: "valid update",
 			payload: roundevents.RoundScheduleUpdatePayload{
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
 				StartTime: &testStartUpdateTime,
@@ -331,25 +343,27 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			},
 			mockSetup: func(mockDB *rounddb.MockRoundDB, mockQueue *queuemocks.MockQueueService) {
 				// Expect cancellation of existing jobs
+				guildID := sharedtypes.GuildID("guild-123")
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
 
 				// Expect GetEventMessageID call
-				mockDB.EXPECT().GetEventMessageID(gomock.Any(), testRoundID).Return("event123", nil)
+				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("event123", nil)
 
 				// Expect GetRound call to get current round data
-				mockDB.EXPECT().GetRound(gomock.Any(), testRoundID).Return(&roundtypes.Round{
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{
 					ID:    testRoundID,
 					Title: roundtypes.Title("Old Title"),
 				}, nil)
 
 				// Expect reminder scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: RoundOperationResult{
 				Success: &roundevents.RoundScheduleUpdatePayload{
+					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testRoundID,
 					Title:     roundtypes.Title("New Title"),
 					Location:  roundtypes.LocationPtr("New Location"),
@@ -361,6 +375,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 		{
 			name: "error cancelling jobs",
 			payload: roundevents.RoundScheduleUpdatePayload{
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
 				StartTime: &testStartUpdateTime,
@@ -381,6 +396,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 		{
 			name: "error getting event message ID",
 			payload: roundevents.RoundScheduleUpdatePayload{
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
 				StartTime: &testStartUpdateTime,
@@ -388,10 +404,11 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			},
 			mockSetup: func(mockDB *rounddb.MockRoundDB, mockQueue *queuemocks.MockQueueService) {
 				// Expect cancellation to succeed
+				guildID := sharedtypes.GuildID("guild-123")
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
 
 				// Expect GetEventMessageID to fail
-				mockDB.EXPECT().GetEventMessageID(gomock.Any(), testRoundID).Return("", errors.New("event message ID not found"))
+				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("", errors.New("event message ID not found"))
 			},
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayload{

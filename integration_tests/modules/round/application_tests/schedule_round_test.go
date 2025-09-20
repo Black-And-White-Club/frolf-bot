@@ -110,7 +110,7 @@ func TestScheduleRoundEvents_Behavioral(t *testing.T) {
 			payload, discordMessageID := tt.setupRound()
 
 			// Call the service method
-			result, err := deps.Service.ScheduleRoundEvents(deps.Ctx, payload, discordMessageID)
+			result, err := deps.Service.ScheduleRoundEvents(deps.Ctx, "test-guild", payload, discordMessageID)
 
 			if tt.expectedError {
 				if err == nil {

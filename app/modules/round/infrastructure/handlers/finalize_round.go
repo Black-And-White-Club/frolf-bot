@@ -86,6 +86,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 
 			// CREATE BACKEND FINALIZED MESSAGE WITH PARTICIPANTS FROM PAYLOAD
 			backendFinalizationPayload := roundevents.RoundFinalizedPayload{
+				GuildID: allScoresSubmittedPayload.GuildID,
 				RoundID: allScoresSubmittedPayload.RoundID,
 				RoundData: roundtypes.Round{
 					ID:             fetchedRound.ID,

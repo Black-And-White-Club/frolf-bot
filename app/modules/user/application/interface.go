@@ -8,12 +8,12 @@ import (
 
 type Service interface {
 	// User Creation
-	CreateUser(ctx context.Context, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error)
+	CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error)
 
 	// User Role
-	UpdateUserRoleInDatabase(ctx context.Context, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error)
+	UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error)
 
 	// User Retrieval
-	GetUserRole(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error)
-	GetUser(ctx context.Context, userID sharedtypes.DiscordID) (UserOperationResult, error)
+	GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (UserOperationResult, error)
+	GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (UserOperationResult, error)
 }

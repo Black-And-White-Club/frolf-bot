@@ -16,6 +16,13 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			discordReminderPayload := payload.(*roundevents.DiscordReminderPayload)
 
+			// Additional instrumentation to ensure guild_id propagation for reminder flow
+			h.logger.DebugContext(ctx, "Reminder handler payload debug",
+				attr.RoundID("round_id", discordReminderPayload.RoundID),
+				attr.String("guild_id", string(discordReminderPayload.GuildID)),
+				attr.String("reminder_type", discordReminderPayload.ReminderType),
+			)
+
 			// Add debugging info to track duplicate processing
 			messageID := msg.UUID
 			deliveredCount := msg.Metadata.Get("Delivered")

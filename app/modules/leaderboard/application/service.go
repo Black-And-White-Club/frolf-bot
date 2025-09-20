@@ -10,6 +10,8 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,12 +20,18 @@ import (
 
 // LeaderboardService handles leaderboard-related logic.
 type LeaderboardService struct {
-	LeaderboardDB  leaderboarddb.LeaderboardDB
-	eventBus       eventbus.EventBus
-	logger         *slog.Logger
-	metrics        leaderboardmetrics.LeaderboardMetrics
-	tracer         trace.Tracer
-	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	LeaderboardDB       leaderboarddb.LeaderboardDB
+	eventBus            eventbus.EventBus
+	logger              *slog.Logger
+	metrics             leaderboardmetrics.LeaderboardMetrics
+	tracer              trace.Tracer
+	serviceWrapper      func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	guildConfigProvider GuildConfigProvider
+}
+
+// GuildConfigProvider supplies guild config for enrichment.
+type GuildConfigProvider interface {
+	GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -45,6 +53,49 @@ func NewLeaderboardService(
 			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
 		},
 	}
+}
+
+// WithGuildConfigProvider injects provider (fluent style)
+func (s *LeaderboardService) WithGuildConfigProvider(p GuildConfigProvider) *LeaderboardService {
+	s.guildConfigProvider = p
+	return s
+}
+
+func (s *LeaderboardService) getGuildConfigForEnrichment(ctx context.Context, guildID sharedtypes.GuildID) *guildtypes.GuildConfig {
+	if s.guildConfigProvider == nil || guildID == "" {
+		return nil
+	}
+	cfg, err := s.guildConfigProvider.GetConfig(ctx, guildID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Leaderboard enrichment config fetch failed", attr.String("guild_id", string(guildID)), attr.Error(err))
+		return nil
+	}
+	return cfg
+}
+
+// EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
+func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
+	_, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+		return err
+	}
+
+	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
+
+	// Create empty active leaderboard
+	empty := &leaderboarddb.Leaderboard{
+		LeaderboardData: leaderboardtypes.LeaderboardData{},
+		IsActive:        true,
+		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
+		GuildID:         guildID,
+	}
+	if _, err := s.LeaderboardDB.CreateLeaderboard(ctx, guildID, empty); err != nil {
+		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
+	}
+	return nil
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.

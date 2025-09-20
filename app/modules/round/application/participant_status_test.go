@@ -41,6 +41,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("test-user-123")
+	guildID := sharedtypes.GuildID("guild-123")
 
 	tests := []struct {
 		name           string
@@ -53,10 +54,11 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			name: "new participant joining",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// GetParticipant returns nil (participant not found)
-				mockDB.EXPECT().GetParticipant(ctx, testRoundID, testUserID).Return(nil, nil)
+				mockDB.EXPECT().GetParticipant(ctx, guildID, testRoundID, testUserID).Return(nil, nil)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   testUserID,
 				Response: roundtypes.ResponseAccept,
 			},
@@ -77,10 +79,11 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 					UserID:   testUserID,
 					Response: roundtypes.ResponseTentative,
 				}
-				mockDB.EXPECT().GetParticipant(ctx, testRoundID, testUserID).Return(existingParticipant, nil)
+				mockDB.EXPECT().GetParticipant(ctx, guildID, testRoundID, testUserID).Return(existingParticipant, nil)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   testUserID,
 				Response: roundtypes.ResponseAccept, // Different from existing status
 			},
@@ -101,10 +104,11 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 					UserID:   testUserID,
 					Response: roundtypes.ResponseAccept,
 				}
-				mockDB.EXPECT().GetParticipant(ctx, testRoundID, testUserID).Return(existingParticipant, nil)
+				mockDB.EXPECT().GetParticipant(ctx, guildID, testRoundID, testUserID).Return(existingParticipant, nil)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   testUserID,
 				Response: roundtypes.ResponseAccept, // Same as existing status
 			},
@@ -120,10 +124,11 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			name: "failure checking participant status",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// GetParticipant returns error
-				mockDB.EXPECT().GetParticipant(ctx, testRoundID, testUserID).Return(nil, errors.New("db error"))
+				mockDB.EXPECT().GetParticipant(ctx, guildID, testRoundID, testUserID).Return(nil, errors.New("db error"))
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   testUserID,
 				Response: roundtypes.ResponseAccept,
 			},
@@ -249,6 +254,7 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	user1ID := sharedtypes.DiscordID("user1")
+	guildID := sharedtypes.GuildID("guild-123")
 
 	tests := []struct {
 		name                    string
@@ -262,7 +268,7 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 		{
 			name: "success validating participant join request",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{ID: testRoundID, State: roundtypes.RoundStateUpcoming}, nil)
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, State: roundtypes.RoundStateUpcoming}, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -272,12 +278,14 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   user1ID,
 				Response: roundtypes.ResponseAccept,
 			},
 			expectedResult: RoundOperationResult{
 				Success: roundevents.ParticipantJoinRequestPayload{
 					RoundID:    testRoundID,
+					GuildID:    guildID,
 					UserID:     user1ID,
 					Response:   roundtypes.ResponseAccept,
 					JoinedLate: &joinedLateFalse,
@@ -288,7 +296,7 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 		{
 			name: "failure validating participant join request",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, errors.New("db error"))
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(nil, errors.New("db error"))
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -298,6 +306,7 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  guildID,
 				UserID:   user1ID,
 				Response: roundtypes.ResponseAccept,
 			},
@@ -305,6 +314,7 @@ func TestRoundService_ValidateParticipantJoinRequest(t *testing.T) {
 				Failure: roundevents.RoundParticipantJoinErrorPayload{
 					ParticipantJoinRequest: &roundevents.ParticipantJoinRequestPayload{
 						RoundID:  testRoundID,
+						GuildID:  guildID,
 						UserID:   user1ID,
 						Response: roundtypes.ResponseAccept,
 					},
@@ -397,7 +407,8 @@ func TestRoundService_ParticipantRemoval(t *testing.T) {
 		{
 			name: "success removing participant",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
@@ -405,12 +416,13 @@ func TestRoundService_ParticipantRemoval(t *testing.T) {
 						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().RemoveParticipant(ctx, testRoundID, testUserID).Return([]roundtypes.Participant{
+				mockDB.EXPECT().RemoveParticipant(ctx, guildID, testRoundID, testUserID).Return([]roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 				}, nil).Times(1)
 			},
 			payload: roundevents.ParticipantRemovalRequestPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 				UserID:  testUserID,
 			},
 			expectedResult: RoundOperationResult{
@@ -430,19 +442,20 @@ func TestRoundService_ParticipantRemoval(t *testing.T) {
 		{
 			name: "success when participant not found",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{
+				mockDB.EXPECT().GetRound(ctx, sharedtypes.GuildID("guild-123"), testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
 						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().RemoveParticipant(ctx, testRoundID, testUserID).Return([]roundtypes.Participant{
+				mockDB.EXPECT().RemoveParticipant(ctx, sharedtypes.GuildID("guild-123"), testRoundID, testUserID).Return([]roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 				}, nil).Times(1)
 			},
 			payload: roundevents.ParticipantRemovalRequestPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 				UserID:  testUserID,
 			},
 			expectedResult: RoundOperationResult{
@@ -460,10 +473,11 @@ func TestRoundService_ParticipantRemoval(t *testing.T) {
 		{
 			name: "failure fetching round details before removal",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, errors.New("db error")).Times(1)
+				mockDB.EXPECT().GetRound(ctx, sharedtypes.GuildID("guild-123"), testRoundID).Return(nil, errors.New("db error")).Times(1)
 			},
 			payload: roundevents.ParticipantRemovalRequestPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 				UserID:  testUserID,
 			},
 			expectedResult: RoundOperationResult{
@@ -478,17 +492,19 @@ func TestRoundService_ParticipantRemoval(t *testing.T) {
 		{
 			name: "failure removing participant from database",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
 						{UserID: testUserID, Response: roundtypes.ResponseAccept},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().RemoveParticipant(ctx, testRoundID, testUserID).Return(nil, errors.New("db remove error")).Times(1)
+				mockDB.EXPECT().RemoveParticipant(ctx, guildID, testRoundID, testUserID).Return(nil, errors.New("db remove error")).Times(1)
 			},
 			payload: roundevents.ParticipantRemovalRequestPayload{
 				RoundID: testRoundID,
+				GuildID: sharedtypes.GuildID("guild-123"),
 				UserID:  testUserID,
 			},
 			expectedResult: RoundOperationResult{
@@ -618,7 +634,8 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "success updating participant status (Decline)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(gomock.Any(), testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
@@ -626,13 +643,14 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().UpdateParticipant(gomock.Any(), testRoundID, gomock.Any()).Return([]roundtypes.Participant{
+				mockDB.EXPECT().UpdateParticipant(gomock.Any(), guildID, testRoundID, gomock.Any()).Return([]roundtypes.Participant{
 					{UserID: testUserID, Response: roundtypes.ResponseDecline},
 					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept},
 				}, nil).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  sharedtypes.GuildID("guild-123"),
 				UserID:   testUserID,
 				Response: roundtypes.ResponseDecline,
 			},
@@ -655,19 +673,21 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "success updating participant status with tag (Accept)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(gomock.Any(), testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
 						{UserID: testUserID, Response: roundtypes.ResponseTentative},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().UpdateParticipant(gomock.Any(), testRoundID, gomock.Any()).Return([]roundtypes.Participant{
+				mockDB.EXPECT().UpdateParticipant(gomock.Any(), guildID, testRoundID, gomock.Any()).Return([]roundtypes.Participant{
 					{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: &testTagNumber},
 				}, nil).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:   testRoundID,
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				UserID:    testUserID,
 				Response:  roundtypes.ResponseAccept,
 				TagNumber: &testTagNumber,
@@ -689,17 +709,19 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "success triggering tag lookup (Accept without tag)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(gomock.Any(), testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					State:          roundtypes.RoundStateUpcoming,
 				}, nil).Times(1)
-				mockDB.EXPECT().UpdateParticipant(gomock.Any(), testRoundID, gomock.Any()).Return([]roundtypes.Participant{
+				mockDB.EXPECT().UpdateParticipant(gomock.Any(), guildID, testRoundID, gomock.Any()).Return([]roundtypes.Participant{
 					{UserID: testUserID, Response: roundtypes.ResponseAccept, TagNumber: nil},
 				}, nil).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:    testRoundID,
+				GuildID:    sharedtypes.GuildID("guild-123"),
 				UserID:     testUserID,
 				Response:   roundtypes.ResponseAccept,
 				JoinedLate: &joinedLateFalse,
@@ -721,10 +743,12 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "failure fetching round details for decline update",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, errors.New("db error")).Times(1)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(nil, errors.New("db error")).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  sharedtypes.GuildID("guild-123"),
 				UserID:   testUserID,
 				Response: roundtypes.ResponseDecline,
 			},
@@ -744,17 +768,19 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "failure updating participant status in DB (Decline)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
 						{UserID: testUserID, Response: roundtypes.ResponseAccept},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().UpdateParticipant(ctx, testRoundID, gomock.Any()).Return(nil, errors.New("db update error")).Times(1)
+				mockDB.EXPECT().UpdateParticipant(ctx, guildID, testRoundID, gomock.Any()).Return(nil, errors.New("db update error")).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  sharedtypes.GuildID("guild-123"),
 				UserID:   testUserID,
 				Response: roundtypes.ResponseDecline,
 			},
@@ -774,10 +800,12 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "failure fetching round details for tag update",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(nil, errors.New("db error")).Times(1)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(nil, errors.New("db error")).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:   testRoundID,
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				UserID:    testUserID,
 				Response:  roundtypes.ResponseAccept,
 				TagNumber: &testTagNumber,
@@ -799,17 +827,19 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 		{
 			name: "failure updating participant with tag in DB",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{
 					ID:             testRoundID,
 					EventMessageID: testEventMessageID,
 					Participants: []roundtypes.Participant{
 						{UserID: testUserID, Response: roundtypes.ResponseTentative},
 					},
 				}, nil).Times(1)
-				mockDB.EXPECT().UpdateParticipant(ctx, testRoundID, gomock.Any()).Return(nil, errors.New("db update error")).Times(1)
+				mockDB.EXPECT().UpdateParticipant(ctx, guildID, testRoundID, gomock.Any()).Return(nil, errors.New("db update error")).Times(1)
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:   testRoundID,
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				UserID:    testUserID,
 				Response:  roundtypes.ResponseAccept,
 				TagNumber: &testTagNumber,
@@ -835,6 +865,7 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 			},
 			payload: roundevents.ParticipantJoinRequestPayload{
 				RoundID:  testRoundID,
+				GuildID:  sharedtypes.GuildID("guild-123"),
 				UserID:   testUserID,
 				Response: "UNKNOWN_RESPONSE_TYPE",
 			},

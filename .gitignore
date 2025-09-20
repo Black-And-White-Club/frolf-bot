@@ -27,6 +27,7 @@ postgres-data*
 /tmp
 
 reports*
+bin/
 bin/app-coverage
 bin/app-instrumented
 bin/bun-instrumented
@@ -37,3 +38,4 @@ reports/integration-test-output.log
 reports/test-output.log
 reports/unit-output.log
 reports/unit-test-output.log
+.ko.yaml

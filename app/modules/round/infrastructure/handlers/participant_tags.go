@@ -23,7 +23,15 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 				attr.String("batch_id", getStringFromMap(tagUpdateMap, "batch_id")),
 			)
 
-			// Convert the map to the service payload format
+			// Extract guild_id if present
+			var guildID sharedtypes.GuildID
+			if gidRaw, ok := (*tagUpdateMap)["guild_id"]; ok {
+				if gidStr, ok := gidRaw.(string); ok && gidStr != "" {
+					guildID = sharedtypes.GuildID(gidStr)
+				}
+			}
+
+			// Convert the map to the service payload format (changed tags)
 			changedTags := make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber)
 
 			if changedTagsRaw, ok := (*tagUpdateMap)["changed_tags"]; ok {
@@ -59,7 +67,20 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 
 			// Create the service payload
 			servicePayload := roundevents.ScheduledRoundTagUpdatePayload{
+				GuildID:     guildID,
 				ChangedTags: changedTags,
+			}
+
+			if guildID == "" {
+				h.logger.WarnContext(ctx, "ScheduledRoundTagUpdate received without guild_id; backend will treat as no-op",
+					attr.CorrelationIDFromMsg(msg),
+				)
+			} else {
+				h.logger.InfoContext(ctx, "Prepared service payload for scheduled round tag update",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("guild_id", string(guildID)),
+					attr.Int("changed_tags_count", len(changedTags)),
+				)
 			}
 
 			// Call the service function to handle the event

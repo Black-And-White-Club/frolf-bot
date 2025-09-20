@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -27,10 +29,12 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 				attr.String("location", string(createRoundRequestedPayload.Location)),
 				attr.String("start_time", string(createRoundRequestedPayload.StartTime)),
 				attr.String("user_id", string(createRoundRequestedPayload.UserID)),
+				attr.String("guild_id", fmt.Sprintf("%v", createRoundRequestedPayload.GuildID)), // Explicitly log guild_id
 			)
 
-			// Call the service function to handle the event
-			result, err := h.roundService.ValidateAndProcessRound(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser())
+			// Determine anchor clock (submitted_at metadata) for deterministic relative parsing
+			clock := h.extractAnchorClock(msg)
+			result, err := h.roundService.ValidateAndProcessRoundWithClock(ctx, *createRoundRequestedPayload, roundtime.NewTimeParser(), clock)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle CreateRoundRequest event",
 					attr.CorrelationIDFromMsg(msg),
@@ -86,6 +90,17 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 	return wrappedHandler(msg)
 }
 
+// extractAnchorClock builds an AnchorClock from message metadata if available; falls back to RealClock.
+func (h *RoundHandlers) extractAnchorClock(msg *message.Message) roundutil.Clock {
+	submittedAt := msg.Metadata.Get("submitted_at")
+	if submittedAt != "" {
+		if t, err := time.Parse(time.RFC3339, submittedAt); err == nil {
+			return roundutil.NewAnchorClock(t)
+		}
+	}
+	return roundutil.RealClock{}
+}
+
 // HandleRoundEntityCreated handles the RoundEntityCreated event.
 func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
@@ -105,7 +120,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 			)
 
 			// Call the service function to handle the event
-			result, err := h.roundService.StoreRound(ctx, *roundEntityCreatedPayload)
+			result, err := h.roundService.StoreRound(ctx, roundEntityCreatedPayload.GuildID, *roundEntityCreatedPayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle RoundEntityCreated event",
 					attr.CorrelationIDFromMsg(msg),
@@ -167,6 +182,9 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 		"HandleRoundEventMessageIDUpdate",          // Operation name for logging/tracing
 		&roundevents.RoundMessageIDUpdatePayload{}, // Expected payload type for unmarshalling
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			// Bound handler work by a short timeout to reduce inherited cancellations
+			hCtx, hCancel := context.WithTimeout(ctx, 7*time.Second)
+			defer hCancel()
 			// Assert the unmarshalled payload to the correct type
 			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayload)
 			if !ok {
@@ -179,7 +197,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 
 			roundID := updatePayload.RoundID
 
-			h.logger.InfoContext(ctx, "Received RoundEventMessageIDUpdate event",
+			h.logger.InfoContext(hCtx, "Received RoundEventMessageIDUpdate event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundID),
 			)
@@ -187,7 +205,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			// Extract the Discord message ID from the message metadata
 			discordMessageID, ok := msg.Metadata["discord_message_id"]
 			if !ok || discordMessageID == "" {
-				h.logger.ErrorContext(ctx, "Discord message ID not found or empty in metadata",
+				h.logger.ErrorContext(hCtx, "Discord message ID not found or empty in metadata",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundID),
 				)
@@ -195,10 +213,14 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			}
 
 			// 1. Update the round in the database with the Discord message ID
+			// Use a short-lived context to avoid premature cancellation from message lifecycle.
+			dbCtx, cancel := context.WithTimeout(hCtx, 5*time.Second)
+			defer cancel()
+
 			// Call the service method which now returns the updated round object
-			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, roundID, discordMessageID)
+			updatedRound, err := h.roundService.UpdateRoundMessageID(dbCtx, updatePayload.GuildID, roundID, discordMessageID)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to update round with Discord message ID via service",
+				h.logger.ErrorContext(hCtx, "Failed to update round with Discord message ID via service",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundID),
 					attr.String("discord_message_id", discordMessageID),
@@ -218,14 +240,20 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 				return nil, errors.New("updated round object is nil")
 			}
 
-			h.logger.InfoContext(ctx, "Successfully updated round with Discord message ID in DB",
+			h.logger.InfoContext(hCtx, "Successfully updated round with Discord message ID in DB",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundID),
 				attr.String("discord_message_id", discordMessageID),
 			)
 
 			// 2. Construct the RoundScheduledPayload using the updated round object
+			// Prefer payload GuildID, but if missing, use the GuildID from the DB entity we just updated.
+			guildID := updatePayload.GuildID
+			if guildID == "" {
+				guildID = updatedRound.GuildID
+			}
 			scheduledPayload := roundevents.RoundScheduledPayload{
+				GuildID: guildID,
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     updatedRound.ID,
 					Title:       updatedRound.Title,

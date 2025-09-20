@@ -141,3 +141,8 @@ type ScoreOperationResult struct {
 	Failure interface{}
 	Error   error
 }
+
+// GetScoresForRound returns the stored round scores (with tag numbers) from persistence.
+func (s *ScoreService) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+	return s.ScoreDB.GetScoresForRound(ctx, guildID, roundID)
+}

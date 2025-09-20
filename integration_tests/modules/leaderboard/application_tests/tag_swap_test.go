@@ -38,6 +38,7 @@ func TestTagSwapRequested(t *testing.T) {
 			name: "Successful tag swap between two users",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
+					GuildID: "test_guild",
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_swap_A", TagNumber: 10},
 						{UserID: "user_swap_B", TagNumber: 20},
@@ -136,6 +137,7 @@ func TestTagSwapRequested(t *testing.T) {
 			name: "Tag swap fails if requestor does not have a tag",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
+					GuildID: "test_guild",
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_swap_B", TagNumber: 20},
 						{UserID: "other_user", TagNumber: 30},
@@ -205,6 +207,7 @@ func TestTagSwapRequested(t *testing.T) {
 			name: "Tag swap fails if target does not have a tag",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
+					GuildID: "test_guild",
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_swap_A", TagNumber: 10},
 						{UserID: "other_user", TagNumber: 30},
@@ -274,6 +277,7 @@ func TestTagSwapRequested(t *testing.T) {
 			name: "Tag swap fails if neither user has a tag",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error) {
 				initialLeaderboard := &leaderboarddb.Leaderboard{
+					GuildID: "test_guild",
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "other_user", TagNumber: 30},
 					},
@@ -419,7 +423,8 @@ func TestTagSwapRequested(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			result, err := deps.Service.TagSwapRequested(ctx, tt.payload)
+			guildID := sharedtypes.GuildID("test_guild")
+			result, err := deps.Service.TagSwapRequested(ctx, guildID, tt.payload)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected an error, but got none")

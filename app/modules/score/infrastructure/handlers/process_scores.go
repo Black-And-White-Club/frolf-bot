@@ -29,12 +29,18 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			}
 
 			// Call the service to process round scores.
-			result, err := h.scoreService.ProcessRoundScores(ctx, processRoundScoresRequestPayload.RoundID, processRoundScoresRequestPayload.Scores)
+			result, err := h.scoreService.ProcessRoundScores(
+				ctx,
+				processRoundScoresRequestPayload.GuildID,
+				processRoundScoresRequestPayload.RoundID,
+				processRoundScoresRequestPayload.Scores,
+			)
 
 			// Handle direct system errors from the service.
 			if err != nil && result.Failure == nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
 				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: processRoundScoresRequestPayload.GuildID,
 					RoundID: processRoundScoresRequestPayload.RoundID,
 					Error:   err.Error(),
 				}

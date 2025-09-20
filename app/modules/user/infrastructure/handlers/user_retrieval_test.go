@@ -24,6 +24,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testUserData := &usertypes.UserData{
 		UserID: testUserID,
@@ -31,7 +32,8 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 	}
 
 	testPayload := &userevents.GetUserRequestPayload{
-		UserID: testUserID,
+		GuildID: testGuildID,
+		UserID:  testUserID,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
@@ -64,7 +66,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.GetUserResponsePayload{User: testUserData},
 						Failure: nil,
@@ -93,7 +95,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.GetUserFailedPayload{
@@ -135,7 +137,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUser(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{},
 					fmt.Errorf("service error"),
 				)
@@ -181,10 +183,12 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
 	testPayload := &userevents.GetUserRoleRequestPayload{
-		UserID: testUserID,
+		GuildID: testGuildID,
+		UserID:  testUserID,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
 	testMsg := message.NewMessage("test-id", payloadBytes)
@@ -217,7 +221,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
 						Failure: nil,
@@ -246,7 +250,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.GetUserRoleFailedPayload{
@@ -288,7 +292,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().GetUserRole(gomock.Any(), testUserID).Return(
+				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{},
 					fmt.Errorf("service error"),
 				)

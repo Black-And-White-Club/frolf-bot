@@ -56,7 +56,7 @@ func TestProcessRoundReminder(t *testing.T) {
 				}
 				round.EventMessageID = "test_event_message_id_123"
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
@@ -141,7 +141,7 @@ func TestProcessRoundReminder(t *testing.T) {
 				}
 				round.EventMessageID = "test_event_message_id_456"
 
-				err := deps.DB.CreateRound(ctx, &round)
+				err := deps.DB.CreateRound(ctx, "test-guild", &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}

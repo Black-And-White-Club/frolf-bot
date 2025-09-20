@@ -38,6 +38,8 @@ type ObservabilityConfig struct {
 	TempoInsecure   bool    `yaml:"tempo_insecure"`
 	TempoSampleRate float64 `yaml:"tempo_sample_rate"`
 	Environment     string  `yaml:"environment"`
+	OTLPEndpoint    string  `yaml:"otlp_endpoint"`
+	OTLPTransport   string  `yaml:"otlp_transport"` // grpc|http
 }
 
 // DiscordConfig holds Discord configuration.
@@ -51,15 +53,49 @@ func LoadConfig(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		// If the file is not found, try loading from environment variables
-		fmt.Printf("Failed to read config file: %v\n", err)
-		fmt.Println("Trying to load configuration from environment variables...")
-
 		return loadConfigFromEnv()
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// --- OVERRIDE WITH ENV VARS IF PRESENT ---
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Postgres.DSN = v
+	}
+	if v := os.Getenv("NATS_URL"); v != "" {
+		cfg.NATS.URL = v
+	}
+	if v := os.Getenv("LOKI_URL"); v != "" {
+		cfg.Observability.LokiURL = v
+	}
+	if v := os.Getenv("LOKI_TENANT_ID"); v != "" {
+		cfg.Observability.LokiTenantID = v
+	}
+	if v := os.Getenv("METRICS_ADDRESS"); v != "" {
+		cfg.Observability.MetricsAddress = v
+	}
+	if v := os.Getenv("TEMPO_ENDPOINT"); v != "" {
+		cfg.Observability.TempoEndpoint = v
+	}
+	if v := os.Getenv("OTLP_ENDPOINT"); v != "" {
+		cfg.Observability.OTLPEndpoint = v
+	}
+	if v := os.Getenv("OTLP_TRANSPORT"); v != "" {
+		cfg.Observability.OTLPTransport = v
+	}
+	if v := os.Getenv("ENV"); v != "" {
+		cfg.Observability.Environment = v
+	}
+	if v := os.Getenv("TEMPO_INSECURE"); v != "" {
+		cfg.Observability.TempoInsecure = v == "true"
+	}
+	if v := os.Getenv("TEMPO_SAMPLE_RATE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Observability.TempoSampleRate = f
+		}
 	}
 
 	return &cfg, nil
@@ -84,14 +120,10 @@ func loadConfigFromEnv() (*Config, error) {
 	// Load Observability settings
 	cfg.Observability.LokiURL = os.Getenv("LOKI_URL")
 	cfg.Observability.LokiTenantID = os.Getenv("LOKI_TENANT_ID")
-	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS")
-	if cfg.Observability.MetricsAddress == "" {
-		return nil, fmt.Errorf("METRICS_ADDRESS environment variable not set")
-	}
-	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")
-	if cfg.Observability.TempoEndpoint == "" {
-		return nil, fmt.Errorf("TEMPO_ENDPOINT environment variable not set")
-	}
+	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS") // optional; empty disables metrics
+	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")   // optional; empty disables tracing
+	cfg.Observability.OTLPEndpoint = os.Getenv("OTLP_ENDPOINT")     // optional; shared collector endpoint
+	cfg.Observability.OTLPTransport = os.Getenv("OTLP_TRANSPORT")   // optional; default set later
 	cfg.Observability.Environment = os.Getenv("ENV")
 	tempoInsecure := os.Getenv("TEMPO_INSECURE")
 	if tempoInsecure == "" {
@@ -131,5 +163,7 @@ func ToObsConfig(appCfg *Config) obs.Config {
 		TempoEndpoint:   appCfg.Observability.TempoEndpoint,
 		TempoInsecure:   appCfg.Observability.TempoInsecure,
 		TempoSampleRate: appCfg.Observability.TempoSampleRate,
+		OTLPEndpoint:    appCfg.Observability.OTLPEndpoint,
+		OTLPTransport:   appCfg.Observability.OTLPTransport,
 	}
 }

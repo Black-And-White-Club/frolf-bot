@@ -191,6 +191,7 @@ func createScoreUpdateValidatedPayload(roundID sharedtypes.RoundID, participant 
 			RoundID:     roundID,
 			Participant: participant,
 			Score:       score,
+			GuildID:     "test-guild",
 		},
 	}
 }

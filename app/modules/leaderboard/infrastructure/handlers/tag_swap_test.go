@@ -64,6 +64,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -112,6 +113,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
@@ -135,6 +137,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -174,6 +177,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -215,6 +219,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
@@ -244,6 +249,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().TagSwapRequested(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},

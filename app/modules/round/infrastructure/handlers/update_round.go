@@ -6,6 +6,8 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -17,6 +19,30 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			updateRequestPayload := payload.(*roundevents.UpdateRoundRequestedPayload)
 
+			// If the Discord side omitted StartTime (we now only send raw_start_time in metadata),
+			// populate the payload's StartTime & Timezone fields from metadata so the existing
+			// service logic will parse it exactly like create flow.
+			if (updateRequestPayload.StartTime == nil || (updateRequestPayload.StartTime != nil && *updateRequestPayload.StartTime == "")) && msg.Metadata.Get("raw_start_time") != "" {
+				raw := msg.Metadata.Get("raw_start_time")
+				updateRequestPayload.StartTime = &raw
+			}
+			if updateRequestPayload.Timezone == nil && msg.Metadata.Get("user_timezone") != "" {
+				tzRaw := msg.Metadata.Get("user_timezone")
+				var tz roundtypes.Timezone = roundtypes.Timezone(tzRaw)
+				updateRequestPayload.Timezone = &tz
+			}
+			if updateRequestPayload.StartTime != nil {
+				h.logger.InfoContext(ctx, "Injected start time from metadata for update request if needed",
+					attr.String("start_time", *updateRequestPayload.StartTime),
+					attr.String("timezone", func() string {
+						if updateRequestPayload.Timezone == nil {
+							return ""
+						}
+						return string(*updateRequestPayload.Timezone)
+					}()),
+				)
+			}
+
 			h.logger.InfoContext(ctx, "Received RoundUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", updateRequestPayload.RoundID),
@@ -27,7 +53,9 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 				attr.String("channel_id", msg.Metadata.Get("channel_id")),
 				attr.String("message_id", msg.Metadata.Get("message_id")))
 
-			result, err := h.roundService.ValidateAndProcessRoundUpdate(ctx, *updateRequestPayload, roundtime.NewTimeParser())
+			// Anchor clock for deterministic relative time parsing on updates
+			clock := h.extractAnchorClock(msg)
+			result, err := h.roundService.ValidateAndProcessRoundUpdateWithClock(ctx, *updateRequestPayload, roundtime.NewTimeParser(), clock)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to validate and process round update",
 					attr.CorrelationIDFromMsg(msg),
@@ -165,7 +193,14 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 				if needsReschedule {
 					h.logger.InfoContext(ctx, "Creating schedule update message for rescheduling",
 						attr.RoundID("round_id", updatedPayload.Round.ID),
+						attr.String("guild_id", string(updatedPayload.Round.GuildID)),
 					)
+
+					if updatedPayload.Round.GuildID == "" {
+						h.logger.ErrorContext(ctx, "Missing guild ID on RoundEntityUpdatedPayload.Round when attempting to reschedule; scheduling payload will lack guild context",
+							attr.RoundID("round_id", updatedPayload.Round.ID),
+						)
+					}
 
 					// Create schedule update message using RoundEntityUpdatedPayload
 					scheduleMsg, err := h.helpers.CreateResultMessage(
@@ -222,13 +257,33 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 				attr.RoundID("round_id", roundID),
 			)
 
-			// Create RoundScheduleUpdatePayload from the updated round data
+			// Create RoundScheduleUpdatePayload from the updated round data (ensure GuildID is set)
+			guildID := updatedPayload.Round.GuildID
+			if guildID == "" {
+				// Fallback: try payload.GuildID (top-level) or metadata
+				if updatedPayload.GuildID != "" {
+					guildID = updatedPayload.GuildID
+				} else if metaGuild := msg.Metadata.Get("guild_id"); metaGuild != "" {
+					guildID = sharedtypes.GuildID(metaGuild)
+				}
+				if guildID == "" {
+					h.logger.ErrorContext(ctx, "Guild ID still empty when building RoundScheduleUpdatePayload; service call likely to fail",
+						attr.RoundID("round_id", updatedPayload.Round.ID),
+					)
+				}
+			}
 			schedulePayload := roundevents.RoundScheduleUpdatePayload{
+				GuildID:   guildID,
 				RoundID:   updatedPayload.Round.ID,
 				Title:     updatedPayload.Round.Title,
 				StartTime: updatedPayload.Round.StartTime,
 				Location:  updatedPayload.Round.Location,
 			}
+			h.logger.DebugContext(ctx, "Built RoundScheduleUpdatePayload",
+				attr.RoundID("round_id", schedulePayload.RoundID),
+				attr.String("guild_id", string(schedulePayload.GuildID)),
+				attr.Time("start_time", schedulePayload.StartTime.AsTime()),
+			)
 
 			// Call the service function with the converted payload
 			result, err := h.roundService.UpdateScheduledRoundEvents(ctx, schedulePayload)

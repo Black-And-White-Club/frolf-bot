@@ -41,12 +41,13 @@ func TestUpdateRoundMessageID(t *testing.T) {
 				})
 				roundForDBInsertion.EventMessageID = ""
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				roundForDBInsertion.GuildID = "test-guild"
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				persistedRound, err := deps.DB.GetRound(ctx, roundForDBInsertion.ID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", roundForDBInsertion.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch newly created round from DB after insertion: %v", err)
 				}
@@ -65,7 +66,7 @@ func TestUpdateRoundMessageID(t *testing.T) {
 					t.Errorf("Returned round EventMessageID mismatch: expected 'new_discord_message_id_12345', got '%v'", returnedRound.EventMessageID)
 				}
 
-				persistedRound, err := deps.DB.GetRound(ctx, returnedRound.ID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", returnedRound.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after update: %v", err)
 				}
@@ -108,12 +109,13 @@ func TestUpdateRoundMessageID(t *testing.T) {
 				})
 				roundForDBInsertion.EventMessageID = "old_message_id_abc"
 
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				roundForDBInsertion.GuildID = "test-guild"
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				persistedRound, err := deps.DB.GetRound(ctx, roundForDBInsertion.ID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", roundForDBInsertion.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch newly created round from DB after insertion: %v", err)
 				}
@@ -132,7 +134,7 @@ func TestUpdateRoundMessageID(t *testing.T) {
 					t.Errorf("Returned round EventMessageID mismatch: expected empty string, got '%v'", returnedRound.EventMessageID)
 				}
 
-				persistedRound, err := deps.DB.GetRound(ctx, returnedRound.ID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", returnedRound.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after update: %v", err)
 				}
@@ -157,7 +159,7 @@ func TestUpdateRoundMessageID(t *testing.T) {
 				roundToUpdateID = sharedtypes.RoundID(uuid.New())
 			}
 
-			returnedRound, err := deps.Service.UpdateRoundMessageID(deps.Ctx, roundToUpdateID, tt.discordMessageID)
+			returnedRound, err := deps.Service.UpdateRoundMessageID(deps.Ctx, "test-guild", roundToUpdateID, tt.discordMessageID)
 
 			if tt.expectedError {
 				if err == nil {

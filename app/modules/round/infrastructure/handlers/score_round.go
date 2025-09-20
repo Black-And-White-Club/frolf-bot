@@ -6,6 +6,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -28,6 +29,15 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 				attr.String("participant_id", string(scoreUpdateRequestPayload.Participant)),
 				attr.String("score", scoreValue), // Use String instead of Int for nil handling
 			)
+
+			// Defensive: ensure guild_id is present in both metadata and payload
+			metaGuildID := msg.Metadata.Get("guild_id")
+			if metaGuildID == "" && scoreUpdateRequestPayload.GuildID != "" {
+				msg.Metadata.Set("guild_id", string(scoreUpdateRequestPayload.GuildID))
+			}
+			if scoreUpdateRequestPayload.GuildID == "" && metaGuildID != "" {
+				scoreUpdateRequestPayload.GuildID = sharedtypes.GuildID(metaGuildID)
+			}
 
 			// Call the service function to handle the event
 			result, err := h.roundService.ValidateScoreUpdateRequest(ctx, *scoreUpdateRequestPayload)

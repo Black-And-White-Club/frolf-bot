@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -19,6 +20,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			tagAvailablePayload := payload.(*userevents.TagAvailablePayload)
 
 			userID := tagAvailablePayload.UserID
+			guildID := tagAvailablePayload.GuildID
 			tagNumber := tagAvailablePayload.TagNumber
 
 			h.logger.InfoContext(ctx, "Received TagAvailable event",
@@ -30,7 +32,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			ctx, span := h.tracer.Start(ctx, "CreateUserWithTag")
 			defer span.End()
 
-			result, err := h.userService.CreateUser(ctx, userID, &tagNumber)
+			result, err := h.userService.CreateUser(ctx, guildID, userID, &tagNumber)
 
 			if result.Failure != nil {
 				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
@@ -127,11 +129,18 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 				attr.Int("tag_number", int(tagNumber)),
 			)
 
+			// Ensure a default reason when none is provided
+			reason := strings.TrimSpace(tagUnavailablePayload.Reason)
+			if reason == "" {
+				reason = "tag not available"
+			}
+
 			// Create the UserCreationFailed payload directly in the handler
 			failedPayload := &userevents.UserCreationFailedPayload{
+				GuildID:   tagUnavailablePayload.GuildID,
 				UserID:    userID,
 				TagNumber: &tagNumber,
-				Reason:    "tag not available",
+				Reason:    reason,
 			}
 
 			// Trace message creation

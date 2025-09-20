@@ -22,6 +22,7 @@ type Round struct {
 	State          roundtypes.RoundState    `bun:"state,notnull"`
 	Participants   []roundtypes.Participant `bun:"participants,type:jsonb"`
 	EventMessageID string                   `bun:"event_message_id,nullzero"`
+	GuildID        sharedtypes.GuildID      `bun:"guild_id,notnull"`
 	CreatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
 	UpdatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
 }

@@ -17,6 +17,7 @@ import (
 
 func TestScoreService_ProcessRoundScores(t *testing.T) {
 	ctx := context.Background()
+	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testScore := sharedtypes.Score(10)
@@ -39,10 +40,9 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		{
 			name: "Successfully processes round scores",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
-				// Expect LogScores to be called and return nil (success).
 				mockDB.EXPECT().
-					LogScores(gomock.Any(), testRoundID, gomock.Any(), "auto").
-					DoAndReturn(func(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
+					LogScores(gomock.Any(), testGuildID, testRoundID, gomock.Any(), "auto").
+					DoAndReturn(func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
 						return nil
 					})
 			},
@@ -55,6 +55,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			expectedResult: ScoreOperationResult{
 				Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					TagMappings: []sharedtypes.TagMapping{
 						{
@@ -69,9 +70,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		{
 			name: "Fails due to database error",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
-				// Expect LogScores to be called and return a database error.
 				mockDB.EXPECT().
-					LogScores(gomock.Any(), testRoundID, gomock.Any(), "auto").
+					LogScores(gomock.Any(), testGuildID, testRoundID, gomock.Any(), "auto").
 					Return(errors.New("database connection failed"))
 			},
 			scores: []sharedtypes.ScoreInfo{
@@ -83,6 +83,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			expectedResult: ScoreOperationResult{
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Error:   "database connection failed",
 				},
@@ -92,9 +93,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		{
 			name: "Fails due to invalid round ID",
 			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
-				// Expect LogScores to be called and return an invalid round ID error.
 				mockDB.EXPECT().
-					LogScores(gomock.Any(), testRoundID, gomock.Any(), "auto").
+					LogScores(gomock.Any(), testGuildID, testRoundID, gomock.Any(), "auto").
 					Return(errors.New("invalid round ID"))
 			},
 			scores: []sharedtypes.ScoreInfo{
@@ -106,6 +106,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			expectedResult: ScoreOperationResult{
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Error:   "invalid round ID",
 				},
@@ -120,6 +121,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			scores: []sharedtypes.ScoreInfo{},
 			expectedResult: ScoreOperationResult{
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID, // RoundID will be passed through to the failure payload
 					Error:   "cannot process empty score list",
 				},
@@ -148,6 +150,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			expectedResult: ScoreOperationResult{
 				// Expect a failure payload matching the one returned by ProcessScoresForStorage.
 				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID, // RoundID will be passed through to the failure payload
 					Error:   "invalid score value: 150 for user user1. Score must be between -36 and 72",
 				},
@@ -180,7 +183,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
 			// Call the function under test.
-			gotResult, err := s.ProcessRoundScores(ctx, testRoundID, tt.scores)
+			gotResult, err := s.ProcessRoundScores(ctx, testGuildID, testRoundID, tt.scores)
 
 			// Validate the returned result.
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
@@ -189,6 +192,9 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 				successGot, okGot := gotResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
 				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
 				if okGot && okExpected {
+					if successGot.GuildID != successExpected.GuildID {
+						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
+					}
 					if successGot.RoundID != successExpected.RoundID {
 						t.Errorf("Mismatched RoundID, got: %v, expected: %v", successGot.RoundID, successExpected.RoundID)
 					}
@@ -213,6 +219,9 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 				failureGot, okGot := gotResult.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
 				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
 				if okGot && okExpected {
+					if failureGot.GuildID != failureExpected.GuildID {
+						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)
+					}
 					if failureGot.RoundID != failureExpected.RoundID {
 						t.Errorf("Mismatched RoundID, got: %v, expected: %v", failureGot.RoundID, failureExpected.RoundID)
 					}

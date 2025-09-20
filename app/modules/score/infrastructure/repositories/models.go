@@ -12,4 +12,5 @@ type Score struct {
 	RoundID   sharedtypes.RoundID     `bun:"id,pk,type:uuid"`
 	RoundData []sharedtypes.ScoreInfo `bun:"round_data,type:jsonb,notnull"`
 	Source    string                  `bun:"source,notnull"`
+	GuildID   sharedtypes.GuildID     `bun:"guild_id,notnull"`
 }

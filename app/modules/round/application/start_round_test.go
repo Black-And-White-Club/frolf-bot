@@ -74,12 +74,14 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					EventMessageID: testStartEventMessageID,
 				}
 
-				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(round, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testStartRoundID).Return(round, nil)
 
 				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
-				mockDB.EXPECT().UpdateRoundState(ctx, testStartRoundID, roundtypes.RoundStateInProgress).Return(nil)
+				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(nil)
 			},
 			payload: roundevents.RoundStartedPayload{
+				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testStartRoundID,
 				Title:     testRoundTitle,
 				Location:  &testStartLocation,
@@ -87,6 +89,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.DiscordRoundStartPayload{
+					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testStartRoundID,
 					Title:     testRoundTitle,
 					Location:  &testStartLocation,
@@ -113,13 +116,16 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 		{
 			name: "error getting round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testStartRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
 			payload: roundevents.RoundStartedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testStartRoundID,
 					Error:   "database error",
 				},
@@ -139,15 +145,18 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					EventMessageID: testStartEventMessageID,
 				}
 
-				mockDB.EXPECT().GetRound(ctx, testStartRoundID).Return(round, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testStartRoundID).Return(round, nil)
 				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
-				mockDB.EXPECT().UpdateRoundState(ctx, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
+				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
 			},
 			payload: roundevents.RoundStartedPayload{
+				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
+					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testStartRoundID,
 					Error:   "database error",
 				},

@@ -2,6 +2,7 @@
 .PHONY: test-unit-all test-integration-all test-all-project test-all-verbose
 .PHONY: test-with-summary test-unit-summary test-integration-summary
 .PHONY: test-quick test-silent test-json test-module
+.PHONY: test-integration-module test-integration-user test-integration-round test-integration-score test-integration-leaderboard
 .PHONY: test-integration-round-summary test-round-summary
 .PHONY: test-count-unit test-count-integration test-count-all coverage-all-with-counts
 .PHONY: integration-leaderboard-service integration-leaderboard-handlers
@@ -32,7 +33,7 @@ rollback-all:
 # Default to loading from .env file if DATABASE_URL is not set
 DB_URL ?= $(shell [ -f .env ] && grep '^DATABASE_URL=' .env | cut -d '=' -f2- | tr -d '"' || echo "")
 ifeq ($(DB_URL),)
-    $(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
+	$(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
 endif
 
 # Parse DATABASE_URL for psql components (for river-clean)
@@ -248,6 +249,42 @@ test-module:
 	rm -f $$TEMP_FILE; \
 	exit $$EXIT_CODE)
 
+# Run only integration tests for a specific module with a summary
+test-integration-module:
+	@if [ -z "$(MODULE)" ]; then \
+		echo "Usage: make test-integration-module MODULE=user|round|score|leaderboard"; \
+		echo "Example: make test-integration-module MODULE=round"; \
+		exit 1; \
+	fi
+	@echo "Running integration tests for $(MODULE) with summary..."
+	@TEMP_FILE=$$(mktemp) && \
+	(go test ./integration_tests/modules/$(MODULE)/... -v 2>&1 | tee $$TEMP_FILE; \
+	EXIT_CODE=$${PIPESTATUS[0]}; \
+	echo ""; \
+	echo "=========================================="; \
+	echo "INTEGRATION TEST SUMMARY: $(MODULE)"; \
+	echo "=========================================="; \
+	if [ $$EXIT_CODE -eq 0 ]; then \
+		echo "✅ ALL INTEGRATION TESTS PASSED"; \
+		grep "^--- PASS:" $$TEMP_FILE | wc -l | xargs printf "Total passed: %s\n"; \
+	else \
+		echo "❌ SOME INTEGRATION TESTS FAILED"; \
+		echo ""; \
+		echo "FAILED TESTS:"; \
+		grep -E "^--- FAIL:|^FAIL" $$TEMP_FILE || echo "No specific test failures found"; \
+		echo ""; \
+		echo "FAILURE DETAILS:"; \
+		grep -A 10 -B 2 "FAIL\|panic:" $$TEMP_FILE | grep -v "^--$$" || echo "No detailed failure info found"; \
+	fi; \
+	rm -f $$TEMP_FILE; \
+	exit $$EXIT_CODE)
+
+# Convenience module-specific integration targets
+test-integration-user: ; $(MAKE) test-integration-module MODULE=user
+test-integration-round: ; $(MAKE) test-integration-module MODULE=round
+test-integration-score: ; $(MAKE) test-integration-module MODULE=score
+test-integration-leaderboard: ; $(MAKE) test-integration-module MODULE=leaderboard
+
 # Round module specific test targets with summary
 test-integration-round-summary:
 	@echo "Running round integration tests with failure summary..."
@@ -311,15 +348,15 @@ build-coverage:
 coverage-all: build-coverage
 	@echo "Running all tests with coverage across entire project..."
 	-mkdir -p $(REPORTS_DIR)
-    # Set environment variable for binary coverage
+	# Set environment variable for binary coverage
 	export GOCOVERDIR=$(REPORTS_DIR)/binary-coverage && \
 	mkdir -p $$GOCOVERDIR && \
 	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... && \
 	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
 	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-  	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/merged-coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-  	else \
-  		cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/merged-coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	else \
+		cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	fi
 	@echo ""
 	@echo "=========================================="
@@ -348,9 +385,9 @@ coverage-all-with-counts: build-coverage
 	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... -v && \
 	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
 	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-  	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	else \
-  	cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
+	cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
 	fi
 	@echo ""
 	@echo "=========================================="
@@ -438,7 +475,12 @@ mocks-score:
 mocks-eventbus:
 	$(MOCKGEN) -source=../frolf-bot-shared/eventbus/eventbus.go -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
 
-mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score
+mocks-guild:
+	$(MOCKGEN) -source=./app/modules/guild/application/interface.go -destination=./app/modules/guild/application/mocks/mock_service.go -package=mocks
+	$(MOCKGEN) -source=./app/modules/guild/infrastructure/handlers/interface.go -destination=./app/modules/guild/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
+	$(MOCKGEN) -source=./app/modules/guild/infrastructure/repositories/interface.go -destination=./app/modules/guild/infrastructure/repositories/mocks/mock_db.go -package=mocks
+
+mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score mocks-guild
 
 build_version_ldflags := -X 'main.Version=$(shell git describe --tags --always)'
 
@@ -502,6 +544,8 @@ help:
 	@echo "  test-silent          - Run tests silently (results only)"
 	@echo "  test-json            - Run tests with JSON output"
 	@echo "  test-module MODULE=x - Test specific module (user|round|score|leaderboard)"
+	@echo "  test-integration-module MODULE=x - Run integration tests for a specific module (user|round|score|leaderboard)"
+	@echo "  test-integration-user|round|score|leaderboard - Convenience targets for integration tests per module"
 	@echo "  test-count-all       - Show test counts"
 	@echo ""
 	@echo "Coverage:"

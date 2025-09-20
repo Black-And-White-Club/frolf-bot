@@ -7,6 +7,9 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +51,8 @@ type TestEnvironment struct {
 // NewTestEnvironment creates a new test environment with Postgres and NATS containers
 func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	configureLocalDockerAutodetect()
 
 	env := &TestEnvironment{
 		Ctx:           ctx,
@@ -344,4 +349,89 @@ func cleanupContainers(ctx context.Context, pg *postgres.PostgresContainer, nats
 	if nats != nil {
 		nats.Terminate(ctx)
 	}
+}
+
+// configureLocalDockerAutodetect sets minimal Testcontainers overrides for Colima environments
+// to make the integration suite plug-and-play. It only applies when:
+// - DOCKER_HOST points at a Colima socket, and
+// - the respective overrides are not already set by the user.
+// It does not change behavior for Docker Desktop or CI environments.
+func configureLocalDockerAutodetect() {
+	dh := os.Getenv("DOCKER_HOST")
+	dc := os.Getenv("DOCKER_CONTEXT")
+	if dh == "" && dc == "" {
+		return
+	}
+	if !(strings.Contains(dh, ".colima/") || strings.EqualFold(dc, "colima")) {
+		return
+	}
+
+	if os.Getenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE") == "" {
+		os.Setenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
+	}
+
+	// If no host override or an alias is set, prefer a concrete IP to avoid DNS issues in Colima.
+	if ho := os.Getenv("TESTCONTAINERS_HOST_OVERRIDE"); ho == "" || ho == "host.lima.internal" || ho == "host.docker.internal" {
+		if ip := hostIPv4ForLocal(); ip != "" {
+			os.Setenv("TESTCONTAINERS_HOST_OVERRIDE", ip)
+		}
+	}
+
+	if os.Getenv("TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED") == "" {
+		os.Setenv("TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED", "true")
+	}
+}
+
+// hostIPv4ForLocal attempts to find a stable, non-loopback IPv4 address on the host
+// that is typically reachable from Colima's VM. Prefer common macOS interfaces (en0/en1),
+// otherwise fall back to the first suitable non-loopback IPv4 address.
+func hostIPv4ForLocal() string {
+	pickFrom := []string{"en0", "en1"}
+	for _, name := range pickFrom {
+		if ip := ipv4ForInterface(name); ip != "" {
+			return ip
+		}
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+			continue
+		}
+		if ip := ipv4ForInterface(iface.Name); ip != "" {
+			return ip
+		}
+	}
+	return ""
+}
+
+func ipv4ForInterface(name string) string {
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return ""
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip == nil || ip.IsLoopback() {
+			continue
+		}
+		ip = ip.To4()
+		if ip == nil {
+			continue
+		}
+		return ip.String()
+	}
+	return ""
 }

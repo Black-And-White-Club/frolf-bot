@@ -23,8 +23,8 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*m
 				attr.String("target_id", string(tagSwapRequestedPayload.TargetID)),
 			)
 
-			// Call the service function to handle the event
-			result, err := h.leaderboardService.TagSwapRequested(ctx, *tagSwapRequestedPayload)
+			// Call the service function to handle the event, propagate guildID
+			result, err := h.leaderboardService.TagSwapRequested(ctx, tagSwapRequestedPayload.GuildID, *tagSwapRequestedPayload)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle TagSwapRequested event",
 					attr.CorrelationIDFromMsg(msg),

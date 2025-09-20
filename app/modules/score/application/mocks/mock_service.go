@@ -43,46 +43,61 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CorrectScore mocks base method.
-func (m *MockService) CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+func (m *MockService) CorrectScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CorrectScore", ctx, roundID, userID, score, tagNumber)
+	ret := m.ctrl.Call(m, "CorrectScore", ctx, guildID, roundID, userID, score, tagNumber)
 	ret0, _ := ret[0].(scoreservice.ScoreOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CorrectScore indicates an expected call of CorrectScore.
-func (mr *MockServiceMockRecorder) CorrectScore(ctx, roundID, userID, score, tagNumber any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CorrectScore(ctx, guildID, roundID, userID, score, tagNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CorrectScore", reflect.TypeOf((*MockService)(nil).CorrectScore), ctx, roundID, userID, score, tagNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CorrectScore", reflect.TypeOf((*MockService)(nil).CorrectScore), ctx, guildID, roundID, userID, score, tagNumber)
+}
+
+// GetScoresForRound mocks base method.
+func (m *MockService) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetScoresForRound", ctx, guildID, roundID)
+	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetScoresForRound indicates an expected call of GetScoresForRound.
+func (mr *MockServiceMockRecorder) GetScoresForRound(ctx, guildID, roundID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScoresForRound", reflect.TypeOf((*MockService)(nil).GetScoresForRound), ctx, guildID, roundID)
 }
 
 // ProcessRoundScores mocks base method.
-func (m *MockService) ProcessRoundScores(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (scoreservice.ScoreOperationResult, error) {
+func (m *MockService) ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (scoreservice.ScoreOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundScores", ctx, roundID, scores)
+	ret := m.ctrl.Call(m, "ProcessRoundScores", ctx, guildID, roundID, scores)
 	ret0, _ := ret[0].(scoreservice.ScoreOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ProcessRoundScores indicates an expected call of ProcessRoundScores.
-func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, roundID, scores any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundScores(ctx, guildID, roundID, scores any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, roundID, scores)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundScores", reflect.TypeOf((*MockService)(nil).ProcessRoundScores), ctx, guildID, roundID, scores)
 }
 
 // ProcessScoresForStorage mocks base method.
-func (m *MockService) ProcessScoresForStorage(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
+func (m *MockService) ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessScoresForStorage", ctx, roundID, scores)
+	ret := m.ctrl.Call(m, "ProcessScoresForStorage", ctx, guildID, roundID, scores)
 	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ProcessScoresForStorage indicates an expected call of ProcessScoresForStorage.
-func (mr *MockServiceMockRecorder) ProcessScoresForStorage(ctx, roundID, scores any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessScoresForStorage(ctx, guildID, roundID, scores any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessScoresForStorage", reflect.TypeOf((*MockService)(nil).ProcessScoresForStorage), ctx, roundID, scores)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessScoresForStorage", reflect.TypeOf((*MockService)(nil).ProcessScoresForStorage), ctx, guildID, roundID, scores)
 }

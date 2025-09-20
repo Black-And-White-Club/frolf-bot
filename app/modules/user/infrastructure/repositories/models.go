@@ -10,7 +10,8 @@ type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 	ID            int64                    `bun:"id,pk,autoincrement" json:"id"`
 	UserID        sharedtypes.DiscordID    `bun:"user_id,unique"`
-	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'Rattler'" json:"role"`
+	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'User'" json:"role"`
+	GuildID       sharedtypes.GuildID      `bun:"guild_id,notnull"`
 }
 
 // Add these methods to your User struct

@@ -12,19 +12,27 @@ import (
 
 // HandleUserSignupRequest handles the UserSignupRequest event.
 func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message.Message, error) {
+	// Add explicit debug logging to stdout
+	fmt.Printf("DEBUG: HandleUserSignupRequest() called with message UUID: %s\n", msg.UUID)
+	h.logger.DebugContext(context.Background(), "HandleUserSignupRequest called",
+		attr.String("message_uuid", msg.UUID),
+		attr.String("payload", string(msg.Payload)),
+	)
 	wrappedHandler := h.handlerWrapper(
 		"HandleUserSignupRequest",
 		&userevents.UserSignupRequestPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			fmt.Printf("DEBUG: Inside handler wrapper for UserSignupRequest\n")
 			userSignupPayload := payload.(*userevents.UserSignupRequestPayload)
 
 			userID := userSignupPayload.UserID
+			guildID := userSignupPayload.GuildID
 
+			fmt.Printf("DEBUG: Processing signup for UserID: %s, GuildID: %s\n", userID, guildID)
 			h.logger.InfoContext(ctx, "Received UserSignupRequest event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
-
 			if userSignupPayload.TagNumber != nil {
 				tagNumber := *userSignupPayload.TagNumber
 
@@ -38,6 +46,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				defer span.End()
 
 				eventPayload := &userevents.TagAvailabilityCheckRequestedPayload{
+					GuildID:   guildID,
 					TagNumber: tagNumber,
 					UserID:    userID,
 				}
@@ -60,7 +69,8 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			ctx, span := h.tracer.Start(ctx, "CreateUser")
 			defer span.End()
 
-			result, err := h.userService.CreateUser(ctx, userID, nil)
+			result, err := h.userService.CreateUser(ctx, guildID, userID, nil)
+			fmt.Printf("DEBUG: CreateUser returned: result=%#v, err=%v\n", result, err)
 
 			if result.Failure != nil {
 				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
@@ -84,6 +94,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					span.RecordError(err)
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
+				fmt.Printf("DEBUG: Created failureMsg for user_id: %s, guild_id: %s, reason: %s\n", userID, guildID, failedPayload.Reason)
 
 				// Create Discord-specific failure message
 				discordFailurePayload := &userevents.UserSignupFailedPayload{
@@ -98,9 +109,11 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					span.RecordError(err)
 					return nil, fmt.Errorf("failed to create discord failure message: %w", err)
 				}
+				fmt.Printf("DEBUG: Created discordFailureMsg for user_id: %s, guild_id: %s, reason: %s\n", userID, guildID, failedPayload.Reason)
 
 				h.metrics.RecordUserCreationFailure(ctx, failedPayload.Reason, "failed")
 
+				fmt.Printf("DEBUG: Returning 2 messages from HandleUserSignupRequest (failure case)\n")
 				return []*message.Message{failureMsg, discordFailureMsg}, nil
 			}
 
@@ -136,6 +149,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					span.RecordError(err)
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
+				fmt.Printf("DEBUG: Created successMsg for user_id: %s, guild_id: %s\n", userID, guildID)
 
 				// Create a Discord-specific signup success message for the discord stream
 				discordSuccessMsg, err := h.helpers.CreateResultMessage(
@@ -147,9 +161,11 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					span.RecordError(err)
 					return nil, fmt.Errorf("failed to create discord success message: %w", err)
 				}
+				fmt.Printf("DEBUG: Created discordSuccessMsg for user_id: %s, guild_id: %s\n", userID, guildID)
 
 				h.metrics.RecordUserCreationSuccess(ctx, string(successPayload.UserID), "discord")
 
+				fmt.Printf("DEBUG: Returning 2 messages from HandleUserSignupRequest (success case)\n")
 				return []*message.Message{successMsg, discordSuccessMsg}, nil
 			}
 
@@ -157,6 +173,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("user_id", string(userID)),
 			)
+			fmt.Printf("DEBUG: CreateUser returned no success or failure payload, err=%v\n", err)
 			return nil, errors.New("user creation service returned unexpected result")
 		},
 	)

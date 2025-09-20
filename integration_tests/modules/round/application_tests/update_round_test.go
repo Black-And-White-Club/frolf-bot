@@ -254,17 +254,20 @@ func TestUpdateRoundEntity(t *testing.T) {
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("UPCOMING"),
 					Finalized: false,
+					GuildID:   "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, originalRound)
+				err := deps.DB.CreateRound(ctx, "test-guild", originalRound)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB: %v", err)
 				}
 
 				payload := roundevents.RoundUpdateValidatedPayload{
+					GuildID: "test-guild",
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
 						RoundID: originalRound.ID,
 						Title:   roundtypes.Title("Updated Title"),
 						UserID:  testUserID,
+						GuildID: "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -272,7 +275,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 			expectedError: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
 				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
 				if !ok {
@@ -282,7 +285,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected round title to be 'Updated Title', got '%s'", entityUpdatedPayload.Round.Title)
 				}
 
-				updatedRoundInDB, err := deps.DB.GetRound(ctx, entityUpdatedPayload.Round.ID)
+				updatedRoundInDB, err := deps.DB.GetRound(ctx, "test-guild", entityUpdatedPayload.Round.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch updated round from DB: %v", err)
 				}
@@ -304,20 +307,23 @@ func TestUpdateRoundEntity(t *testing.T) {
 					CreatedBy:   testUserID,
 					State:       roundtypes.RoundState("UPCOMING"),
 					Finalized:   false,
+					GuildID:     "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, originalRound)
+				err := deps.DB.CreateRound(ctx, "test-guild", originalRound)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB: %v", err)
 				}
 
 				newStartTime := time.Now().Add(48 * time.Hour)
 				payload := roundevents.RoundUpdateValidatedPayload{
+					GuildID: "test-guild",
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
 						RoundID:     originalRound.ID,
 						Description: roundtypes.DescriptionPtr("New Description"),
 						Location:    roundtypes.LocationPtr("New Location"),
 						StartTime:   (*sharedtypes.StartTime)(&newStartTime),
 						UserID:      testUserID,
+						GuildID:     "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -325,7 +331,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 			expectedError: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
 				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
 				if !ok {
@@ -341,7 +347,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected StartTime to be updated and in future, got %v", entityUpdatedPayload.Round.StartTime)
 				}
 
-				updatedRoundInDB, err := deps.DB.GetRound(ctx, entityUpdatedPayload.Round.ID)
+				updatedRoundInDB, err := deps.DB.GetRound(ctx, "test-guild", entityUpdatedPayload.Round.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch updated round from DB: %v", err)
 				}
@@ -367,18 +373,21 @@ func TestUpdateRoundEntity(t *testing.T) {
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("UPCOMING"),
 					Finalized: false,
+					GuildID:   "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, originalRound)
+				err := deps.DB.CreateRound(ctx, "test-guild", originalRound)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB: %v", err)
 				}
 
 				newEventType := roundtypes.EventType("tournament")
 				payload := roundevents.RoundUpdateValidatedPayload{
+					GuildID: "test-guild",
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
 						RoundID:   originalRound.ID,
 						EventType: &newEventType,
 						UserID:    testUserID,
+						GuildID:   "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -386,7 +395,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 			expectedError: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
 				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
 				if !ok {
@@ -396,7 +405,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected EventType to be 'tournament', got '%v'", entityUpdatedPayload.Round.EventType)
 				}
 
-				updatedRoundInDB, err := deps.DB.GetRound(ctx, entityUpdatedPayload.Round.ID)
+				updatedRoundInDB, err := deps.DB.GetRound(ctx, "test-guild", entityUpdatedPayload.Round.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch updated round from DB: %v", err)
 				}
@@ -410,10 +419,12 @@ func TestUpdateRoundEntity(t *testing.T) {
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID) {
 				roundID := sharedtypes.RoundID(uuid.New())
 				payload := roundevents.RoundUpdateValidatedPayload{
+					GuildID: "test-guild",
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
 						RoundID: roundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  testUserID,
+						GuildID: "test-guild",
 					},
 				}
 				return payload, roundID
@@ -494,6 +505,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					RoundID:   roundID,
 					Title:     roundtypes.Title("Non-existent Round"),
 					StartTime: &futureTime,
+					GuildID:   "test-guild",
 				}
 				return payload, roundID
 			},
@@ -525,8 +537,9 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("FINALIZED"),
 					Finalized: true,
+					GuildID:   "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, round)
+				err := deps.DB.CreateRound(ctx, "test-guild", round)
 				if err != nil {
 					t.Fatalf("Failed to create finalized round in DB: %v", err)
 				}
@@ -536,6 +549,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Attempted Update"),
 					StartTime: &futureTime,
+					GuildID:   "test-guild",
 				}
 				return payload, round.ID
 			},
@@ -568,8 +582,9 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("UPCOMING"),
 					Finalized: false,
+					GuildID:   "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, round)
+				err := deps.DB.CreateRound(ctx, "test-guild", round)
 				if err != nil {
 					t.Fatalf("Failed to create round for rescheduling in DB: %v", err)
 				}
@@ -579,18 +594,19 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Rescheduled Round"),
 					StartTime: (*sharedtypes.StartTime)(&newStartTime),
+					GuildID:   "test-guild",
 				}
 				return payload, round.ID
 			},
 			expectedError: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
 
 				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayload)
 				if !ok {
-					t.Errorf("Expected *RoundScheduleUpdatePayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundScheduleUpdatePayload, got %T. Value: %#v", returnedResult.Success, returnedResult.Success)
 					return
 				}
 
@@ -615,8 +631,9 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("UPCOMING"),
 					Finalized: false,
+					GuildID:   "test-guild",
 				}
-				err := deps.DB.CreateRound(ctx, round)
+				err := deps.DB.CreateRound(ctx, "test-guild", round)
 				if err != nil {
 					t.Fatalf("Failed to create round for location update in DB: %v", err)
 				}
@@ -628,6 +645,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					Title:     roundtypes.Title("Location Update Round"),
 					StartTime: (*sharedtypes.StartTime)(&newStartTime),
 					Location:  &newLocation,
+					GuildID:   "test-guild",
 				}
 				return payload, round.ID
 			},

@@ -22,9 +22,11 @@ import (
 )
 
 func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
+	guildID := sharedtypes.GuildID("guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
 	testPayload := &roundevents.GetRoundRequestPayload{
+		GuildID: guildID,
 		RoundID: testRoundID,
 	}
 
@@ -57,6 +59,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
+					guildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
@@ -99,6 +102,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
+					guildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{},
@@ -122,6 +126,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
+					guildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
@@ -155,6 +160,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
+					guildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{}, // Return empty result
@@ -178,6 +184,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
+					guildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{

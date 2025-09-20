@@ -11,7 +11,7 @@ import (
 )
 
 // CorrectScore updates a player's score and returns the appropriate payload.
-func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error) {
+func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error) {
 	return s.serviceWrapper(ctx, "CorrectScore", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
 		// Validate the incoming score value at the service layer
 		// Adjusted bounds for disc golf: assuming a valid score is between -36 and +72 (e.g., 18 holes, -2 per hole to +4 per hole).
@@ -27,6 +27,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 			)
 			return ScoreOperationResult{
 				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
 					Error:   validationError.Error(),
@@ -34,13 +35,27 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 			}, nil // Return nil error as this is a handled business validation failure
 		}
 
+		// Preserve existing tag number if not provided
+		effectiveTag := tagNumber
+		if effectiveTag == nil {
+			if existing, err := s.ScoreDB.GetScoresForRound(ctx, guildID, roundID); err == nil {
+				for _, si := range existing {
+					if si.UserID == userID && si.TagNumber != nil {
+						tn := *si.TagNumber
+						effectiveTag = &tn
+						break
+					}
+				}
+			}
+		}
+
 		scoreInfo := sharedtypes.ScoreInfo{
 			UserID:    userID,
 			Score:     score,
-			TagNumber: tagNumber,
+			TagNumber: effectiveTag,
 		}
 		dbStart := time.Now()
-		err := s.ScoreDB.UpdateOrAddScore(ctx, roundID, scoreInfo)
+		err := s.ScoreDB.UpdateOrAddScore(ctx, guildID, roundID, scoreInfo)
 		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update/add score",
@@ -55,6 +70,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 			// and it's not a system error to be propagated further as an 'error'.
 			return ScoreOperationResult{
 				Failure: &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
 					Error:   err.Error(),
@@ -69,6 +85,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, roundID sharedtypes.Rou
 		)
 		return ScoreOperationResult{
 			Success: &scoreevents.ScoreUpdateSuccessPayload{
+				GuildID: guildID,
 				RoundID: roundID,
 				UserID:  userID,
 				Score:   score,

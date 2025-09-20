@@ -35,6 +35,7 @@ func TestHandleTagAvailable(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				payload := userevents.TagAvailablePayload{
+					GuildID:   "test-guild",
 					UserID:    "test-tag-user-available",
 					TagNumber: 21,
 				}
@@ -78,7 +79,8 @@ func TestHandleTagAvailable(t *testing.T) {
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Create the user that will cause the "already exists" error
 				// Use testutils.InsertUser to directly insert the user into the database
-				err := testutils.InsertUser(t, env.DB, "existing-tag-user", sharedtypes.UserRoleRattler)
+				guildID := sharedtypes.GuildID("test-guild")
+				err := testutils.InsertUser(t, env.DB, "existing-tag-user", guildID, sharedtypes.UserRoleUser)
 				if err != nil {
 					t.Fatalf("Failed to insert pre-existing user via testutils.InsertUser: %v", err)
 				}
@@ -86,6 +88,7 @@ func TestHandleTagAvailable(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				payload := userevents.TagAvailablePayload{
+					GuildID:   "test-guild",
 					UserID:    "existing-tag-user",
 					TagNumber: 22,
 				}

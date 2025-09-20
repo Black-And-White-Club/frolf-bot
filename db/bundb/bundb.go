@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	sharedinterface "github.com/Black-And-White-Club/frolf-bot/app/shared/interfaces"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -18,11 +20,13 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB        userdb.UserDB
-	RoundDB       rounddb.RoundDB
-	ScoreDB       scoredb.ScoreDB
-	LeaderboardDB leaderboarddb.LeaderboardDB
-	db            *bun.DB
+	UserDB            userdb.UserDB
+	RoundDB           rounddb.RoundDB
+	ScoreDB           scoredb.ScoreDB
+	LeaderboardDB     leaderboarddb.LeaderboardDB
+	GuildDB           guilddb.GuildDB
+	SharedDBInterface sharedinterface.GuildConfigReader
+	db                *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.
@@ -63,6 +67,7 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 	db.RegisterModel(&rounddb.Round{})
 	db.RegisterModel(&scoredb.Score{})
 	db.RegisterModel(&leaderboarddb.Leaderboard{})
+	db.RegisterModel(&guilddb.GuildConfig{})
 	log.Println("newDBServiceWithDB - Models registered successfully")
 
 	dbService := &DBService{
@@ -70,6 +75,7 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 		RoundDB:       &rounddb.RoundDBImpl{DB: db},
 		ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
 		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
+		GuildDB:       &guilddb.GuildDBImpl{DB: db},
 		db:            db,
 	}
 

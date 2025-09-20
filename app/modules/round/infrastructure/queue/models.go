@@ -2,11 +2,13 @@ package roundqueue
 
 import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // RoundStartJob represents a scheduled round start event
 // This job will publish a round.started event at the scheduled time
 type RoundStartJob struct {
+	GuildID   sharedtypes.GuildID             `json:"guild_id"`
 	RoundID   string                          `json:"round_id"`
 	RoundData roundevents.RoundStartedPayload `json:"round_data"` // ✅ Correct payload type
 }
@@ -17,6 +19,7 @@ func (j RoundStartJob) Kind() string { return "round_start" }
 // RoundReminderJob represents a scheduled round reminder event
 // This job will publish a round.reminder event at the scheduled time
 type RoundReminderJob struct {
+	GuildID   sharedtypes.GuildID                `json:"guild_id"`
 	RoundID   string                             `json:"round_id"`
 	RoundData roundevents.DiscordReminderPayload `json:"round_data"` // ✅ Correct payload type
 }

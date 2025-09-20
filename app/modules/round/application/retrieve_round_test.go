@@ -65,25 +65,27 @@ func TestRoundService_GetRound(t *testing.T) {
 		{
 			name: "successful retrieval",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&testRound, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&testRound, nil)
 			},
 			expectedResult: RoundOperationResult{
-				Success: &testRound, // Make this a pointer to match your implementation
+				Success: &testRound,
 			},
 			expectedError: nil,
 		},
 		{
 			name: "error retrieving round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetRound(ctx, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Add pointer to match your implementation
+				Failure: &roundevents.RoundErrorPayload{
 					RoundID: testRoundID,
 					Error:   "database error",
 				},
 			},
-			expectedError: nil, // Change this to nil since you're handling errors in Failure
+			expectedError: nil,
 		},
 	}
 
@@ -103,7 +105,8 @@ func TestRoundService_GetRound(t *testing.T) {
 				},
 			}
 
-			result, err := s.GetRound(ctx, testRoundID)
+			guildID := sharedtypes.GuildID("guild-123")
+			result, err := s.GetRound(ctx, guildID, testRoundID)
 
 			// Check error expectations
 			if tt.expectedError != nil {

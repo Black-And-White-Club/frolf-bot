@@ -20,6 +20,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 
 	ctx := context.Background()
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTag := sharedtypes.TagNumber(42)
 	negativeTag := sharedtypes.TagNumber(-1)
 
@@ -194,7 +195,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				ctxArg = nil
 			}
 
-			gotResult, gotErr := s.CreateUser(ctxArg, tt.userID, tt.tag)
+			gotResult, gotErr := s.CreateUser(ctxArg, testGuildID, tt.userID, tt.tag)
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {

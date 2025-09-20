@@ -14,8 +14,9 @@ type ScoreDBImpl struct {
 	DB *bun.DB
 }
 
-func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
+func (db *ScoreDBImpl) LogScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
 	scoreToLog := Score{
+		GuildID:   guildID,
 		RoundID:   roundID,
 		RoundData: scores,
 		Source:    source,
@@ -24,7 +25,7 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID sharedtypes.RoundI
 	res, err := db.DB.NewInsert().
 		Model(&scoreToLog).
 		On("CONFLICT (id) DO UPDATE").
-		Set("round_data = EXCLUDED.round_data, source = EXCLUDED.source").
+		Set("round_data = EXCLUDED.round_data, source = EXCLUDED.source, guild_id = EXCLUDED.guild_id").
 		Exec(ctx)
 
 	fmt.Printf("[DEBUG LogScores] Insert/Update Executed for RoundID %s. Error: %v, Result: %+v\n", roundID, err, res)
@@ -36,15 +37,15 @@ func (db *ScoreDBImpl) LogScores(ctx context.Context, roundID sharedtypes.RoundI
 	return nil
 }
 
-func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
+func (db *ScoreDBImpl) UpdateScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
 	var score Score
 	err := db.DB.NewSelect().
 		Model(&score).
-		Where("id = ?", roundID).
+		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("score record for round %s not found for update", roundID)
+			return fmt.Errorf("score record for round %s (guild %s) not found for update", roundID, guildID)
 		}
 		return fmt.Errorf("failed to fetch score record for update: %w", err)
 	}
@@ -58,26 +59,54 @@ func (db *ScoreDBImpl) UpdateScore(ctx context.Context, roundID sharedtypes.Roun
 
 	_, err = db.DB.NewUpdate().
 		Model(&score).
-		Where("id = ?", roundID).
+		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update score record for round %s: %w", roundID, err)
+		return fmt.Errorf("failed to update score record for round %s (guild %s): %w", roundID, guildID, err)
 	}
 	return nil
 }
 
-func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, roundID sharedtypes.RoundID, scoreInfo sharedtypes.ScoreInfo) error {
+func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scoreInfo sharedtypes.ScoreInfo) error {
 	var score Score
 	err := db.DB.NewSelect().
 		Model(&score).
-		Where("id = ?", roundID).
+		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("score record not found for round %s", roundID)
+			// Attempt self-heal: locate any row by round ID regardless of guild and set guild_id if missing
+			var anyRound Score
+			errByID := db.DB.NewSelect().
+				Model(&anyRound).
+				Where("id = ?", roundID).
+				Scan(ctx)
+			if errByID == nil {
+				if string(anyRound.GuildID) == "" {
+					// Update the existing row to attach the correct guild_id
+					anyRound.GuildID = guildID
+					if _, updErr := db.DB.NewUpdate().
+						Model(&anyRound).
+						Where("id = ?", roundID).
+						Column("guild_id").
+						Exec(ctx); updErr == nil {
+						// Retry original lookup now that guild_id is set
+						errRetry := db.DB.NewSelect().
+							Model(&score).
+							Where("id = ? AND guild_id = ?", roundID, guildID).
+							Scan(ctx)
+						if errRetry == nil {
+							goto SCORE_LOADED
+						}
+					}
+				}
+			}
+			return fmt.Errorf("score record not found for round %s (guild %s)", roundID, guildID)
 		}
 		return fmt.Errorf("failed to fetch score record for add/update: %w", err)
 	}
+
+SCORE_LOADED:
 
 	exists := false
 	for i, existingScoreInfo := range score.RoundData {
@@ -94,25 +123,25 @@ func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, roundID sharedtypes
 
 	_, err = db.DB.NewUpdate().
 		Model(&score).
-		Where("id = ?", roundID).
+		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update score record for round %s: %w", roundID, err)
+		return fmt.Errorf("failed to update score record for round %s (guild %s): %w", roundID, guildID, err)
 	}
 	return nil
 }
 
-func (db *ScoreDBImpl) GetScoresForRound(ctx context.Context, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+func (db *ScoreDBImpl) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
 	var score Score
 	err := db.DB.NewSelect().
 		Model(&score).
-		Where("id = ?", roundID).
+		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to fetch scores for round %s: %w", roundID, err)
+		return nil, fmt.Errorf("failed to fetch scores for round %s (guild %s): %w", roundID, guildID, err)
 	}
 	return score.RoundData, nil
 }

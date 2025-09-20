@@ -30,29 +30,30 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Round to be finalized",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				roundForDBInsertion.GuildID = "test-guild"
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
+					GuildID:   "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				// Fixed: expecting pointer type
 				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
-					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *RoundFinalizedPayload, got %T. Value: %#v", returnedResult.Success, returnedResult.Success)
 					return
 				}
 
 				// Verify the round's state is FINALIZED in the DB
-				persistedRound, err := deps.DB.GetRound(ctx, finalizedPayload.RoundID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", finalizedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after finalization: %v", err)
 				}
@@ -147,24 +148,25 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Round for fetch failure test",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDBInsertion)
+				roundForDBInsertion.GuildID = "test-guild"
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				// Set up mock to simulate fetch failure after successful update
-				// This would require a mock DB implementation that can simulate partial failures
+				// In integration tests, we cannot simulate a fetch failure after update without a mock.
+				// This test expects normal operation and a successful result.
 				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
+					GuildID:   "test-guild",
 				}
 			},
-			expectedFailure: false, // This test assumes normal operation since we can't easily mock partial failure
+			expectedFailure: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// Fixed: expecting pointer type
 				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
@@ -172,7 +174,7 @@ func TestFinalizeRound(t *testing.T) {
 				}
 
 				// Verify the round's state is FINALIZED in the DB
-				persistedRound, err := deps.DB.GetRound(ctx, finalizedPayload.RoundID)
+				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", finalizedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after finalization: %v", err)
 				}
@@ -253,7 +255,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round for score notification",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDB)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -337,7 +339,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with nil scores",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDB)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -392,7 +394,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with no participants",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDB)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -429,7 +431,7 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with mixed participant data",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, &roundForDB)
+				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}

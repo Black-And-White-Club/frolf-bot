@@ -105,7 +105,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Verify scores were stored in DB
-				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, roundID)
+				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID)
 				if err != nil {
 					t.Fatalf("Failed to get scores from DB: %v", err)
 				}
@@ -185,7 +185,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Verify scores were stored in DB
-				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, roundID)
+				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID)
 				if err != nil {
 					t.Fatalf("Failed to get scores from DB: %v", err)
 				}
@@ -269,7 +269,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Verify scores were stored in DB in sorted order
-				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, roundID)
+				storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID)
 				if err != nil {
 					t.Fatalf("Failed to get scores from DB: %v", err)
 				}
@@ -312,7 +312,8 @@ func TestProcessRoundScores(t *testing.T) {
 				roundID, scores, _ := tc.setupFunc()
 
 				// Process round scores
-				result, err := deps.Service.ProcessRoundScores(deps.Ctx, roundID, scores)
+				guildID := sharedtypes.GuildID("test_guild")
+				result, err := deps.Service.ProcessRoundScores(deps.Ctx, guildID, roundID, scores)
 
 				// Validate the result
 				tc.validateFunc(t, roundID, result, err) // Pass the entire result struct
@@ -368,8 +369,10 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 			roundID := sharedtypes.RoundID(parsedUUID)
 
 			// Call ProcessRoundScores, which returns ScoreOperationResult
+			guildID := sharedtypes.GuildID("test_guild")
 			result, err := deps.Service.ProcessRoundScores(
 				deps.Ctx,
+				guildID,
 				roundID,
 				scoresList[idx],
 			)
@@ -413,8 +416,10 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 		}
 		roundID := sharedtypes.RoundID(parsedUUID)
 
+		// Use the same guildID as above
 		storedScores, err := deps.DB.GetScoresForRound(
 			deps.Ctx,
+			sharedtypes.GuildID("test_guild"),
 			roundID,
 		)
 		if err != nil {
@@ -533,7 +538,8 @@ func TestProcessScoresForStorage(t *testing.T) {
 			roundID := sharedtypes.RoundID(parsedUUID)
 
 			// Call the Service directly (not ScoreService)
-			processedScores, err := deps.Service.ProcessScoresForStorage(deps.Ctx, roundID, tc.scores)
+			guildID := sharedtypes.GuildID("test_guild")
+			processedScores, err := deps.Service.ProcessScoresForStorage(deps.Ctx, guildID, roundID, tc.scores)
 
 			// Validate results based on test case expectations
 			tc.validate(t, processedScores, err)

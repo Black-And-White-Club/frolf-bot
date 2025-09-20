@@ -20,10 +20,10 @@ import (
 )
 
 // Helper: Validate success response for leaderboard update
-func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.LeaderboardUpdateRequestedPayload, msg *message.Message) leaderboardevents.LeaderboardUpdatedPayload {
+func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.LeaderboardUpdateRequestedPayload, outgoing *message.Message, incoming *message.Message) leaderboardevents.LeaderboardUpdatedPayload {
 	t.Helper()
 	var res leaderboardevents.LeaderboardUpdatedPayload
-	if err := json.Unmarshal(msg.Payload, &res); err != nil {
+	if err := json.Unmarshal(outgoing.Payload, &res); err != nil {
 		t.Fatalf("Failed to parse payload: %v", err)
 	}
 
@@ -31,9 +31,11 @@ func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.Leade
 		t.Errorf("RoundID mismatch: expected %s, got %s", req.RoundID, res.RoundID)
 	}
 
-	if msg.Metadata.Get(middleware.CorrelationIDMetadataKey) != "" &&
-		msg.Metadata.Get(middleware.CorrelationIDMetadataKey) != msg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-		t.Errorf("Correlation ID mismatch")
+	// Validate correlation ID matches the incoming message when present
+	inCorr := incoming.Metadata.Get(middleware.CorrelationIDMetadataKey)
+	outCorr := outgoing.Metadata.Get(middleware.CorrelationIDMetadataKey)
+	if inCorr != "" && outCorr != inCorr {
+		t.Errorf("Correlation ID mismatch: expected %q, got %q", inCorr, outCorr)
 	}
 	return res
 }
@@ -108,7 +110,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 					t.Fatalf("Invalid request payload: %v", err)
 				}
 				// Validate the payload of the success message
-				_ = validateLeaderboardUpdatedPayload(t, req, msgs[0])
+				_ = validateLeaderboardUpdatedPayload(t, req, msgs[0], incoming)
 
 				// DB assertions
 				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)

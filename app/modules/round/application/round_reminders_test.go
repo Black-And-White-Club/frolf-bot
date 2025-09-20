@@ -70,10 +70,12 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		{
 			name: "successful processing with participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetParticipants(ctx, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
 			},
 			payload: roundevents.DiscordReminderPayload{
 				RoundID:        testReminderRoundID,
+				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,
@@ -96,10 +98,12 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		{
 			name: "successful processing with no participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetParticipants(ctx, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
 			},
 			payload: roundevents.DiscordReminderPayload{
 				RoundID:        testReminderRoundID,
+				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,
@@ -116,10 +120,12 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		{
 			name: "error retrieving participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				mockDB.EXPECT().GetParticipants(ctx, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
 			},
 			payload: roundevents.DiscordReminderPayload{
 				RoundID:        testReminderRoundID,
+				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
 				StartTime:      &testReminderStartTime,
 				Location:       &testReminderLocation,

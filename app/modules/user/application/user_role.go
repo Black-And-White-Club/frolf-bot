@@ -12,7 +12,7 @@ import (
 )
 
 // UpdateUserRoleInDatabase updates a user's role in the database and returns an operation result.
-func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error) {
+func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (UserOperationResult, error) {
 	operationName := "HandleUpdateUserRole"
 
 	result, err := s.serviceWrapper(ctx, operationName, userID, func(ctx context.Context) (UserOperationResult, error) {
@@ -21,14 +21,15 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 			s.logger.ErrorContext(ctx, "Role validation failed",
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 				attr.String("new_role", string(newRole)),
 				attr.Error(validationErr),
 			)
 
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "validation_failed", newRole)
-
 			return UserOperationResult{
 				Failure: &userevents.UserRoleUpdateResultPayload{
+					GuildID: guildID,
 					UserID:  userID,
 					Role:    newRole, // Include the invalid role in the response
 					Success: false,
@@ -38,10 +39,11 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 			}, nil
 		}
 
-		dbErr := s.UserDB.UpdateUserRole(ctx, userID, newRole)
+		dbErr := s.UserDB.UpdateUserRole(ctx, userID, guildID, newRole)
 		if dbErr != nil {
 			s.logger.ErrorContext(ctx, "Failed to update userrole",
 				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
 				attr.String("new_role", string(newRole)),
 				attr.Error(dbErr),
 			)
@@ -52,9 +54,9 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 			}
 
 			s.metrics.RecordRoleUpdateFailure(ctx, userID, "database_error", newRole)
-
 			return UserOperationResult{
 				Failure: &userevents.UserRoleUpdateResultPayload{
+					GuildID: guildID,
 					UserID:  userID,
 					Role:    newRole,
 					Success: false,
@@ -66,6 +68,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 		s.logger.InfoContext(ctx, "User role updated successfully",
 			attr.String("user_id", string(userID)),
+			attr.String("guild_id", string(guildID)),
 			attr.String("new_role", string(newRole)),
 		)
 
@@ -73,6 +76,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, userID s
 
 		return UserOperationResult{
 			Success: &userevents.UserRoleUpdateResultPayload{
+				GuildID: guildID,
 				UserID:  userID,
 				Role:    newRole,
 				Success: true,

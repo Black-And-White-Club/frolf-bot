@@ -24,12 +24,14 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testScore := sharedtypes.Score(10)
 	testTagNumber := sharedtypes.TagNumber(1)
 
 	testPayload := &scoreevents.ScoreUpdateRequestPayload{
+		GuildID:   testGuildID,
 		RoundID:   testRoundID,
 		UserID:    testUserID,
 		Score:     testScore,
@@ -67,6 +69,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				)
 
 				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Score:   testScore,
@@ -74,6 +77,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,
@@ -118,6 +122,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				)
 
 				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Error:   "internal service error",
@@ -125,6 +130,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,
@@ -161,6 +167,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,
@@ -186,6 +193,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				)
 
 				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Score:   testScore,
@@ -193,6 +201,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,
@@ -228,6 +237,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				)
 
 				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
 					Error:   "internal service error",
@@ -235,6 +245,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,
@@ -271,6 +282,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
+					testGuildID,
 					testRoundID,
 					testUserID,
 					testScore,

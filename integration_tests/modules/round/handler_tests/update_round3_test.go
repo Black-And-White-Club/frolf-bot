@@ -32,26 +32,17 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				// Create a round with no participants
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
 
-				// Debug: Log what we created
-				t.Logf("DEBUG: Created round ID: %s", roundID)
-
 				// Get original round for verification - use the correct DB reference
-				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get original round: %v", err)
 				}
 
-				// Debug: Log what we got from the database
-				t.Logf("DEBUG: Original round from DBService - ID: %s, Title: %s, CreatedBy: %s, Participants: %d",
-					originalRound.ID, originalRound.Title, originalRound.CreatedBy, len(originalRound.Participants))
-
 				// Also verify the round exists using both DB interfaces
-				roundViaDirectDB, err2 := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				roundViaDirectDB, err2 := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err2 != nil {
 					t.Fatalf("Failed to get round via direct DB: %v", err2)
 				}
-				t.Logf("DEBUG: Round via direct DB - ID: %s, Title: %s, CreatedBy: %s, Participants: %d",
-					roundViaDirectDB.ID, roundViaDirectDB.Title, roundViaDirectDB.CreatedBy, len(roundViaDirectDB.Participants))
 
 				// Verify both DB interfaces return the same data
 				if originalRound.ID != roundViaDirectDB.ID {
@@ -64,7 +55,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				location := roundtypes.Location("Updated Location")
 
 				// Get the actual round and create a payload that represents it being updated
-				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get round: %v", err)
 				}
@@ -75,8 +66,6 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				payload := roundevents.RoundEntityUpdatedPayload{
 					Round: *updatedRound,
 				}
-
-				t.Logf("DEBUG: About to publish message with payload for round %s", payload.Round.ID)
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
 
@@ -100,7 +89,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				location := roundtypes.Location("Multi-Participant Updated Location")
 
 				// Get the actual round and create a payload that represents it being updated
-				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get round: %v", err)
 				}
@@ -127,7 +116,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				})
 
 				// Create schedule update payload with minimal data
-				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get round: %v", err)
 				}
@@ -155,7 +144,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				})
 
 				// Get original round to have additional data for verification
-				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get original round: %v", err)
 				}
@@ -166,7 +155,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				location := roundtypes.Location("Comprehensive Update Location")
 
 				// Get the actual round and create a payload that represents it being updated
-				comprehensiveRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				comprehensiveRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get round: %v", err)
 				}
@@ -181,7 +170,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
 
 				// Schedule update completed successfully - verify round still exists
-				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), roundID)
+				updatedRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
 					t.Fatalf("Failed to get updated round: %v", err)
 				}
@@ -222,7 +211,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
 				// Create a real round first
 				existingRoundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
-				existingRound, err := deps.DBService.RoundDB.GetRound(context.Background(), existingRoundID)
+				existingRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", existingRoundID)
 				if err != nil {
 					t.Fatalf("Failed to get existing round: %v", err)
 				}

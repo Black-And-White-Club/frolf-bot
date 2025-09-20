@@ -71,6 +71,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					successResultPayload,
@@ -112,8 +113,6 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 					return tagAssignmentMsg, nil
 				})
-
-				return
 			},
 			msg: testMsg,
 			want: []*message.Message{
@@ -144,6 +143,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					nil,
@@ -174,6 +174,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					successResultPayload,
@@ -210,6 +211,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					successResultPayload,
@@ -247,6 +249,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					&leaderboardevents.TagAvailabilityCheckResultPayload{
@@ -294,6 +297,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
+					gomock.Any(), // guildID
 					*testPayload,
 				).Return(
 					nil,

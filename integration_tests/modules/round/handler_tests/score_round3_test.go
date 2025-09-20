@@ -249,6 +249,7 @@ func createParticipantScoreUpdatedPayload(roundID sharedtypes.RoundID, participa
 		Score:          score,
 		EventMessageID: "test-event-message-id",
 		Participants:   participants,
+		GuildID:        "test-guild",
 	}
 }
 

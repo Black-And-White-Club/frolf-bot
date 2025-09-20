@@ -44,9 +44,10 @@ func NewTestDataGenerator(seed ...int64) *TestDataGenerator {
 
 // User represents the user model in your application
 type User struct {
-	ID     int64        `json:"id"`
-	UserID DiscordID    `json:"user_id"`
-	Role   UserRoleEnum `json:"role"`
+	ID      int64               `json:"id"`
+	UserID  DiscordID           `json:"user_id"`
+	Role    UserRoleEnum        `json:"role"`
+	GuildID sharedtypes.GuildID `json:"guild_id"`
 }
 
 // ScoreModel represents the score model in your application
@@ -69,13 +70,14 @@ type Leaderboard struct {
 // GenerateUsers creates a specified number of test users
 func (g *TestDataGenerator) GenerateUsers(count int) []User {
 	users := make([]User, count)
-	roles := []UserRoleEnum{"Rattler", "Admin", "Moderator"}
+	roles := []UserRoleEnum{"User", "Editor", "Admin"}
 
 	for i := 0; i < count; i++ {
 		users[i] = User{
-			ID:     int64(i + 1),
-			UserID: DiscordID(g.faker.Numerify("#########")),
-			Role:   roles[g.faker.Number(0, len(roles)-1)],
+			ID:      int64(i + 1),
+			UserID:  DiscordID(g.faker.Numerify("#########")),
+			Role:    roles[g.faker.Number(0, len(roles)-1)],
+			GuildID: "test_guild", // Always set a valid guild ID for integration tests
 		}
 	}
 

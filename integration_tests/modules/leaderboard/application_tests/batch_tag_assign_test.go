@@ -30,6 +30,7 @@ func TestProcessTagAssignments(t *testing.T) {
 		setupData func(db *bun.DB, generator *testutils.TestDataGenerator) ([]testutils.User, *leaderboarddb.Leaderboard, error)
 		// serviceParams contains the parameters to pass to ProcessTagAssignments
 		serviceParams struct {
+			guildID          sharedtypes.GuildID
 			source           sharedtypes.ServiceUpdateSource
 			requests         []sharedtypes.TagAssignmentRequest
 			requestingUserID *sharedtypes.DiscordID
@@ -58,12 +59,13 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard record.
+				// Insert an initial active leaderboard record with correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{}, // Start with empty data
 					IsActive:        true,
 					UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:        sharedtypes.RoundID(uuid.New()),
+					GuildID:         "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -73,13 +75,15 @@ func TestProcessTagAssignments(t *testing.T) {
 				return users, initialLeaderboard, nil
 			},
 			serviceParams: struct {
+				guildID          sharedtypes.GuildID
 				source           sharedtypes.ServiceUpdateSource
 				requests         []sharedtypes.TagAssignmentRequest
 				requestingUserID *sharedtypes.DiscordID
 				operationID      uuid.UUID
 				batchID          uuid.UUID
 			}{
-				source: sharedtypes.ServiceUpdateSourceAdminBatch,
+				guildID: "test_guild",
+				source:  sharedtypes.ServiceUpdateSourceAdminBatch,
 				requests: []sharedtypes.TagAssignmentRequest{
 					{UserID: "user_1", TagNumber: 1},
 					{UserID: "user_2", TagNumber: 2},
@@ -202,7 +206,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard with some existing data.
+				// Insert an initial active leaderboard with some existing data and correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_initial", TagNumber: 99},
@@ -210,6 +214,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -219,13 +224,15 @@ func TestProcessTagAssignments(t *testing.T) {
 				return users, initialLeaderboard, nil
 			},
 			serviceParams: struct {
+				guildID          sharedtypes.GuildID
 				source           sharedtypes.ServiceUpdateSource
 				requests         []sharedtypes.TagAssignmentRequest
 				requestingUserID *sharedtypes.DiscordID
 				operationID      uuid.UUID
 				batchID          uuid.UUID
 			}{
-				source: sharedtypes.ServiceUpdateSourceAdminBatch,
+				guildID: "test_guild",
+				source:  sharedtypes.ServiceUpdateSourceAdminBatch,
 				requests: []sharedtypes.TagAssignmentRequest{
 					{UserID: "user_a", TagNumber: 10}, // Existing user, valid tag
 					{UserID: "user_b", TagNumber: -5}, // Non-existent user, invalid tag (should be skipped)
@@ -368,6 +375,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -377,12 +385,14 @@ func TestProcessTagAssignments(t *testing.T) {
 				return users, initialLeaderboard, nil
 			},
 			serviceParams: struct {
+				guildID          sharedtypes.GuildID
 				source           sharedtypes.ServiceUpdateSource
 				requests         []sharedtypes.TagAssignmentRequest
 				requestingUserID *sharedtypes.DiscordID
 				operationID      uuid.UUID
 				batchID          uuid.UUID
 			}{
+				guildID:          "test_guild",
 				source:           sharedtypes.ServiceUpdateSourceAdminBatch,
 				requests:         []sharedtypes.TagAssignmentRequest{}, // Empty list
 				requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_admin_user"); return &id }(),
@@ -465,7 +475,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					return nil, nil, err
 				}
 
-				// Insert an initial active leaderboard with user_with_tag having tag 1
+				// Insert an initial active leaderboard with user_with_tag having tag 1 and correct GuildID.
 				initialLeaderboard := &leaderboarddb.Leaderboard{
 					LeaderboardData: leaderboardtypes.LeaderboardData{
 						{UserID: "user_with_tag", TagNumber: 1},
@@ -473,6 +483,7 @@ func TestProcessTagAssignments(t *testing.T) {
 					IsActive:     true,
 					UpdateSource: sharedtypes.ServiceUpdateSourceManual,
 					UpdateID:     sharedtypes.RoundID(uuid.New()),
+					GuildID:      "test_guild",
 				}
 				_, err = db.NewInsert().Model(initialLeaderboard).Exec(context.Background())
 				if err != nil {
@@ -482,13 +493,15 @@ func TestProcessTagAssignments(t *testing.T) {
 				return users, initialLeaderboard, nil
 			},
 			serviceParams: struct {
+				guildID          sharedtypes.GuildID
 				source           sharedtypes.ServiceUpdateSource
 				requests         []sharedtypes.TagAssignmentRequest
 				requestingUserID *sharedtypes.DiscordID
 				operationID      uuid.UUID
 				batchID          uuid.UUID
 			}{
-				source: sharedtypes.ServiceUpdateSourceManual,
+				guildID: "test_guild",
+				source:  sharedtypes.ServiceUpdateSourceManual,
 				requests: []sharedtypes.TagAssignmentRequest{
 					{UserID: "user_requesting_tag", TagNumber: 1}, // This should trigger a failure result
 				},
@@ -581,6 +594,7 @@ func TestProcessTagAssignments(t *testing.T) {
 			// Call the service method with the new signature
 			result, err := deps.Service.ProcessTagAssignments(
 				context.Background(),
+				tt.serviceParams.guildID,
 				tt.serviceParams.source,
 				tt.serviceParams.requests,
 				tt.serviceParams.requestingUserID,

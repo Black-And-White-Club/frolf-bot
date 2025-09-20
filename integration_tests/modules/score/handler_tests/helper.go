@@ -136,8 +136,8 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 		}
 	}
 
-	// Create router with test-appropriate configuration
-	routerConfig := message.RouterConfig{CloseTimeout: 1 * time.Second}
+	// Create router with test-appropriate configuration (longer close timeout for graceful shutdown)
+	routerConfig := message.RouterConfig{CloseTimeout: 3 * time.Second}
 
 	watermillRouter, err := message.NewRouter(routerConfig, watermillLogger)
 	if err != nil {

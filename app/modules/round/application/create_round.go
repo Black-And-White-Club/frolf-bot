@@ -7,6 +7,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -16,7 +17,8 @@ import (
 )
 
 // ValidateAndProcessRound transforms validated round data to an entity
-func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+// ValidateAndProcessRoundWithClock is the internal implementation allowing a custom clock (e.g. anchored).
+func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ValidateAndProcessRound", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate the round
 		input := roundtypes.CreateRoundInput{
@@ -44,7 +46,7 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 		parsedTimeUnix, err := timeParser.ParseUserTimeInput(
 			payload.StartTime,
 			payload.Timezone,
-			roundutil.RealClock{},
+			clock,
 		)
 		if err != nil {
 			s.metrics.RecordTimeParsingError(ctx)
@@ -82,11 +84,17 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 			Participants: []roundtypes.Participant{},
 		}
 
-		// Create event payload
+		// Create event payload, propagate GuildID from payload
 		createdPayload := roundevents.RoundEntityCreatedPayload{
+			GuildID:          payload.GuildID,
 			Round:            roundObject,
 			DiscordChannelID: payload.ChannelID,
-			DiscordGuildID:   "",
+			DiscordGuildID:   string(payload.GuildID), // maintain existing behavior
+		}
+
+		// Enrich with config fragment if service can supply a guild config (non-fatal if absent)
+		if cfg := s.getGuildConfigForEnrichment(ctx, payload.GuildID); cfg != nil {
+			createdPayload.Config = sharedevents.NewGuildConfigFragment(cfg)
 		}
 
 		// Log round creation
@@ -104,8 +112,13 @@ func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roun
 	return result, err
 }
 
+// ValidateAndProcessRound keeps backward compatibility using the real clock.
+func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+	return s.ValidateAndProcessRoundWithClock(ctx, payload, timeParser, roundutil.RealClock{})
+}
+
 // StoreRound stores a round in the database
-func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "StoreRound", payload.Round.ID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate round data
 		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
@@ -119,6 +132,8 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		}
 
 		roundTypes := payload.Round
+		// Ensure GuildID is always set on the DB model for multi-tenant safety
+		roundTypes.GuildID = guildID
 		location := ""
 		if roundTypes.Location != nil {
 			location = string(*roundTypes.Location)
@@ -139,6 +154,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 			CreatedBy:    roundTypes.CreatedBy,
 			State:        roundTypes.State,
 			Participants: []roundtypes.Participant{},
+			GuildID:      guildID,
 		}
 
 		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {
@@ -175,7 +191,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 		)
 
 		// Store the round in the database
-		if err := s.RoundDB.CreateRound(ctx, &roundDB); err != nil {
+		if err := s.RoundDB.CreateRound(ctx, guildID, &roundDB); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "create_round")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundCreationFailedPayload{
@@ -200,7 +216,7 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)
 
-		return RoundOperationResult{Success: &roundevents.RoundCreatedPayload{
+		created := &roundevents.RoundCreatedPayload{
 			BaseRoundPayload: roundtypes.BaseRoundPayload{
 				RoundID:     roundDB.ID,
 				Title:       roundDB.Title,
@@ -210,7 +226,11 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 				UserID:      roundDB.CreatedBy,
 			},
 			ChannelID: payload.DiscordChannelID,
-		}}, nil
+		}
+		if cfg := s.getGuildConfigForEnrichment(ctx, guildID); cfg != nil {
+			created.Config = sharedevents.NewGuildConfigFragment(cfg)
+		}
+		return RoundOperationResult{Success: created}, nil
 	})
 
 	// Return the result and error as-is
@@ -219,19 +239,39 @@ func (s *RoundService) StoreRound(ctx context.Context, payload roundevents.Round
 
 // UpdateRoundMessageID updates the Discord event message ID for a round in the database
 // and returns the updated Round object.
-func (s *RoundService) UpdateRoundMessageID(ctx context.Context, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
-	result, err := s.serviceWrapper(ctx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
-		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
+func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+	// Note: guildID may be empty in some integration test flows where the test
+	// data was inserted without a guild. Log a warning but proceed; the DB
+	// layer filters by the provided guildID value.
+	if string(guildID) == "" {
+		s.logger.WarnContext(ctx, "UpdateRoundMessageID proceeding with empty guildID",
 			attr.RoundID("round_id", roundID),
 			attr.String("discord_message_id", discordMessageID),
 		)
+	}
 
-		round, dbErr := s.RoundDB.UpdateEventMessageID(ctx, roundID, discordMessageID)
+	// Use a short-lived child context to protect DB work from premature cancellation
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	result, err := s.serviceWrapper(dbCtx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
+		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_message_id", discordMessageID),
+			attr.Any("guild_id_type", fmt.Sprintf("%T", guildID)),
+			attr.Any("round_id_type", fmt.Sprintf("%T", roundID)),
+			attr.Any("discord_message_id_type", fmt.Sprintf("%T", discordMessageID)),
+			attr.String("guild_id_value", string(guildID)),
+			attr.String("round_id_value", roundID.String()),
+		)
+
+		round, dbErr := s.RoundDB.UpdateEventMessageID(ctx, guildID, roundID, discordMessageID)
 		if dbErr != nil {
 			s.metrics.RecordDBOperationError(ctx, "update_round_message_id")
 			s.logger.ErrorContext(ctx, "Failed to update Discord event message ID in DB",
 				attr.RoundID("round_id", roundID),
 				attr.String("discord_message_id", discordMessageID),
+				attr.String("guild_id_value", string(guildID)),
 				attr.Error(dbErr),
 			)
 			return RoundOperationResult{
@@ -246,6 +286,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, roundID sharedt
 		s.logger.InfoContext(ctx, "Successfully updated Discord message ID in DB",
 			attr.RoundID("round_id", roundID),
 			attr.String("discord_message_id", discordMessageID),
+			attr.String("guild_id_value", string(guildID)),
 		)
 
 		return RoundOperationResult{Success: round}, nil
