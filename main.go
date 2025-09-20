@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	pprof "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -47,9 +48,34 @@ func startHealthServer() {
 	}()
 }
 
+// --- Optional pprof server for on-demand profiling ---
+func startPprofIfEnabled() {
+	if os.Getenv("PPROF_ENABLED") != "true" {
+		return
+	}
+	addr := os.Getenv("PPROF_ADDR")
+	if addr == "" {
+		addr = ":6060"
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	go func() {
+		log.Printf("pprof enabled on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Printf("pprof server stopped: %v", err)
+		}
+	}()
+}
+
 func main() {
 	// Start health server for Kubernetes probes
 	startHealthServer()
+	// Optionally start pprof for profiling
+	startPprofIfEnabled()
 
 	// Check for migrate command
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {

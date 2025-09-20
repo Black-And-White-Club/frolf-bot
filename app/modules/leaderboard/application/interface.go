@@ -22,4 +22,6 @@ type Service interface {
 	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error)
 	RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestPayload) (LeaderboardOperationResult, error)
 	CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error)
+	// Ensure an active leaderboard exists for the guild
+	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error
 }

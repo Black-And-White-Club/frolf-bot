@@ -182,6 +182,9 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 		"HandleRoundEventMessageIDUpdate",          // Operation name for logging/tracing
 		&roundevents.RoundMessageIDUpdatePayload{}, // Expected payload type for unmarshalling
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			// Bound handler work by a short timeout to reduce inherited cancellations
+			hCtx, hCancel := context.WithTimeout(ctx, 7*time.Second)
+			defer hCancel()
 			// Assert the unmarshalled payload to the correct type
 			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayload)
 			if !ok {
@@ -194,7 +197,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 
 			roundID := updatePayload.RoundID
 
-			h.logger.InfoContext(ctx, "Received RoundEventMessageIDUpdate event",
+			h.logger.InfoContext(hCtx, "Received RoundEventMessageIDUpdate event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundID),
 			)
@@ -202,7 +205,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			// Extract the Discord message ID from the message metadata
 			discordMessageID, ok := msg.Metadata["discord_message_id"]
 			if !ok || discordMessageID == "" {
-				h.logger.ErrorContext(ctx, "Discord message ID not found or empty in metadata",
+				h.logger.ErrorContext(hCtx, "Discord message ID not found or empty in metadata",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundID),
 				)
@@ -210,10 +213,14 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			}
 
 			// 1. Update the round in the database with the Discord message ID
+			// Use a short-lived context to avoid premature cancellation from message lifecycle.
+			dbCtx, cancel := context.WithTimeout(hCtx, 5*time.Second)
+			defer cancel()
+
 			// Call the service method which now returns the updated round object
-			updatedRound, err := h.roundService.UpdateRoundMessageID(ctx, updatePayload.GuildID, roundID, discordMessageID)
+			updatedRound, err := h.roundService.UpdateRoundMessageID(dbCtx, updatePayload.GuildID, roundID, discordMessageID)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to update round with Discord message ID via service",
+				h.logger.ErrorContext(hCtx, "Failed to update round with Discord message ID via service",
 					attr.CorrelationIDFromMsg(msg),
 					attr.RoundID("round_id", roundID),
 					attr.String("discord_message_id", discordMessageID),
@@ -233,18 +240,20 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 				return nil, errors.New("updated round object is nil")
 			}
 
-			h.logger.InfoContext(ctx, "Successfully updated round with Discord message ID in DB",
+			h.logger.InfoContext(hCtx, "Successfully updated round with Discord message ID in DB",
 				attr.CorrelationIDFromMsg(msg),
 				attr.RoundID("round_id", roundID),
 				attr.String("discord_message_id", discordMessageID),
 			)
 
 			// 2. Construct the RoundScheduledPayload using the updated round object
-			// IMPORTANT: include GuildID so downstream scheduling (ScheduleRoundEvents -> ScheduleRoundReminder/Start)
-			// has tenant scope. Previously this was omitted, resulting in empty guild_id in reminder jobs
-			// and failing participant lookups (round not found with empty guild_id).
+			// Prefer payload GuildID, but if missing, use the GuildID from the DB entity we just updated.
+			guildID := updatePayload.GuildID
+			if guildID == "" {
+				guildID = updatedRound.GuildID
+			}
 			scheduledPayload := roundevents.RoundScheduledPayload{
-				GuildID: updatePayload.GuildID,
+				GuildID: guildID,
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     updatedRound.ID,
 					Title:       updatedRound.Title,

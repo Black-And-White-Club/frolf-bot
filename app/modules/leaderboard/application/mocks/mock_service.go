@@ -45,6 +45,20 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// EnsureGuildLeaderboard mocks base method.
+func (m *MockService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureGuildLeaderboard", ctx, guildID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureGuildLeaderboard indicates an expected call of EnsureGuildLeaderboard.
+func (mr *MockServiceMockRecorder) EnsureGuildLeaderboard(ctx, guildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureGuildLeaderboard", reflect.TypeOf((*MockService)(nil).EnsureGuildLeaderboard), ctx, guildID)
+}
+
 // CheckTagAvailability mocks base method.
 func (m *MockService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
 	m.ctrl.T.Helper()

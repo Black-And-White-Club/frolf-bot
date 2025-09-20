@@ -75,13 +75,23 @@ func (db *LeaderboardDBImpl) DeactivateLeaderboard(ctx context.Context, guildID 
 func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (TagAvailabilityResult, error) {
 	leaderboard, err := db.GetActiveLeaderboard(ctx, guildID)
 	if err != nil {
-		// If no active leaderboard exists, propagate the specific error so callers
-		// can surface a failure (integration tests expect an error in this case).
+		// If no active leaderboard exists for this guild, create an empty one to enable signup flow.
 		if errors.Is(err, ErrNoActiveLeaderboard) {
-			return TagAvailabilityResult{Available: false}, ErrNoActiveLeaderboard
+			newLeaderboard := &Leaderboard{
+				LeaderboardData: make(leaderboardtypes.LeaderboardData, 0),
+				IsActive:        true,
+				UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
+				GuildID:         guildID,
+			}
+			if _, createErr := db.DB.NewInsert().Model(newLeaderboard).Exec(ctx); createErr != nil {
+				// If creation fails, return the original "no active leaderboard" error
+				return TagAvailabilityResult{Available: false}, ErrNoActiveLeaderboard
+			}
+			leaderboard = newLeaderboard
+		} else {
+			// Propagate other database errors
+			return TagAvailabilityResult{Available: false}, fmt.Errorf("failed to get active leaderboard for tag availability check: %w", err)
 		}
-		// Propagate other database errors
-		return TagAvailabilityResult{Available: false}, fmt.Errorf("failed to get active leaderboard for tag availability check: %w", err)
 	}
 
 	// Check if the user already has any tag (prevent duplicate signups)

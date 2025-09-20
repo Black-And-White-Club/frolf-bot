@@ -551,6 +551,7 @@ func (db *RoundDBImpl) UpdateEventMessageID(ctx context.Context, guildID sharedt
 		State:          dbRound.State,
 		Participants:   dbRound.Participants,
 		EventMessageID: dbRound.EventMessageID,
+		GuildID:        dbRound.GuildID,
 	}
 
 	return round, nil

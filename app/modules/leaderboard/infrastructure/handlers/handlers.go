@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
@@ -131,4 +132,22 @@ func handlerWrapper(
 		metrics.RecordHandlerSuccess(ctx, handlerName)
 		return result, nil
 	}
+}
+
+// HandleGuildConfigCreated seeds an empty active leaderboard for the guild if missing.
+func (h *LeaderboardHandlers) HandleGuildConfigCreated(msg *message.Message) ([]*message.Message, error) {
+	wrapped := h.handlerWrapper(
+		"HandleGuildConfigCreated",
+		&guildevents.GuildConfigCreatedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			p := payload.(*guildevents.GuildConfigCreatedPayload)
+			if err := h.leaderboardService.EnsureGuildLeaderboard(ctx, p.GuildID); err != nil {
+				h.logger.ErrorContext(ctx, "Failed to ensure guild leaderboard", attr.Error(err))
+				// No retry storm: treat as transient and let Watermill retry
+				return nil, fmt.Errorf("ensure leaderboard failed: %w", err)
+			}
+			return nil, nil
+		},
+	)
+	return wrapped(msg)
 }

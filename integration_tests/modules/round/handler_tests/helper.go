@@ -333,6 +333,30 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		}
 	}()
 
+	// Wait for the router to create the consumer for the update topic to avoid race conditions
+	// Consumer durable is built as "<appType>-consumer-<sanitized_topic>" with appType="backend"
+	updateTopic := roundevents.RoundEventMessageIDUpdate // "round.discord.event.id.update"
+	updateStream := getStreamForTopic(updateTopic)       // should resolve to "round"
+	consumerName := "backend-consumer-" + strings.ReplaceAll(strings.ReplaceAll(updateTopic, ".", "-"), "_", "-")
+
+	js := eventBusImpl.GetJetStream()
+	readyCtx, readyCancel := context.WithTimeout(testCtx, 2*time.Second)
+	defer readyCancel()
+	for {
+		select {
+		case <-readyCtx.Done():
+			// Proceed anyway; tests may still pass but this reduces flakiness when successful
+			goto afterReadyWait
+		default:
+			if _, err := js.Consumer(testCtx, updateStream, consumerName); err == nil {
+				goto afterReadyWait
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+
+afterReadyWait:
+
 	// Optimized cleanup function
 	cleanup := func() {
 		// 1. Cancel context first to stop all operations
@@ -363,13 +387,15 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				roundModule.Close()
+				_ = roundModule.Close()
 			}()
-		} else if eventBusImpl != nil { // Ensure eventBusImpl is closed if roundModule creation failed
+		}
+		// Always close EventBus explicitly to stop JetStream consumers and unblock subscribers
+		if eventBusImpl != nil {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				eventBusImpl.Close()
+				_ = eventBusImpl.Close()
 			}()
 		}
 
@@ -496,27 +522,40 @@ func startOptimizedMessageCapture(t *testing.T, ctx context.Context, eventBusImp
 						continue
 					}
 
-					for msg := range msgs.Messages() {
-						msgID := getMessageID(msg)
-						watermillMsg := message.NewMessage(msgID, msg.Data())
+					// Non-blocking drain of fetched messages to avoid hangs on shutdown
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						default:
+							msg, ok := <-msgs.Messages()
+							if !ok {
+								// No more messages in this batch
+								goto afterDrain
+							}
 
-						// Efficient header copying
-						if headers := msg.Headers(); headers != nil {
-							for k, v := range headers {
-								if len(v) > 0 {
-									watermillMsg.Metadata.Set(k, v[0])
+							msgID := getMessageID(msg)
+							watermillMsg := message.NewMessage(msgID, msg.Data())
+
+							// Efficient header copying
+							if headers := msg.Headers(); headers != nil {
+								for k, v := range headers {
+									if len(v) > 0 {
+										watermillMsg.Metadata.Set(k, v[0])
+									}
 								}
 							}
-						}
 
-						// Call capture handler without debug logging
-						captureHandler := messageCapture.CaptureHandler(topicName)
-						if _, err := captureHandler(watermillMsg); err != nil {
-							t.Logf("Capture handler error for %s: %v", topicName, err)
-						}
+							// Call capture handler without debug logging
+							captureHandler := messageCapture.CaptureHandler(topicName)
+							if _, err := captureHandler(watermillMsg); err != nil {
+								t.Logf("Capture handler error for %s: %v", topicName, err)
+							}
 
-						msg.Ack()
+							msg.Ack()
+						}
 					}
+				afterDrain:
 				}
 			}
 		}(topic, i)

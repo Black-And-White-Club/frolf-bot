@@ -14,4 +14,5 @@ type Handlers interface {
 	HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error)
 	HandleBatchTagAssignmentRequested(msg *message.Message) ([]*message.Message, error)
 	HandleRoundGetTagRequest(msg *message.Message) ([]*message.Message, error)
+	HandleGuildConfigCreated(msg *message.Message) ([]*message.Message, error)
 }

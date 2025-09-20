@@ -3,9 +3,9 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.45
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.47
 	github.com/ThreeDotsLabs/watermill v1.5.1
-	github.com/brianvoe/gofakeit/v7 v7.6.0
+	github.com/brianvoe/gofakeit/v7 v7.7.0
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -15,9 +15,9 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/riverqueue/river v0.25.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.25.0
-	github.com/testcontainers/testcontainers-go v0.38.0
-	github.com/testcontainers/testcontainers-go/modules/nats v0.38.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
+	github.com/testcontainers/testcontainers-go v0.39.0
+	github.com/testcontainers/testcontainers-go/modules/nats v0.39.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
 	github.com/uptrace/bun v1.2.15
 	github.com/uptrace/bun/dialect/pgdialect v1.2.15
 	github.com/uptrace/bun/driver/pgdriver v1.2.15
@@ -50,7 +50,7 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/ebitengine/purego v0.8.4 // indirect
+	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect

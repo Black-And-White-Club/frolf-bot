@@ -292,7 +292,6 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				},
 				ExpectError:    tc.expectHandlerError,
 				MessageTimeout: tc.timeout, // Pass the timeout
-				Bus:            deps.EventBus,
 			}
 			// Run the test using the testutils.RunTest helper
 			testutils.RunTest(t, genericCase, deps.TestEnvironment)

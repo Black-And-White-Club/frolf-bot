@@ -250,7 +250,11 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 		)
 	}
 
-	result, err := s.serviceWrapper(ctx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
+	// Use a short-lived child context to protect DB work from premature cancellation
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	result, err := s.serviceWrapper(dbCtx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
 			attr.RoundID("round_id", roundID),
 			attr.String("discord_message_id", discordMessageID),

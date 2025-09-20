@@ -38,6 +38,8 @@ type ObservabilityConfig struct {
 	TempoInsecure   bool    `yaml:"tempo_insecure"`
 	TempoSampleRate float64 `yaml:"tempo_sample_rate"`
 	Environment     string  `yaml:"environment"`
+	OTLPEndpoint    string  `yaml:"otlp_endpoint"`
+	OTLPTransport   string  `yaml:"otlp_transport"` // grpc|http
 }
 
 // DiscordConfig holds Discord configuration.
@@ -81,6 +83,12 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("TEMPO_ENDPOINT"); v != "" {
 		cfg.Observability.TempoEndpoint = v
 	}
+	if v := os.Getenv("OTLP_ENDPOINT"); v != "" {
+		cfg.Observability.OTLPEndpoint = v
+	}
+	if v := os.Getenv("OTLP_TRANSPORT"); v != "" {
+		cfg.Observability.OTLPTransport = v
+	}
 	if v := os.Getenv("ENV"); v != "" {
 		cfg.Observability.Environment = v
 	}
@@ -115,15 +123,10 @@ func loadConfigFromEnv() (*Config, error) {
 	// Load Observability settings
 	cfg.Observability.LokiURL = os.Getenv("LOKI_URL")
 	cfg.Observability.LokiTenantID = os.Getenv("LOKI_TENANT_ID")
-	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS")
-	if cfg.Observability.MetricsAddress == "" {
-		// Don't require metrics address - make it optional
-		cfg.Observability.MetricsAddress = ":9090" // Use a different port or make empty
-	}
-	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")
-	if cfg.Observability.TempoEndpoint == "" {
-		return nil, fmt.Errorf("TEMPO_ENDPOINT environment variable not set")
-	}
+	cfg.Observability.MetricsAddress = os.Getenv("METRICS_ADDRESS") // optional; empty disables metrics
+	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")   // optional; empty disables tracing
+	cfg.Observability.OTLPEndpoint = os.Getenv("OTLP_ENDPOINT")     // optional; shared collector endpoint
+	cfg.Observability.OTLPTransport = os.Getenv("OTLP_TRANSPORT")   // optional; default set later
 	cfg.Observability.Environment = os.Getenv("ENV")
 	tempoInsecure := os.Getenv("TEMPO_INSECURE")
 	if tempoInsecure == "" {
@@ -163,5 +166,7 @@ func ToObsConfig(appCfg *Config) obs.Config {
 		TempoEndpoint:   appCfg.Observability.TempoEndpoint,
 		TempoInsecure:   appCfg.Observability.TempoInsecure,
 		TempoSampleRate: appCfg.Observability.TempoSampleRate,
+		OTLPEndpoint:    appCfg.Observability.OTLPEndpoint,
+		OTLPTransport:   appCfg.Observability.OTLPTransport,
 	}
 }

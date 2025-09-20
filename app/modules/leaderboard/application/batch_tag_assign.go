@@ -451,23 +451,9 @@ func (s *LeaderboardService) buildSuccessResponse(
 		}
 
 	case sharedtypes.ServiceUpdateSourceCreateUser:
-		// For single user creation flows, emit TagAssigned for backward compatibility
-		if len(completedRequests) == 1 {
-			req := completedRequests[0]
-			tn := req.TagNumber
-			return LeaderboardOperationResult{
-				Success: &leaderboardevents.TagAssignedPayload{
-					UserID:       req.UserID,
-					TagNumber:    &tn,
-					AssignmentID: sharedtypes.RoundID(operationID),
-					Source:       "create_user",
-				},
-			}
-		}
-		// Otherwise, return batch response
-		return LeaderboardOperationResult{
-			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
-		}
+		// Emit batch response (even for single assignment) so downstream
+		// Discord handler receives a consistent payload with assignments.
+		return LeaderboardOperationResult{Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID)}
 
 	case sharedtypes.ServiceUpdateSourceAdminBatch, sharedtypes.ServiceUpdateSourceManual:
 		// Admin operations return batch assigned event

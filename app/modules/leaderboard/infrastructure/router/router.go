@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -148,6 +149,7 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
 		sharedevents.LeaderboardBatchTagAssignmentRequested: handlers.HandleBatchTagAssignmentRequested,
 		leaderboardevents.RoundGetTagByUserIDRequest:        handlers.HandleRoundGetTagRequest,
+		guildevents.GuildConfigCreated:                      handlers.HandleGuildConfigCreated,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {
