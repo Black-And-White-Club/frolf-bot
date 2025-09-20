@@ -14,8 +14,10 @@ import (
 func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message.Message, error) {
 	// Add explicit debug logging to stdout
 	fmt.Printf("DEBUG: HandleUserSignupRequest() called with message UUID: %s\n", msg.UUID)
-	fmt.Printf("DEBUG: Message payload: %s\n", string(msg.Payload))
-
+	h.logger.DebugContext(context.Background(), "HandleUserSignupRequest called",
+		attr.String("message_uuid", msg.UUID),
+		attr.String("payload", string(msg.Payload)),
+	)
 	wrappedHandler := h.handlerWrapper(
 		"HandleUserSignupRequest",
 		&userevents.UserSignupRequestPayload{},
