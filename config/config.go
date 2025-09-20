@@ -53,9 +53,6 @@ func LoadConfig(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		// If the file is not found, try loading from environment variables
-		fmt.Printf("Failed to read config file: %v\n", err)
-		fmt.Println("Trying to load configuration from environment variables...")
-
 		return loadConfigFromEnv()
 	}
 
