@@ -5,12 +5,12 @@ go 1.25
 require (
 	github.com/Black-And-White-Club/frolf-bot-shared v0.0.47
 	github.com/ThreeDotsLabs/watermill v1.5.1
-	github.com/brianvoe/gofakeit/v7 v7.7.0
+	github.com/brianvoe/gofakeit/v7 v7.7.3
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/nats-io/nats.go v1.45.0
+	github.com/nats-io/nats.go v1.46.0
 	github.com/olebedev/when v1.1.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/riverqueue/river v0.25.0
@@ -124,8 +124,8 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250922171735-9219d122eba9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	mellium.im/sasl v0.3.2 // indirect
