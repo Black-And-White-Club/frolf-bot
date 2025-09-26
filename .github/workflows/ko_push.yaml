@@ -45,4 +45,4 @@ jobs:
           echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
 
       - name: Build and push with ko
-        run: ko build --tags latest,${{ env.COMMIT_SHORT_SHA }} .
+        run: ko build --tags ${{ env.COMMIT_SHORT_SHA }} .
