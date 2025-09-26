@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
   id-token: write
@@ -16,6 +19,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -25,14 +34,15 @@ jobs:
       - name: Set up Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Install ko
-        uses: ko-build/setup-ko@v0.6
+      - name: Set up ko
+        uses: ko-build/setup-ko@v0.9
+        env:
+          KO_DOCKER_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frolf-bot
 
-      - name: Set image tag and repo
+      - name: Set image tag
         run: |
           shortSha=$(git rev-parse --short ${{ github.sha }})
           echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
-          echo "KO_DOCKER_REPO=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frolf-bot" >> $GITHUB_ENV
 
       - name: Build and push with ko
-        run: ko publish --tags latest,${{ env.COMMIT_SHORT_SHA }} .
+        run: ko build --tags latest,${{ env.COMMIT_SHORT_SHA }} .
