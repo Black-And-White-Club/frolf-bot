@@ -107,6 +107,7 @@ func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*mes
 
 			// Convert validated payload to authorized payload
 			authorizedPayload := &roundevents.RoundDeleteAuthorizedPayload{
+				GuildID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.GuildID,
 				RoundID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID,
 			}
 
