@@ -10,6 +10,12 @@
 
 *.out
 
+# Coverage and profiling
+.coverage_temp/
+*.heap.out
+heap.out
+backend-heap.out
+
 # IDE settings
 .vscode/
 
