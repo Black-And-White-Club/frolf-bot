@@ -46,3 +46,5 @@ jobs:
 
       - name: Build and push with ko
         run: ko build --tags ${{ env.COMMIT_SHORT_SHA }} .
+        env:
+          KO_IMAGE_NAME: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frolf-bot/frolf-bot-5c61470c8a98ccb765b70626593bbb0c
