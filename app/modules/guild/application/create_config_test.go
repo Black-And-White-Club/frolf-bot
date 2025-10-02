@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
@@ -27,6 +28,8 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 	metrics := &guildmetrics.NoOpMetrics{}
 	tracer := noop.NewTracerProvider().Tracer("test")
 
+	setupTime := time.Now().UTC()
+
 	validConfig := &guildtypes.GuildConfig{
 		GuildID:              "guild-1",
 		SignupChannelID:      "signup-chan",
@@ -34,6 +37,8 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 		LeaderboardChannelID: "leaderboard-chan",
 		UserRoleID:           "role-1",
 		SignupEmoji:          ":frolf:",
+		AutoSetupCompleted:   true,
+		SetupCompletedAt:     &setupTime,
 	}
 
 	tests := []struct {
@@ -81,9 +86,26 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			wantErr: errors.New("db error"),
 		},
 		{
-			name: "already exists",
+			name: "idempotent when config matches",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-3")).Return(&guildtypes.GuildConfig{GuildID: "guild-3"}, nil)
+				existing := *validConfig
+				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(&existing, nil)
+			},
+			config: validConfig,
+			wantResult: GuildOperationResult{
+				Success: &guildevents.GuildConfigCreatedPayload{
+					GuildID: "guild-1",
+					Config:  *validConfig,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "already exists with different settings",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {
+				existing := *validConfig
+				existing.SignupChannelID = "another-chan"
+				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-3")).Return(&existing, nil)
 			},
 			config: &guildtypes.GuildConfig{
 				GuildID:              "guild-3",
@@ -92,14 +114,16 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				LeaderboardChannelID: "leaderboard-chan",
 				UserRoleID:           "role-1",
 				SignupEmoji:          ":frolf:",
+				AutoSetupCompleted:   true,
+				SetupCompletedAt:     &setupTime,
 			},
 			wantResult: GuildOperationResult{
 				Failure: &guildevents.GuildConfigCreationFailedPayload{
 					GuildID: "guild-3",
-					Reason:  "guild config already exists",
+					Reason:  ErrGuildConfigConflict.Error(),
 				},
 			},
-			wantErr: errors.New("guild config already exists"),
+			wantErr: ErrGuildConfigConflict,
 		},
 		{
 			name:        "missing required field",

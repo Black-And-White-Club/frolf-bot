@@ -3,18 +3,20 @@ package guildservice
 import (
 	"context"
 	"errors"
+	"time"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/go-cmp/cmp"
 )
 
 // CreateGuildConfig creates a new guild configuration.
 // Common domain errors for guild config
 var (
-	ErrGuildConfigAlreadyExists = errors.New("guild config already exists")
-	ErrInvalidGuildID           = errors.New("invalid guild ID")
-	ErrNilContext               = errors.New("context cannot be nil")
+	ErrGuildConfigConflict = errors.New("guild config already exists with different settings - use update instead")
+	ErrInvalidGuildID      = errors.New("invalid guild ID")
+	ErrNilContext          = errors.New("context cannot be nil")
 )
 
 // CreateGuildConfig creates a new guild configuration.
@@ -56,8 +58,17 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 		return createGuildConfigFailureResult(guildID, config, err), err
 	}
 	if existing != nil {
-		// Config already exists
-		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigAlreadyExists), ErrGuildConfigAlreadyExists
+		if guildConfigsEqual(existing, config) {
+			successPayload := &guildevents.GuildConfigCreatedPayload{
+				GuildID: guildID,
+				Config:  *existing,
+			}
+			return GuildOperationResult{
+				Success: successPayload,
+			}, nil
+		}
+
+		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigConflict), ErrGuildConfigConflict
 	}
 
 	// Save config (repository handles conversion to DB model)
@@ -86,4 +97,21 @@ func createGuildConfigFailureResult(guildID sharedtypes.GuildID, config *guildty
 		},
 		Error: err,
 	}
+}
+
+var guildConfigCmpOptions = []cmp.Option{
+	cmp.Comparer(func(a, b *time.Time) bool {
+		if a == nil || b == nil {
+			return a == b
+		}
+		return a.Equal(*b)
+	}),
+}
+
+func guildConfigsEqual(a, b *guildtypes.GuildConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
+	return cmp.Equal(*a, *b, guildConfigCmpOptions...)
 }
