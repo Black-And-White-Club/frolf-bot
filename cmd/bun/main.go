@@ -16,6 +16,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	// Import for migrator creation
+	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
@@ -23,7 +24,6 @@ import (
 )
 
 func main() {
-
 	// Load configuration for database connection ONLY
 	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
 	flag.Parse()
@@ -45,6 +45,7 @@ func main() {
 		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
 		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
+		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations),
 	}
 
 	cliApp := &cli.App{
