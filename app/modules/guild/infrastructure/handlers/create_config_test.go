@@ -149,6 +149,34 @@ func TestGuildHandlers_HandleCreateGuildConfig(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "failure payload with domain error",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*guildevents.GuildConfigRequestedPayload) = *validPayload
+						return nil
+					},
+				)
+				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
+					Failure: &guildevents.GuildConfigCreationFailedPayload{
+						GuildID: "guild-1",
+						Reason:  guildservice.ErrGuildConfigConflict.Error(),
+					},
+				}, fmt.Errorf("%w", guildservice.ErrGuildConfigConflict))
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&guildevents.GuildConfigCreationFailedPayload{
+						GuildID: "guild-1",
+						Reason:  guildservice.ErrGuildConfigConflict.Error(),
+					},
+					guildevents.GuildConfigCreationFailed,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
 			name: "unexpected result",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(

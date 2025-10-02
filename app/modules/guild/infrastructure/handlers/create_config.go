@@ -40,7 +40,7 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 			}
 
 			result, err := h.guildService.CreateGuildConfig(ctx, config)
-			if err != nil {
+			if err != nil && result.Failure == nil {
 				h.logger.ErrorContext(ctx, "Failed to handle CreateGuildConfigRequested event",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
@@ -49,10 +49,18 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 			}
 
 			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Create guild config request failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
+				if err != nil {
+					h.logger.WarnContext(ctx, "Create guild config request failed with domain error",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Any("error", err),
+						attr.Any("failure_payload", result.Failure),
+					)
+				} else {
+					h.logger.InfoContext(ctx, "Create guild config request failed",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Any("failure_payload", result.Failure),
+					)
+				}
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
