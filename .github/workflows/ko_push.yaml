@@ -14,6 +14,10 @@ permissions:
 jobs:
   build-push:
     runs-on: ubuntu-latest
+    env:
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      OCI_TENANCY_NAMESPACE: ${{ secrets.OCI_TENANCY_NAMESPACE }}
+      KO_DOCKER_REPO: ${{ secrets.OCI_REGION }}.ocir.io/${{ secrets.OCI_TENANCY_NAMESPACE }}/frolf-bot/backend
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -24,24 +28,23 @@ jobs:
           go-version: "1.25.x"
           cache: true
 
+      - name: Set image tag
+        id: vars
+        run: |
+          shortSha=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
+
       - name: Log in to OCIR
         uses: docker/login-action@v3
         with:
-          registry: ${{ secrets.OCI_REGION }}.ocir.io
+          registry: ${{ env.OCI_REGION }}.ocir.io
           username: ${{ secrets.OCI_TENANCY_NAMESPACE }}/oracleidentitycloudservice/${{ secrets.OCI_USERNAME }}
           password: ${{ secrets.OCI_AUTH_TOKEN }}
 
       - name: Set up ko
         uses: ko-build/setup-ko@v0.9
-        env:
-          KO_DOCKER_REPO: ${{ secrets.OCI_REGION }}.ocir.io/${{ secrets.OCI_TENANCY_NAMESPACE }}/frolf-bot
 
-      - name: Set image tag
+      - name: Build and publish with ko
         run: |
-          shortSha=$(git rev-parse --short ${{ github.sha }})
-          echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
-
-      - name: Build and push with ko
-        run: ko build --bare --tags ${{ env.COMMIT_SHORT_SHA }},latest .
-        env:
-          KO_DOCKER_REPO: ${{ secrets.OCI_REGION }}.ocir.io/${{ secrets.OCI_TENANCY_NAMESPACE }}/frolf-bot/frolf-bot
+          set -euo pipefail
+          ko publish --bare --tags "${COMMIT_SHORT_SHA},latest" .
