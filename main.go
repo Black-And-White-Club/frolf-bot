@@ -246,6 +246,9 @@ func runMigrations() {
 		os.Exit(1)
 	}
 
+	// Ensure database exists
+	ensureDatabaseExists(cfg.Postgres.DSN)
+
 	// First, run River migrations
 	fmt.Println("Running River queue migrations...")
 	dbPool, err := pgxpool.New(context.Background(), cfg.Postgres.DSN)
@@ -310,4 +313,53 @@ func runMigrations() {
 	}
 
 	fmt.Println("All migrations completed successfully!")
+}
+
+func ensureDatabaseExists(dsn string) {
+	// Parse DSN to get database name and connection info
+	// Assuming DSN format: postgres://user:pass@host:port/dbname?options
+	// We need to connect to "postgres" database to create the new database
+
+	// Simple parsing (can be improved with a library if needed)
+	parts := strings.Split(dsn, "/")
+	if len(parts) < 4 {
+		fmt.Println("Invalid DSN format, skipping database creation check")
+		return
+	}
+
+	dbNameWithArgs := parts[len(parts)-1]
+	dbName := strings.Split(dbNameWithArgs, "?")[0]
+
+	// Replace dbname with "postgres" for the initial connection
+	postgresDSN := strings.Replace(dsn, "/"+dbName, "/postgres", 1)
+
+	fmt.Printf("Checking if database '%s' exists...\n", dbName)
+
+	db, err := sql.Open("pgdriver", postgresDSN)
+	if err != nil {
+		fmt.Printf("Failed to connect to postgres database: %v\n", err)
+		return
+	}
+	defer db.Close()
+
+	// Check if database exists
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", dbName).Scan(&exists)
+	if err != nil {
+		fmt.Printf("Failed to check if database exists: %v\n", err)
+		return
+	}
+
+	if !exists {
+		fmt.Printf("Database '%s' does not exist. Creating...\n", dbName)
+		_, err = db.Exec(fmt.Sprintf("CREATE DATABASE \"%s\"", dbName))
+		if err != nil {
+			fmt.Printf("Failed to create database: %v\n", err)
+			// Don't exit, let the migration fail naturally if this didn't work
+			return
+		}
+		fmt.Printf("Database '%s' created successfully.\n", dbName)
+	} else {
+		fmt.Printf("Database '%s' already exists.\n", dbName)
+	}
 }
