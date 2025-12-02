@@ -335,8 +335,11 @@ func ensureDatabaseExists(dsn string) {
 
 	fmt.Printf("Checking if database '%s' exists...\n", dbName)
 
-	db, err := sql.Open("pgdriver", postgresDSN)
-	if err != nil {
+	// Use pgdriver.NewConnector to create a connector, then sql.OpenDB
+	connector := pgdriver.NewConnector(pgdriver.WithDSN(postgresDSN))
+	db := sql.OpenDB(connector)
+
+	if err := db.Ping(); err != nil {
 		fmt.Printf("Failed to connect to postgres database: %v\n", err)
 		return
 	}
@@ -344,7 +347,7 @@ func ensureDatabaseExists(dsn string) {
 
 	// Check if database exists
 	var exists bool
-	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", dbName).Scan(&exists)
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", dbName).Scan(&exists)
 	if err != nil {
 		fmt.Printf("Failed to check if database exists: %v\n", err)
 		return
