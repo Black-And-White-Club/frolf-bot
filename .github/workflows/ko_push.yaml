@@ -47,4 +47,4 @@ jobs:
       - name: Build and publish with ko
         run: |
           set -euo pipefail
-          ko publish --bare --tags "${COMMIT_SHORT_SHA},latest" .
+          ko publish --bare --tags "${COMMIT_SHORT_SHA},latest" --platform=linux/amd64,linux/arm64 .
