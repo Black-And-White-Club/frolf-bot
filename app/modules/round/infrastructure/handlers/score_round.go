@@ -193,7 +193,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 				discordMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					&updatedPayload,
-					roundevents.DiscordParticipantScoreUpdated, // Discord updates embed
+					roundevents.RoundParticipantScoreUpdated, // Discord updates embed
 				)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to create discord message for participant score updated",
@@ -219,7 +219,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Publishing parallel messages for score update",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("discord_topic", roundevents.DiscordParticipantScoreUpdated),
+					attr.String("discord_topic", roundevents.RoundParticipantScoreUpdated),
 					attr.String("backend_topic", roundevents.RoundParticipantScoreUpdated),
 				)
 

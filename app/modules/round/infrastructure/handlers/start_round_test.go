@@ -71,7 +71,7 @@ func TestRoundHandlers_HandleRoundStarted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordRoundStarted,
+					roundevents.RoundStarted,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -140,7 +140,7 @@ func TestRoundHandlers_HandleRoundStarted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordRoundStarted,
+					roundevents.RoundStarted,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,

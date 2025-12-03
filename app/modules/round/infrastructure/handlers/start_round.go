@@ -58,7 +58,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					discordStartPayload,
-					roundevents.DiscordRoundStarted,
+					roundevents.RoundStarted,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

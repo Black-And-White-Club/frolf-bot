@@ -335,7 +335,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdated,
 				).Return(discordMsg, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
@@ -423,7 +423,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdated,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 				return nil
 			},
@@ -466,7 +466,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdated,
 				).Return(discordMsg, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(

@@ -281,7 +281,7 @@ func publishInvalidJSONAndExpectNoRoundStartMessages(t *testing.T, deps *RoundHa
 
 // Wait functions - UNIQUE TO ROUND STARTED TESTS
 func waitForRoundStartSuccessFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.DiscordRoundStarted, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundStarted, count, defaultTimeout)
 }
 
 func waitForRoundStartErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
@@ -290,7 +290,7 @@ func waitForRoundStartErrorFromHandler(capture *testutils.MessageCapture, count 
 
 // Message retrieval functions - UNIQUE TO ROUND STARTED TESTS
 func getRoundStartSuccessFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.DiscordRoundStarted)
+	return capture.GetMessages(roundevents.RoundStarted)
 }
 
 func getRoundStartErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
@@ -354,7 +354,7 @@ func publishAndExpectRoundStartSuccess(t *testing.T, deps *RoundHandlerTestDeps,
 	publishRoundStartedMessage(t, deps, &payload)
 
 	if !waitForRoundStartSuccessFromHandler(capture, 1) {
-		t.Fatalf("Expected discord round started message from %s", roundevents.DiscordRoundStarted)
+		t.Fatalf("Expected discord round started message from %s", roundevents.RoundStarted)
 	}
 
 	msgs := getRoundStartSuccessFromHandlerMessages(capture)
