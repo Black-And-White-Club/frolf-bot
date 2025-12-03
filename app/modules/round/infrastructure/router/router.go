@@ -190,7 +190,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 					publishTopic := m.Metadata.Get("topic")
 					if publishTopic != "" {
 						// Add specific logging for round reminder messages
-						if publishTopic == roundevents.DiscordRoundReminder {
+						if publishTopic == roundevents.RoundReminder {
 							r.logger.InfoContext(ctx, "🚀 Publishing Discord Round Reminder",
 								attr.String("original_message_id", msg.UUID),
 								attr.String("new_message_id", m.UUID),

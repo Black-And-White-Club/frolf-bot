@@ -131,7 +131,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					expectedDiscordPayload,
-					roundevents.DiscordRoundFinalized,
+					roundevents.RoundFinalized,
 				).Return(discordMsg, nil) // ✅ Use the pre-defined message
 
 				// ✅ Second call: Backend finalization message
@@ -255,13 +255,13 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordRoundFinalized,
+					roundevents.RoundFinalized,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create DiscordRoundFinalized message: failed to create result message",
+			expectedErrMsg: "failed to create RoundFinalized message: failed to create result message",
 		},
 		{
 			name: "CreateResultMessage fails for Backend finalization",
@@ -289,7 +289,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.DiscordRoundFinalized,
+					roundevents.RoundFinalized,
 				).Return(discordMsg, nil)
 
 				// Second call fails

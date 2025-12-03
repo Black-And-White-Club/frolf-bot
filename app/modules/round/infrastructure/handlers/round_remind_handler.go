@@ -87,7 +87,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				if len(discordPayload.UserIDs) > 0 {
 					successMsg, err := h.helpers.CreateNewMessage(
 						discordPayload,
-						roundevents.DiscordRoundReminder,
+						roundevents.RoundReminder,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create Discord reminder message: %w", err)
@@ -97,7 +97,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 					h.logger.InfoContext(ctx, "Publishing Discord reminder message",
 						attr.String("original_message_id", msg.UUID),
 						attr.String("new_message_id", successMsg.UUID),
-						attr.String("topic", roundevents.DiscordRoundReminder),
+						attr.String("topic", roundevents.RoundReminder),
 						attr.RoundID("round_id", discordPayload.RoundID),
 						attr.Int("participants", len(discordPayload.UserIDs)),
 					)

@@ -74,14 +74,14 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			discordFinalizedMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				&discordFinalizationPayload,
-				roundevents.DiscordRoundFinalized,
+				roundevents.RoundFinalized,
 			)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create DiscordRoundFinalized message",
+				h.logger.ErrorContext(ctx, "Failed to create RoundFinalized message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
-				return nil, fmt.Errorf("failed to create DiscordRoundFinalized message: %w", err)
+				return nil, fmt.Errorf("failed to create RoundFinalized message: %w", err)
 			}
 
 			// CREATE BACKEND FINALIZED MESSAGE WITH PARTICIPANTS FROM PAYLOAD
@@ -117,7 +117,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 
 			h.logger.InfoContext(ctx, "Publishing parallel messages for round finalization",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("discord_topic", roundevents.DiscordRoundFinalized),
+				attr.String("discord_topic", roundevents.RoundFinalized),
 				attr.String("backend_topic", roundevents.RoundFinalized),
 				attr.Int("participants_with_scores", len(allScoresSubmittedPayload.Participants)),
 			)

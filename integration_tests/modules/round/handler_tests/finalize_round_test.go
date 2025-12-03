@@ -159,7 +159,7 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 			tc.setupAndRun(t, helper, &deps) // ✅ Pass deps to the test function
 
 			if tc.expectDiscordFinalized {
-				if !helper.WaitForDiscordRoundFinalized(1, testTimeout) {
+				if !helper.WaitForRoundFinalized(1, testTimeout) {
 					t.Error("Timed out waiting for discord finalized message")
 				}
 			} else if tc.expectFinalizationError {
@@ -171,7 +171,7 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 			}
 
 			// Check results
-			discordFinalizedMsgs := helper.GetDiscordRoundFinalizedMessages()
+			discordFinalizedMsgs := helper.GetRoundFinalizedMessages()
 			finalizationErrorMsgs := helper.GetRoundFinalizationErrorMessages()
 
 			if tc.expectDiscordFinalized {

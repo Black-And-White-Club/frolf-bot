@@ -76,7 +76,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateNewMessage(
 					gomock.Any(),
-					roundevents.DiscordRoundReminder,
+					roundevents.RoundReminder,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -181,7 +181,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateNewMessage(
 					gomock.Any(),
-					roundevents.DiscordRoundReminder,
+					roundevents.RoundReminder,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,

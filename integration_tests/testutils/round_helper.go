@@ -457,9 +457,9 @@ func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Contex
 	return msg
 }
 
-// GetDiscordRoundFinalizedMessages returns captured discord round finalized messages
-func (h *RoundTestHelper) GetDiscordRoundFinalizedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.DiscordRoundFinalized)
+// GetRoundFinalizedMessages returns captured discord round finalized messages
+func (h *RoundTestHelper) GetRoundFinalizedMessages() []*message.Message {
+	return h.capture.GetMessages(roundevents.RoundFinalized)
 }
 
 // GetProcessRoundScoresRequestMessages returns captured process round scores request messages
@@ -472,9 +472,9 @@ func (h *RoundTestHelper) GetRoundFinalizationErrorMessages() []*message.Message
 	return h.capture.GetMessages(roundevents.RoundFinalizationError)
 }
 
-// WaitForDiscordRoundFinalized waits for discord round finalized messages
-func (h *RoundTestHelper) WaitForDiscordRoundFinalized(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.DiscordRoundFinalized, expectedCount, timeout)
+// WaitForRoundFinalized waits for discord round finalized messages
+func (h *RoundTestHelper) WaitForRoundFinalized(expectedCount int, timeout time.Duration) bool {
+	return h.capture.WaitForMessages(roundevents.RoundFinalized, expectedCount, timeout)
 }
 
 // WaitForProcessRoundScoresRequest waits for process round scores request messages
@@ -487,8 +487,8 @@ func (h *RoundTestHelper) WaitForRoundFinalizationError(expectedCount int, timeo
 	return h.capture.WaitForMessages(roundevents.RoundFinalizationError, expectedCount, timeout)
 }
 
-// ValidateDiscordRoundFinalized parses and validates a discord round finalized message
-func (h *RoundTestHelper) ValidateDiscordRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayload {
+// ValidateRoundFinalized parses and validates a discord round finalized message
+func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayload {
 	t.Helper()
 
 	result, err := ParsePayload[roundevents.RoundFinalizedPayload](msg)

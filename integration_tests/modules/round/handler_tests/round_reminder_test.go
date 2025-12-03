@@ -172,7 +172,7 @@ func publishInvalidJSONAndExpectNoReminderMessages(t *testing.T, deps *RoundHand
 
 // Wait functions - UNIQUE TO ROUND REMINDER TESTS
 func waitForReminderSuccessFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.DiscordRoundReminder, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundReminder, count, defaultTimeout)
 }
 
 func waitForReminderErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
@@ -181,7 +181,7 @@ func waitForReminderErrorFromHandler(capture *testutils.MessageCapture, count in
 
 // Message retrieval functions - UNIQUE TO ROUND REMINDER TESTS
 func getReminderSuccessFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.DiscordRoundReminder)
+	return capture.GetMessages(roundevents.RoundReminder)
 }
 
 func getReminderErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
@@ -230,7 +230,7 @@ func publishAndExpectReminderSuccess(t *testing.T, deps *RoundHandlerTestDeps, c
 	publishRoundReminderMessage(t, deps, &payload)
 
 	if !waitForReminderSuccessFromHandler(capture, 1) {
-		t.Fatalf("Expected reminder success message from %s", roundevents.DiscordRoundReminder)
+		t.Fatalf("Expected reminder success message from %s", roundevents.RoundReminder)
 	}
 
 	msgs := getReminderSuccessFromHandlerMessages(capture)
