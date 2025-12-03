@@ -1,5 +1,5 @@
 postgres:
-  dsn: "postgres://local:local@my-postgresql.postgres:5432/tcr-bot?sslmode=disable"
+  dsn: "postgres://local:local@my-postgresql.postgres:5432/frolf_bot?sslmode=disable"
 
 nats:
   url: "nats://my-nats.nats:4222"
