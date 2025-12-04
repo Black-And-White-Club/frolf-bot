@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	pprof "net/http/pprof"
 	"os"
@@ -117,10 +116,7 @@ func main() {
 	}
 	fmt.Println("DEBUG: Observability initialized successfully")
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug, // or your preferred level
-	}))
-	obs.Provider.Logger = logger // Ensure all modules/services use the overridden logger
+	logger := obs.Provider.Logger
 	fmt.Println("DEBUG: About to initialize application...")
 
 	// --- Application Initialization ---
