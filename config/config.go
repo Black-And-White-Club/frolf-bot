@@ -40,6 +40,7 @@ type ObservabilityConfig struct {
 	Environment     string  `yaml:"environment"`
 	OTLPEndpoint    string  `yaml:"otlp_endpoint"`
 	OTLPTransport   string  `yaml:"otlp_transport"` // grpc|http
+	OTLPLogsEnabled bool    `yaml:"otlp_logs_enabled"`
 }
 
 // DiscordConfig holds Discord configuration.
@@ -86,6 +87,9 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("OTLP_TRANSPORT"); v != "" {
 		cfg.Observability.OTLPTransport = v
 	}
+	if v := os.Getenv("OTLP_LOGS_ENABLED"); v != "" {
+		cfg.Observability.OTLPLogsEnabled = v == "true"
+	}
 	if v := os.Getenv("ENV"); v != "" {
 		cfg.Observability.Environment = v
 	}
@@ -96,6 +100,9 @@ func LoadConfig(filename string) (*Config, error) {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.Observability.TempoSampleRate = f
 		}
+	}
+	if v := os.Getenv("OTLP_LOGS_ENABLED"); v != "" {
+		cfg.Observability.OTLPLogsEnabled = v == "true"
 	}
 
 	return &cfg, nil
@@ -124,6 +131,7 @@ func loadConfigFromEnv() (*Config, error) {
 	cfg.Observability.TempoEndpoint = os.Getenv("TEMPO_ENDPOINT")   // optional; empty disables tracing
 	cfg.Observability.OTLPEndpoint = os.Getenv("OTLP_ENDPOINT")     // optional; shared collector endpoint
 	cfg.Observability.OTLPTransport = os.Getenv("OTLP_TRANSPORT")   // optional; default set later
+	cfg.Observability.OTLPLogsEnabled = os.Getenv("OTLP_LOGS_ENABLED") == "true"
 	cfg.Observability.Environment = os.Getenv("ENV")
 	tempoInsecure := os.Getenv("TEMPO_INSECURE")
 	if tempoInsecure == "" {
@@ -165,5 +173,6 @@ func ToObsConfig(appCfg *Config) obs.Config {
 		TempoSampleRate: appCfg.Observability.TempoSampleRate,
 		OTLPEndpoint:    appCfg.Observability.OTLPEndpoint,
 		OTLPTransport:   appCfg.Observability.OTLPTransport,
+		LogsEnabled:     appCfg.Observability.OTLPLogsEnabled,
 	}
 }
