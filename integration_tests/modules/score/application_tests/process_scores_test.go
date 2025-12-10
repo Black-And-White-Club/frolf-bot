@@ -313,7 +313,7 @@ func TestProcessRoundScores(t *testing.T) {
 
 				// Process round scores
 				guildID := sharedtypes.GuildID("test_guild")
-				result, err := deps.Service.ProcessRoundScores(deps.Ctx, guildID, roundID, scores)
+				result, err := deps.Service.ProcessRoundScores(deps.Ctx, guildID, roundID, scores, false)
 
 				// Validate the result
 				tc.validateFunc(t, roundID, result, err) // Pass the entire result struct
@@ -375,6 +375,7 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 				guildID,
 				roundID,
 				scoresList[idx],
+				false,
 			)
 			// Check for both technical errors and business logic errors
 			if err != nil {

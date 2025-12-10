@@ -34,6 +34,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 				processRoundScoresRequestPayload.GuildID,
 				processRoundScoresRequestPayload.RoundID,
 				processRoundScoresRequestPayload.Scores,
+				processRoundScoresRequestPayload.Overwrite,
 			)
 
 			// Handle direct system errors from the service.

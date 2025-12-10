@@ -74,6 +74,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
@@ -142,6 +143,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Failure: failurePayload, // Proper failure payload type
@@ -174,6 +176,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
@@ -218,6 +221,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Failure: failurePayload, // Proper failure payload type
@@ -251,6 +255,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{}, // Neither success nor failure
 					nil,
@@ -276,6 +281,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{}, // No failure payload
 					fmt.Errorf("direct service error"),  // Direct error
@@ -313,6 +319,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 					testProcessRoundScoresRequestPayload.Scores,
+					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Failure: "wrong type", // Wrong type, should be *ProcessRoundScoresFailurePayload

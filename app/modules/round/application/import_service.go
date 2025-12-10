@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,9 +12,12 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/parsers"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // CreateImportJob creates a new import job for a scorecard upload.
@@ -422,6 +426,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 
 		var scores []sharedtypes.ScoreInfo
 		var unmatchedPlayers []string
+		playersAutoAdded := 0
 
 		// Match players and collect scores. Unmatched players are skipped (not an error).
 		for _, player := range payload.ParsedData.PlayerScores {
@@ -463,6 +468,53 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 			if tag, ok := tagByUser[userID]; ok {
 				copyTag := *tag
 				tagNumber = &copyTag
+			} else {
+				// Auto-add participant if not already in the round
+				s.logger.InfoContext(ctx, "Auto-adding participant from scorecard",
+					attr.String("import_id", payload.ImportID),
+					attr.String("user_id", string(userID)),
+				)
+
+				newParticipant := roundtypes.Participant{
+					UserID:   userID,
+					Response: roundtypes.ResponseAccept, // Assume they accepted if they played
+				}
+
+				_, err := s.RoundDB.UpdateParticipant(ctx, payload.GuildID, payload.RoundID, newParticipant)
+				if err != nil {
+					s.logger.ErrorContext(ctx, "Failed to auto-add participant",
+						attr.String("import_id", payload.ImportID),
+						attr.String("user_id", string(userID)),
+						attr.Error(err),
+					)
+					// Continue anyway, maybe they can be added later or it's a transient error
+				} else {
+					playersAutoAdded++
+					// Publish auto-added event
+					autoAddedPayload := &roundevents.RoundParticipantAutoAddedPayload{
+						RoundID:   payload.RoundID,
+						GuildID:   payload.GuildID,
+						UserID:    payload.UserID, // The user who initiated the import
+						AddedUser: userID,         // The user being added
+						ImportID:  payload.ImportID,
+						Timestamp: time.Now().UTC(),
+					}
+
+					payloadBytes, err := json.Marshal(autoAddedPayload)
+					if err != nil {
+						s.logger.ErrorContext(ctx, "Failed to marshal ParticipantAutoAdded payload", attr.Error(err))
+					} else {
+						msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+						// Propagate correlation ID if available
+						// msg.Metadata.Set("correlation_id", attr.CorrelationIDFromContext(ctx))
+
+						if err := s.EventBus.Publish(roundevents.RoundParticipantAutoAddedTopic, msg); err != nil {
+							s.logger.ErrorContext(ctx, "Failed to publish ParticipantAutoAdded event",
+								attr.Error(err),
+							)
+						}
+					}
+				}
 			}
 
 			scores = append(scores, sharedtypes.ScoreInfo{
@@ -494,17 +546,43 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 			attr.String("import_id", payload.ImportID),
 			attr.Int("matched_count", len(scores)),
 			attr.Int("unmatched_count", len(unmatchedPlayers)),
+			attr.Int("auto_added_count", playersAutoAdded),
 		)
 
 		// Update status to indicate we're about to process scores
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "processing", "", "")
 
+		// Publish ImportCompleted event
+		importCompletedPayload := &roundevents.ImportCompletedPayload{
+			ImportID:         payload.ImportID,
+			GuildID:          payload.GuildID,
+			RoundID:          payload.RoundID,
+			UserID:           payload.UserID,
+			ChannelID:        payload.ChannelID,
+			ScoresIngested:   len(scores),
+			MatchedPlayers:   len(scores),
+			UnmatchedPlayers: len(unmatchedPlayers),
+			PlayersAutoAdded: playersAutoAdded,
+			Timestamp:        time.Now().UTC(),
+		}
+
+		payloadBytes, err := json.Marshal(importCompletedPayload)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to marshal ImportCompleted payload", attr.Error(err))
+		} else {
+			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+			if err := s.EventBus.Publish(roundevents.ImportCompletedTopic, msg); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to publish ImportCompleted event", attr.Error(err))
+			}
+		}
+
 		// Publish the request to process scores
 		return RoundOperationResult{
 			Success: &scoreevents.ProcessRoundScoresRequestPayload{
-				GuildID: payload.GuildID,
-				RoundID: payload.RoundID,
-				Scores:  scores,
+				GuildID:   payload.GuildID,
+				RoundID:   payload.RoundID,
+				Scores:    scores,
+				Overwrite: false, // Default to false, user must confirm overwrite if conflict occurs
 			},
 		}, nil
 	})

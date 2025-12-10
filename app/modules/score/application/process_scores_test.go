@@ -183,7 +183,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
 			// Call the function under test.
-			gotResult, err := s.ProcessRoundScores(ctx, testGuildID, testRoundID, tt.scores)
+			gotResult, err := s.ProcessRoundScores(ctx, testGuildID, testRoundID, tt.scores, true)
 
 			// Validate the returned result.
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
