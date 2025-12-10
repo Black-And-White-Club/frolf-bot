@@ -22,7 +22,6 @@ import (
 var (
 	testReminderRoundID    = sharedtypes.RoundID(uuid.New())
 	testReminderRoundTitle = roundtypes.Title("Test Round")
-	testReminderDesc       = roundtypes.Description("Test Description")
 	testReminderLocation   = roundtypes.Location("Test Location")
 	testReminderStartTime  = sharedtypes.StartTime(time.Now())
 	testReminderType       = "Test Reminder Type"

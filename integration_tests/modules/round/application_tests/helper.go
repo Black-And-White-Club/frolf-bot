@@ -151,6 +151,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		realDB,
 		queueService,
 		eventBusImpl,
+		nil,
 		noOpMetrics,
 		testLogger,
 		noOpTracer,

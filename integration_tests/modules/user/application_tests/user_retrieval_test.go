@@ -33,7 +33,7 @@ func TestGetUser(t *testing.T) {
 				tag := tagPtr(42)
 
 				// Create a user first
-				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag)
+				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag, nil, nil)
 				if err != nil {
 					t.Fatalf("Failed to create user for test setup: %v", err)
 				}
@@ -193,7 +193,7 @@ func TestGetUserRole(t *testing.T) {
 				guildID := sharedtypes.GuildID("test-guild")
 				userID := sharedtypes.DiscordID("12345678901234567")
 				tag := tagPtr(42)
-				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag)
+				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag, nil, nil)
 				if err != nil {
 					t.Fatalf("Failed to create user for test setup: %v", err)
 				}

@@ -45,3 +45,4 @@ reports/test-output.log
 reports/unit-output.log
 reports/unit-test-output.log
 .ko.yaml
+spec.md

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
@@ -72,6 +73,62 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.Dis
 	}
 
 	return nil
+}
+
+// UpdateUDiscIdentity sets UDisc username/name for a user in a guild (stores normalized).
+func (db *UserDBImpl) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username *string, name *string) error {
+	normalizedUsername := normalizeNullablePointer(username)
+	normalizedName := normalizeNullablePointer(name)
+
+	_, err := db.DB.NewUpdate().Model((*User)(nil)).
+		Set("udisc_username = ?", normalizedUsername).
+		Set("udisc_name = ?", normalizedName).
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update udisc identity: %w", err)
+	}
+	return nil
+}
+
+// FindByUDiscUsername looks up a user by UDisc username (already normalized) within a guild.
+func (db *UserDBImpl) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*User, error) {
+	user := &User{}
+	err := db.DB.NewSelect().Model(user).
+		Where("guild_id = ? AND udisc_username = ?", guildID, strings.ToLower(strings.TrimSpace(username))).
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to find user by udisc username: %w", err)
+	}
+	return user, nil
+}
+
+// FindByUDiscName looks up a user by UDisc name (already normalized) within a guild.
+func (db *UserDBImpl) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*User, error) {
+	user := &User{}
+	err := db.DB.NewSelect().Model(user).
+		Where("guild_id = ? AND udisc_name = ?", guildID, strings.ToLower(strings.TrimSpace(name))).
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to find user by udisc name: %w", err)
+	}
+	return user, nil
+}
+
+func normalizeNullablePointer(val *string) *string {
+	if val == nil || *val == "" {
+		return nil
+	}
+	normalized := strings.ToLower(strings.TrimSpace(*val))
+	return &normalized
 }
 
 // GetUserByUserID retrieves a user by their Discord ID and Guild ID.

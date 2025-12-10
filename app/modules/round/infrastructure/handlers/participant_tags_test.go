@@ -317,7 +317,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				metrics:      metrics,
 				helpers:      mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
 				},
 			}
 

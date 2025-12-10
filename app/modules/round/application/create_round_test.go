@@ -12,7 +12,6 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -32,7 +31,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 
 	// Mock dependencies
 	mockDB := rounddb.NewMockRoundDB(ctrl)
-	mockTimeParser := roundtime.NewMockTimeParserInterface(ctrl)
+	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl)
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
 	// No-Op implementations for logging, metrics, and tracing
@@ -44,7 +43,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 	tests := []struct {
 		name                    string
 		mockDBSetup             func(*rounddb.MockRoundDB)
-		mockTimeParserSetup     func(*roundtime.MockTimeParserInterface)
+		mockTimeParserSetup     func(*roundutil.MockTimeParserInterface)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
 		payload                 roundevents.CreateRoundRequestedPayload
 		expectedResult          RoundOperationResult
@@ -54,7 +53,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 			name: "valid round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 			},
-			mockTimeParserSetup: func(mockTimeParser *roundtime.MockTimeParserInterface) {
+			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1884312000), nil) // 2029-09-16T12:00:00Z
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
@@ -90,7 +89,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 			name: "invalid round",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 			},
-			mockTimeParserSetup: func(mockTimeParser *roundtime.MockTimeParserInterface) {
+			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				// mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1672531200), nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
@@ -116,7 +115,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 			name: "invalid timezone",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 			},
-			mockTimeParserSetup: func(mockTimeParser *roundtime.MockTimeParserInterface) {
+			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), errors.New("invalid timezone"))
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
@@ -143,7 +142,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 			name: "start time in the past",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 			},
-			mockTimeParserSetup: func(mockTimeParser *roundtime.MockTimeParserInterface) {
+			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {

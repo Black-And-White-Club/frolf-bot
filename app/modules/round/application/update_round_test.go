@@ -13,7 +13,6 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	queuemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue/mocks"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -32,7 +31,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-	mockTimeParser := roundtime.NewMockTimeParserInterface(ctrl) // ← Add mock time parser
+	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl) // ← Add mock time parser
 
 	s := &RoundService{
 		RoundDB:        mockDB,
@@ -142,20 +141,19 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up time parser expectations with a fixed time for testing
 			var expectedParsedTime int64
-			if tt.payload.StartTime != nil {
-				if *tt.payload.StartTime == "tomorrow at 2pm" {
-					// Use a FUTURE time for consistent testing
-					expectedParsedTime = time.Now().Add(24 * time.Hour).Unix() // Tomorrow
-					mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(expectedParsedTime, nil)
+			switch ptr := tt.payload.StartTime; {
+			case ptr != nil && *ptr == "tomorrow at 2pm":
+				// Use a FUTURE time for consistent testing
+				expectedParsedTime = time.Now().Add(24 * time.Hour).Unix() // Tomorrow
+				mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(expectedParsedTime, nil)
 
-					// Update the expected result with the actual parsed time
-					if successPayload, ok := tt.want.Success.(*roundevents.RoundUpdateValidatedPayload); ok {
-						expectedStartTime := sharedtypes.StartTime(time.Unix(expectedParsedTime, 0).UTC())
-						successPayload.RoundUpdateRequestPayload.StartTime = &expectedStartTime
-					}
-				} else if *tt.payload.StartTime == "invalid time" {
-					mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(int64(0), errors.New("invalid time format"))
+				// Update the expected result with the actual parsed time
+				if successPayload, ok := tt.want.Success.(*roundevents.RoundUpdateValidatedPayload); ok {
+					expectedStartTime := sharedtypes.StartTime(time.Unix(expectedParsedTime, 0).UTC())
+					successPayload.RoundUpdateRequestPayload.StartTime = &expectedStartTime
 				}
+			case ptr != nil && *ptr == "invalid time":
+				mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(int64(0), errors.New("invalid time format"))
 			}
 
 			// Updated: Now calls ValidateAndProcessRoundUpdate with timeParser

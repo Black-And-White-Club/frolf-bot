@@ -239,6 +239,20 @@ func (mr *MockRoundDBMockRecorder) UpdateEventMessageID(ctx, guildID, roundID, e
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventMessageID", reflect.TypeOf((*MockRoundDB)(nil).UpdateEventMessageID), ctx, guildID, roundID, eventMessageID)
 }
 
+// UpdateImportStatus mocks base method.
+func (m *MockRoundDB) UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID, status, errorMessage, errorCode string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateImportStatus", ctx, guildID, roundID, importID, status, errorMessage, errorCode)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateImportStatus indicates an expected call of UpdateImportStatus.
+func (mr *MockRoundDBMockRecorder) UpdateImportStatus(ctx, guildID, roundID, importID, status, errorMessage, errorCode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateImportStatus", reflect.TypeOf((*MockRoundDB)(nil).UpdateImportStatus), ctx, guildID, roundID, importID, status, errorMessage, errorCode)
+}
+
 // UpdateParticipant mocks base method.
 func (m *MockRoundDB) UpdateParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()

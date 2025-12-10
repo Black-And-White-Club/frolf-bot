@@ -132,8 +132,6 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 		}
 
 		roundTypes := payload.Round
-		// Ensure GuildID is always set on the DB model for multi-tenant safety
-		roundTypes.GuildID = guildID
 		location := ""
 		if roundTypes.Location != nil {
 			location = string(*roundTypes.Location)

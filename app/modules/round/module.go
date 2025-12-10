@@ -9,10 +9,12 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,6 +39,7 @@ func NewRoundModule(
 	cfg *config.Config,
 	obs observability.Observability,
 	roundDB rounddb.RoundDB,
+	userDB userdb.UserDB,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -76,11 +79,12 @@ func NewRoundModule(
 	// Use your existing round validator
 	roundValidator := roundutil.NewRoundValidator()
 
-	// Initialize round service with queue service
+	// Initialize round service with queue service and score DB
 	roundService := roundservice.NewRoundService(
 		roundDB,
 		queueService,
 		eventBus,
+		roundadapters.NewUserLookupAdapter(userDB),
 		metrics,
 		logger,
 		tracer,

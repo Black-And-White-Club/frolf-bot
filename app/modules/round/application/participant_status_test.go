@@ -20,12 +20,10 @@ import (
 )
 
 var (
-	testUserID           = sharedtypes.DiscordID("user1")
-	testEventMessageID   = "discord_message_id_123"
-	testParticipantScore = sharedtypes.Score(10)
-	testTagNumber        = sharedtypes.TagNumber(1)
-	joinedLateFalse      = false // Define the variable
-	joinedLateTrue       = true  // Define the variable
+	testUserID         = sharedtypes.DiscordID("user1")
+	testEventMessageID = "discord_message_id_123"
+	testTagNumber      = sharedtypes.TagNumber(1)
+	joinedLateFalse    = false // Define the variable
 )
 
 func TestRoundService_CheckParticipantStatus(t *testing.T) {

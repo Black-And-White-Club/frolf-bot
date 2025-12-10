@@ -106,7 +106,6 @@ var streamTopicMap = map[string]string{
 	roundevents.RoundDeleted:                          "discord", // ✅ Correct - "discord.round.deleted"
 	roundevents.RoundAllScoresSubmitted:               "round",
 	roundevents.RoundFinalized:                        "round",
-	roundevents.RoundFinalized:                        "discord",
 	roundevents.ProcessRoundScoresRequest:             "score",
 	roundevents.RoundFinalizationError:                "round",
 	roundevents.RoundParticipantJoinRequest:           "round",
@@ -300,6 +299,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		env.Config,
 		testObservability,
 		roundDB,
+		env.DBService.UserDB,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,

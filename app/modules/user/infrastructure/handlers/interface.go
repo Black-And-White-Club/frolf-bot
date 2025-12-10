@@ -12,4 +12,6 @@ type Handlers interface {
 	HandleGetUserRoleRequest(msg *message.Message) ([]*message.Message, error)
 	HandleTagUnavailable(msg *message.Message) ([]*message.Message, error)
 	HandleTagAvailable(msg *message.Message) ([]*message.Message, error)
+	HandleUpdateUDiscIdentityRequest(msg *message.Message) ([]*message.Message, error)
+	HandleScorecardParsed(msg *message.Message) ([]*message.Message, error)
 }

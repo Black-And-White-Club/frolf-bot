@@ -10,8 +10,8 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
@@ -21,20 +21,21 @@ import (
 
 // RoundService uses the concrete queue service directly
 type RoundService struct {
-	RoundDB        rounddb.RoundDB
-	QueueService   roundqueue.QueueService // Use the interface from infrastructure
-	EventBus       eventbus.EventBus
-	metrics        roundmetrics.RoundMetrics
-	logger         *slog.Logger
-	tracer         trace.Tracer
-	roundValidator roundutil.RoundValidator
-	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error)
+	RoundDB             rounddb.RoundDB
+	QueueService        roundqueue.QueueService // Use the interface from infrastructure
+	EventBus            eventbus.EventBus
+	userLookup          UserLookup
+	metrics             roundmetrics.RoundMetrics
+	logger              *slog.Logger
+	tracer              trace.Tracer
+	roundValidator      roundutil.RoundValidator
+	serviceWrapper      func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error)
 	guildConfigProvider GuildConfigProvider // optional provider for enrichment
 }
 
 // GuildConfigProvider supplies guild config for enrichment (DB-backed, no events)
 type GuildConfigProvider interface {
-    GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 }
 
 // Constructor takes the concrete implementation
@@ -42,6 +43,7 @@ func NewRoundService(
 	roundDB rounddb.RoundDB,
 	queueService roundqueue.QueueService, // Interface from infrastructure
 	eventBus eventbus.EventBus,
+	userLookup UserLookup,
 	metrics roundmetrics.RoundMetrics,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -51,6 +53,7 @@ func NewRoundService(
 		RoundDB:        roundDB,
 		QueueService:   queueService,
 		EventBus:       eventBus,
+		userLookup:     userLookup,
 		metrics:        metrics,
 		logger:         logger,
 		tracer:         tracer,

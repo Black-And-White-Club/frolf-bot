@@ -70,6 +70,21 @@ func (mr *MockHandlersMockRecorder) HandleGetUserRoleRequest(msg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetUserRoleRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetUserRoleRequest), msg)
 }
 
+// HandleScorecardParsed mocks base method.
+func (m *MockHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleScorecardParsed", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleScorecardParsed indicates an expected call of HandleScorecardParsed.
+func (mr *MockHandlersMockRecorder) HandleScorecardParsed(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScorecardParsed", reflect.TypeOf((*MockHandlers)(nil).HandleScorecardParsed), msg)
+}
+
 // HandleTagAvailable mocks base method.
 func (m *MockHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
@@ -98,6 +113,21 @@ func (m *MockHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 func (mr *MockHandlersMockRecorder) HandleTagUnavailable(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagUnavailable", reflect.TypeOf((*MockHandlers)(nil).HandleTagUnavailable), msg)
+}
+
+// HandleUpdateUDiscIdentityRequest mocks base method.
+func (m *MockHandlers) HandleUpdateUDiscIdentityRequest(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleUpdateUDiscIdentityRequest", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleUpdateUDiscIdentityRequest indicates an expected call of HandleUpdateUDiscIdentityRequest.
+func (mr *MockHandlersMockRecorder) HandleUpdateUDiscIdentityRequest(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateUDiscIdentityRequest", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateUDiscIdentityRequest), msg)
 }
 
 // HandleUserRoleUpdateRequest mocks base method.

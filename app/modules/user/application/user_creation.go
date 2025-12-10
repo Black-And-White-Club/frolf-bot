@@ -20,8 +20,13 @@ var (
 	ErrNilContext        = errors.New("context cannot be nil")
 )
 
+// normalizeUDiscName normalizes a UDisc name for matching (lowercase, trimmed).
+func normalizeUDiscName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
 // CreateUser creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (UserOperationResult, error) {
+func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (UserOperationResult, error) {
 	if ctx == nil {
 		return UserOperationResult{
 			Error: ErrNilContext,
@@ -48,7 +53,20 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
 	result, err := s.serviceWrapper(ctx, "CreateUser", userID, func(ctx context.Context) (UserOperationResult, error) {
-		user := userdb.User{UserID: userID, GuildID: guildID}
+		user := userdb.User{
+			UserID:  userID,
+			GuildID: guildID,
+		}
+
+		// Normalize and set UDisc fields if provided
+		if udiscUsername != nil && *udiscUsername != "" {
+			normalized := normalizeUDiscName(*udiscUsername)
+			user.UDiscUsername = &normalized
+		}
+		if udiscName != nil && *udiscName != "" {
+			normalized := normalizeUDiscName(*udiscName)
+			user.UDiscName = &normalized
+		}
 
 		dbStart := time.Now()
 		err := s.UserDB.CreateUser(ctx, &user)
