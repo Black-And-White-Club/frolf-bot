@@ -426,6 +426,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 
 		var scores []sharedtypes.ScoreInfo
 		var unmatchedPlayers []string
+		var matchedPlayersList []roundtypes.MatchedPlayer
 		playersAutoAdded := 0
 
 		// Match players and collect scores. Unmatched players are skipped (not an error).
@@ -522,6 +523,12 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 				Score:     sharedtypes.Score(total),
 				TagNumber: tagNumber,
 			})
+
+			matchedPlayersList = append(matchedPlayersList, roundtypes.MatchedPlayer{
+				DiscordID: userID,
+				UDiscName: player.PlayerName,
+				Score:     total,
+			})
 		}
 
 		// If no matched players, fail the import
@@ -554,16 +561,18 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 
 		// Publish ImportCompleted event
 		importCompletedPayload := &roundevents.ImportCompletedPayload{
-			ImportID:         payload.ImportID,
-			GuildID:          payload.GuildID,
-			RoundID:          payload.RoundID,
-			UserID:           payload.UserID,
-			ChannelID:        payload.ChannelID,
-			ScoresIngested:   len(scores),
-			MatchedPlayers:   len(scores),
-			UnmatchedPlayers: len(unmatchedPlayers),
-			PlayersAutoAdded: playersAutoAdded,
-			Timestamp:        time.Now().UTC(),
+			ImportID:           payload.ImportID,
+			GuildID:            payload.GuildID,
+			RoundID:            payload.RoundID,
+			UserID:             payload.UserID,
+			ChannelID:          payload.ChannelID,
+			ScoresIngested:     len(scores),
+			MatchedPlayers:     len(scores),
+			UnmatchedPlayers:   len(unmatchedPlayers),
+			PlayersAutoAdded:   playersAutoAdded,
+			MatchedPlayersList: matchedPlayersList,
+			SkippedPlayers:     unmatchedPlayers,
+			Timestamp:          time.Now().UTC(),
 		}
 
 		payloadBytes, err := json.Marshal(importCompletedPayload)
