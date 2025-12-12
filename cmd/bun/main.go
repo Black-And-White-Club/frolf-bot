@@ -55,7 +55,7 @@ func main() {
 		},
 	}
 
-	if err := cliApp.Run(os.Args); err != nil {
+	if err := cliApp.Run(append([]string{os.Args[0]}, flag.Args()...)); err != nil {
 		log.Fatal(err)
 	}
 }
