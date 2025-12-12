@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog" // Use standard library slog for a basic logger
 	"os"       // Import os for logger output
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,36 +33,36 @@ func sortLeaderboardData(data leaderboardtypes.LeaderboardData) {
 	})
 }
 
-func compareLeaderboardEntries(t *testing.T, expected, actual []leaderboardtypes.LeaderboardEntry, testName string) {
-	if len(expected) != len(actual) {
-		t.Errorf("Test '%s': Expected leaderboard length %d, Got %d", testName, len(expected), len(actual))
-		return
-	}
+// func compareLeaderboardEntries(t *testing.T, expected, actual []leaderboardtypes.LeaderboardEntry, testName string) {
+// 	if len(expected) != len(actual) {
+// 		t.Errorf("Test '%s': Expected leaderboard length %d, Got %d", testName, len(expected), len(actual))
+// 		return
+// 	}
 
-	sortLeaderboardEntries(expected)
-	sortLeaderboardEntries(actual)
+// 	sortLeaderboardEntries(expected)
+// 	sortLeaderboardEntries(actual)
 
-	for i := range expected {
-		if !reflect.DeepEqual(expected[i], actual[i]) {
-			t.Errorf("Test '%s': Entry mismatch at index %d: Expected %+v, Got %+v", testName, i, expected[i], actual[i])
-		}
-	}
-}
+// 	for i := range expected {
+// 		if !reflect.DeepEqual(expected[i], actual[i]) {
+// 			t.Errorf("Test '%s': Entry mismatch at index %d: Expected %+v, Got %+v", testName, i, expected[i], actual[i])
+// 		}
+// 	}
+// }
 
-func sortLeaderboardEntries(entries []leaderboardtypes.LeaderboardEntry) {
-	slices.SortFunc(entries, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		if a.TagNumber != 0 && b.TagNumber != 0 {
-			return int(a.TagNumber - b.TagNumber)
-		}
-		if a.TagNumber == 0 && b.TagNumber == 0 {
-			return 0
-		}
-		if a.TagNumber == 0 {
-			return 1
-		}
-		return -1
-	})
-}
+// func sortLeaderboardEntries(entries []leaderboardtypes.LeaderboardEntry) {
+// 	slices.SortFunc(entries, func(a, b leaderboardtypes.LeaderboardEntry) int {
+// 		if a.TagNumber != 0 && b.TagNumber != 0 {
+// 			return int(a.TagNumber - b.TagNumber)
+// 		}
+// 		if a.TagNumber == 0 && b.TagNumber == 0 {
+// 			return 0
+// 		}
+// 		if a.TagNumber == 0 {
+// 			return 1
+// 		}
+// 		return -1
+// 	})
+// }
 
 func TestGenerateUpdatedLeaderboardData(t *testing.T) {
 	tag1 := sharedtypes.TagNumber(1)

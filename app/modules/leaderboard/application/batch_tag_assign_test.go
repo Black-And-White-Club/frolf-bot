@@ -80,7 +80,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "Single user creation returns TagAssigned event",
+			name: "Single user creation returns BatchTagAssigned payload",
 			mockDBSetup: func(mockDB *leaderboarddb.MockLeaderboardDB) {
 				guildID := sharedtypes.GuildID("test-guild")
 				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
@@ -105,12 +105,14 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID:    nil,
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
-			expectedSuccessType: "tag_assigned",
-			expectedTagAssigned: &leaderboardevents.TagAssignedPayload{
-				UserID:       "user1",
-				TagNumber:    func() *sharedtypes.TagNumber { t := sharedtypes.TagNumber(1); return &t }(),
-				AssignmentID: sharedtypes.RoundID{},
-				Source:       "create_user",
+			expectedSuccessType: "batch",
+			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+				RequestingUserID: "system",
+				BatchID:          "",
+				AssignmentCount:  1,
+				Assignments: []leaderboardevents.TagAssignmentInfo{
+					{UserID: "user1", TagNumber: 1},
+				},
 			},
 			expectedError: nil,
 		},
@@ -340,12 +342,14 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID:    nil,
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
-			expectedSuccessType: "tag_assigned",
-			expectedTagAssigned: &leaderboardevents.TagAssignedPayload{
-				UserID:       "user1",
-				TagNumber:    func() *sharedtypes.TagNumber { t := sharedtypes.TagNumber(1); return &t }(),
-				AssignmentID: sharedtypes.RoundID{},
-				Source:       "create_user",
+			expectedSuccessType: "batch",
+			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+				RequestingUserID: "system",
+				BatchID:          "",
+				AssignmentCount:  1,
+				Assignments: []leaderboardevents.TagAssignmentInfo{
+					{UserID: "user1", TagNumber: 1},
+				},
 			},
 			expectedError: nil,
 		},

@@ -41,7 +41,7 @@ func NewRoundHandlers(
 		helpers:      helpers,
 		metrics:      metrics,
 		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
+			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, helpers, metrics)
 		},
 	}
 }
@@ -52,9 +52,9 @@ func handlerWrapper(
 	unmarshalTo interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
 	logger *slog.Logger,
-	metrics roundmetrics.RoundMetrics,
 	tracer trace.Tracer,
 	helpers utils.Helpers,
+	metrics roundmetrics.RoundMetrics,
 ) message.HandlerFunc {
 	return func(msg *message.Message) ([]*message.Message, error) {
 		// Start a span for tracing
@@ -69,7 +69,7 @@ func handlerWrapper(
 
 		startTime := time.Now()
 		defer func() {
-			duration := time.Duration(time.Since(startTime).Seconds())
+			duration := time.Since(startTime)
 			metrics.RecordHandlerDuration(ctx, handlerName, duration)
 		}()
 
@@ -97,8 +97,7 @@ func handlerWrapper(
 		if err != nil {
 			logger.ErrorContext(ctx, "Error in "+handlerName,
 				attr.CorrelationIDFromMsg(msg),
-				attr.Error(err),
-			)
+				attr.Error(err))
 			metrics.RecordHandlerFailure(ctx, handlerName)
 			return nil, err
 		}

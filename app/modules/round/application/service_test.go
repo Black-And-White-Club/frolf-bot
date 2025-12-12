@@ -19,6 +19,16 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+type testUserLookup struct{}
+
+func (testUserLookup) FindByNormalizedUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, normalizedUsername string) (*UserIdentity, error) {
+	return nil, nil
+}
+
+func (testUserLookup) FindByNormalizedUDiscDisplayName(ctx context.Context, guildID sharedtypes.GuildID, normalizedDisplayName string) (*UserIdentity, error) {
+	return nil, nil
+}
+
 func Test_serviceWrapper(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -123,9 +133,10 @@ func TestNewRoundService(t *testing.T) {
 				tracer := noop.NewTracerProvider().Tracer("test")
 				mockEventbus := mocks.NewMockEventBus(ctrl)
 				mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
+				userLookup := testUserLookup{}
 
 				// Call the function being tested
-				service := NewRoundService(mockDB, mockQueueService, mockEventbus, mockMetrics, logger, tracer, mockRoundValidator)
+				service := NewRoundService(mockDB, mockQueueService, mockEventbus, userLookup, mockMetrics, logger, tracer, mockRoundValidator)
 
 				// Ensure service is correctly created
 				if service == nil {
@@ -153,6 +164,9 @@ func TestNewRoundService(t *testing.T) {
 				if service.tracer != tracer {
 					t.Errorf("tracer not correctly assigned")
 				}
+				if service.userLookup != userLookup {
+					t.Errorf("userLookup not correctly assigned")
+				}
 
 				// Ensure serviceWrapper is correctly set
 				if service.serviceWrapper == nil {
@@ -164,7 +178,7 @@ func TestNewRoundService(t *testing.T) {
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
 				// Call with nil dependencies
-				service := NewRoundService(nil, nil, nil, nil, nil, nil, nil)
+				service := NewRoundService(nil, nil, nil, nil, nil, nil, nil, nil)
 
 				// Ensure service is correctly created
 				if service == nil {

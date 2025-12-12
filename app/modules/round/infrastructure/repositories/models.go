@@ -25,6 +25,20 @@ type Round struct {
 	GuildID        sharedtypes.GuildID      `bun:"guild_id,notnull"`
 	CreatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
 	UpdatedAt      time.Time                `bun:",nullzero,notnull,default:current_timestamp"`
+	// Import/scorecard fields
+	ImportID        string       `bun:"import_id,nullzero"`
+	ImportStatus    ImportStatus `bun:"import_status,nullzero"`
+	ImportType      ImportType   `bun:"import_type,nullzero"`
+	FileData        []byte       `bun:"file_data,type:bytea"`
+	FileName        string       `bun:"file_name,nullzero"`
+	UDiscURL        string       `bun:"u_disc_url,nullzero"`
+	ImportNotes     string       `bun:"import_notes,nullzero"`
+	ImportError     string       `bun:"import_error,nullzero"`
+	ImportErrorCode string       `bun:"import_error_code,nullzero"`
+	ImportedAt      *time.Time   `bun:"imported_at,type:timestamp"`
+	// Import context - who initiated and where to respond
+	ImportUserID    sharedtypes.DiscordID `bun:"import_user_id,nullzero"`
+	ImportChannelID string                `bun:"import_channel_id,nullzero"`
 }
 
 // Response represents the possible responses for a participant.
@@ -46,6 +60,27 @@ const (
 	RoundStateInProgress RoundState = "IN_PROGRESS"
 	RoundStateFinalized  RoundState = "FINALIZED"
 	RoundStateDeleted    RoundState = "DELETED"
+)
+
+// ImportStatus represents the status of a scorecard import.
+type ImportStatus string
+
+const (
+	ImportStatusPending    ImportStatus = "pending"
+	ImportStatusProcessing ImportStatus = "processing"
+	ImportStatusParsing    ImportStatus = "parsing"
+	ImportStatusMatching   ImportStatus = "matching"
+	ImportStatusCompleted  ImportStatus = "completed"
+	ImportStatusFailed     ImportStatus = "failed"
+)
+
+// ImportType represents the type of scorecard import.
+type ImportType string
+
+const (
+	ImportTypeCSV  ImportType = "csv"
+	ImportTypeXLSX ImportType = "xlsx"
+	ImportTypeURL  ImportType = "url"
 )
 
 // Participant represents a user participating in a round.

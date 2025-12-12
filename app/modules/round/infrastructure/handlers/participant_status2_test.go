@@ -140,7 +140,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error", // Corrected error message
+			expectedErrMsg: "update participant status: internal service error", // Corrected error message
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -177,7 +177,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "Failed to create RoundParticipantJoined message: failed to create result message",
 		},
 		{
 			name: "Unknown result from UpdateParticipantStatus",
@@ -206,7 +206,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper", // Corrected error message
+			expectedErrMsg: "invalid service result: both success and failure are nil", // Corrected error message
 		},
 		{
 			name: "Invalid payload type",
@@ -238,7 +238,7 @@ func TestRoundHandlers_HandleTagNumberFound(t *testing.T) {
 				metrics:      metrics,
 				helpers:      mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
 				},
 			}
 
@@ -376,7 +376,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error",
+			expectedErrMsg: "update participant status: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -413,7 +413,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "Failed to create RoundParticipantJoined message: failed to create result message",
 		},
 		{
 			name: "Unknown result from UpdateParticipantStatus",
@@ -442,7 +442,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper",
+			expectedErrMsg: "invalid service result: both success and failure are nil",
 		},
 		{
 			name: "Invalid payload type",
@@ -473,7 +473,7 @@ func TestRoundHandlers_HandleTagNumberNotFound(t *testing.T) {
 				metrics:      metrics,
 				helpers:      mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
 				},
 			}
 
@@ -604,7 +604,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service failed in helper: internal service error",
+			expectedErrMsg: "update participant status: internal service error",
 		},
 		{
 			name: "Service success but CreateResultMessage fails",
@@ -652,7 +652,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "Failed to create RoundParticipantJoined message: failed to create result message",
 		},
 		{
 			name: "Unknown result from UpdateParticipantStatus",
@@ -681,7 +681,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "UpdateParticipantStatus service returned unexpected nil result in helper",
+			expectedErrMsg: "invalid service result: both success and failure are nil",
 		},
 		{
 			name: "Invalid payload type",
@@ -712,7 +712,7 @@ func TestRoundHandlers_HandleParticipantDeclined(t *testing.T) {
 				metrics:      metrics,
 				helpers:      mockHelpers,
 				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
+					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
 				},
 			}
 

@@ -99,7 +99,7 @@ func TestCorrectScore(t *testing.T) {
 					Score:     0,
 					TagNumber: nil,
 				}}
-				_, err = deps.Service.ProcessRoundScores(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID, initial)
+				_, err = deps.Service.ProcessRoundScores(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID, initial, false)
 				if err != nil {
 					t.Fatalf("Failed to seed round with initial score: %v", err)
 				}

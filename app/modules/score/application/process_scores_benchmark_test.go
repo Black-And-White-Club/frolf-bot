@@ -91,7 +91,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}
@@ -117,7 +117,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}
@@ -143,7 +143,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 
 			b.ResetTimer() // Reset timer before the actual benchmark
 			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores)
+				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}

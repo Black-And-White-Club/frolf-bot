@@ -12,4 +12,7 @@ type UserDB interface {
 	GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*User, error)
 	GetUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
 	UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username *string, name *string) error
+	FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*User, error)
+	FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*User, error)
 }

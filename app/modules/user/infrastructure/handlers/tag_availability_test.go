@@ -63,7 +63,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
@@ -92,7 +92,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
 					userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayload{
@@ -136,7 +136,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{},
 					fmt.Errorf("internal service error"),
 				)
@@ -155,7 +155,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
@@ -180,7 +180,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 				)
 
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber)).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{},
 					nil,
 				)

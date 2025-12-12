@@ -1,0 +1,307 @@
+package roundhandlers
+
+import (
+	"context"
+	"fmt"
+
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/ThreeDotsLabs/watermill/message"
+)
+
+// HandleScorecardUploaded handles scorecard uploaded events.
+func (h *RoundHandlers) HandleScorecardUploaded(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleScorecardUploaded",
+		&roundevents.ScorecardUploadedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayload)
+
+			h.logger.InfoContext(ctx, "Received ScorecardUploaded event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", scoreboardUploadedPayload.ImportID),
+				attr.String("guild_id", string(scoreboardUploadedPayload.GuildID)),
+				attr.String("round_id", scoreboardUploadedPayload.RoundID.String()),
+				attr.String("file_name", scoreboardUploadedPayload.FileName),
+			)
+
+			result, err := h.roundService.CreateImportJob(ctx, *scoreboardUploadedPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle ScorecardUploaded event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to handle ScorecardUploaded event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Import job creation failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Publish failure event
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.ImportFailedTopic,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Import job created successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("success_payload", result.Success),
+				)
+
+				parseMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.ScorecardParseRequestTopic,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create parse request message: %w", err)
+				}
+
+				return []*message.Message{parseMsg}, nil
+			}
+
+			// If neither Failure nor Success is set, return an error
+			h.logger.ErrorContext(ctx, "Unexpected result from CreateImportJob service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
+	)
+
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
+}
+
+// HandleScorecardURLRequested handles scorecard URL requested events.
+func (h *RoundHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleScorecardURLRequested",
+		&roundevents.ScorecardURLRequestedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			scoreboardURLRequestedPayload := payload.(*roundevents.ScorecardURLRequestedPayload)
+
+			h.logger.InfoContext(ctx, "Received ScorecardURLRequested event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", scoreboardURLRequestedPayload.ImportID),
+				attr.String("guild_id", string(scoreboardURLRequestedPayload.GuildID)),
+				attr.String("round_id", scoreboardURLRequestedPayload.RoundID.String()),
+				attr.String("udisc_url", scoreboardURLRequestedPayload.UDiscURL),
+			)
+
+			result, err := h.roundService.HandleScorecardURLRequested(ctx, *scoreboardURLRequestedPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle ScorecardURLRequested event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to handle ScorecardURLRequested event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Scorecard URL request handling failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Publish failure event
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.ImportFailedTopic,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Scorecard URL request handled successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("success_payload", result.Success),
+				)
+
+				parseMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.ScorecardParseRequestTopic,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create parse request message: %w", err)
+				}
+
+				return []*message.Message{parseMsg}, nil
+			}
+
+			// If neither Failure nor Success is set, return an error
+			h.logger.ErrorContext(ctx, "Unexpected result from HandleScorecardURLRequested service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
+	)
+
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
+}
+
+// HandleParseScorecardRequest handles parse scorecard requests.
+func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleParseScorecardRequest",
+		&roundevents.ScorecardUploadedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayload)
+
+			h.logger.InfoContext(ctx, "Received ParseScorecardRequest event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", scoreboardUploadedPayload.ImportID),
+				attr.String("guild_id", string(scoreboardUploadedPayload.GuildID)),
+				attr.String("round_id", scoreboardUploadedPayload.RoundID.String()),
+				attr.String("file_name", scoreboardUploadedPayload.FileName),
+			)
+
+			// Get file data from payload (would be the actual file bytes)
+			fileData := scoreboardUploadedPayload.FileData
+
+			result, err := h.roundService.ParseScorecard(ctx, *scoreboardUploadedPayload, fileData)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle ParseScorecardRequest event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to handle ParseScorecardRequest event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Scorecard parsing failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				// Publish failure event
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.ImportFailedTopic,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Scorecard parsed successfully",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("success_payload", result.Success),
+				)
+
+				// Publish success event
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.ScorecardParsedTopic,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create success message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			// If neither Failure nor Success is set, return an error
+			h.logger.ErrorContext(ctx, "Unexpected result from ParseScorecard service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
+	)
+
+	// Execute the wrapped handler with the message
+	return wrappedHandler(msg)
+}
+
+// HandleScorecardParsed ingests parsed scorecards and publishes score processing requests.
+func (h *RoundHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleScorecardParsed",
+		&roundevents.ParsedScorecardPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			parsedPayload := payload.(*roundevents.ParsedScorecardPayload)
+
+			h.logger.InfoContext(ctx, "Received ScorecardParsed event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", parsedPayload.ImportID),
+				attr.String("guild_id", string(parsedPayload.GuildID)),
+				attr.String("round_id", parsedPayload.RoundID.String()),
+			)
+
+			result, err := h.roundService.IngestParsedScorecard(ctx, *parsedPayload)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to handle ScorecardParsed event",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to handle ScorecardParsed event: %w", err)
+			}
+
+			if result.Failure != nil {
+				h.logger.InfoContext(ctx, "Scorecard ingestion failed",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("failure_payload", result.Failure),
+				)
+
+				failureMsg, errMsg := h.helpers.CreateResultMessage(
+					msg,
+					result.Failure,
+					roundevents.ImportFailedTopic,
+				)
+				if errMsg != nil {
+					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
+				}
+
+				return []*message.Message{failureMsg}, nil
+			}
+
+			if result.Success != nil {
+				h.logger.InfoContext(ctx, "Scorecard ingestion succeeded",
+					attr.CorrelationIDFromMsg(msg),
+					attr.Any("success_payload", result.Success),
+				)
+
+				successMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					scoreevents.ProcessRoundScoresRequest,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create score processing message: %w", err)
+				}
+
+				return []*message.Message{successMsg}, nil
+			}
+
+			h.logger.ErrorContext(ctx, "Unexpected result from IngestParsedScorecard service",
+				attr.CorrelationIDFromMsg(msg),
+			)
+			return nil, fmt.Errorf("unexpected result from service")
+		},
+	)
+
+	return wrappedHandler(msg)
+}

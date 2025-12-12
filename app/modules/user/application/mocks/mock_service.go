@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	gomock "go.uber.org/mock/gomock"
@@ -43,18 +44,48 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber) (userservice.UserOperationResult, error) {
+func (m *MockService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername, udiscName *string) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateUser", ctx, guildID, userID, tag)
+	ret := m.ctrl.Call(m, "CreateUser", ctx, guildID, userID, tag, udiscUsername, udiscName)
 	ret0, _ := ret[0].(userservice.UserOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateUser indicates an expected call of CreateUser.
-func (mr *MockServiceMockRecorder) CreateUser(ctx, guildID, userID, tag any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CreateUser(ctx, guildID, userID, tag, udiscUsername, udiscName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockService)(nil).CreateUser), ctx, guildID, userID, tag)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockService)(nil).CreateUser), ctx, guildID, userID, tag, udiscUsername, udiscName)
+}
+
+// FindByUDiscName mocks base method.
+func (m *MockService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByUDiscName", ctx, guildID, name)
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByUDiscName indicates an expected call of FindByUDiscName.
+func (mr *MockServiceMockRecorder) FindByUDiscName(ctx, guildID, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByUDiscName", reflect.TypeOf((*MockService)(nil).FindByUDiscName), ctx, guildID, name)
+}
+
+// FindByUDiscUsername mocks base method.
+func (m *MockService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByUDiscUsername", ctx, guildID, username)
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByUDiscUsername indicates an expected call of FindByUDiscUsername.
+func (mr *MockServiceMockRecorder) FindByUDiscUsername(ctx, guildID, username any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByUDiscUsername", reflect.TypeOf((*MockService)(nil).FindByUDiscUsername), ctx, guildID, username)
 }
 
 // GetUser mocks base method.
@@ -85,6 +116,36 @@ func (m *MockService) GetUserRole(ctx context.Context, guildID sharedtypes.Guild
 func (mr *MockServiceMockRecorder) GetUserRole(ctx, guildID, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRole", reflect.TypeOf((*MockService)(nil).GetUserRole), ctx, guildID, userID)
+}
+
+// MatchParsedScorecard mocks base method.
+func (m *MockService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (userservice.UserOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MatchParsedScorecard", ctx, payload)
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MatchParsedScorecard indicates an expected call of MatchParsedScorecard.
+func (mr *MockServiceMockRecorder) MatchParsedScorecard(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MatchParsedScorecard", reflect.TypeOf((*MockService)(nil).MatchParsedScorecard), ctx, payload)
+}
+
+// UpdateUDiscIdentity mocks base method.
+func (m *MockService) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username, name *string) (userservice.UserOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUDiscIdentity", ctx, guildID, userID, username, name)
+	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateUDiscIdentity indicates an expected call of UpdateUDiscIdentity.
+func (mr *MockServiceMockRecorder) UpdateUDiscIdentity(ctx, guildID, userID, username, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUDiscIdentity", reflect.TypeOf((*MockService)(nil).UpdateUDiscIdentity), ctx, guildID, userID, username, name)
 }
 
 // UpdateUserRoleInDatabase mocks base method.

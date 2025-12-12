@@ -8,6 +8,7 @@ import (
 	"os" // Import os for environment variable check
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
@@ -159,6 +160,8 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 		userevents.GetUserRoleRequest:          handlers.HandleGetUserRoleRequest,
 		userevents.GetUserRequest:              handlers.HandleGetUserRequest,
 		userevents.UserPermissionsCheckRequest: handlers.HandleGetUserRoleRequest,
+		userevents.UpdateUDiscIdentityRequest:  handlers.HandleUpdateUDiscIdentityRequest,
+		roundevents.ScorecardParsedTopic:       handlers.HandleScorecardParsed,
 	}
 	r.logger.InfoContext(ctx, "Registering handlers for user module",
 		attr.String("TagAvailable_constant", userevents.TagAvailable))

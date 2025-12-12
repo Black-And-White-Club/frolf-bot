@@ -85,6 +85,21 @@ func (mr *MockHandlersMockRecorder) HandleGetTagByUserIDRequest(msg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetTagByUserIDRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetTagByUserIDRequest), msg)
 }
 
+// HandleGuildConfigCreated mocks base method.
+func (m *MockHandlers) HandleGuildConfigCreated(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleGuildConfigCreated", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleGuildConfigCreated indicates an expected call of HandleGuildConfigCreated.
+func (mr *MockHandlersMockRecorder) HandleGuildConfigCreated(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildConfigCreated", reflect.TypeOf((*MockHandlers)(nil).HandleGuildConfigCreated), msg)
+}
+
 // HandleLeaderboardUpdateRequested mocks base method.
 func (m *MockHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()

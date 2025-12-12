@@ -2,17 +2,23 @@ package userservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	userrepo "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -272,4 +278,332 @@ func Test_serviceWrapper(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
+	mockMetrics := mocks.NewMockUserMetrics(ctrl)
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testImportID := "import-123"
+	testUserID := sharedtypes.DiscordID("user-123")
+
+	tests := []struct {
+		name      string
+		payload   roundevents.ParsedScorecardPayload
+		mockSetup func()
+		want      UserOperationResult
+		wantErr   bool
+	}{
+		{
+			name: "Successful match by username",
+			payload: roundevents.ParsedScorecardPayload{
+				ImportID: testImportID,
+				GuildID:  testGuildID,
+				RoundID:  testRoundID,
+				UserID:   testUserID,
+				ParsedData: &roundtypes.ParsedScorecard{
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{PlayerName: "TestUser"},
+					},
+				},
+			},
+			mockSetup: func() {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
+
+				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "testuser").
+					Return(&userrepo.User{UserID: "discord-user-1"}, nil)
+			},
+			want: UserOperationResult{
+				Success: &userevents.UDiscMatchConfirmedPayload{
+					ImportID: testImportID,
+					GuildID:  testGuildID,
+					RoundID:  testRoundID,
+					UserID:   testUserID,
+					Mappings: []userevents.UDiscConfirmedMapping{
+						{PlayerName: "TestUser", DiscordUserID: "discord-user-1"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Successful match by name (fallback)",
+			payload: roundevents.ParsedScorecardPayload{
+				ImportID: testImportID,
+				GuildID:  testGuildID,
+				RoundID:  testRoundID,
+				UserID:   testUserID,
+				ParsedData: &roundtypes.ParsedScorecard{
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{PlayerName: "Test User"},
+					},
+				},
+			},
+			mockSetup: func() {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
+
+				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "test user").
+					Return(nil, userrepo.ErrUserNotFound)
+				mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, "test user").
+					Return(&userrepo.User{UserID: "discord-user-2"}, nil)
+			},
+			want: UserOperationResult{
+				Success: &userevents.UDiscMatchConfirmedPayload{
+					ImportID: testImportID,
+					GuildID:  testGuildID,
+					RoundID:  testRoundID,
+					UserID:   testUserID,
+					Mappings: []userevents.UDiscConfirmedMapping{
+						{PlayerName: "Test User", DiscordUserID: "discord-user-2"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "No match found (skipped)",
+			payload: roundevents.ParsedScorecardPayload{
+				ImportID: testImportID,
+				GuildID:  testGuildID,
+				RoundID:  testRoundID,
+				UserID:   testUserID,
+				ParsedData: &roundtypes.ParsedScorecard{
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{PlayerName: "Unknown"},
+					},
+				},
+			},
+			mockSetup: func() {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
+				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
+
+				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "unknown").
+					Return(nil, userrepo.ErrUserNotFound)
+				mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, "unknown").
+					Return(nil, userrepo.ErrUserNotFound)
+			},
+			want: UserOperationResult{
+				Success: &userevents.UDiscMatchConfirmedPayload{
+					ImportID: testImportID,
+					GuildID:  testGuildID,
+					RoundID:  testRoundID,
+					UserID:   testUserID,
+					Mappings: nil, // Empty mappings
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Parsed data is nil",
+			payload: roundevents.ParsedScorecardPayload{
+				ImportID:   testImportID,
+				GuildID:    testGuildID,
+				RoundID:    testRoundID,
+				UserID:     testUserID,
+				ParsedData: nil,
+			},
+			mockSetup: func() {
+				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
+				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
+				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "MatchParsedScorecard", testUserID)
+			},
+			want:    UserOperationResult{Failure: errors.New("parsed_data is nil")},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+			got, err := service.MatchParsedScorecard(context.Background(), tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MatchParsedScorecard() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				// Verify success payload
+				gotPayload, ok := got.Success.(*userevents.UDiscMatchConfirmedPayload)
+				if !ok {
+					t.Errorf("MatchParsedScorecard() success type mismatch, got %T", got.Success)
+					return
+				}
+				wantPayload := tt.want.Success.(*userevents.UDiscMatchConfirmedPayload)
+
+				if gotPayload.ImportID != wantPayload.ImportID {
+					t.Errorf("ImportID mismatch")
+				}
+				if len(gotPayload.Mappings) != len(wantPayload.Mappings) {
+					t.Errorf("Mappings length mismatch")
+				}
+			}
+		})
+	}
+}
+
+func TestUserServiceImpl_UpdateUDiscIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
+	mockMetrics := mocks.NewMockUserMetrics(ctrl)
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testUserID := sharedtypes.DiscordID("user-123")
+	username := "TestUser"
+	name := "Test Name"
+
+	t.Run("Successful update", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "UpdateUDiscIdentity", testUserID)
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
+		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "UpdateUDiscIdentity", testUserID)
+
+		// Expect normalized values
+		mockDB.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, gid sharedtypes.GuildID, uid sharedtypes.DiscordID, u *string, n *string) error {
+				if *u != "testuser" {
+					t.Errorf("expected normalized username 'testuser', got '%s'", *u)
+				}
+				if *n != "test name" {
+					t.Errorf("expected normalized name 'test name', got '%s'", *n)
+				}
+				return nil
+			})
+
+		got, err := service.UpdateUDiscIdentity(context.Background(), testGuildID, testUserID, &username, &name)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if got.Success != true {
+			t.Errorf("expected success true")
+		}
+	})
+
+	t.Run("DB error", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "UpdateUDiscIdentity", testUserID)
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
+		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "UpdateUDiscIdentity", testUserID)
+
+		mockDB.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, gomock.Any(), gomock.Any()).
+			Return(errors.New("db error"))
+
+		_, err := service.UpdateUDiscIdentity(context.Background(), testGuildID, testUserID, &username, &name)
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}
+
+func TestUserServiceImpl_FindByUDiscUsername(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
+	mockMetrics := mocks.NewMockUserMetrics(ctrl)
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testUsername := "testuser"
+
+	t.Run("User found", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscUsername", gomock.Any(), sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
+
+		mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
+			Return(&userrepo.User{UserID: "found-user"}, nil)
+
+		got, err := service.FindByUDiscUsername(context.Background(), testGuildID, testUsername)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if got.Success.(*userrepo.User).UserID != "found-user" {
+			t.Errorf("expected user ID found-user")
+		}
+	})
+
+	t.Run("User not found", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscUsername", gomock.Any(), sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
+
+		mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
+			Return(nil, userrepo.ErrUserNotFound)
+
+		_, err := service.FindByUDiscUsername(context.Background(), testGuildID, testUsername)
+		if !errors.Is(err, userrepo.ErrUserNotFound) {
+			t.Errorf("expected ErrUserNotFound, got %v", err)
+		}
+	})
+}
+
+func TestUserServiceImpl_FindByUDiscName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDB := userdb.NewMockUserDB(ctrl)
+	mockEventBus := eventbus.NewMockEventBus(ctrl)
+	mockMetrics := mocks.NewMockUserMetrics(ctrl)
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	service := NewUserService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testName := "test name"
+
+	t.Run("User found", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscName", gomock.Any(), sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
+
+		mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testName).
+			Return(&userrepo.User{UserID: "found-user"}, nil)
+
+		got, err := service.FindByUDiscName(context.Background(), testGuildID, testName)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if got.Success.(*userrepo.User).UserID != "found-user" {
+			t.Errorf("expected user ID found-user")
+		}
+	})
+
+	t.Run("User not found", func(t *testing.T) {
+		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscName", gomock.Any(), sharedtypes.DiscordID(""))
+		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
+
+		mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testName).
+			Return(nil, userrepo.ErrUserNotFound)
+
+		_, err := service.FindByUDiscName(context.Background(), testGuildID, testName)
+		if !errors.Is(err, userrepo.ErrUserNotFound) {
+			t.Errorf("expected ErrUserNotFound, got %v", err)
+		}
+	})
 }

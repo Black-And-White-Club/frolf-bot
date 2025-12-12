@@ -211,7 +211,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				tag := sharedtypes.TagNumber(23) // Dummy tag for pre-creation
 				// Use the service from the user module to create the user
 				guildID := sharedtypes.GuildID("test-guild")
-				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tag) // Use env.Ctx
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tag, nil, nil) // Use env.Ctx
 				if createErr != nil || createResult.Success == nil {
 					t.Fatalf("Failed to pre-create user for test setup: %v, result: %+v", createErr, createResult.Failure)
 				}

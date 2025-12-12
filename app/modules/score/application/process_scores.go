@@ -10,7 +10,7 @@ import (
 )
 
 // ProcessRoundScores processes scores received from the round module using the service wrapper.
-func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) (ScoreOperationResult, error) {
+func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, overwrite bool) (ScoreOperationResult, error) {
 	s.metrics.RecordScoreProcessingAttempt(ctx, roundID)
 	roundIDAttr := attr.RoundID("round_id", roundID)
 
@@ -19,9 +19,41 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		roundIDAttr,
 		attr.Int("num_scores", len(scores)),
 		attr.String("guild_id", string(guildID)),
+		attr.Bool("overwrite", overwrite),
 	)
 
 	return s.serviceWrapper(ctx, "ProcessRoundScores", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
+		// Check if scores already exist for this round
+		existingScores, err := s.ScoreDB.GetScoresForRound(ctx, guildID, roundID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to check existing scores",
+				attr.ExtractCorrelationID(ctx),
+				roundIDAttr,
+				attr.Error(err),
+			)
+			return ScoreOperationResult{
+				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: guildID,
+					RoundID: roundID,
+					Error:   "failed to check existing scores",
+				},
+			}, nil
+		}
+
+		if len(existingScores) > 0 && !overwrite {
+			s.logger.WarnContext(ctx, "Scores already exist for round, overwrite not requested",
+				attr.ExtractCorrelationID(ctx),
+				roundIDAttr,
+			)
+			return ScoreOperationResult{
+				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+					GuildID: guildID,
+					RoundID: roundID,
+					Error:   "SCORES_ALREADY_EXIST",
+				},
+			}, nil
+		}
+
 		processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, scores)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to process scores for storage",

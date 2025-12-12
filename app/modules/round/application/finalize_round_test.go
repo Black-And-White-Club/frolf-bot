@@ -19,11 +19,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// Helper to create a pointer to a value
-func ptr[T any](v T) *T {
-	return &v
-}
-
 func TestRoundService_FinalizeRound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -57,4 +57,10 @@ type Service interface {
 
 	// Update Participant Tags
 	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error)
+
+	// Scorecard Import
+	CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayload) (RoundOperationResult, error)
+	HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (RoundOperationResult, error)
+	ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (RoundOperationResult, error)
+	IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (RoundOperationResult, error)
 }

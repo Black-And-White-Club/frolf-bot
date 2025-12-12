@@ -37,7 +37,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				}
 
 				// Create a user first
-				createResult, createErr := deps.Service.CreateUser(deps.Ctx, guildID, userID, tagPtr(1))
+				createResult, createErr := deps.Service.CreateUser(deps.Ctx, guildID, userID, tagPtr(1), nil, nil)
 				if createErr != nil {
 					t.Fatalf("Failed to create user for test setup: %v", createErr)
 				}

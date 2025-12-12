@@ -32,7 +32,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			ctx, span := h.tracer.Start(ctx, "CreateUserWithTag")
 			defer span.End()
 
-			result, err := h.userService.CreateUser(ctx, guildID, userID, &tagNumber)
+			result, err := h.userService.CreateUser(ctx, guildID, userID, &tagNumber, nil, nil)
 
 			if result.Failure != nil {
 				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)

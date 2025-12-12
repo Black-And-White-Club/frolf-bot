@@ -114,7 +114,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				}
 
 				guildID := sharedtypes.GuildID("test-guild") // Use a test guild ID
-				processResult, processErr := deps.ScoreModule.ScoreService.ProcessRoundScores(ctx, guildID, roundID, scores)
+				processResult, processErr := deps.ScoreModule.ScoreService.ProcessRoundScores(ctx, guildID, roundID, scores, false)
 				if processErr != nil || processResult.Error != nil {
 					t.Fatalf("Failed to process initial round scores for setup: %v, result: %+v", processErr, processResult.Error)
 				}
@@ -198,7 +198,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				}
 
 				guildID := sharedtypes.GuildID("test-guild") // Use a test guild ID
-				processResult, processErr := deps.ScoreModule.ScoreService.ProcessRoundScores(ctx, guildID, roundID, scores)
+				processResult, processErr := deps.ScoreModule.ScoreService.ProcessRoundScores(ctx, guildID, roundID, scores, false)
 				if processErr != nil || processResult.Error != nil {
 					t.Fatalf("Failed to process initial round scores for setup: %v, result: %+v", processErr, processResult.Error)
 				}

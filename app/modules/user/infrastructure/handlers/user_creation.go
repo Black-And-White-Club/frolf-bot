@@ -69,7 +69,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			ctx, span := h.tracer.Start(ctx, "CreateUser")
 			defer span.End()
 
-			result, err := h.userService.CreateUser(ctx, guildID, userID, nil)
+			result, err := h.userService.CreateUser(ctx, guildID, userID, nil, userSignupPayload.UDiscUsername, userSignupPayload.UDiscName)
 			fmt.Printf("DEBUG: CreateUser returned: result=%#v, err=%v\n", result, err)
 
 			if result.Failure != nil {

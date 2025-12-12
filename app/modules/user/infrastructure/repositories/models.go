@@ -12,6 +12,10 @@ type User struct {
 	UserID        sharedtypes.DiscordID    `bun:"user_id,unique"`
 	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'User'" json:"role"`
 	GuildID       sharedtypes.GuildID      `bun:"guild_id,notnull"`
+
+	// UDisc linkage - values stored normalized (lowercase, trimmed)
+	UDiscUsername *string `bun:"udisc_username,nullzero" json:"udisc_username,omitempty"` // @username
+	UDiscName     *string `bun:"udisc_name,nullzero" json:"udisc_name,omitempty"`         // Name shown on casual rounds
 }
 
 // Add these methods to your User struct

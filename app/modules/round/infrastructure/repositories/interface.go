@@ -28,4 +28,5 @@ type RoundDB interface {
 	GetEventMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (string, error)
 	UpdateRoundsAndParticipants(ctx context.Context, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error
 	TagUpdates(ctx context.Context, guildID sharedtypes.GuildID, bun bun.IDB, round *roundtypes.Round) error
+	UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error
 }

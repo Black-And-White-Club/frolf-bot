@@ -305,7 +305,7 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(100)
 
 				// Call CreateUser for setup and check its result
-				result, err := deps.Service.CreateUser(deps.Ctx, sharedtypes.GuildID("test_guild"), userID, tag)
+				result, err := deps.Service.CreateUser(deps.Ctx, sharedtypes.GuildID("test_guild"), userID, tag, nil, nil)
 				if err != nil && result.Failure == nil { // If error exists but no failure payload, something is wrong
 					t.Fatalf("Failed to setup test by creating initial user: %v (Result: %+v)", err, result)
 				}
@@ -382,7 +382,7 @@ func TestCreateUser(t *testing.T) {
 				ctx, userID, tag = tc.setupFn(t, currentDeps)
 			}
 
-			result, err = currentDeps.Service.CreateUser(ctx, sharedtypes.GuildID("test_guild"), userID, tag)
+			result, err = currentDeps.Service.CreateUser(ctx, sharedtypes.GuildID("test_guild"), userID, tag, nil, nil)
 
 			tc.validateFn(t, currentDeps, userID, result, err)
 		})

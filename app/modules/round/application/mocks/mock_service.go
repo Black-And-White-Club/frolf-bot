@@ -76,6 +76,21 @@ func (mr *MockServiceMockRecorder) CheckParticipantStatus(ctx, payload any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckParticipantStatus", reflect.TypeOf((*MockService)(nil).CheckParticipantStatus), ctx, payload)
 }
 
+// CreateImportJob mocks base method.
+func (m *MockService) CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayload) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateImportJob", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateImportJob indicates an expected call of CreateImportJob.
+func (mr *MockServiceMockRecorder) CreateImportJob(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateImportJob", reflect.TypeOf((*MockService)(nil).CreateImportJob), ctx, payload)
+}
+
 // DeleteRound mocks base method.
 func (m *MockService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
@@ -121,6 +136,36 @@ func (mr *MockServiceMockRecorder) GetRound(ctx, guildID, roundID any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRound", reflect.TypeOf((*MockService)(nil).GetRound), ctx, guildID, roundID)
 }
 
+// HandleScorecardURLRequested mocks base method.
+func (m *MockService) HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleScorecardURLRequested", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleScorecardURLRequested indicates an expected call of HandleScorecardURLRequested.
+func (mr *MockServiceMockRecorder) HandleScorecardURLRequested(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScorecardURLRequested", reflect.TypeOf((*MockService)(nil).HandleScorecardURLRequested), ctx, payload)
+}
+
+// IngestParsedScorecard mocks base method.
+func (m *MockService) IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IngestParsedScorecard", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IngestParsedScorecard indicates an expected call of IngestParsedScorecard.
+func (mr *MockServiceMockRecorder) IngestParsedScorecard(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IngestParsedScorecard", reflect.TypeOf((*MockService)(nil).IngestParsedScorecard), ctx, payload)
+}
+
 // NotifyScoreModule mocks base method.
 func (m *MockService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
@@ -134,6 +179,21 @@ func (m *MockService) NotifyScoreModule(ctx context.Context, payload roundevents
 func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyScoreModule", reflect.TypeOf((*MockService)(nil).NotifyScoreModule), ctx, payload)
+}
+
+// ParseScorecard mocks base method.
+func (m *MockService) ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ParseScorecard", ctx, payload, fileData)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ParseScorecard indicates an expected call of ParseScorecard.
+func (mr *MockServiceMockRecorder) ParseScorecard(ctx, payload, fileData any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParseScorecard", reflect.TypeOf((*MockService)(nil).ParseScorecard), ctx, payload, fileData)
 }
 
 // ParticipantRemoval mocks base method.

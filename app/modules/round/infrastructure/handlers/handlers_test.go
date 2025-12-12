@@ -297,9 +297,9 @@ func TestHandlerWrapper(t *testing.T) {
 				testArgs.unmarshalTo,
 				testArgs.handlerFunc,
 				testArgs.logger,
-				testArgs.metrics,
 				testArgs.tracer,
 				testArgs.helpers,
+				testArgs.metrics,
 			)
 
 			msg := message.NewMessage("test-id", nil)

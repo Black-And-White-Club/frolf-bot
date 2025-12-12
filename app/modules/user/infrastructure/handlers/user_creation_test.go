@@ -90,7 +90,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,
@@ -123,7 +123,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayload{UserID: testUserID, Reason: "failed"},
@@ -156,7 +156,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{}, fmt.Errorf("service error"))
 			},
 			wantErr:        true,
@@ -177,7 +177,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,
@@ -206,7 +206,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 						return nil
 					},
 				)
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil).
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayload{UserID: testUserID},
 						Failure: nil,

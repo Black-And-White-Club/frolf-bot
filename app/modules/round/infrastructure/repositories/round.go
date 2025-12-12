@@ -19,6 +19,32 @@ type RoundDBImpl struct {
 	DB *bun.DB
 }
 
+// UpdateImportStatus updates import fields on a round with minimal surface area.
+func (db *RoundDBImpl) UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error {
+	update := db.DB.NewUpdate().
+		Model((*roundtypes.Round)(nil)).
+		Set("import_status = ?", status).
+		Set("updated_at = now()")
+
+	if importID != "" {
+		update = update.Set("import_id = ?", importID)
+	}
+
+	if errorMessage != "" {
+		update = update.Set("import_error = ?", errorMessage)
+	}
+
+	if errorCode != "" {
+		update = update.Set("import_error_code = ?", errorCode)
+	}
+
+	_, err := update.Where("id = ? AND guild_id = ?", roundID, guildID).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update import status: %w", err)
+	}
+	return nil
+}
+
 // CreateRound creates a new round in the database and retrieves the generated ID.
 func (db *RoundDBImpl) CreateRound(ctx context.Context, guildID sharedtypes.GuildID, round *roundtypes.Round) error {
 	_, err := db.DB.NewInsert().

@@ -195,7 +195,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				ctxArg = nil
 			}
 
-			gotResult, gotErr := s.CreateUser(ctxArg, testGuildID, tt.userID, tt.tag)
+			gotResult, gotErr := s.CreateUser(ctxArg, testGuildID, tt.userID, tt.tag, nil, nil)
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
