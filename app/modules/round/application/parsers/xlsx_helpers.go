@@ -158,6 +158,7 @@ func findParRowXLSX(rows [][]string) (int, int, int, []int, error) {
 func detectLayout(rows [][]string) (int, int, int, string) {
 	for i, row := range rows {
 		nameIdx := -1
+		usernameIdx := -1
 		holeStartIdx := -1
 		isLeaderboard := false
 
@@ -169,6 +170,11 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 				nameIdx = c
 			}
 
+			// Check for Username header (preferred for Leaderboards)
+			if usernameIdx == -1 && (val == "username" || val == "user name") {
+				usernameIdx = c
+			}
+
 			// Check for Leaderboard headers
 			if val == "division" || val == "position" {
 				isLeaderboard = true
@@ -178,6 +184,11 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 			if holeStartIdx == -1 && (val == "hole1" || val == "hole 1" || val == "hole_1" || val == "1") {
 				holeStartIdx = c
 			}
+		}
+
+		// If it's a leaderboard and we found a username column, use that as the name source
+		if isLeaderboard && usernameIdx != -1 {
+			nameIdx = usernameIdx
 		}
 
 		if nameIdx != -1 && holeStartIdx != -1 && holeStartIdx > nameIdx {
