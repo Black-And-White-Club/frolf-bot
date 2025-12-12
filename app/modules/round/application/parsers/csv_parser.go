@@ -21,6 +21,7 @@ func NewCSVParser() *CSVParser {
 // Parse parses CSV data and returns a ParsedScorecard
 func (p *CSVParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	reader := csv.NewReader(strings.NewReader(string(data)))
+	reader.FieldsPerRecord = -1 // Allow variable number of fields
 
 	var records [][]string
 	for {

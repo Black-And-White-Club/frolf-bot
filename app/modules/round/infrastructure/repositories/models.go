@@ -31,11 +31,14 @@ type Round struct {
 	ImportType      ImportType   `bun:"import_type,nullzero"`
 	FileData        []byte       `bun:"file_data,type:bytea"`
 	FileName        string       `bun:"file_name,nullzero"`
-	UDiscURL        string       `bun:"udisc_url,nullzero"`
+	UDiscURL        string       `bun:"u_disc_url,nullzero"`
 	ImportNotes     string       `bun:"import_notes,nullzero"`
 	ImportError     string       `bun:"import_error,nullzero"`
 	ImportErrorCode string       `bun:"import_error_code,nullzero"`
 	ImportedAt      *time.Time   `bun:"imported_at,type:timestamp"`
+	// Import context - who initiated and where to respond
+	ImportUserID    sharedtypes.DiscordID `bun:"import_user_id,nullzero"`
+	ImportChannelID string                `bun:"import_channel_id,nullzero"`
 }
 
 // Response represents the possible responses for a participant.

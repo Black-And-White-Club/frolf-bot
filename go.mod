@@ -15,6 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/riverqueue/river v0.28.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.28.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/nats v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
@@ -96,7 +97,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.11 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

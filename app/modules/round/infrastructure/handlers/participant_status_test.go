@@ -173,7 +173,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create validation request message: failed to create result message", // Corrected error message
+			expectedErrMsg: "Failed to create validation request message: failed to create result message", // Corrected error message
 		},
 		{
 			name: "Service failure with non-error result",
@@ -471,7 +471,7 @@ func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create TagLookupRequest message: failed to create result message",
+			expectedErrMsg: "Failed to create TagLookupRequest message: failed to create result message",
 		},
 		{
 			name: "Service failure with non-error result",
@@ -764,7 +764,7 @@ func TestRoundHandlers_HandleParticipantRemovalRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			expectedErrMsg: "Failed to create success message: failed to create result message",
 		},
 		{
 			name: "Service failure with non-error result",
@@ -860,7 +860,7 @@ func TestRoundHandlers_HandleParticipantRemovalRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			expectedErrMsg: "ParticipantRemoval service returned unexpected nil result",
 		},
 		{
 			name: "Invalid payload type",

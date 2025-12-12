@@ -11,95 +11,37 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Adding import fields to rounds table...")
 
-		// Add import-related columns to rounds table
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_id TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
+		// Note: this migration may run before the rounds table exists (depending on
+		// the registration order). Use Postgres' IF EXISTS/IF NOT EXISTS to make it
+		// safe in both cases:
+		// - Existing DB with rounds table: adds the columns.
+		// - Fresh DB without rounds table yet: no-ops (table is created later).
+		//
+		// This avoids a hard failure like: relation "rounds" does not exist.
+
+		stmts := []string{
+			// Backward compatibility: earlier versions used `udisc_url` (no underscore).
+			// The canonical DB column name should be `u_disc_url` to match Bun's default
+			// snake_case mapping for the Go field name UDiscURL.
+			"DO $$\nBEGIN\n  IF EXISTS (\n    SELECT 1\n    FROM information_schema.columns\n    WHERE table_schema = 'public'\n      AND table_name = 'rounds'\n      AND column_name = 'udisc_url'\n  ) AND NOT EXISTS (\n    SELECT 1\n    FROM information_schema.columns\n    WHERE table_schema = 'public'\n      AND table_name = 'rounds'\n      AND column_name = 'u_disc_url'\n  ) THEN\n    ALTER TABLE rounds RENAME COLUMN udisc_url TO u_disc_url;\n  END IF;\nEND\n$$;",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_id TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_status TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_type TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS file_data BYTEA",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS file_name TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS u_disc_url TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_user_id TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_channel_id TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_notes TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_error TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS import_error_code TEXT",
+			"ALTER TABLE IF EXISTS rounds ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP",
 		}
 
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_status TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_type TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("file_data BYTEA").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("file_name TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("udisc_url TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_notes TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_error TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("import_error_code TEXT").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
-		}
-
-		if _, err := db.NewAddColumn().
-			Model((*interface{})(nil)).
-			Table("rounds").
-			ColumnExpr("imported_at TIMESTAMP").
-			IfNotExists().
-			Exec(ctx); err != nil {
-			return err
+		for _, stmt := range stmts {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
 		}
 
 		fmt.Println("Import fields added to rounds table successfully!")
@@ -107,19 +49,25 @@ func init() {
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Removing import fields from rounds table...")
 
-		// Drop import-related columns
-		columns := []string{
-			"import_id", "import_status", "import_type", "file_data",
-			"file_name", "udisc_url", "import_notes", "import_error",
-			"import_error_code", "imported_at",
+		stmts := []string{
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_id",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_status",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_type",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS file_data",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS file_name",
+			// Drop both spellings to be resilient across schema versions.
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS u_disc_url",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS udisc_url",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_user_id",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_channel_id",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_notes",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_error",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS import_error_code",
+			"ALTER TABLE IF EXISTS rounds DROP COLUMN IF EXISTS imported_at",
 		}
 
-		for _, col := range columns {
-			if _, err := db.NewDropColumn().
-				Model((*interface{})(nil)).
-				Table("rounds").
-				Column(col).
-				Exec(ctx); err != nil {
+		for _, stmt := range stmts {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
 		}

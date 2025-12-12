@@ -12,13 +12,12 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Adding UDisc fields to users table...")
 
-		// Add udisc_username (normalized on insert/update)
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("udisc_username TEXT NULL").Exec(ctx); err != nil {
+		// NOTE: The users table may already contain these columns (fresh DBs are created
+		// from the current bun model). Keep this migration safe to run regardless.
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS udisc_username TEXT NULL"); err != nil {
 			return err
 		}
-
-		// Add udisc_name (normalized on insert/update) - name shown on casual rounds
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("udisc_name TEXT NULL").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS udisc_name TEXT NULL"); err != nil {
 			return err
 		}
 

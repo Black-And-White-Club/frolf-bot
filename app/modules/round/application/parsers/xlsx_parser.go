@@ -1,6 +1,7 @@
 package parsers
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ func NewXLSXParser() *XLSXParser {
 // Parse parses XLSX data and returns a ParsedScorecard
 func (p *XLSXParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	// Create a reader from the byte data
-	f, err := excelize.OpenReader(strings.NewReader(string(data)))
+	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open XLSX file: %w", err)
 	}

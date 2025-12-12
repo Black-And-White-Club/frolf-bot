@@ -189,6 +189,6 @@ type LeaderboardOperationResult struct {
 	Error   error
 }
 
-func ptrTag(t sharedtypes.TagNumber) *sharedtypes.TagNumber {
-	return &t
-}
+// func ptrTag(t sharedtypes.TagNumber) *sharedtypes.TagNumber {
+// 	return &t
+// }

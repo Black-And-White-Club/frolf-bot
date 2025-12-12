@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
@@ -12,16 +11,19 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Adding UDisc columns to users table...")
 
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("udisc_username TEXT NULL").Exec(ctx); err != nil {
+		// NOTE: The users table is created from the current bun model in an earlier migration.
+		// That means fresh databases may already include these columns.
+		// Use IF NOT EXISTS to keep migrations forward-compatible and safe to re-run.
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS udisc_username TEXT NULL"); err != nil {
 			return err
 		}
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("udisc_display_name TEXT NULL").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS udisc_display_name TEXT NULL"); err != nil {
 			return err
 		}
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("normalized_username TEXT NOT NULL DEFAULT ''").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS normalized_username TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
-		if _, err := db.NewAddColumn().Model((*userdb.User)(nil)).ColumnExpr("normalized_display_name TEXT NOT NULL DEFAULT ''").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS normalized_display_name TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
 
@@ -30,16 +32,16 @@ func init() {
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Dropping UDisc columns from users table...")
 
-		if _, err := db.NewDropColumn().Model((*userdb.User)(nil)).Column("udisc_username").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users DROP COLUMN IF EXISTS udisc_username"); err != nil {
 			return err
 		}
-		if _, err := db.NewDropColumn().Model((*userdb.User)(nil)).Column("udisc_display_name").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users DROP COLUMN IF EXISTS udisc_display_name"); err != nil {
 			return err
 		}
-		if _, err := db.NewDropColumn().Model((*userdb.User)(nil)).Column("normalized_username").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users DROP COLUMN IF EXISTS normalized_username"); err != nil {
 			return err
 		}
-		if _, err := db.NewDropColumn().Model((*userdb.User)(nil)).Column("normalized_display_name").Exec(ctx); err != nil {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users DROP COLUMN IF EXISTS normalized_display_name"); err != nil {
 			return err
 		}
 
