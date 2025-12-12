@@ -222,7 +222,14 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		round.ImportID = payload.ImportID
 		round.ImportStatus = "pending"
 		round.ImportType = "url"
-		round.UDiscURL = payload.UDiscURL
+
+		// Ensure URL has /export appended if it's a UDisc scorecard URL
+		uDiscURL := payload.UDiscURL
+		if strings.Contains(uDiscURL, "udisc.com/scorecards/") && !strings.HasSuffix(uDiscURL, "/export") {
+			uDiscURL = strings.TrimSuffix(uDiscURL, "/") + "/export"
+		}
+		round.UDiscURL = uDiscURL
+
 		round.ImportNotes = payload.Notes
 		now := time.Now().UTC()
 		round.ImportedAt = &now
@@ -277,6 +284,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 
 		// If we only have a URL, fetch it now
 		if len(fileData) == 0 && payload.FileURL != "" {
+			s.logger.InfoContext(ctx, "Downloading file from URL", attr.String("url", payload.FileURL))
 			client := &http.Client{Timeout: 15 * time.Second}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, payload.FileURL, nil)
 			if err != nil {
@@ -343,6 +351,11 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 			}
 
 			fileData = buf
+			s.logger.InfoContext(ctx, "File downloaded successfully", attr.Int("size", len(fileData)))
+		} else if len(fileData) == 0 {
+			s.logger.WarnContext(ctx, "No file data provided and no URL available")
+		} else {
+			s.logger.InfoContext(ctx, "Using provided file data", attr.Int("size", len(fileData)))
 		}
 
 		// Get the appropriate parser based on file extension
