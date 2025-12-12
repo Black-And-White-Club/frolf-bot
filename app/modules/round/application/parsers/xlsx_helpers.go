@@ -9,59 +9,42 @@ import (
 )
 
 // findParRowXLSX identifies the par row and extracts par values.
-// Returns: rowIndex, nameColIndex, holeStartColIdx, parScores, error
-func findParRowXLSX(rows [][]string) (int, int, int, []int, error) {
-	// First, try to detect a UDisc-style header row to find column indices
+// Returns: parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, layoutType, parScores, error
+func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) {
 	headerRowIdx, nameColIdx, holeStartColIdx, layoutType := detectLayout(rows)
 
 	if headerRowIdx != -1 {
-		// If it's a Leaderboard (XLSX), it might not have a Par row.
-		// We return 0s for ParScores since we can't know the hole pars,
-		// but we need to return the correct number of holes so player scores can be parsed.
 		if layoutType == "leaderboard" {
-			// Count holes starting from holeStartColIdx
+			// Count holes starting from the detected hole column
 			numHoles := 0
 			headerRow := rows[headerRowIdx]
 			for i := holeStartColIdx; i < len(headerRow); i++ {
 				val := strings.ToLower(strings.TrimSpace(headerRow[i]))
-				// Check if it looks like a hole header (e.g. "Hole 1", "1", etc.)
-				// We assume hole columns are contiguous.
 				if strings.HasPrefix(val, "hole") || (len(val) <= 2 && isNumeric(val)) {
 					numHoles++
-				} else {
-					// If we hit a non-hole column, stop counting?
-					// In some exports, holes are followed by other data.
-					// But usually holes are the last thing or contiguous.
-					// If we encounter an empty string, skip it?
-					if val == "" {
-						continue
-					}
-					// If it's clearly not a hole (e.g. "Round Rating"), stop.
-					if !strings.HasPrefix(val, "hole") && !isNumeric(val) {
+					continue
+				}
+				if val == "" {
+					continue
+				}
+				if !strings.HasPrefix(val, "hole") && !isNumeric(val) {
+					break
+				}
+				if isNumeric(val) {
+					n, _ := strconv.Atoi(val)
+					if n > 100 {
 						break
 					}
-					// If it's numeric but not a hole? (e.g. "1000" rating).
-					// "1" to "18" are holes. "1000" is not.
-					if isNumeric(val) {
-						n, _ := strconv.Atoi(val)
-						if n > 100 { // Arbitrary cutoff for hole number
-							break
-						}
-					}
-					numHoles++
 				}
+				numHoles++
 			}
 
-			// If we found holes, return 0s for par (unknown)
 			if numHoles > 0 {
 				parScores := make([]int, numHoles)
-				// Return headerRowIdx as parRowIndex so it gets skipped during player parsing
-				return headerRowIdx, nameColIdx, holeStartColIdx, parScores, nil
+				return headerRowIdx, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
 			}
 		}
 
-		// For Scorecard layout, look for the Par row relative to this layout.
-		// The Par row usually has "Par" in the name column.
 		for i := headerRowIdx + 1; i < len(rows); i++ {
 			row := rows[i]
 			if len(row) <= nameColIdx {
@@ -70,38 +53,32 @@ func findParRowXLSX(rows [][]string) (int, int, int, []int, error) {
 
 			nameVal := strings.TrimSpace(row[nameColIdx])
 			if strings.Contains(strings.ToLower(nameVal), "par") {
-				// Found Par row. Parse scores starting from holeStartColIdx.
 				if len(row) <= holeStartColIdx {
-					return -1, -1, -1, nil, fmt.Errorf("par row too short")
+					return -1, -1, -1, -1, "", nil, fmt.Errorf("par row too short")
 				}
 
 				parScores, err := parseScoreRowXLSX(row[holeStartColIdx:])
 				if err != nil {
-					return -1, -1, -1, nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+					return -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
 				}
-				return i, nameColIdx, holeStartColIdx, parScores, nil
+				return i, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
 			}
 		}
 
-		// If no labeled Par row found, look for a numeric row that matches the hole count/structure
-		// This handles cases where the par row exists but isn't labeled "Par" (e.g. just numbers)
 		for i := headerRowIdx + 1; i < len(rows); i++ {
 			row := rows[i]
 			if len(row) <= holeStartColIdx {
 				continue
 			}
 
-			// Check if the "name" column is NOT a likely player name (e.g. it's a number or empty)
-			// If it looks like a player name, we shouldn't treat it as a par row
 			nameVal := strings.TrimSpace(row[nameColIdx])
 			if isLikelyPlayerNameXLSX(nameVal) {
 				continue
 			}
 
-			// Check if the rest are scores
 			parScores, err := parseScoreRowXLSX(row[holeStartColIdx:])
 			if err == nil && len(parScores) > 0 {
-				return i, nameColIdx, holeStartColIdx, parScores, nil
+				return i, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
 			}
 		}
 	}
@@ -112,7 +89,6 @@ func findParRowXLSX(rows [][]string) (int, int, int, []int, error) {
 			continue
 		}
 
-		// Find first non-empty column
 		firstColIdx := -1
 		for c, val := range row {
 			if strings.TrimSpace(val) != "" {
@@ -122,34 +98,25 @@ func findParRowXLSX(rows [][]string) (int, int, int, []int, error) {
 		}
 
 		if firstColIdx == -1 {
-			continue // Empty row
+			continue
 		}
 
 		firstVal := strings.TrimSpace(row[firstColIdx])
-
-		// Check if first non-empty column is "Par" (case-insensitive)
 		if strings.Contains(strings.ToLower(firstVal), "par") {
-			// Extract numeric values from remaining columns
 			parScores, err := parseScoreRowXLSX(row[firstColIdx+1:])
 			if err != nil {
-				// If parsing fails immediately after "Par", it might be because of intermediate columns (UDisc style)
-				// Try skipping columns until we find numbers?
-				// For now, just return error as before, unless we want to be smarter here too.
-				return -1, -1, -1, nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+				return -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
 			}
-			return i, firstColIdx, firstColIdx + 1, parScores, nil
+			return i, -1, firstColIdx, firstColIdx + 1, "scorecard", parScores, nil
 		}
 
-		// Alternative: check if entire row is numeric (all scores)
 		parScores, err := parseScoreRowXLSX(row[firstColIdx:])
-		if err == nil && len(parScores) >= 9 {
-			if !isLikelyPlayerNameXLSX(firstVal) {
-				return i, firstColIdx, firstColIdx, parScores, nil
-			}
+		if err == nil && len(parScores) >= 9 && !isLikelyPlayerNameXLSX(firstVal) {
+			return i, -1, firstColIdx, firstColIdx, "scorecard", parScores, nil
 		}
 	}
 
-	return -1, -1, -1, nil, nil
+	return -1, -1, -1, -1, "", nil, nil
 }
 
 // detectLayout attempts to find the header row and column indices.
@@ -186,8 +153,11 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 			}
 		}
 
-		// If it's a leaderboard and we found a username column, use that as the name source
-		if isLeaderboard && usernameIdx != -1 {
+		// Prefer username column if it exists and sits before the hole columns
+		if usernameIdx != -1 && holeStartIdx != -1 && holeStartIdx > usernameIdx {
+			nameIdx = usernameIdx
+			isLeaderboard = true
+		} else if isLeaderboard && usernameIdx != -1 {
 			nameIdx = usernameIdx
 		}
 
@@ -243,12 +213,17 @@ func parseScoreRowXLSX(row []string) ([]int, error) {
 }
 
 // extractPlayerScoresXLSX extracts all player score rows from XLSX
-func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, nameColIndex int, holeStartColIdx int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
+func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
 	var players []roundtypes.PlayerScoreRow
 
 	for i, row := range rows {
-		// Skip par row
-		if i == parRowIndex || i == 0 {
+		if i == parRowIndex {
+			continue
+		}
+		if headerRowIndex >= 0 && i == headerRowIndex {
+			continue
+		}
+		if i == 0 {
 			continue
 		}
 
@@ -295,6 +270,6 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, nameColIndex int,
 }
 
 // parsePlayerScoresXLSX is a wrapper for extractPlayerScoresXLSX to match the signature used in xlsx_core.go
-func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, nameColIndex int, holeStartColIdx int, parScores []int) ([]roundtypes.PlayerScoreRow, error) {
-	return extractPlayerScoresXLSX(rows, parRowIndex, nameColIndex, holeStartColIdx, len(parScores))
+func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, parScores []int) ([]roundtypes.PlayerScoreRow, error) {
+	return extractPlayerScoresXLSX(rows, parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, len(parScores))
 }

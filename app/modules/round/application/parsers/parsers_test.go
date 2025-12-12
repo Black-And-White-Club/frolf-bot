@@ -94,9 +94,11 @@ func TestCSVParser_Parse(t *testing.T) {
 func TestXLSXParser_Parse(t *testing.T) {
 	parser := NewXLSXParser()
 	tests := []struct {
-		name    string
-		rows    [][]string
-		wantErr bool
+		name                string
+		rows                [][]string
+		wantErr             bool
+		wantPlayerCount     int
+		wantFirstPlayerName string
 	}{
 		{
 			name: "normal sheet",
@@ -106,6 +108,7 @@ func TestXLSXParser_Parse(t *testing.T) {
 				{"Player One", "3", "4", "3", "10"},
 				{"Player Two", "4", "4", "4", "12"},
 			},
+			wantPlayerCount: 2,
 		},
 		{
 			name: "numeric par row without label",
@@ -114,6 +117,17 @@ func TestXLSXParser_Parse(t *testing.T) {
 				{"3", "3", "3", "3", "3", "3", "3", "3", "3"},
 				{"Player One", "3", "4", "3", "4", "3", "4", "3", "4", "3"},
 			},
+			wantPlayerCount: 1,
+		},
+		{
+			name: "leaderboard username column",
+			rows: [][]string{
+				{"Division", "Position", "Username", "Hole 1", "Hole 2"},
+				{"Open", "1", "CoolDuck", "3", "2"},
+				{"Open", "2", "OtherUser", "4", "3"},
+			},
+			wantPlayerCount:     2,
+			wantFirstPlayerName: "CoolDuck",
 		},
 		{
 			name: "missing par row",
@@ -140,7 +154,10 @@ func TestXLSXParser_Parse(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.NotEmpty(t, result.ParScores)
-			require.Len(t, result.PlayerScores, len(tt.rows)-2)
+			require.Equal(t, tt.wantPlayerCount, len(result.PlayerScores))
+			if tt.wantFirstPlayerName != "" {
+				require.Equal(t, tt.wantFirstPlayerName, result.PlayerScores[0].PlayerName)
+			}
 		})
 	}
 }
