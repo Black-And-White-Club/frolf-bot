@@ -58,17 +58,39 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 
 		// Idempotency and conflict checks
 		if round.ImportID != "" && round.ImportID != payload.ImportID {
-			s.logger.WarnContext(ctx, "Import ID conflict", attr.String("existing_import_id", round.ImportID), attr.String("incoming_import_id", payload.ImportID))
-			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
-					GuildID:   payload.GuildID,
-					RoundID:   payload.RoundID,
-					ImportID:  payload.ImportID,
-					Error:     "another import is already in progress or completed",
-					ErrorCode: "IMPORT_CONFLICT",
-					Timestamp: time.Now().UTC(),
-				},
-			}, nil
+			// Check if we can overwrite
+			canOverwrite := false
+
+			// 1. Failed imports can be retried
+			if round.ImportStatus == string(rounddb.ImportStatusFailed) {
+				canOverwrite = true
+			}
+
+			// 2. Stale pending imports (older than 5 mins) can be retried
+			if !canOverwrite && round.ImportStatus != string(rounddb.ImportStatusCompleted) {
+				if round.ImportedAt != nil && time.Since(*round.ImportedAt) > 5*time.Minute {
+					canOverwrite = true
+					s.logger.InfoContext(ctx, "Overwriting stale import",
+						attr.String("old_import_id", round.ImportID),
+						attr.String("old_status", round.ImportStatus),
+						attr.Time("imported_at", *round.ImportedAt),
+					)
+				}
+			}
+
+			if !canOverwrite {
+				s.logger.WarnContext(ctx, "Import ID conflict", attr.String("existing_import_id", round.ImportID), attr.String("incoming_import_id", payload.ImportID))
+				return RoundOperationResult{
+					Failure: &roundevents.ImportFailedPayload{
+						GuildID:   payload.GuildID,
+						RoundID:   payload.RoundID,
+						ImportID:  payload.ImportID,
+						Error:     "another import is already in progress or completed",
+						ErrorCode: "IMPORT_CONFLICT",
+						Timestamp: time.Now().UTC(),
+					},
+				}, nil
+			}
 		}
 
 		if round.ImportID == payload.ImportID && string(round.ImportStatus) == string(rounddb.ImportStatusCompleted) {
