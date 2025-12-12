@@ -36,16 +36,16 @@ func parseXLSXCore(data []byte) (*roundtypes.ParsedScorecard, error) {
 	}
 
 	// Find par row and validate structure
-	parRowIndex, parScores, err := findParRowXLSX(rows)
+	parRowIndex, nameColIndex, holeStartColIdx, parScores, err := findParRowXLSX(rows)
 	if err != nil {
 		return nil, err
 	}
-	if parRowIndex == -1 {
+	if len(parScores) == 0 {
 		return nil, fmt.Errorf("no par row found in XLSX")
 	}
 
 	// Parse player scores
-	playerScores, err := parsePlayerScoresXLSX(rows, parRowIndex, parScores)
+	playerScores, err := parsePlayerScoresXLSX(rows, parRowIndex, nameColIndex, holeStartColIdx, parScores)
 	if err != nil {
 		return nil, err
 	}

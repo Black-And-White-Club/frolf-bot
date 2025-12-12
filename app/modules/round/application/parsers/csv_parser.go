@@ -103,7 +103,7 @@ func (p *CSVParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	}
 
 	// Find par row and validate structure
-	parRowIndex, parScores, err := findParRow(records)
+	parRowIndex, nameColIndex, parScores, err := findParRow(records)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (p *CSVParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	}
 
 	// Extract player rows (skip header and par row)
-	playerScores, err := extractPlayerScores(records, parRowIndex, len(parScores))
+	playerScores, err := extractPlayerScores(records, parRowIndex, nameColIndex, len(parScores))
 	if err != nil {
 		return nil, err
 	}
@@ -125,34 +125,103 @@ func (p *CSVParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 }
 
 // findParRow identifies the par row and extracts par values
-func findParRow(records [][]string) (int, []int, error) {
+// Returns: rowIndex, colIndex, parScores, error
+func findParRow(records [][]string) (int, int, []int, error) {
+	// First, try to detect a UDisc-style header row to find column indices
+	headerRowIdx, nameColIdx, holeStartColIdx := detectLayoutCSV(records)
+
+	if headerRowIdx != -1 {
+		// We found a header. Look for the Par row relative to this layout.
+		// The Par row usually has "Par" in the name column.
+		for i := headerRowIdx + 1; i < len(records); i++ {
+			row := records[i]
+			if len(row) <= nameColIdx {
+				continue
+			}
+
+			nameVal := strings.TrimSpace(row[nameColIdx])
+			if strings.Contains(strings.ToLower(nameVal), "par") {
+				// Found Par row. Parse scores starting from holeStartColIdx.
+				if len(row) <= holeStartColIdx {
+					return -1, -1, nil, fmt.Errorf("par row too short")
+				}
+
+				parScores, err := parseScoreRow(row[holeStartColIdx:])
+				if err != nil {
+					return -1, -1, nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+				}
+				return i, nameColIdx, parScores, nil
+			}
+		}
+	}
+
+	// Fallback: Use the old heuristic search
 	for i, record := range records {
 		if len(record) == 0 {
 			continue
 		}
 
-		// Check if first column is "Par" (case-insensitive)
-		if strings.EqualFold(strings.TrimSpace(record[0]), "Par") {
-			// Extract numeric values from remaining columns
-			parScores, err := parseScoreRow(record[1:])
-			if err != nil {
-				return -1, nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+		// Find first non-empty column
+		firstColIdx := -1
+		for c, val := range record {
+			if strings.TrimSpace(val) != "" {
+				firstColIdx = c
+				break
 			}
-			return i, parScores, nil
+		}
+
+		if firstColIdx == -1 {
+			continue // Empty row
+		}
+
+		firstVal := strings.TrimSpace(record[firstColIdx])
+
+		// Check if first non-empty column is "Par" (case-insensitive)
+		if strings.Contains(strings.ToLower(firstVal), "par") {
+			// Extract numeric values from remaining columns
+			parScores, err := parseScoreRow(record[firstColIdx+1:])
+			if err != nil {
+				return -1, -1, nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+			}
+			return i, firstColIdx, parScores, nil
 		}
 
 		// Alternative: check if entire row is numeric (all scores)
-		parScores, err := parseScoreRow(record)
+		parScores, err := parseScoreRow(record[firstColIdx:])
 		if err == nil && len(parScores) >= 9 {
 			// Assume this is the par row if it has at least 9 numeric values
-			// and the first column isn't a player name
-			if !isLikelyPlayerName(record[0]) {
-				return i, parScores, nil
+			if !isLikelyPlayerName(firstVal) {
+				return i, firstColIdx, parScores, nil
 			}
 		}
 	}
 
-	return -1, nil, nil
+	return -1, -1, nil, nil
+}
+
+// detectLayoutCSV attempts to find the header row and column indices.
+// Returns: headerRowIndex, nameColIndex, holeStartColIndex
+// Returns -1s if not found.
+func detectLayoutCSV(rows [][]string) (int, int, int) {
+	for i, row := range rows {
+		nameIdx := -1
+		holeStartIdx := -1
+
+		for c, val := range row {
+			val = strings.ToLower(strings.TrimSpace(val))
+			if nameIdx == -1 && (val == "playername" || val == "name" || val == "player") {
+				nameIdx = c
+			}
+			if holeStartIdx == -1 && (val == "hole1" || val == "hole 1" || val == "hole_1" || val == "1") {
+				holeStartIdx = c
+			}
+		}
+
+		if nameIdx != -1 && holeStartIdx != -1 && holeStartIdx > nameIdx {
+			return i, nameIdx, holeStartIdx
+		}
+	}
+	return -1, -1, -1
 }
 
 // isLikelyPlayerName checks if a string looks like a player name
@@ -174,6 +243,12 @@ func parseScoreRow(record []string) ([]int, error) {
 		}
 		score, err := strconv.Atoi(val)
 		if err != nil {
+			// If we hit a non-numeric value
+			if len(scores) > 0 {
+				// We already have some scores, assume this is the start of summary columns (Total, +/-)
+				// Stop parsing and return what we have
+				break
+			}
 			return nil, fmt.Errorf("non-numeric score value: %q", val)
 		}
 		if score < 0 {
@@ -185,7 +260,7 @@ func parseScoreRow(record []string) ([]int, error) {
 }
 
 // extractPlayerScores extracts all player score rows
-func extractPlayerScores(records [][]string, parRowIndex int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
+func extractPlayerScores(records [][]string, parRowIndex int, nameColIndex int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
 	var players []roundtypes.PlayerScoreRow
 
 	for i, record := range records {
@@ -194,20 +269,24 @@ func extractPlayerScores(records [][]string, parRowIndex int, numHoles int) ([]r
 			continue
 		}
 
-		if len(record) == 0 {
+		if len(record) <= nameColIndex {
 			continue
 		}
 
-		// First column is player name
-		playerName := strings.TrimSpace(record[0])
+		// Player name is at the same column index as "Par"
+		playerName := strings.TrimSpace(record[nameColIndex])
 		if playerName == "" {
 			continue
 		}
 
 		// Parse scores
-		scores, err := parseScoreRow(record[1:])
+		if len(record) <= nameColIndex+1 {
+			continue
+		}
+		scores, err := parseScoreRow(record[nameColIndex+1:])
 		if err != nil {
-			return nil, fmt.Errorf("invalid scores for player %q at line %d: %w", playerName, i+1, err)
+			// Skip rows that don't look like player rows (e.g. headers)
+			continue
 		}
 
 		// Validate hole count
@@ -227,18 +306,6 @@ func extractPlayerScores(records [][]string, parRowIndex int, numHoles int) ([]r
 		total := 0
 		for _, score := range scores {
 			total += score
-		}
-
-		// Check if the record has an explicit total column
-		if len(record) > numHoles+1 {
-			lastCol := strings.TrimSpace(record[len(record)-1])
-			if providedTotal, err := strconv.Atoi(lastCol); err == nil {
-				// Validate provided total matches calculated
-				if providedTotal != total && providedTotal > 0 {
-					// Log warning but don't fail; use calculated total
-					// fmt.Printf("Warning: player %s total mismatch: provided=%d, calculated=%d\n", playerName, providedTotal, total)
-				}
-			}
 		}
 
 		players = append(players, roundtypes.PlayerScoreRow{
