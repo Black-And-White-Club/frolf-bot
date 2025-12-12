@@ -368,14 +368,13 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 		if err != nil {
 			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", fmt.Sprintf("failed to parse scorecard: %v", err), "PARSE_ERROR")
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ScorecardParseFailedPayload{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     fmt.Sprintf("failed to parse scorecard: %v", err),
-					ErrorCode: "PARSE_ERROR",
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil

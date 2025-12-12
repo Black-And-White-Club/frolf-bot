@@ -177,6 +177,15 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 			// Get file data from payload (would be the actual file bytes)
 			fileData := scoreboardUploadedPayload.FileData
 
+			headerLen := 10
+			if len(fileData) < headerLen {
+				headerLen = len(fileData)
+			}
+			h.logger.InfoContext(ctx, "Inspecting file data",
+				attr.Int("file_size", len(fileData)),
+				attr.String("file_header", fmt.Sprintf("%x", fileData[:headerLen])),
+			)
+
 			result, err := h.roundService.ParseScorecard(ctx, *scoreboardUploadedPayload, fileData)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to handle ParseScorecardRequest event",
@@ -192,11 +201,17 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 					attr.Any("failure_payload", result.Failure),
 				)
 
+				// Determine the topic based on the failure payload type
+				topic := roundevents.ImportFailedTopic
+				if _, ok := result.Failure.(roundevents.ScorecardParseFailedPayload); ok {
+					topic = roundevents.ScorecardParseFailedTopic
+				}
+
 				// Publish failure event
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.ImportFailedTopic,
+					topic,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)

@@ -23,6 +23,9 @@ func (p *XLSXParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	// Create a reader from the byte data
 	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
+		if strings.Contains(err.Error(), "zip: not a valid zip file") {
+			return nil, fmt.Errorf("failed to open XLSX file: %w. (Hint: If this is a CSV file, please ensure it has a .csv extension)", err)
+		}
 		return nil, fmt.Errorf("failed to open XLSX file: %w", err)
 	}
 	defer f.Close()
