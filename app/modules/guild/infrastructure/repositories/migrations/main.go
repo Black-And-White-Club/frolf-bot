@@ -33,8 +33,8 @@ func DropGuildConfigsTable(ctx context.Context, db *bun.DB) error {
 	return nil
 }
 
-func init() {
-	if err := Migrations.DiscoverCaller(); err != nil {
-		panic(err)
-	}
-}
+// func init() {
+// 	if err := Migrations.DiscoverCaller(); err != nil {
+// 		panic(err)
+// 	}
+// }
