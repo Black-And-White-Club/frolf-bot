@@ -265,8 +265,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		result, err := service.ParseScorecard(ctx, payload, []byte("not-a-real-xlsx"))
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		failure := result.Failure.(*roundevents.ImportFailedPayload)
-		require.Equal(t, "PARSE_ERROR", failure.ErrorCode)
+		failure := result.Failure.(*roundevents.ScorecardParseFailedPayload)
 		require.Contains(t, failure.Error, "failed to parse scorecard")
 	})
 }
