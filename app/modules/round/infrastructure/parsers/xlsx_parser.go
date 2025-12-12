@@ -1,6 +1,7 @@
 package parsers
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ func NewXLSXParser() *XLSXParser {
 // Parse reads XLSX data and returns a ParsedScorecard.
 // It extracts scores from the first sheet, assuming standard UDisc XLSX format.
 func (p *XLSXParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedScorecard, error) {
-	f, err := excelize.OpenReader(strings.NewReader(string(fileData)))
+	f, err := excelize.OpenReader(bytes.NewReader(fileData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse XLSX: %w", err)
 	}
