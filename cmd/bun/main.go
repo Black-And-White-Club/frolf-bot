@@ -41,11 +41,11 @@ func main() {
 
 	// Create migrators
 	migrators := map[string]*migrate.Migrator{
-		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
-		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
-		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
-		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
-		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations),
+		"user":        migrate.NewMigrator(db, usermigrations.Migrations, migrate.WithTableName("bun_migrations_user")),
+		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations, migrate.WithTableName("bun_migrations_leaderboard")),
+		"score":       migrate.NewMigrator(db, scoremigrations.Migrations, migrate.WithTableName("bun_migrations_score")),
+		"round":       migrate.NewMigrator(db, roundmigrations.Migrations, migrate.WithTableName("bun_migrations_round")),
+		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations, migrate.WithTableName("bun_migrations_guild")),
 	}
 
 	cliApp := &cli.App{
