@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -288,14 +289,27 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) 
 				return nil, fmt.Errorf("no parsed scorecard data in match confirmed payload")
 			}
 
-			// Convert to ParsedScorecardPayload
-			parsedPayload, ok := parsedScorecardRaw.(*roundevents.ParsedScorecardPayload)
-			if !ok {
-				h.logger.ErrorContext(ctx, "Failed to cast parsed scorecard data",
+			// Convert interface{} to ParsedScorecardPayload
+			// When JSON unmarshals into interface{}, it creates a map[string]interface{}
+			// We need to re-marshal and unmarshal to get the typed struct
+			parsedPayload := &roundevents.ParsedScorecardPayload{}
+			parsedBytes, err := json.Marshal(parsedScorecardRaw)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to marshal parsed scorecard data",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("import_id", matchedPayload.ImportID),
+					attr.Error(err),
 				)
-				return nil, fmt.Errorf("failed to cast parsed scorecard data to ParsedScorecardPayload")
+				return nil, fmt.Errorf("failed to marshal parsed scorecard data: %w", err)
+			}
+
+			if err := json.Unmarshal(parsedBytes, parsedPayload); err != nil {
+				h.logger.ErrorContext(ctx, "Failed to unmarshal parsed scorecard data",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", matchedPayload.ImportID),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to unmarshal parsed scorecard data: %w", err)
 			}
 
 			result, err := h.roundService.IngestParsedScorecard(ctx, *parsedPayload)
