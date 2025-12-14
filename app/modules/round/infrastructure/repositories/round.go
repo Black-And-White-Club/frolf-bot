@@ -142,18 +142,30 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, guildID sharedtype
 // convertToDomainRound converts a database Round model to domain Round model
 func convertToDomainRound(dbRound Round) *roundtypes.Round {
 	return &roundtypes.Round{
-		ID:             dbRound.ID,
-		Title:          dbRound.Title,
-		Description:    &dbRound.Description,
-		Location:       &dbRound.Location,
-		EventType:      dbRound.EventType,
-		StartTime:      &dbRound.StartTime,
-		Finalized:      dbRound.Finalized,
-		CreatedBy:      dbRound.CreatedBy,
-		State:          dbRound.State,
-		Participants:   dbRound.Participants,
-		EventMessageID: dbRound.EventMessageID,
-		GuildID:        dbRound.GuildID,
+		ID:              dbRound.ID,
+		Title:           dbRound.Title,
+		Description:     &dbRound.Description,
+		Location:        &dbRound.Location,
+		EventType:       dbRound.EventType,
+		StartTime:       &dbRound.StartTime,
+		Finalized:       dbRound.Finalized,
+		CreatedBy:       dbRound.CreatedBy,
+		State:           dbRound.State,
+		Participants:    dbRound.Participants,
+		EventMessageID:  dbRound.EventMessageID,
+		GuildID:         dbRound.GuildID,
+		ImportID:        dbRound.ImportID,
+		ImportStatus:    string(dbRound.ImportStatus),
+		ImportType:      string(dbRound.ImportType),
+		FileData:        dbRound.FileData,
+		FileName:        dbRound.FileName,
+		UDiscURL:        dbRound.UDiscURL,
+		ImportNotes:     dbRound.ImportNotes,
+		ImportError:     dbRound.ImportError,
+		ImportErrorCode: dbRound.ImportErrorCode,
+		ImportedAt:      dbRound.ImportedAt,
+		ImportUserID:    dbRound.ImportUserID,
+		ImportChannelID: dbRound.ImportChannelID,
 	}
 }
 
@@ -179,6 +191,44 @@ func (db *RoundDBImpl) UpdateRound(ctx context.Context, guildID sharedtypes.Guil
 	}
 	if round.EventType != nil {
 		dbRound.EventType = round.EventType
+	}
+
+	// Import/scorecard fields
+	if round.ImportID != "" {
+		dbRound.ImportID = round.ImportID
+	}
+	if round.ImportStatus != "" {
+		dbRound.ImportStatus = ImportStatus(round.ImportStatus)
+	}
+	if round.ImportType != "" {
+		dbRound.ImportType = ImportType(round.ImportType)
+	}
+	if len(round.FileData) > 0 {
+		dbRound.FileData = round.FileData
+	}
+	if round.FileName != "" {
+		dbRound.FileName = round.FileName
+	}
+	if round.UDiscURL != "" {
+		dbRound.UDiscURL = round.UDiscURL
+	}
+	if round.ImportNotes != "" {
+		dbRound.ImportNotes = round.ImportNotes
+	}
+	if round.ImportError != "" {
+		dbRound.ImportError = round.ImportError
+	}
+	if round.ImportErrorCode != "" {
+		dbRound.ImportErrorCode = round.ImportErrorCode
+	}
+	if round.ImportedAt != nil {
+		dbRound.ImportedAt = round.ImportedAt
+	}
+	if round.ImportUserID != "" {
+		dbRound.ImportUserID = round.ImportUserID
+	}
+	if round.ImportChannelID != "" {
+		dbRound.ImportChannelID = round.ImportChannelID
 	}
 
 	var updatedDbRound Round

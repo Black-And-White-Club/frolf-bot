@@ -37,4 +37,5 @@ type Handlers interface {
 	HandleScorecardURLRequested(msg *message.Message) ([]*message.Message, error)
 	HandleParseScorecardRequest(msg *message.Message) ([]*message.Message, error)
 	HandleScorecardParsed(msg *message.Message) ([]*message.Message, error)
+	HandleImportCompleted(msg *message.Message) ([]*message.Message, error)
 }

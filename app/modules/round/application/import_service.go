@@ -10,7 +10,6 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -99,17 +98,24 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 			}
 		}
 
+		now := time.Now().UTC()
+
 		if round.ImportID == payload.ImportID && string(round.ImportStatus) == string(rounddb.ImportStatusCompleted) {
 			s.logger.InfoContext(ctx, "Import already completed; acknowledging idempotently", attr.String("import_id", payload.ImportID))
 			return RoundOperationResult{
 				Success: &roundevents.ScorecardUploadedPayload{
-					GuildID:  payload.GuildID,
-					RoundID:  payload.RoundID,
-					ImportID: payload.ImportID,
-					FileName: payload.FileName,
-					FileURL:  payload.FileURL,
-					UDiscURL: payload.UDiscURL,
-					Notes:    payload.Notes,
+					GuildID:   payload.GuildID,
+					RoundID:   payload.RoundID,
+					ImportID:  payload.ImportID,
+					UserID:    payload.UserID,
+					ChannelID: payload.ChannelID,
+					MessageID: payload.MessageID,
+					FileData:  payload.FileData,
+					FileURL:   payload.FileURL,
+					FileName:  payload.FileName,
+					UDiscURL:  payload.UDiscURL,
+					Notes:     payload.Notes,
+					Timestamp: now,
 				},
 			}, nil
 		}
@@ -125,7 +131,8 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 			round.ImportType = string(rounddb.ImportTypeCSV)
 		}
 		if payload.FileURL != "" {
-			round.FileData = []byte(payload.FileURL)
+			// Note: Round domain model does not currently persist FileURL separately.
+			// Keep FileData empty here to avoid corrupting parsing; the parse step will use payload.FileURL.
 			round.ImportType = string(rounddb.ImportTypeCSV)
 		}
 		if payload.UDiscURL != "" {
@@ -134,7 +141,6 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 		}
 		round.FileName = payload.FileName
 		round.ImportNotes = payload.Notes
-		now := time.Now().UTC()
 		round.ImportedAt = &now
 
 		// Persist the import job
@@ -165,13 +171,18 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 
 		return RoundOperationResult{
 			Success: &roundevents.ScorecardUploadedPayload{
-				GuildID:  payload.GuildID,
-				RoundID:  payload.RoundID,
-				ImportID: payload.ImportID,
-				FileName: payload.FileName,
-				FileURL:  payload.FileURL,
-				UDiscURL: payload.UDiscURL,
-				Notes:    payload.Notes,
+				GuildID:   payload.GuildID,
+				RoundID:   payload.RoundID,
+				ImportID:  payload.ImportID,
+				UserID:    payload.UserID,
+				ChannelID: payload.ChannelID,
+				MessageID: payload.MessageID,
+				FileData:  payload.FileData,
+				FileURL:   payload.FileURL,
+				FileName:  payload.FileName,
+				UDiscURL:  payload.UDiscURL,
+				Notes:     payload.Notes,
+				Timestamp: now,
 			},
 		}, nil
 	})
@@ -218,10 +229,14 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 			}, nil
 		}
 
-		// Update the round with UDisc URL information
+		now := time.Now().UTC()
+
+		// Update the round with import context + UDisc URL information
 		round.ImportID = payload.ImportID
-		round.ImportStatus = "pending"
-		round.ImportType = "url"
+		round.ImportStatus = string(rounddb.ImportStatusPending)
+		round.ImportType = string(rounddb.ImportTypeURL)
+		round.ImportUserID = payload.UserID
+		round.ImportChannelID = payload.ChannelID
 
 		// Ensure URL has /export appended if it's a UDisc scorecard URL
 		uDiscURL := payload.UDiscURL
@@ -231,7 +246,6 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		round.UDiscURL = uDiscURL
 
 		round.ImportNotes = payload.Notes
-		now := time.Now().UTC()
 		round.ImportedAt = &now
 
 		// Persist the update
@@ -259,12 +273,20 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.ScorecardURLRequestedPayload{
-				GuildID:  payload.GuildID,
-				RoundID:  payload.RoundID,
-				ImportID: payload.ImportID,
-				UDiscURL: payload.UDiscURL,
-				Notes:    payload.Notes,
+			// Success here is intended to be used as a parse request payload.
+			// The parse handler expects ScorecardUploadedPayload.
+			Success: &roundevents.ScorecardUploadedPayload{
+				GuildID:   payload.GuildID,
+				RoundID:   payload.RoundID,
+				ImportID:  payload.ImportID,
+				UserID:    payload.UserID,
+				ChannelID: payload.ChannelID,
+				MessageID: payload.MessageID,
+				FileURL:   uDiscURL,
+				FileName:  "udisc-export.csv",
+				UDiscURL:  payload.UDiscURL,
+				Notes:     payload.Notes,
+				Timestamp: now,
 			},
 		}, nil
 	})
@@ -474,6 +496,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		var unmatchedPlayers []string
 		var matchedPlayersList []roundtypes.MatchedPlayer
 		playersAutoAdded := 0
+		autoAddedUserIDs := make([]sharedtypes.DiscordID, 0)
 
 		// Match players and collect scores. Unmatched players are skipped (not an error).
 		for _, player := range payload.ParsedData.PlayerScores {
@@ -537,24 +560,24 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 					// Continue anyway, maybe they can be added later or it's a transient error
 				} else {
 					playersAutoAdded++
-					// Publish auto-added event
 					autoAddedPayload := &roundevents.RoundParticipantAutoAddedPayload{
 						RoundID:   payload.RoundID,
 						GuildID:   payload.GuildID,
 						UserID:    payload.UserID, // The user who initiated the import
-						AddedUser: userID,         // The user being added
+						ChannelID: payload.ChannelID,
+						AddedUser: userID, // The user being added
 						ImportID:  payload.ImportID,
 						Timestamp: time.Now().UTC(),
 					}
+					autoAddedUserIDs = append(autoAddedUserIDs, userID)
 
 					payloadBytes, err := json.Marshal(autoAddedPayload)
 					if err != nil {
-						s.logger.ErrorContext(ctx, "Failed to marshal ParticipantAutoAdded payload", attr.Error(err))
+						s.logger.ErrorContext(ctx, "Failed to marshal ParticipantAutoAdded payload",
+							attr.Error(err),
+						)
 					} else {
 						msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-						// Propagate correlation ID if available
-						// msg.Metadata.Set("correlation_id", attr.CorrelationIDFromContext(ctx))
-
 						if err := s.EventBus.Publish(roundevents.RoundParticipantAutoAddedTopic, msg); err != nil {
 							s.logger.ErrorContext(ctx, "Failed to publish ParticipantAutoAdded event",
 								attr.Error(err),
@@ -605,39 +628,22 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		// Update status to indicate we're about to process scores
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "processing", "", "")
 
-		// Publish ImportCompleted event
-		importCompletedPayload := &roundevents.ImportCompletedPayload{
-			ImportID:           payload.ImportID,
-			GuildID:            payload.GuildID,
-			RoundID:            payload.RoundID,
-			UserID:             payload.UserID,
-			ChannelID:          payload.ChannelID,
-			ScoresIngested:     len(scores),
-			MatchedPlayers:     len(scores),
-			UnmatchedPlayers:   len(unmatchedPlayers),
-			PlayersAutoAdded:   playersAutoAdded,
-			MatchedPlayersList: matchedPlayersList,
-			SkippedPlayers:     unmatchedPlayers,
-			Timestamp:          time.Now().UTC(),
-		}
-
-		payloadBytes, err := json.Marshal(importCompletedPayload)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to marshal ImportCompleted payload", attr.Error(err))
-		} else {
-			msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-			if err := s.EventBus.Publish(roundevents.ImportCompletedTopic, msg); err != nil {
-				s.logger.ErrorContext(ctx, "Failed to publish ImportCompleted event", attr.Error(err))
-			}
-		}
-
-		// Publish the request to process scores
 		return RoundOperationResult{
-			Success: &scoreevents.ProcessRoundScoresRequestPayload{
-				GuildID:   payload.GuildID,
-				RoundID:   payload.RoundID,
-				Scores:    scores,
-				Overwrite: false, // Default to false, user must confirm overwrite if conflict occurs
+			Success: &roundevents.ImportCompletedPayload{
+				ImportID:           payload.ImportID,
+				GuildID:            payload.GuildID,
+				RoundID:            payload.RoundID,
+				UserID:             payload.UserID,
+				ChannelID:          payload.ChannelID,
+				ScoresIngested:     len(scores),
+				MatchedPlayers:     len(scores),
+				UnmatchedPlayers:   len(unmatchedPlayers),
+				PlayersAutoAdded:   playersAutoAdded,
+				MatchedPlayersList: matchedPlayersList,
+				SkippedPlayers:     unmatchedPlayers,
+				AutoAddedUserIDs:   autoAddedUserIDs,
+				Scores:             scores,
+				Timestamp:          time.Now().UTC(),
 			},
 		}, nil
 	})

@@ -299,22 +299,66 @@ func (h *RoundHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.
 					attr.Any("success_payload", result.Success),
 				)
 
-				successMsg, err := h.helpers.CreateResultMessage(
+				importCompletedMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					scoreevents.ProcessRoundScoresRequest,
+					roundevents.ImportCompletedTopic,
 				)
 				if err != nil {
-					return nil, fmt.Errorf("failed to create score processing message: %w", err)
+					return nil, fmt.Errorf("failed to create ImportCompleted message: %w", err)
 				}
 
-				return []*message.Message{successMsg}, nil
+				return []*message.Message{importCompletedMsg}, nil
 			}
 
 			h.logger.ErrorContext(ctx, "Unexpected result from IngestParsedScorecard service",
 				attr.CorrelationIDFromMsg(msg),
 			)
 			return nil, fmt.Errorf("unexpected result from service")
+		},
+	)
+
+	return wrappedHandler(msg)
+}
+
+func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.Message, error) {
+	wrappedHandler := h.handlerWrapper(
+		"HandleImportCompleted",
+		&roundevents.ImportCompletedPayload{},
+		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
+			completed := payload.(*roundevents.ImportCompletedPayload)
+			h.logger.InfoContext(ctx, "Received ImportCompleted event",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", completed.ImportID),
+				attr.String("guild_id", string(completed.GuildID)),
+				attr.String("round_id", completed.RoundID.String()),
+			)
+
+			if len(completed.Scores) == 0 {
+				h.logger.InfoContext(ctx, "Import completed with no scores to process",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+				)
+				return nil, nil
+			}
+
+			processPayload := &scoreevents.ProcessRoundScoresRequestPayload{
+				GuildID:   completed.GuildID,
+				RoundID:   completed.RoundID,
+				Scores:    completed.Scores,
+				Overwrite: false,
+			}
+
+			processMsg, err := h.helpers.CreateResultMessage(
+				msg,
+				processPayload,
+				scoreevents.ProcessRoundScoresRequest,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create score processing message: %w", err)
+			}
+
+			return []*message.Message{processMsg}, nil
 		},
 	)
 

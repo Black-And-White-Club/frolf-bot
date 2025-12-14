@@ -175,6 +175,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.ScorecardURLRequestedTopic: handlers.HandleScorecardURLRequested,
 		roundevents.ScorecardParseRequestTopic: handlers.HandleParseScorecardRequest,
 		roundevents.ScorecardParsedTopic:       handlers.HandleScorecardParsed,
+		roundevents.ImportCompletedTopic:       handlers.HandleImportCompleted,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

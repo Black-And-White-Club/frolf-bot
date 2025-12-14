@@ -9,7 +9,6 @@ import (
 
 	sharedeventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -135,11 +134,14 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 	ctx := context.Background()
 	payload := roundevents.ScorecardURLRequestedPayload{
-		GuildID:  sharedtypes.GuildID("guild-1"),
-		RoundID:  sharedtypes.RoundID(uuid.New()),
-		ImportID: "import-url",
-		UDiscURL: "https://udisc.com/score",
-		Notes:    "note",
+		GuildID:   sharedtypes.GuildID("guild-1"),
+		RoundID:   sharedtypes.RoundID(uuid.New()),
+		ImportID:  "import-url",
+		UserID:    sharedtypes.DiscordID("111"),
+		ChannelID: "chan-1",
+		MessageID: "msg-1",
+		UDiscURL:  "https://udisc.com/score",
+		Notes:     "note",
 	}
 	service := newTestRoundService(mockDB, nil, nil)
 
@@ -170,6 +172,9 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 			func(_ context.Context, _ sharedtypes.GuildID, _ sharedtypes.RoundID, updated *roundtypes.Round) (*roundtypes.Round, error) {
 				require.Equal(t, payload.UDiscURL, updated.UDiscURL)
 				require.Equal(t, string(rounddb.ImportTypeURL), string(updated.ImportType))
+				require.Equal(t, string(rounddb.ImportStatusPending), string(updated.ImportStatus))
+				require.Equal(t, payload.UserID, updated.ImportUserID)
+				require.Equal(t, payload.ChannelID, updated.ImportChannelID)
 				return updated, nil
 			},
 		)
@@ -177,8 +182,10 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 		result, err := service.HandleScorecardURLRequested(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardURLRequestedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayload)
 		require.Equal(t, payload.UDiscURL, success.UDiscURL)
+		require.NotEmpty(t, success.FileName)
+		require.NotEmpty(t, success.FileURL)
 	})
 }
 
@@ -367,23 +374,16 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 
 		mockDB.EXPECT().UpdateImportStatus(gomock.Any(), payload.GuildID, payload.RoundID, payload.ImportID, "ingesting", "", "").Return(nil)
 		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(round, nil)
-		mockEventBus.EXPECT().Publish(roundevents.ImportCompletedTopic, gomock.Any()).DoAndReturn(func(topic string, msgs ...*message.Message) error {
-			require.Len(t, msgs, 1)
-			var completed roundevents.ImportCompletedPayload
-			require.NoError(t, json.Unmarshal(msgs[0].Payload, &completed))
-			require.Equal(t, 1, completed.MatchedPlayers)
-			require.Equal(t, 0, completed.PlayersAutoAdded)
-			return nil
-		})
 		mockDB.EXPECT().UpdateImportStatus(gomock.Any(), payload.GuildID, payload.RoundID, payload.ImportID, "processing", "", "").Return(nil)
 
 		service := newTestRoundService(mockDB, mockEventBus, lookup)
 		result, err := service.IngestParsedScorecard(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*scoreevents.ProcessRoundScoresRequestPayload)
+		success := result.Success.(*roundevents.ImportCompletedPayload)
+		require.Equal(t, 1, success.MatchedPlayers)
+		require.Equal(t, 0, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
-		require.False(t, success.Overwrite)
 		require.Equal(t, sharedtypes.Score(6), success.Scores[0].Score)
 		require.NotNil(t, success.Scores[0].TagNumber)
 	})
@@ -422,22 +422,16 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 			require.Equal(t, matchedID, added.AddedUser)
 			return nil
 		})
-		mockEventBus.EXPECT().Publish(roundevents.ImportCompletedTopic, gomock.Any()).DoAndReturn(func(topic string, msgs ...*message.Message) error {
-			require.Len(t, msgs, 1)
-			var completed roundevents.ImportCompletedPayload
-			require.NoError(t, json.Unmarshal(msgs[0].Payload, &completed))
-			require.Equal(t, 1, completed.PlayersAutoAdded)
-			return nil
-		})
 		mockDB.EXPECT().UpdateImportStatus(gomock.Any(), payload.GuildID, payload.RoundID, payload.ImportID, "processing", "", "").Return(nil)
 
 		service := newTestRoundService(mockDB, mockEventBus, lookup)
 		result, err := service.IngestParsedScorecard(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*scoreevents.ProcessRoundScoresRequestPayload)
+		success := result.Success.(*roundevents.ImportCompletedPayload)
+		require.Equal(t, 1, success.MatchedPlayers)
+		require.Equal(t, 1, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
-		require.False(t, success.Overwrite)
 		require.Equal(t, sharedtypes.Score(4), success.Scores[0].Score)
 		require.Nil(t, success.Scores[0].TagNumber)
 	})
