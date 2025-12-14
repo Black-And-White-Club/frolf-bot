@@ -226,17 +226,27 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 					attr.Any("success_payload", result.Success),
 				)
 
-				// Publish success event
-				successMsg, err := h.helpers.CreateResultMessage(
+				// Fan-out: publish parsed scorecard to the ingest topic (round module)
+				// and to a user-specific topic (user module matching).
+				ingestMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
 					roundevents.ScorecardParsedTopic,
 				)
 				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
+					return nil, fmt.Errorf("failed to create parsed scorecard ingest message: %w", err)
 				}
 
-				return []*message.Message{successMsg}, nil
+				userMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					result.Success,
+					roundevents.ScorecardParsedForUserTopic,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create parsed scorecard user message: %w", err)
+				}
+
+				return []*message.Message{ingestMsg, userMsg}, nil
 			}
 
 			// If neither Failure nor Success is set, return an error

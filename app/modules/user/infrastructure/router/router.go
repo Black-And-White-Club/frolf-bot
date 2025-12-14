@@ -153,15 +153,15 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 
 	// Map event topics to their corresponding handler functions.
 	eventsToHandlers := map[string]message.HandlerFunc{
-		userevents.UserSignupRequest:           handlers.HandleUserSignupRequest,
-		userevents.TagAvailable:                handlers.HandleTagAvailable,
-		userevents.TagUnavailable:              handlers.HandleTagUnavailable,
-		userevents.UserRoleUpdateRequest:       handlers.HandleUserRoleUpdateRequest,
-		userevents.GetUserRoleRequest:          handlers.HandleGetUserRoleRequest,
-		userevents.GetUserRequest:              handlers.HandleGetUserRequest,
-		userevents.UserPermissionsCheckRequest: handlers.HandleGetUserRoleRequest,
-		userevents.UpdateUDiscIdentityRequest:  handlers.HandleUpdateUDiscIdentityRequest,
-		roundevents.ScorecardParsedTopic:       handlers.HandleScorecardParsed,
+		userevents.UserSignupRequest:            handlers.HandleUserSignupRequest,
+		userevents.TagAvailable:                 handlers.HandleTagAvailable,
+		userevents.TagUnavailable:               handlers.HandleTagUnavailable,
+		userevents.UserRoleUpdateRequest:        handlers.HandleUserRoleUpdateRequest,
+		userevents.GetUserRoleRequest:           handlers.HandleGetUserRoleRequest,
+		userevents.GetUserRequest:               handlers.HandleGetUserRequest,
+		userevents.UserPermissionsCheckRequest:  handlers.HandleGetUserRoleRequest,
+		userevents.UpdateUDiscIdentityRequest:   handlers.HandleUpdateUDiscIdentityRequest,
+		roundevents.ScorecardParsedForUserTopic: handlers.HandleScorecardParsed,
 	}
 	r.logger.InfoContext(ctx, "Registering handlers for user module",
 		attr.String("TagAvailable_constant", userevents.TagAvailable))
