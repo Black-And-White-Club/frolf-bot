@@ -10,6 +10,7 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
@@ -174,7 +175,7 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 		roundevents.ScorecardUploadedTopic:     handlers.HandleScorecardUploaded,
 		roundevents.ScorecardURLRequestedTopic: handlers.HandleScorecardURLRequested,
 		roundevents.ScorecardParseRequestTopic: handlers.HandleParseScorecardRequest,
-		roundevents.ScorecardParsedTopic:       handlers.HandleScorecardParsed,
+		userevents.UserUDiscMatchConfirmed:     handlers.HandleUserMatchConfirmedForIngest,
 		roundevents.ImportCompletedTopic:       handlers.HandleImportCompleted,
 	}
 

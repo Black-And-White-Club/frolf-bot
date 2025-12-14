@@ -6,6 +6,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -261,28 +262,49 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 	return wrappedHandler(msg)
 }
 
-// HandleScorecardParsed ingests parsed scorecards and publishes score processing requests.
-func (h *RoundHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.Message, error) {
+// HandleUserMatchConfirmedForIngest ingests parsed scorecards after user matching completes and publishes score processing requests.
+func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
-		"HandleScorecardParsed",
-		&roundevents.ParsedScorecardPayload{},
+		"HandleUserMatchConfirmedForIngest",
+		&userevents.UDiscMatchConfirmedPayload{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			parsedPayload := payload.(*roundevents.ParsedScorecardPayload)
+			matchedPayload := payload.(*userevents.UDiscMatchConfirmedPayload)
 
-			h.logger.InfoContext(ctx, "Received ScorecardParsed event",
+			h.logger.InfoContext(ctx, "Received user match confirmed for score ingestion",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("import_id", parsedPayload.ImportID),
-				attr.String("guild_id", string(parsedPayload.GuildID)),
-				attr.String("round_id", parsedPayload.RoundID.String()),
+				attr.String("import_id", matchedPayload.ImportID),
+				attr.String("guild_id", string(matchedPayload.GuildID)),
+				attr.String("round_id", matchedPayload.RoundID.String()),
 			)
+
+			// Extract the parsed scorecard from the payload
+			// The user module should have attached it when confirming matches
+			parsedScorecardRaw := matchedPayload.ParsedScores
+			if parsedScorecardRaw == nil {
+				h.logger.ErrorContext(ctx, "No parsed scorecard data in match confirmed payload",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", matchedPayload.ImportID),
+				)
+				return nil, fmt.Errorf("no parsed scorecard data in match confirmed payload")
+			}
+
+			// Convert to ParsedScorecardPayload
+			parsedPayload, ok := parsedScorecardRaw.(*roundevents.ParsedScorecardPayload)
+			if !ok {
+				h.logger.ErrorContext(ctx, "Failed to cast parsed scorecard data",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", matchedPayload.ImportID),
+				)
+				return nil, fmt.Errorf("failed to cast parsed scorecard data to ParsedScorecardPayload")
+			}
 
 			result, err := h.roundService.IngestParsedScorecard(ctx, *parsedPayload)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle ScorecardParsed event",
+				h.logger.ErrorContext(ctx, "Failed to ingest scorecard after user matching",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
-				return nil, fmt.Errorf("failed to handle ScorecardParsed event: %w", err)
+				return nil, fmt.Errorf("failed to ingest scorecard after user matching: %w", err)
 			}
 
 			if result.Failure != nil {

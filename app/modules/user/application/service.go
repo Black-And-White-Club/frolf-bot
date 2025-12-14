@@ -207,13 +207,14 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 		}
 
 		return UserOperationResult{Success: &userevents.UDiscMatchConfirmedPayload{
-			ImportID:  payload.ImportID,
-			GuildID:   payload.GuildID,
-			RoundID:   payload.RoundID,
-			UserID:    payload.UserID,
-			ChannelID: payload.ChannelID,
-			Timestamp: time.Now().UTC(),
-			Mappings:  mappings,
+			ImportID:     payload.ImportID,
+			GuildID:      payload.GuildID,
+			RoundID:      payload.RoundID,
+			UserID:       payload.UserID,
+			ChannelID:    payload.ChannelID,
+			Timestamp:    time.Now().UTC(),
+			Mappings:     mappings,
+			ParsedScores: &payload, // Include the parsed scorecard for round module ingestion
 		}}, nil
 	})
 }

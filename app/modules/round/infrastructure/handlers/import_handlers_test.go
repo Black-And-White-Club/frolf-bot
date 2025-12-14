@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
@@ -762,18 +764,31 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 	}
 }
 
-func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
+func TestRoundHandlers_HandleUserMatchConfirmedForIngest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testImportID := "test-import-id"
 	testGuildID := sharedtypes.GuildID("test-guild-id")
 	testRoundID := sharedtypes.RoundID(uuid.New())
+	testUserID := sharedtypes.DiscordID("test-user-id")
+	testChannelID := "test-channel-id"
 
-	testPayload := &roundevents.ParsedScorecardPayload{
+	parsedScores := &roundevents.ParsedScorecardPayload{
 		ImportID: testImportID,
 		GuildID:  testGuildID,
 		RoundID:  testRoundID,
+	}
+
+	testPayload := &userevents.UDiscMatchConfirmedPayload{
+		ImportID:     testImportID,
+		GuildID:      testGuildID,
+		RoundID:      testRoundID,
+		UserID:       testUserID,
+		ChannelID:    testChannelID,
+		Timestamp:    time.Now(),
+		Mappings:     []userevents.UDiscConfirmedMapping{},
+		ParsedScores: parsedScores,
 	}
 
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -798,16 +813,16 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle ScorecardParsed",
+			name: "Successfully handle UserMatchConfirmedForIngest",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.ImportCompletedPayload{
 							ImportID:       testImportID,
@@ -845,12 +860,12 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("service error"),
 				)
@@ -858,19 +873,19 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ScorecardParsed event: service error",
+			expectedErrMsg: "failed to ingest scorecard after user matching: service error",
 		},
 		{
 			name: "Handle IngestParsedScorecard failure result",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{
 						Failure: &roundevents.ImportFailedPayload{
 							ImportID: testImportID,
@@ -895,12 +910,12 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{
 						Failure: &roundevents.ImportFailedPayload{
 							ImportID: testImportID,
@@ -926,12 +941,12 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.ImportCompletedPayload{
 							ImportID: testImportID,
@@ -956,12 +971,12 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParsedScorecardPayload) = *testPayload
+						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
 						return nil
 					},
 				)
 
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *testPayload).Return(
+				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
 					roundservice.RoundOperationResult{},
 					nil,
 				)
@@ -978,19 +993,19 @@ func TestRoundHandlers_HandleScorecardParsed(t *testing.T) {
 			tt.mockSetup()
 
 			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleScorecardParsed(tt.msg)
+			got, err := h.HandleUserMatchConfirmedForIngest(tt.msg)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundHandlers.HandleScorecardParsed() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("RoundHandlers.HandleScorecardParsed() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
 			if !tt.wantErr && len(got) != len(tt.want) {
-				t.Errorf("RoundHandlers.HandleScorecardParsed() got = %v, want %v", got, tt.want)
+				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
