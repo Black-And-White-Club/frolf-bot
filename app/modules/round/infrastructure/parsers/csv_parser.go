@@ -49,7 +49,10 @@ func (p *CSVParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedS
 	// Look for round_relative_score and player name columns
 	for i, col := range headerRow {
 		colLower := strings.ToLower(strings.TrimSpace(col))
-		if colLower == "round_relative_score" {
+		// Remove common separators to match variations like "round_relative_score", "Round Relative Score", "RoundRelativeScore"
+		colNormalized := strings.ReplaceAll(strings.ReplaceAll(colLower, " ", ""), "_", "")
+
+		if colNormalized == "roundrelativescore" || colLower == "round_relative_score" || colLower == "relative score" {
 			relativeScoreColIdx = i
 		}
 		if colLower == "playername" || colLower == "player_name" || colLower == "name" {
@@ -59,10 +62,13 @@ func (p *CSVParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedS
 
 	// If we found the relative score column, use UDisc format parsing
 	if relativeScoreColIdx >= 0 {
+		// Log that we detected UDisc format for debugging
+		fmt.Printf("CSV Parser: Detected UDisc format with round_relative_score at column %d\n", relativeScoreColIdx)
 		return p.parseUDiscFormat(rows, relativeScoreColIdx, playerNameColIdx, fileName)
 	}
 
 	// Fall back to legacy hole-by-hole format
+	fmt.Printf("CSV Parser: Using legacy format (no round_relative_score column found). Header: %v\n", headerRow)
 	return p.parseLegacyFormat(rows, fileName)
 }
 
@@ -110,6 +116,8 @@ func (p *CSVParser) parseUDiscFormat(rows [][]string, relativeScoreColIdx, playe
 		if err != nil {
 			continue // Skip invalid scores
 		}
+
+		fmt.Printf("CSV Parser: Extracted player '%s' with relative score %d (from column value '%s')\n", playerName, relativeScore, relativeScoreStr)
 
 		// Extract hole scores for informational purposes (if available)
 		var holeScores []int
