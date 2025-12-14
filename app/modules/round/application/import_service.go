@@ -567,7 +567,11 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 			// Compute total strokes and par for the holes the player actually played.
 			totalStrokes := player.Total
 			parForPlayer := 0
-			if len(player.HoleScores) > 0 {
+			var scoreToPar int
+
+			// If we have hole-by-hole data, calculate relative score from strokes
+			if len(player.HoleScores) > 1 {
+				// Multiple hole scores means we have per-hole data
 				sumStrokes := 0
 				for i, strokes := range player.HoleScores {
 					if strokes <= 0 {
@@ -582,14 +586,19 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 				if totalStrokes == 0 {
 					totalStrokes = sumStrokes
 				}
+				scoreToPar = totalStrokes - parForPlayer
+			} else if len(player.HoleScores) == 1 {
+				// Single hole score means parser provided relative score directly (UDisc format)
+				scoreToPar = player.HoleScores[0]
 			} else if totalStrokes > 0 {
 				// No per-hole data; fall back to total and assume full par.
 				for _, p := range parScores {
 					parForPlayer += p
 				}
+				scoreToPar = totalStrokes - parForPlayer
+			} else {
+				scoreToPar = 0
 			}
-
-			scoreToPar := totalStrokes - parForPlayer
 
 			var tagNumber *sharedtypes.TagNumber
 			if tag, ok := tagByUser[userID]; ok {

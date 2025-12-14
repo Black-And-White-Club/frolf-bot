@@ -20,7 +20,8 @@ func NewCSVParser() *CSVParser {
 }
 
 // Parse reads CSV data and returns a ParsedScorecard.
-// Expected format: first row contains hole numbers or "Par", followed by player rows with player name and scores.
+// Expected format: first row contains column headers including "round_relative_score".
+// If round_relative_score column is found, use it directly; otherwise fall back to hole-by-hole parsing.
 func (p *CSVParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedScorecard, error) {
 	reader := csv.NewReader(strings.NewReader(string(fileData)))
 
@@ -40,7 +41,109 @@ func (p *CSVParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedS
 		return nil, fmt.Errorf("CSV must contain at least header and one data row")
 	}
 
-	// Parse header to extract par scores
+	// Parse header to check for UDisc format (round_relative_score column)
+	headerRow := rows[0]
+	relativeScoreColIdx := -1
+	playerNameColIdx := -1
+
+	// Look for round_relative_score and player name columns
+	for i, col := range headerRow {
+		colLower := strings.ToLower(strings.TrimSpace(col))
+		if colLower == "round_relative_score" {
+			relativeScoreColIdx = i
+		}
+		if colLower == "playername" || colLower == "player_name" || colLower == "name" {
+			playerNameColIdx = i
+		}
+	}
+
+	// If we found the relative score column, use UDisc format parsing
+	if relativeScoreColIdx >= 0 {
+		return p.parseUDiscFormat(rows, relativeScoreColIdx, playerNameColIdx, fileName)
+	}
+
+	// Fall back to legacy hole-by-hole format
+	return p.parseLegacyFormat(rows, fileName)
+}
+
+// parseUDiscFormat parses CSV with round_relative_score column.
+// It extracts hole-by-hole scores for logging but uses round_relative_score as the authoritative score.
+func (p *CSVParser) parseUDiscFormat(rows [][]string, relativeScoreColIdx, playerNameColIdx int, fileName string) (*roundtypes.ParsedScorecard, error) {
+	var playerScores []PlayerScore
+	headerRow := rows[0]
+
+	// Find hole score columns (columns that look like hole numbers: 1, 2, 3, etc.)
+	var holeColIndices []int
+	for i, col := range headerRow {
+		colTrimmed := strings.TrimSpace(col)
+		if _, err := strconv.Atoi(colTrimmed); err == nil {
+			holeColIndices = append(holeColIndices, i)
+		}
+	}
+
+	// Start from row 1 (skip header)
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) <= relativeScoreColIdx {
+			continue
+		}
+
+		// Extract player name
+		playerName := ""
+		if playerNameColIdx >= 0 && playerNameColIdx < len(row) {
+			playerName = strings.TrimSpace(row[playerNameColIdx])
+		} else if len(row) > 0 {
+			playerName = strings.TrimSpace(row[0]) // Default to first column
+		}
+
+		if playerName == "" {
+			continue
+		}
+
+		// Extract relative score (this is the authoritative score)
+		relativeScoreStr := strings.TrimSpace(row[relativeScoreColIdx])
+		if relativeScoreStr == "" {
+			continue
+		}
+
+		relativeScore, err := strconv.Atoi(relativeScoreStr)
+		if err != nil {
+			continue // Skip invalid scores
+		}
+
+		// Extract hole scores for informational purposes (if available)
+		var holeScores []int
+		if len(holeColIndices) > 0 {
+			for _, holeIdx := range holeColIndices {
+				if holeIdx < len(row) {
+					holeScoreStr := strings.TrimSpace(row[holeIdx])
+					if holeScore, err := strconv.Atoi(holeScoreStr); err == nil && holeScore > 0 {
+						holeScores = append(holeScores, holeScore)
+					}
+				}
+			}
+		}
+
+		// Store relative score as single value in HoleScores[0] - this signals to import service to use it directly
+		playerScores = append(playerScores, PlayerScore{
+			PlayerName: playerName,
+			HoleScores: []int{relativeScore}, // Single value at index 0 means "use this as relative score"
+			Total:      relativeScore,
+		})
+	}
+
+	if len(playerScores) == 0 {
+		return nil, fmt.Errorf("no valid player scores found in UDisc CSV")
+	}
+
+	return &roundtypes.ParsedScorecard{
+		PlayerScores: convertPlayerScores(playerScores),
+		ParScores:    []int{}, // No par info needed when we have relative scores
+	}, nil
+}
+
+// parseLegacyFormat parses CSV with hole-by-hole scores and par row.
+func (p *CSVParser) parseLegacyFormat(rows [][]string, fileName string) (*roundtypes.ParsedScorecard, error) {
 	headerRow := rows[0]
 	if len(headerRow) < 2 {
 		return nil, fmt.Errorf("header row must have at least player name column and one hole")
