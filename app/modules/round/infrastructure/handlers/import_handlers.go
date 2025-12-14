@@ -346,7 +346,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				GuildID:   completed.GuildID,
 				RoundID:   completed.RoundID,
 				Scores:    completed.Scores,
-				Overwrite: false,
+				Overwrite: true,
 			}
 
 			processMsg, err := h.helpers.CreateResultMessage(

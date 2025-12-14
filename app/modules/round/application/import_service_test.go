@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	sharedeventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -100,6 +101,27 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
 		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "another import is already in progress")
+	})
+
+	t.Run("overwrite completed import", func(t *testing.T) {
+		payload := basePayload
+		payload.ImportID = "import-new"
+		completedAt := time.Now().Add(-24 * time.Hour)
+		existing := &roundtypes.Round{ImportID: "import-old", ImportStatus: string(rounddb.ImportStatusCompleted), ImportedAt: &completedAt}
+		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(existing, nil)
+		mockDB.EXPECT().UpdateRound(gomock.Any(), payload.GuildID, payload.RoundID, gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ sharedtypes.GuildID, _ sharedtypes.RoundID, updated *roundtypes.Round) (*roundtypes.Round, error) {
+				require.Equal(t, payload.ImportID, updated.ImportID)
+				require.Equal(t, string(rounddb.ImportStatusPending), string(updated.ImportStatus))
+				return updated, nil
+			},
+		)
+
+		result, err := service.CreateImportJob(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result.Success)
+		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 
 	t.Run("success with file data", func(t *testing.T) {

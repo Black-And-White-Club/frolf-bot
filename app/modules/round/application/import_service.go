@@ -64,6 +64,21 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 			// Check if we can overwrite
 			canOverwrite := false
 
+			// 0. Completed imports can be retried/overwritten (e.g. silent downstream failures)
+			if round.ImportStatus == string(rounddb.ImportStatusCompleted) {
+				canOverwrite = true
+				s.logger.InfoContext(ctx, "Overwriting previously completed import",
+					attr.String("old_import_id", round.ImportID),
+					attr.String("new_import_id", payload.ImportID),
+					attr.Time("imported_at", func() time.Time {
+						if round.ImportedAt != nil {
+							return *round.ImportedAt
+						}
+						return time.Time{}
+					}()),
+				)
+			}
+
 			// 1. Failed imports can be retried
 			if round.ImportStatus == string(rounddb.ImportStatusFailed) {
 				canOverwrite = true

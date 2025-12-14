@@ -1022,7 +1022,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 						require.True(t, ok)
 						require.Equal(t, testGuildID, req.GuildID)
 						require.Equal(t, testRoundID, req.RoundID)
-						require.False(t, req.Overwrite)
+						require.True(t, req.Overwrite)
 						require.Len(t, req.Scores, 1)
 						require.Equal(t, sharedtypes.DiscordID("u1"), req.Scores[0].UserID)
 						require.Equal(t, sharedtypes.Score(6), req.Scores[0].Score)
