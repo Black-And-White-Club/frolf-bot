@@ -532,6 +532,8 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		playersAutoAdded := 0
 		autoAddedUserIDs := make([]sharedtypes.DiscordID, 0)
 
+		parScores := payload.ParsedData.ParScores
+
 		// Match players and collect scores. Unmatched players are skipped (not an error).
 		for _, player := range payload.ParsedData.PlayerScores {
 			normalized := normalizeName(player.PlayerName)
@@ -561,12 +563,33 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 				continue
 			}
 
-			total := player.Total
-			if total == 0 {
-				for _, hole := range player.HoleScores {
-					total += hole
+			// The score module expects scores as relative-to-par (not raw stroke totals).
+			// Compute total strokes and par for the holes the player actually played.
+			totalStrokes := player.Total
+			parForPlayer := 0
+			if len(player.HoleScores) > 0 {
+				sumStrokes := 0
+				for i, strokes := range player.HoleScores {
+					if strokes <= 0 {
+						// Treat 0/negative as "not played / missing".
+						continue
+					}
+					sumStrokes += strokes
+					if i >= 0 && i < len(parScores) {
+						parForPlayer += parScores[i]
+					}
+				}
+				if totalStrokes == 0 {
+					totalStrokes = sumStrokes
+				}
+			} else if totalStrokes > 0 {
+				// No per-hole data; fall back to total and assume full par.
+				for _, p := range parScores {
+					parForPlayer += p
 				}
 			}
+
+			scoreToPar := totalStrokes - parForPlayer
 
 			var tagNumber *sharedtypes.TagNumber
 			if tag, ok := tagByUser[userID]; ok {
@@ -623,14 +646,14 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 
 			scores = append(scores, sharedtypes.ScoreInfo{
 				UserID:    userID,
-				Score:     sharedtypes.Score(total),
+				Score:     sharedtypes.Score(scoreToPar),
 				TagNumber: tagNumber,
 			})
 
 			matchedPlayersList = append(matchedPlayersList, roundtypes.MatchedPlayer{
 				DiscordID: userID,
 				UDiscName: player.PlayerName,
-				Score:     total,
+				Score:     scoreToPar,
 			})
 		}
 

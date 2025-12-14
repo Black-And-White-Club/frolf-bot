@@ -442,6 +442,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 			UserID:    sharedtypes.DiscordID("importer"),
 			ChannelID: "chan-1",
 			ParsedData: &roundtypes.ParsedScorecard{
+				ParScores:    []int{3, 3},
 				PlayerScores: []roundtypes.PlayerScoreRow{player},
 			},
 		}
@@ -466,7 +467,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		require.Equal(t, 1, success.MatchedPlayers)
 		require.Equal(t, 0, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
-		require.Equal(t, sharedtypes.Score(6), success.Scores[0].Score)
+		require.Equal(t, sharedtypes.Score(0), success.Scores[0].Score) // 6 strokes on par 6 => even
 		require.NotNil(t, success.Scores[0].TagNumber)
 	})
 
@@ -485,6 +486,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 			UserID:    sharedtypes.DiscordID("importer"),
 			ChannelID: "chan-2",
 			ParsedData: &roundtypes.ParsedScorecard{
+				ParScores:    []int{3, 3},
 				PlayerScores: []roundtypes.PlayerScoreRow{player},
 			},
 		}
@@ -514,7 +516,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		require.Equal(t, 1, success.MatchedPlayers)
 		require.Equal(t, 1, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
-		require.Equal(t, sharedtypes.Score(4), success.Scores[0].Score)
+		require.Equal(t, sharedtypes.Score(-2), success.Scores[0].Score) // 4 strokes on par 6 => -2
 		require.Nil(t, success.Scores[0].TagNumber)
 	})
 }
