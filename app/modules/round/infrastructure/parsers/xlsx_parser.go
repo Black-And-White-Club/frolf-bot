@@ -9,7 +9,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // XLSXParser implements the Parser interface for XLSX scorecard files.
@@ -21,7 +20,7 @@ func NewXLSXParser() *XLSXParser {
 }
 
 // Parse reads XLSX data and returns a ParsedScorecard.
-// It extracts scores from the first sheet, assuming standard UDisc XLSX format.
+// It extracts scores from the first sheet. Checks for UDisc format with round_relative_score column first.
 func (p *XLSXParser) Parse(fileData []byte, fileName string) (*roundtypes.ParsedScorecard, error) {
 	f, err := excelize.OpenReader(bytes.NewReader(fileData))
 	if err != nil {
@@ -46,10 +45,96 @@ func (p *XLSXParser) Parse(fileData []byte, fileName string) (*roundtypes.Parsed
 		return nil, fmt.Errorf("XLSX must contain at least header and one data row")
 	}
 
+	// Check first row for UDisc format (round_relative_score column)
+	headerRow := rows[0]
+	relativeScoreColIdx := -1
+	playerNameColIdx := -1
+
+	for i, col := range headerRow {
+		colLower := strings.ToLower(strings.TrimSpace(col))
+		colNormalized := strings.ReplaceAll(strings.ReplaceAll(colLower, " ", ""), "_", "")
+
+		if colNormalized == "roundrelativescore" || colLower == "round_relative_score" || colLower == "relative score" {
+			relativeScoreColIdx = i
+		}
+		// XLSX uses "username" column
+		if colLower == "username" || colLower == "user_name" || colLower == "name" {
+			playerNameColIdx = i
+		}
+	}
+
+	// If we found the relative score column, use UDisc format parsing
+	if relativeScoreColIdx >= 0 {
+		fmt.Printf("XLSX Parser: Detected UDisc format with round_relative_score at column %d\n", relativeScoreColIdx)
+		return p.parseUDiscFormat(rows, relativeScoreColIdx, playerNameColIdx)
+	}
+
+	// Fall back to legacy hole-by-hole format
+	fmt.Printf("XLSX Parser: Using legacy format (no round_relative_score column found). Header: %v\n", headerRow)
+	return p.parseLegacyFormat(rows)
+}
+
+// parseUDiscFormat parses XLSX with round_relative_score column.
+func (p *XLSXParser) parseUDiscFormat(rows [][]string, relativeScoreColIdx, playerNameColIdx int) (*roundtypes.ParsedScorecard, error) {
+	var playerScores []PlayerScore
+
+	// Start from row 1 (skip header)
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) <= relativeScoreColIdx {
+			continue
+		}
+
+		// Extract player name
+		playerName := ""
+		if playerNameColIdx >= 0 && playerNameColIdx < len(row) {
+			playerName = strings.TrimSpace(row[playerNameColIdx])
+		} else if len(row) > 0 {
+			playerName = strings.TrimSpace(row[0])
+		}
+
+		if playerName == "" {
+			continue
+		}
+
+		// Extract relative score (this is the authoritative score)
+		relativeScoreStr := strings.TrimSpace(row[relativeScoreColIdx])
+		if relativeScoreStr == "" {
+			continue
+		}
+
+		relativeScore, err := strconv.Atoi(relativeScoreStr)
+		if err != nil {
+			continue // Skip invalid scores
+		}
+
+		fmt.Printf("XLSX Parser: Extracted player '%s' with relative score %d (from column value '%s')\n", playerName, relativeScore, relativeScoreStr)
+
+		// Store relative score as single value - signals to import service to use directly
+		playerScores = append(playerScores, PlayerScore{
+			PlayerName: playerName,
+			HoleScores: []int{relativeScore}, // Single value: use as relative score
+			Total:      relativeScore,
+		})
+	}
+
+	if len(playerScores) == 0 {
+		return nil, fmt.Errorf("no valid player scores found in UDisc XLSX")
+	}
+
+	return &roundtypes.ParsedScorecard{
+		PlayerScores: convertPlayerScores(playerScores),
+		ParScores:    []int{}, // No par info needed when we have relative scores
+	}, nil
+}
+
+// parseLegacyFormat parses XLSX with hole-by-hole scores and par row.
+func (p *XLSXParser) parseLegacyFormat(rows [][]string) (*roundtypes.ParsedScorecard, error) {
 	var parScores []int
 	var playerScores []PlayerScore
 	parRowIdx := -1
 
+	// Look for PAR row (usually near the top)
 	// Look for PAR row (usually near the top)
 	for i := 0; i < len(rows) && i < 5; i++ { // Check first 5 rows for PAR
 		if len(rows[i]) > 0 && isPARRow(rows[i][0]) {
@@ -124,9 +209,6 @@ func (p *XLSXParser) Parse(fileData []byte, fileName string) (*roundtypes.Parsed
 	}
 
 	return &roundtypes.ParsedScorecard{
-		ImportID:     "",                    // Set by caller
-		RoundID:      sharedtypes.RoundID{}, // Set by caller
-		GuildID:      "",                    // Set by caller
 		ParScores:    parScores,
 		PlayerScores: convertPlayerScores(playerScores),
 	}, nil
