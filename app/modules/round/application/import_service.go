@@ -61,43 +61,62 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 
 		// Idempotency and conflict checks
 		if round.ImportID != "" && round.ImportID != payload.ImportID {
-			// Check if we can overwrite
 			canOverwrite := false
 
-			// 0. Completed imports can be retried/overwritten (e.g. silent downstream failures)
-			if round.ImportStatus == string(rounddb.ImportStatusCompleted) {
+			// 1) Completed/failed imports can be retried/overwritten.
+			switch round.ImportStatus {
+			case string(rounddb.ImportStatusCompleted), string(rounddb.ImportStatusFailed):
 				canOverwrite = true
-				s.logger.InfoContext(ctx, "Overwriting previously completed import",
+			}
+
+			// 2) Same-user retries are allowed even if the previous attempt is still "in progress".
+			// This helps recover from silent downstream failures where import status never reaches "completed".
+			if !canOverwrite && round.ImportUserID != "" && payload.UserID != "" && round.ImportUserID == payload.UserID {
+				canOverwrite = true
+			}
+
+			// 3) Stale imports can be overwritten regardless of status.
+			// Keep this threshold relatively short so users can retry quickly.
+			const staleThreshold = 2 * time.Minute
+			if !canOverwrite && round.ImportedAt != nil && time.Since(*round.ImportedAt) > staleThreshold {
+				canOverwrite = true
+				s.logger.InfoContext(ctx, "Overwriting stale import",
 					attr.String("old_import_id", round.ImportID),
-					attr.String("new_import_id", payload.ImportID),
-					attr.Time("imported_at", func() time.Time {
-						if round.ImportedAt != nil {
-							return *round.ImportedAt
-						}
-						return time.Time{}
-					}()),
+					attr.String("old_status", round.ImportStatus),
+					attr.Time("imported_at", *round.ImportedAt),
 				)
 			}
 
-			// 1. Failed imports can be retried
-			if round.ImportStatus == string(rounddb.ImportStatusFailed) {
+			// 4) Legacy safety valve: if the existing import record doesn't have enough metadata
+			// to apply the checks above (e.g., older deployments didn't persist ImportUserID/ImportedAt),
+			// allow overwrite so users aren't permanently blocked.
+			if !canOverwrite && (round.ImportUserID == "" || round.ImportedAt == nil) {
 				canOverwrite = true
-			}
-
-			// 2. Stale pending imports (older than 5 mins) can be retried
-			if !canOverwrite && round.ImportStatus != string(rounddb.ImportStatusCompleted) {
-				if round.ImportedAt != nil && time.Since(*round.ImportedAt) > 5*time.Minute {
-					canOverwrite = true
-					s.logger.InfoContext(ctx, "Overwriting stale import",
-						attr.String("old_import_id", round.ImportID),
-						attr.String("old_status", round.ImportStatus),
-						attr.Time("imported_at", *round.ImportedAt),
-					)
-				}
+				s.logger.InfoContext(ctx, "Overwriting import with missing metadata",
+					attr.String("old_import_id", round.ImportID),
+					attr.String("old_status", round.ImportStatus),
+					attr.String("old_import_user_id", string(round.ImportUserID)),
+					attr.Bool("old_has_imported_at", round.ImportedAt != nil),
+				)
 			}
 
 			if !canOverwrite {
-				s.logger.WarnContext(ctx, "Import ID conflict", attr.String("existing_import_id", round.ImportID), attr.String("incoming_import_id", payload.ImportID))
+				importedAtStr := ""
+				importAgeSeconds := int64(0)
+				if round.ImportedAt != nil {
+					importedAtStr = round.ImportedAt.Format(time.RFC3339)
+					importAgeSeconds = int64(time.Since(*round.ImportedAt).Seconds())
+				}
+
+				s.logger.WarnContext(ctx, "Import ID conflict",
+					attr.String("existing_import_id", round.ImportID),
+					attr.String("incoming_import_id", payload.ImportID),
+					attr.String("existing_status", round.ImportStatus),
+					attr.String("existing_import_user_id", string(round.ImportUserID)),
+					attr.String("incoming_user_id", string(payload.UserID)),
+					attr.String("existing_imported_at", importedAtStr),
+					attr.Int64("existing_import_age_seconds", importAgeSeconds),
+				)
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,

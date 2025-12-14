@@ -94,13 +94,44 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 
 	t.Run("import conflict", func(t *testing.T) {
 		payload := basePayload
-		existing := &roundtypes.Round{ImportID: "other-id", ImportStatus: string(rounddb.ImportStatusPending)}
+		recentAt := time.Now().Add(-10 * time.Second)
+		existing := &roundtypes.Round{
+			ImportID:     "other-id",
+			ImportStatus: string(rounddb.ImportStatusPending),
+			// Provide enough metadata so overwrite rules do NOT apply.
+			ImportUserID: sharedtypes.DiscordID("someone-else"),
+			ImportedAt:   &recentAt,
+		}
 		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(existing, nil)
 
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
 		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "another import is already in progress")
+	})
+
+	t.Run("overwrite when existing import missing metadata", func(t *testing.T) {
+		payload := basePayload
+		payload.ImportID = "import-new"
+		existing := &roundtypes.Round{
+			ImportID:     "import-old",
+			ImportStatus: string(rounddb.ImportStatusPending),
+			// Intentionally leave ImportUserID and ImportedAt empty to simulate legacy rounds.
+		}
+		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(existing, nil)
+		mockDB.EXPECT().UpdateRound(gomock.Any(), payload.GuildID, payload.RoundID, gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ sharedtypes.GuildID, _ sharedtypes.RoundID, updated *roundtypes.Round) (*roundtypes.Round, error) {
+				require.Equal(t, payload.ImportID, updated.ImportID)
+				require.Equal(t, string(rounddb.ImportStatusPending), string(updated.ImportStatus))
+				return updated, nil
+			},
+		)
+
+		result, err := service.CreateImportJob(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result.Success)
+		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 
 	t.Run("overwrite completed import", func(t *testing.T) {
@@ -113,6 +144,35 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 			func(_ context.Context, _ sharedtypes.GuildID, _ sharedtypes.RoundID, updated *roundtypes.Round) (*roundtypes.Round, error) {
 				require.Equal(t, payload.ImportID, updated.ImportID)
 				require.Equal(t, string(rounddb.ImportStatusPending), string(updated.ImportStatus))
+				return updated, nil
+			},
+		)
+
+		result, err := service.CreateImportJob(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result.Success)
+		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		require.Equal(t, payload.ImportID, success.ImportID)
+	})
+
+	t.Run("overwrite in-progress import when same user", func(t *testing.T) {
+		payload := basePayload
+		payload.ImportID = "import-new"
+		existingAt := time.Now().Add(-30 * time.Second)
+		existing := &roundtypes.Round{
+			ImportID:        "import-old",
+			ImportStatus:    string(rounddb.ImportStatusProcessing),
+			ImportUserID:    payload.UserID,
+			ImportChannelID: payload.ChannelID,
+			ImportedAt:      &existingAt,
+		}
+		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(existing, nil)
+		mockDB.EXPECT().UpdateRound(gomock.Any(), payload.GuildID, payload.RoundID, gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ sharedtypes.GuildID, _ sharedtypes.RoundID, updated *roundtypes.Round) (*roundtypes.Round, error) {
+				require.Equal(t, payload.ImportID, updated.ImportID)
+				require.Equal(t, string(rounddb.ImportStatusPending), string(updated.ImportStatus))
+				require.Equal(t, payload.UserID, updated.ImportUserID)
+				require.Equal(t, payload.ChannelID, updated.ImportChannelID)
 				return updated, nil
 			},
 		)
