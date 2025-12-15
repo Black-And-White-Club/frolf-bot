@@ -63,6 +63,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 
 			// Create Discord finalization message
 			discordFinalizationPayload := roundevents.RoundFinalizedEmbedUpdatePayload{
+				GuildID:        allScoresSubmittedPayload.GuildID,
 				RoundID:        allScoresSubmittedPayload.RoundID,
 				Title:          fetchedRound.Title,
 				StartTime:      fetchedRound.StartTime,
