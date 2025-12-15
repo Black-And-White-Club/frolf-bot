@@ -450,6 +450,66 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.Int("score_count", len(outgoingMessages)),
 			)
 
+			// Import is batch - all scores are persisted at this point
+			// Check if all scores have been submitted and handle finalization if needed
+			// Use the first score's payload to get guild/round IDs (all same for this import)
+			if len(completed.Scores) > 0 {
+				firstScore := completed.Scores[0]
+				checkPayload := roundevents.ParticipantScoreUpdatedPayload{
+					GuildID:        completed.GuildID,
+					RoundID:        completed.RoundID,
+					Participant:    firstScore.UserID,
+					EventMessageID: completed.EventMessageID,
+				}
+
+				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, checkPayload)
+				if err != nil {
+					h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.Error(err),
+					)
+					return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
+				}
+
+				if checkResult.Failure != nil {
+					h.logger.ErrorContext(ctx, "All scores check failed for import",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+					)
+					// Don't fail the entire import if the check fails - log and continue
+				}
+
+				if checkResult.Success != nil {
+					if allScoresData, ok := checkResult.Success.(*roundevents.AllScoresSubmittedPayload); ok {
+						h.logger.InfoContext(ctx, "All scores submitted after import, publishing finalization",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("import_id", completed.ImportID),
+						)
+
+						allScoresMsg, err := h.helpers.CreateResultMessage(
+							msg,
+							allScoresData,
+							roundevents.RoundAllScoresSubmitted,
+						)
+						if err != nil {
+							h.logger.ErrorContext(ctx, "Failed to create all scores submitted message for import",
+								attr.CorrelationIDFromMsg(msg),
+								attr.String("import_id", completed.ImportID),
+								attr.Error(err),
+							)
+							return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
+						}
+						outgoingMessages = append(outgoingMessages, allScoresMsg)
+					} else if _, ok := checkResult.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
+						h.logger.InfoContext(ctx, "Not all scores submitted yet after import",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("import_id", completed.ImportID),
+						)
+					}
+				}
+			}
+
 			return outgoingMessages, nil
 		},
 	)
