@@ -62,8 +62,11 @@ func (p *CSVParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 		return nil, fmt.Errorf("no par row found in CSV")
 	}
 
+	// Detect relative score column (for disc golf "+/-" scores)
+	relativeScoreColIndex := detectRelativeScoreColumn(records, nameColIndex)
+
 	// Extract player rows (skip header and par row)
-	playerScores, err := extractPlayerScores(records, parRowIndex, nameColIndex, len(parScores))
+	playerScores, err := extractPlayerScoresWithRelative(records, parRowIndex, nameColIndex, len(parScores), parScores, relativeScoreColIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -270,4 +273,121 @@ func extractPlayerScores(records [][]string, parRowIndex int, nameColIndex int, 
 	}
 
 	return players, nil
+}
+
+// detectRelativeScoreColumn looks for a "+/-" or "round_relative_score" column in the CSV header.
+// Returns the column index if found, or -1 if not found.
+func detectRelativeScoreColumn(records [][]string, nameColIndex int) int {
+	// Look for a header row (usually row 0 or close to it)
+	for i := 0; i < len(records) && i < 3; i++ { // Check first few rows for headers
+		row := records[i]
+		for j, cell := range row {
+			cellLower := strings.ToLower(strings.TrimSpace(cell))
+			if cellLower == "+/-" || cellLower == "round_relative_score" || cellLower == "relative_score" || cellLower == "to_par" {
+				return j
+			}
+		}
+	}
+	return -1
+}
+
+// extractPlayerScoresWithRelative extracts player scores, attempting to use relative score column if available
+func extractPlayerScoresWithRelative(records [][]string, parRowIndex int, nameColIndex int, numHoles int, parScores []int, relativeScoreColIndex int) ([]roundtypes.PlayerScoreRow, error) {
+	var players []roundtypes.PlayerScoreRow
+
+	for i, record := range records {
+		// Skip par row and header rows
+		if i == parRowIndex || i == 0 {
+			continue
+		}
+
+		if len(record) <= nameColIndex {
+			continue
+		}
+
+		// Player name is at the same column index as "Par"
+		playerName := strings.TrimSpace(record[nameColIndex])
+		if playerName == "" {
+			continue
+		}
+
+		// Parse scores
+		if len(record) <= nameColIndex+1 {
+			continue
+		}
+		scores, err := parseScoreRow(record[nameColIndex+1:])
+		if err != nil {
+			// Skip rows that don't look like player rows (e.g. headers)
+			continue
+		}
+
+		// Validate hole count
+		if len(scores) < numHoles {
+			// Allow short hole counts (player didn't play all holes)
+			// but pad with zeros for missing holes
+			for len(scores) < numHoles {
+				scores = append(scores, 0)
+			}
+		} else if len(scores) > numHoles {
+			// If more scores than holes, the last score might be a total
+			// Try to use first numHoles as hole scores
+			scores = scores[:numHoles]
+		}
+
+		// Try to extract relative score from the dedicated column if available
+		total := 0
+		if relativeScoreColIndex != -1 && relativeScoreColIndex < len(record) {
+			relativeScoreStr := strings.TrimSpace(record[relativeScoreColIndex])
+			// Try to parse the relative score directly
+			if relativeScoreStr != "" && relativeScoreStr != "-" && relativeScoreStr != "+" {
+				// Remove leading + if present
+				relativeScoreStr = strings.TrimPrefix(relativeScoreStr, "+")
+				if val, err := strconv.Atoi(relativeScoreStr); err == nil {
+					total = val
+				} else {
+					// Fall back to calculating from holes and par
+					total = calculateRelativeScore(scores, parScores)
+				}
+			} else {
+				// Fall back to calculating from holes and par
+				total = calculateRelativeScore(scores, parScores)
+			}
+		} else {
+			// No relative score column, calculate from holes and par
+			total = calculateRelativeScore(scores, parScores)
+		}
+
+		players = append(players, roundtypes.PlayerScoreRow{
+			PlayerName: playerName,
+			HoleScores: scores,
+			Total:      total,
+		})
+	}
+
+	if len(players) == 0 {
+		return nil, fmt.Errorf("no player score rows found in CSV")
+	}
+
+	return players, nil
+}
+
+// calculateRelativeScore calculates the relative score (to par) from hole scores and par
+func calculateRelativeScore(holeScores []int, parScores []int) int {
+	if len(holeScores) == 0 || len(parScores) == 0 {
+		return 0
+	}
+
+	// Calculate strokes and par
+	totalStrokes := 0
+	for _, s := range holeScores {
+		totalStrokes += s
+	}
+
+	totalPar := 0
+	for _, p := range parScores {
+		totalPar += p
+	}
+
+	// Relative score is strokes - par
+	return totalStrokes - totalPar
 }

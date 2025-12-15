@@ -216,6 +216,17 @@ func parseScoreRowXLSX(row []string) ([]int, error) {
 func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
 	var players []roundtypes.PlayerScoreRow
 
+	// Detect relative score column
+	relativeScoreColIndex := detectRelativeScoreColumnXLSX(rows, nameColIndex)
+
+	// Get par scores if available (from par row)
+	var parScores []int
+	if parRowIndex >= 0 && parRowIndex < len(rows) {
+		if holeStartColIdx >= 0 && holeStartColIdx < len(rows[parRowIndex]) {
+			parScores, _ = parseScoreRowXLSX(rows[parRowIndex][holeStartColIdx:])
+		}
+	}
+
 	for i, row := range rows {
 		if i == parRowIndex {
 			continue
@@ -256,9 +267,31 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 			scores = scores[:numHoles]
 		}
 
+		// Calculate the relative score (total to par)
+		total := 0
+		if relativeScoreColIndex != -1 && relativeScoreColIndex < len(row) {
+			// Try to extract from relative score column
+			relativeScoreStr := strings.TrimSpace(row[relativeScoreColIndex])
+			if relativeScoreStr != "" && relativeScoreStr != "-" {
+				relativeScoreStr = strings.TrimPrefix(relativeScoreStr, "+")
+				if val, err := strconv.Atoi(relativeScoreStr); err == nil {
+					total = val
+				} else {
+					// Fall back to calculating from holes and par
+					total = calculateRelativeScoreXLSX(scores, parScores)
+				}
+			} else {
+				total = calculateRelativeScoreXLSX(scores, parScores)
+			}
+		} else {
+			// No relative score column, calculate from holes and par
+			total = calculateRelativeScoreXLSX(scores, parScores)
+		}
+
 		players = append(players, roundtypes.PlayerScoreRow{
 			PlayerName: playerName,
 			HoleScores: scores,
+			Total:      total,
 		})
 	}
 
@@ -272,4 +305,46 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 // parsePlayerScoresXLSX is a wrapper for extractPlayerScoresXLSX to match the signature used in xlsx_core.go
 func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, parScores []int) ([]roundtypes.PlayerScoreRow, error) {
 	return extractPlayerScoresXLSX(rows, parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, len(parScores))
+}
+
+// detectRelativeScoreColumnXLSX looks for a relative score column ("+/-", "round_relative_score", etc.)
+// in the header row or the first few rows of an XLSX sheet.
+func detectRelativeScoreColumnXLSX(rows [][]string, nameColIndex int) int {
+	// Look for a header row (usually row 0 or close to it)
+	for i := 0; i < len(rows) && i < 3; i++ {
+		row := rows[i]
+		for j, cell := range row {
+			cellLower := strings.ToLower(strings.TrimSpace(cell))
+			if cellLower == "+/-" || cellLower == "round_relative_score" || cellLower == "relative_score" || cellLower == "to_par" {
+				return j
+			}
+		}
+	}
+	return -1
+}
+
+// calculateRelativeScoreXLSX calculates the relative score (to par) from hole scores and par
+func calculateRelativeScoreXLSX(holeScores []int, parScores []int) int {
+	if len(holeScores) == 0 {
+		return 0
+	}
+
+	// Calculate strokes
+	totalStrokes := 0
+	for _, s := range holeScores {
+		totalStrokes += s
+	}
+
+	// Calculate par if available
+	if len(parScores) > 0 {
+		totalPar := 0
+		for _, p := range parScores {
+			totalPar += p
+		}
+		// Relative score is strokes - par
+		return totalStrokes - totalPar
+	}
+
+	// If no par available, return the sum (not ideal, but a fallback)
+	return totalStrokes
 }
