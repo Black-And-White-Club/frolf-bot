@@ -427,22 +427,8 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 					// Create message for CheckAllScoresSubmitted (same as manual entry)
 					updatePayload := participantScorePayload
 
-					// Prepare message with discord_message_id metadata for proper finalization routing
-					msgWithMetadata := msg
-					if completed.EventMessageID != "" {
-						// Create a new message copy with discord_message_id in metadata
-						tempMsg := &message.Message{
-							Metadata: make(message.Metadata),
-						}
-						for key, val := range msg.Metadata {
-							tempMsg.Metadata[key] = val
-						}
-						tempMsg.Metadata.Set("discord_message_id", completed.EventMessageID)
-						msgWithMetadata = tempMsg
-					}
-
 					scoreUpdateMsg, err := h.helpers.CreateResultMessage(
-						msgWithMetadata,
+						msg,
 						updatePayload,
 						roundevents.RoundParticipantScoreUpdated,
 					)

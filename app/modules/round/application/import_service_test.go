@@ -301,7 +301,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 	t.Run("parse csv file", func(t *testing.T) {
 		payload := basePayload
 		payload.FileName = "scores.csv"
-		sample := "Name,1,2,3,Total\nPar,3,3,3,9\nPlayer One,3,4,3,10\n"
+		sample := "Name,1,2,3,+/-\nPar,3,3,3,0\nPlayer One,3,4,3,1\n"
 
 		gomock.InOrder(
 			mockDB.EXPECT().UpdateImportStatus(gomock.Any(), payload.GuildID, payload.RoundID, payload.ImportID, "parsing", "", "").Return(nil),
@@ -315,7 +315,8 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		require.Equal(t, payload.ImportID, parsedPayload.ImportID)
 		require.NotNil(t, parsedPayload.ParsedData)
 		require.Len(t, parsedPayload.ParsedData.PlayerScores, 1)
-		require.Len(t, parsedPayload.ParsedData.ParScores, 4)
+		// Verify the score was extracted from the +/- column
+		require.Equal(t, 1, parsedPayload.ParsedData.PlayerScores[0].Total)
 	})
 
 	t.Run("parse xlsx file", func(t *testing.T) {

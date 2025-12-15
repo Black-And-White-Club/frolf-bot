@@ -54,25 +54,24 @@ func TestCSVParser_Parse(t *testing.T) {
 		wantPlayer int
 	}{
 		{
-			name:       "labeled par row",
-			data:       "Name,1,2,3,4,5,6,7,8,9\nPar,3,4,3,4,3,4,3,4,3\nPlayer One,3,4,3,4,3,4,3,4,3\nPlayer Two,4,4,4,4,4,4,4,4,4",
+			name:       "csv with relative score column",
+			data:       "Name,1,2,3,4,5,6,7,8,9,+/-\nPar,3,4,3,4,3,4,3,4,3,0\nPlayer One,3,4,3,4,3,4,3,4,3,0\nPlayer Two,4,4,4,4,4,4,4,4,4,9",
 			wantPar:    []int{3, 4, 3, 4, 3, 4, 3, 4, 3},
 			wantPlayer: 2,
 		},
 		{
-			name:       "numeric par row",
-			data:       "Name,1,2,3,4,5,6,7,8,9\n3,4,3,4,3,4,3,4,3\nPlayer One,3,4,3,4,3,4,3,4,3",
-			wantPar:    []int{3, 4, 3, 4, 3, 4, 3, 4, 3},
-			wantPlayer: 1,
+			name:    "csv missing +/- column",
+			data:    "Name,1,2,3,4,5,6,7,8,9\nPar,3,4,3,4,3,4,3,4,3\nPlayer One,3,4,3,4,3,4,3,4,3",
+			wantErr: true,
 		},
 		{
-			name:    "invalid par row",
-			data:    "Name,1,2\nPar,3,not-a-number",
+			name:    "invalid relative score",
+			data:    "Name,1,2,+/-\nPar,3,3,0\nPlayer One,3,3,not-a-number",
 			wantErr: true,
 		},
 		{
 			name:    "no players",
-			data:    "Name,1,2,3\nPar,3,3,3",
+			data:    "Name,1,2,+/-\nPar,3,3,0",
 			wantErr: true,
 		},
 	}

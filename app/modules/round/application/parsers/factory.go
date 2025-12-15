@@ -12,7 +12,7 @@ type Parser interface {
 	Parse(data []byte) (*roundtypes.ParsedScorecard, error)
 }
 
-// Factory creates the appropriate parser based on file extension or content
+// Factory creates the appropriate parser based on file extension
 type Factory struct{}
 
 // NewFactory creates a new parser factory
@@ -27,9 +27,7 @@ func (f *Factory) GetParser(filename string) (Parser, error) {
 	switch ext {
 	case ".csv":
 		return NewCSVParser(), nil
-	case ".xlsx":
-		return NewXLSXParser(), nil
-	case ".xls":
+	case ".xlsx", ".xls":
 		return NewXLSXParser(), nil
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
