@@ -401,7 +401,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 					RoundID:        completed.RoundID,
 					Participant:    score.UserID,
 					Score:          score.Score,
-					EventMessageID: "", // Import doesn't have an event message ID
+					EventMessageID: completed.EventMessageID, // Thread the Discord message ID through
 				}
 
 				scoreUpdateMsg, err := h.helpers.CreateResultMessage(

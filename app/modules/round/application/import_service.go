@@ -463,13 +463,14 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "parsed", "", "")
 		return RoundOperationResult{
 			Success: &roundevents.ParsedScorecardPayload{
-				ImportID:   payload.ImportID,
-				GuildID:    payload.GuildID,
-				RoundID:    payload.RoundID,
-				UserID:     payload.UserID,
-				ChannelID:  payload.ChannelID,
-				ParsedData: parsedScorecard,
-				Timestamp:  time.Now().UTC(),
+				ImportID:       payload.ImportID,
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				ParsedData:     parsedScorecard,
+				EventMessageID: payload.MessageID,
+				Timestamp:      time.Now().UTC(),
 			},
 		}, nil
 	})
@@ -685,6 +686,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 				SkippedPlayers:     unmatchedPlayers,
 				AutoAddedUserIDs:   autoAddedUserIDs,
 				Scores:             scores,
+				EventMessageID:     payload.EventMessageID,
 				Timestamp:          time.Now().UTC(),
 			},
 		}, nil
