@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -383,91 +382,51 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 			)
 
 			if len(completed.Scores) == 0 {
-				h.logger.InfoContext(ctx, "Import completed with no scores to process",
+				h.logger.InfoContext(ctx, "Import completed with no scores to ingest",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("import_id", completed.ImportID),
 				)
 				return nil, nil
 			}
 
-			// After import completes, check if all required participants now have scores
-			// This handles the case where the import provides some/all of the needed scores
-			checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, roundevents.ParticipantScoreUpdatedPayload{
-				GuildID: completed.GuildID,
-				RoundID: completed.RoundID,
-			})
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("import_id", completed.ImportID),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
-			}
-
+			// Ingest imported scores as if they were manual entries
+			// Each score update will trigger ParticipantScoreUpdated → CheckAllScoresSubmitted flow
 			outgoingMessages := make([]*message.Message, 0)
 
-			// Handle check result - if all scores are present, proceed to score processing
-			if checkResult.Failure != nil {
-				h.logger.InfoContext(ctx, "All scores check failed after import",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("import_id", completed.ImportID),
-					attr.Any("failure", checkResult.Failure),
-				)
-				// Not all scores submitted yet - just log, don't publish anything
-				return nil, nil
-			}
-
-			if checkResult.Success != nil {
-				if _, ok := checkResult.Success.(*roundevents.AllScoresSubmittedPayload); ok {
-					h.logger.InfoContext(ctx, "All scores submitted after import, proceeding to score processing",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-					)
-
-					// All scores are present - publish to score module for processing
-					processPayload := &scoreevents.ProcessRoundScoresRequestPayload{
-						GuildID:   completed.GuildID,
-						RoundID:   completed.RoundID,
-						Scores:    completed.Scores,
-						Overwrite: true,
-					}
-
-					processMsg, err := h.helpers.CreateResultMessage(
-						msg,
-						processPayload,
-						scoreevents.ProcessRoundScoresRequest,
-					)
-					if err != nil {
-						return nil, fmt.Errorf("failed to create score processing message: %w", err)
-					}
-
-					outgoingMessages = append(outgoingMessages, processMsg)
-
-				} else if notAllScoresData, ok := checkResult.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
-					h.logger.InfoContext(ctx, "Not all scores submitted after import - waiting for remaining entries",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-						attr.Any("not_all_scores", notAllScoresData),
-					)
-					// Not all scores yet - don't proceed to score processing
-					return nil, nil
-
-				} else {
-					h.logger.ErrorContext(ctx, "Unexpected success payload type from CheckAllScoresSubmitted",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-						attr.Any("payload_type", fmt.Sprintf("%T", checkResult.Success)),
-					)
-					return nil, fmt.Errorf("unexpected success payload type: %T", checkResult.Success)
+			for _, score := range completed.Scores {
+				// Create a ParticipantScoreUpdated payload for each imported score
+				// This mimics the normal manual score entry flow
+				updatePayload := &roundevents.ParticipantScoreUpdatedPayload{
+					GuildID:        completed.GuildID,
+					RoundID:        completed.RoundID,
+					Participant:    score.UserID,
+					Score:          score.Score,
+					EventMessageID: "", // Import doesn't have an event message ID
 				}
-			} else {
-				h.logger.ErrorContext(ctx, "Unexpected result from CheckAllScoresSubmitted (neither success nor failure)",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("import_id", completed.ImportID),
+
+				scoreUpdateMsg, err := h.helpers.CreateResultMessage(
+					msg,
+					updatePayload,
+					roundevents.RoundParticipantScoreUpdated,
 				)
-				return nil, fmt.Errorf("unexpected result from service")
+				if err != nil {
+					h.logger.ErrorContext(ctx, "Failed to create participant score updated message for imported score",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.String("user_id", string(score.UserID)),
+						attr.Error(err),
+					)
+					return nil, fmt.Errorf("failed to create score update message: %w", err)
+				}
+
+				outgoingMessages = append(outgoingMessages, scoreUpdateMsg)
 			}
+
+			h.logger.InfoContext(ctx, "Publishing participant score updates for imported scores",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", completed.ImportID),
+				attr.Int("score_count", len(outgoingMessages)),
+			)
 
 			return outgoingMessages, nil
 		},

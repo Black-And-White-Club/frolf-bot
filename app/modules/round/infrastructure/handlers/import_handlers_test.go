@@ -7,7 +7,6 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
@@ -1067,21 +1066,21 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), scoreevents.ProcessRoundScoresRequest).
+				// Expect CreateResultMessage to be called for each imported score
+				// This should publish ParticipantScoreUpdated events that flow through the normal handler
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).
 					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
-						req, ok := payload.(*scoreevents.ProcessRoundScoresRequestPayload)
+						scorePayload, ok := payload.(*roundevents.ParticipantScoreUpdatedPayload)
 						require.True(t, ok)
-						require.Equal(t, testGuildID, req.GuildID)
-						require.Equal(t, testRoundID, req.RoundID)
-						require.True(t, req.Overwrite)
-						require.Len(t, req.Scores, 1)
-						require.Equal(t, sharedtypes.DiscordID("u1"), req.Scores[0].UserID)
-						require.Equal(t, sharedtypes.Score(6), req.Scores[0].Score)
-						return message.NewMessage("result-id", nil), nil
+						require.Equal(t, testGuildID, scorePayload.GuildID)
+						require.Equal(t, testRoundID, scorePayload.RoundID)
+						require.Equal(t, sharedtypes.DiscordID("u1"), scorePayload.Participant)
+						require.Equal(t, sharedtypes.Score(6), scorePayload.Score)
+						return message.NewMessage("score-update-id", nil), nil
 					})
 			},
 			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("result-id", nil)},
+			want:    []*message.Message{message.NewMessage("score-update-id", nil)},
 			wantErr: false,
 		},
 		{
@@ -1118,14 +1117,14 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), scoreevents.ProcessRoundScoresRequest).Return(
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Return(
 					nil, fmt.Errorf("create message error"),
 				)
 			},
 			msg:            withScoresMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create score processing message: create message error",
+			expectedErrMsg: "failed to create score update message: create message error",
 		},
 	}
 
