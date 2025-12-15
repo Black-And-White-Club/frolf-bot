@@ -12,9 +12,25 @@ type Parser interface {
 	Parse(fileData []byte, fileName string) (*roundtypes.ParsedScorecard, error)
 }
 
-// PlayerScore represents a player's scores from a scorecard.
+// ScoreFormat indicates whether we have relative scores or hole-by-hole
+type ScoreFormat int
+
+const (
+	FormatUnknown    ScoreFormat = iota
+	FormatRelative               // UDisc format with relative scores
+	FormatHoleByHole             // Legacy format with individual hole scores
+)
+
+// ParsedScorecard represents the result with explicit format indication
+type ParsedScorecardInternal struct {
+	Format       ScoreFormat
+	PlayerScores []PlayerScore
+	ParScores    []int
+}
+
 type PlayerScore struct {
-	PlayerName string
-	HoleScores []int
-	Total      int
+	PlayerName    string
+	RelativeScore *int  // Pointer so we can tell if it's set
+	HoleScores    []int // Empty if format is relative-only
+	Total         int
 }
