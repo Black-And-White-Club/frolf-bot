@@ -532,8 +532,6 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		playersAutoAdded := 0
 		autoAddedUserIDs := make([]sharedtypes.DiscordID, 0)
 
-		parScores := payload.ParsedData.ParScores
-
 		// Match players and collect scores. Unmatched players are skipped (not an error).
 		for _, player := range payload.ParsedData.PlayerScores {
 			normalized := normalizeName(player.PlayerName)
@@ -563,41 +561,19 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 				continue
 			}
 
-			// The score module expects scores as relative-to-par (not raw stroke totals).
-			// Compute total strokes and par for the holes the player actually played.
-			totalStrokes := player.Total
-			parForPlayer := 0
-			var scoreToPar int
+			// CRITICAL: parser.Total is ALREADY the relative score (+/- from par)
+			// The parsers extract this from the "+/-" (CSV) or "round_relative_score" (XLSX) columns
+			// We do NOT need to recalculate it from hole-by-hole data
+			scoreToPar := player.Total
 
-			// If we have hole-by-hole data, calculate relative score from strokes
-			if len(player.HoleScores) > 1 {
-				// Multiple hole scores means we have per-hole data
-				sumStrokes := 0
-				for i, strokes := range player.HoleScores {
-					if strokes <= 0 {
-						// Treat 0/negative as "not played / missing".
-						continue
-					}
-					sumStrokes += strokes
-					if i >= 0 && i < len(parScores) {
-						parForPlayer += parScores[i]
-					}
-				}
-				if totalStrokes == 0 {
-					totalStrokes = sumStrokes
-				}
-				scoreToPar = totalStrokes - parForPlayer
-			} else if len(player.HoleScores) == 1 {
-				// Single hole score means parser provided relative score directly (UDisc format)
-				scoreToPar = player.HoleScores[0]
-			} else if totalStrokes > 0 {
-				// No per-hole data; fall back to total and assume full par.
-				for _, p := range parScores {
-					parForPlayer += p
-				}
-				scoreToPar = totalStrokes - parForPlayer
-			} else {
-				scoreToPar = 0
+			// Log the hole-by-hole data for debugging/validation if present
+			if len(player.HoleScores) > 0 {
+				s.logger.DebugContext(ctx, "Player hole scores (for logging only)",
+					attr.String("import_id", payload.ImportID),
+					attr.String("player_name", player.PlayerName),
+					attr.Int("relative_score", scoreToPar),
+					attr.Any("hole_scores", player.HoleScores),
+				)
 			}
 
 			var tagNumber *sharedtypes.TagNumber

@@ -434,7 +434,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
-		player := roundtypes.PlayerScoreRow{PlayerName: "Matched One", HoleScores: []int{3, 3}, Total: 6}
+		player := roundtypes.PlayerScoreRow{PlayerName: "Matched One", HoleScores: []int{3, 3}, Total: 0}
 		payload := roundevents.ParsedScorecardPayload{
 			GuildID:   sharedtypes.GuildID("guild-1"),
 			RoundID:   sharedtypes.RoundID(uuid.New()),
@@ -478,7 +478,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
-		player := roundtypes.PlayerScoreRow{PlayerName: "Auto Add", HoleScores: []int{2, 2}, Total: 4}
+		player := roundtypes.PlayerScoreRow{PlayerName: "Auto Add", HoleScores: []int{2, 2}, Total: -2}
 		payload := roundevents.ParsedScorecardPayload{
 			GuildID:   sharedtypes.GuildID("guild-1"),
 			RoundID:   sharedtypes.RoundID(uuid.New()),
