@@ -378,6 +378,8 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.String("import_id", completed.ImportID),
 				attr.String("guild_id", string(completed.GuildID)),
 				attr.String("round_id", completed.RoundID.String()),
+				attr.Int("matched_players", completed.MatchedPlayers),
+				attr.Int("auto_added_players", completed.PlayersAutoAdded),
 			)
 
 			if len(completed.Scores) == 0 {
@@ -388,23 +390,86 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				return nil, nil
 			}
 
-			processPayload := &scoreevents.ProcessRoundScoresRequestPayload{
-				GuildID:   completed.GuildID,
-				RoundID:   completed.RoundID,
-				Scores:    completed.Scores,
-				Overwrite: true,
-			}
-
-			processMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				processPayload,
-				scoreevents.ProcessRoundScoresRequest,
-			)
+			// After import completes, check if all required participants now have scores
+			// This handles the case where the import provides some/all of the needed scores
+			checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, roundevents.ParticipantScoreUpdatedPayload{
+				GuildID: completed.GuildID,
+				RoundID: completed.RoundID,
+			})
 			if err != nil {
-				return nil, fmt.Errorf("failed to create score processing message: %w", err)
+				h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
 			}
 
-			return []*message.Message{processMsg}, nil
+			outgoingMessages := make([]*message.Message, 0)
+
+			// Handle check result - if all scores are present, proceed to score processing
+			if checkResult.Failure != nil {
+				h.logger.InfoContext(ctx, "All scores check failed after import",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+					attr.Any("failure", checkResult.Failure),
+				)
+				// Not all scores submitted yet - just log, don't publish anything
+				return nil, nil
+			}
+
+			if checkResult.Success != nil {
+				if _, ok := checkResult.Success.(*roundevents.AllScoresSubmittedPayload); ok {
+					h.logger.InfoContext(ctx, "All scores submitted after import, proceeding to score processing",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+					)
+
+					// All scores are present - publish to score module for processing
+					processPayload := &scoreevents.ProcessRoundScoresRequestPayload{
+						GuildID:   completed.GuildID,
+						RoundID:   completed.RoundID,
+						Scores:    completed.Scores,
+						Overwrite: true,
+					}
+
+					processMsg, err := h.helpers.CreateResultMessage(
+						msg,
+						processPayload,
+						scoreevents.ProcessRoundScoresRequest,
+					)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create score processing message: %w", err)
+					}
+
+					outgoingMessages = append(outgoingMessages, processMsg)
+
+				} else if notAllScoresData, ok := checkResult.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
+					h.logger.InfoContext(ctx, "Not all scores submitted after import - waiting for remaining entries",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.Any("not_all_scores", notAllScoresData),
+					)
+					// Not all scores yet - don't proceed to score processing
+					return nil, nil
+
+				} else {
+					h.logger.ErrorContext(ctx, "Unexpected success payload type from CheckAllScoresSubmitted",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.Any("payload_type", fmt.Sprintf("%T", checkResult.Success)),
+					)
+					return nil, fmt.Errorf("unexpected success payload type: %T", checkResult.Success)
+				}
+			} else {
+				h.logger.ErrorContext(ctx, "Unexpected result from CheckAllScoresSubmitted (neither success nor failure)",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+				)
+				return nil, fmt.Errorf("unexpected result from service")
+			}
+
+			return outgoingMessages, nil
 		},
 	)
 
