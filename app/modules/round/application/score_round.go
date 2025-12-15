@@ -203,6 +203,10 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 				}, nil
 			}
 
+			// Use the updated participants (which we've verified have scores)
+			// instead of whatever participants are in the database
+			round.Participants = updatedParticipants
+
 			return RoundOperationResult{
 				Success: &roundevents.AllScoresSubmittedPayload{
 					GuildID:        payload.GuildID,
