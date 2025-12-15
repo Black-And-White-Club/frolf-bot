@@ -37,7 +37,6 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		Participants: []roundtypes.Participant{},
 	}
 	dbUpdateError := errors.New("db update failed")
-	dbGetError := errors.New("db get failed")
 
 	tests := []struct {
 		name                    string
@@ -53,7 +52,6 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(testFinalizedRound, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -61,12 +59,14 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
 			},
 			payload: roundevents.AllScoresSubmittedPayload{
-				RoundID: testRoundID,
-				GuildID: sharedtypes.GuildID("guild-123"),
+				RoundID:   testRoundID,
+				GuildID:   sharedtypes.GuildID("guild-123"),
+				RoundData: *testFinalizedRound,
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.RoundFinalizedPayload{
 					RoundID:   testRoundID,
+					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundData: *testFinalizedRound,
 				},
 			},
@@ -91,30 +91,6 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				Failure: &roundevents.RoundFinalizationErrorPayload{
 					RoundID: testRoundID,
 					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
-				},
-			},
-			expectedError: nil, // Service returns failure payload with nil error
-		},
-		{
-			name: "failure fetching round after update",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(nil, dbGetError)
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				// No expectations for the RoundValidator
-			},
-			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
-			},
-			payload: roundevents.AllScoresSubmittedPayload{
-				RoundID: testRoundID,
-				GuildID: sharedtypes.GuildID("guild-123"),
-			},
-			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayload{
-					RoundID: testRoundID,
-					Error:   fmt.Sprintf("failed to fetch round data: %v", dbGetError),
 				},
 			},
 			expectedError: nil, // Service returns failure payload with nil error

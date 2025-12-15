@@ -31,25 +31,15 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
-		// Fetch the finalized round data
-		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
-		if err != nil {
-			s.metrics.RecordDBOperationError(ctx, "get_round")
-			failurePayload := roundevents.RoundFinalizationErrorPayload{
-				RoundID: payload.RoundID,
-				Error:   fmt.Sprintf("failed to fetch round data: %v", err),
-			}
-			s.logger.ErrorContext(ctx, "Failed to fetch round data after finalization",
-				attr.StringUUID("round_id", payload.RoundID.String()),
-				attr.Error(err),
-			)
-			return RoundOperationResult{Failure: &failurePayload}, nil
-		}
+		// Use the round data from the payload which contains verified participants with scores
+		// Do NOT fetch fresh from database as it would lose the verified participant data
+		roundData := payload.RoundData
 
 		// Prepare the success payload with round data
 		finalizedPayload := roundevents.RoundFinalizedPayload{
+			GuildID:   payload.GuildID,
 			RoundID:   payload.RoundID,
-			RoundData: *round,
+			RoundData: roundData,
 		}
 		s.logger.InfoContext(ctx, "Round state updated to finalized successfully",
 			attr.StringUUID("round_id", payload.RoundID.String()),
@@ -63,7 +53,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Use the round data directly from the payload
-		// The payload.RoundData is populated by FinalizeRound which fetches fresh data from the database
+		// The payload.RoundData is populated by AllScoresSubmittedPayload which has verified participants with scores
 		round := payload.RoundData
 
 		// Prepare the participant score data for the Score Module
