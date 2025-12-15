@@ -1055,8 +1055,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				// Expect CreateResultMessage to be called for each imported score
-				// This should publish ParticipantScoreUpdated events that flow through the normal handler
+				// Expect CreateResultMessage to be called for the imported score update
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).
 					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
 						scorePayload, ok := payload.(*roundevents.ParticipantScoreUpdatedPayload)
@@ -1067,9 +1066,41 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 						require.Equal(t, sharedtypes.Score(6), scorePayload.Score)
 						return message.NewMessage("score-update-id", nil), nil
 					})
+
+				// Expect CheckAllScoresSubmitted to be called after all scores are imported
+				mockRoundService.EXPECT().CheckAllScoresSubmitted(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (roundservice.RoundOperationResult, error) {
+						require.Equal(t, testGuildID, payload.GuildID)
+						require.Equal(t, testRoundID, payload.RoundID)
+
+						// Return AllScoresSubmittedPayload to trigger finalization
+						return roundservice.RoundOperationResult{
+							Success: &roundevents.AllScoresSubmittedPayload{
+								GuildID: testGuildID,
+								RoundID: testRoundID,
+								RoundData: roundtypes.Round{
+									ID:           testRoundID,
+									State:        roundtypes.RoundStateInProgress,
+									Participants: []roundtypes.Participant{},
+								},
+								Participants: []roundtypes.Participant{},
+							},
+						}, nil
+					},
+				)
+
+				// Expect CreateResultMessage to be called for the finalization payload
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundAllScoresSubmitted).
+					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
+						allScoresPayload, ok := payload.(*roundevents.AllScoresSubmittedPayload)
+						require.True(t, ok)
+						require.Equal(t, testGuildID, allScoresPayload.GuildID)
+						require.Equal(t, testRoundID, allScoresPayload.RoundID)
+						return message.NewMessage("finalization-id", nil), nil
+					})
 			},
 			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("score-update-id", nil)},
+			want:    []*message.Message{message.NewMessage("score-update-id", nil), message.NewMessage("finalization-id", nil)},
 			wantErr: false,
 		},
 		{

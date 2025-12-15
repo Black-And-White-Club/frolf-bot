@@ -460,6 +460,63 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.Int("score_count", len(outgoingMessages)),
 			)
 
+			// After all scores are imported, check if all scores have been submitted
+			// This will trigger round finalization if all participants have scores
+			if len(completed.Scores) > 0 {
+				// Use the last score to check all scores submitted
+				lastScore := completed.Scores[len(completed.Scores)-1]
+				checkPayload := roundevents.ParticipantScoreUpdatedPayload{
+					GuildID:        completed.GuildID,
+					RoundID:        completed.RoundID,
+					EventMessageID: completed.EventMessageID,
+					Participant:    lastScore.UserID,
+					Score:          lastScore.Score,
+				}
+
+				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, checkPayload)
+				if err != nil {
+					h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.Error(err),
+					)
+					return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
+				}
+
+				if checkResult.Success != nil {
+					// CheckAllScoresSubmitted returns AllScoresSubmittedPayload
+					allScoresPayload := checkResult.Success.(*roundevents.AllScoresSubmittedPayload)
+
+					// Create message for round finalization
+					msgWithMetadata := msg
+					if completed.EventMessageID != "" {
+						msg.Metadata.Set("discord_message_id", completed.EventMessageID)
+						msgWithMetadata = msg
+					}
+
+					finalizationMsg, err := h.helpers.CreateResultMessage(
+						msgWithMetadata,
+						allScoresPayload,
+						roundevents.RoundAllScoresSubmitted,
+					)
+					if err != nil {
+						h.logger.ErrorContext(ctx, "Failed to create all scores submitted message after import",
+							attr.CorrelationIDFromMsg(msg),
+							attr.String("import_id", completed.ImportID),
+							attr.Error(err),
+						)
+						return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
+					}
+
+					outgoingMessages = append(outgoingMessages, finalizationMsg)
+					h.logger.InfoContext(ctx, "All scores submitted after import - round finalization triggered",
+						attr.CorrelationIDFromMsg(msg),
+						attr.String("import_id", completed.ImportID),
+						attr.StringUUID("round_id", completed.RoundID.String()),
+					)
+				}
+			}
+
 			return outgoingMessages, nil
 		},
 	)
