@@ -553,15 +553,12 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedTopic).Return(
-					message.NewMessage("result-id", nil), nil,
-				)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedForUserTopic).Return(
 					message.NewMessage("result-id-user", nil), nil,
 				)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("result-id", nil), message.NewMessage("result-id-user", nil)},
+			want:    []*message.Message{message.NewMessage("result-id-user", nil)},
 			wantErr: false,
 		},
 		{
@@ -656,7 +653,7 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 			expectedErrMsg: "failed to create failure message: create message error",
 		},
 		{
-			name: "Handle ParseScorecard success result but ingest CreateResultMessage fails",
+			name: "Handle ParseScorecard success result but CreateResultMessage fails",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -676,39 +673,6 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedTopic).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create parsed scorecard ingest message: create message error",
-		},
-		{
-			name: "Handle ParseScorecard success result but user CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ParsedScorecardPayload{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedTopic).Return(
-					message.NewMessage("result-id", nil), nil,
-				)
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedForUserTopic).Return(
 					nil, fmt.Errorf("create message error"),
 				)
