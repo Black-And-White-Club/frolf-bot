@@ -1,6 +1,7 @@
 package roundhandlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
@@ -1030,6 +1032,29 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
+				// Expect UpdateParticipantScore to be called (persists score to DB)
+				testScore := sharedtypes.Score(6)
+				mockRoundService.EXPECT().UpdateParticipantScore(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
+						require.Equal(t, testGuildID, payload.GuildID)
+						require.Equal(t, testRoundID, payload.ScoreUpdateRequestPayload.RoundID)
+						require.Equal(t, sharedtypes.DiscordID("u1"), payload.ScoreUpdateRequestPayload.Participant)
+						require.Equal(t, &testScore, payload.ScoreUpdateRequestPayload.Score)
+
+						// Return a ParticipantScoreUpdatedPayload
+						return roundservice.RoundOperationResult{
+							Success: &roundevents.ParticipantScoreUpdatedPayload{
+								GuildID:        testGuildID,
+								RoundID:        testRoundID,
+								Participant:    sharedtypes.DiscordID("u1"),
+								Score:          testScore,
+								EventMessageID: "",
+								Participants:   []roundtypes.Participant{},
+							},
+						}, nil
+					},
+				)
+
 				// Expect CreateResultMessage to be called for each imported score
 				// This should publish ParticipantScoreUpdated events that flow through the normal handler
 				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).
@@ -1072,7 +1097,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
 		},
 		{
-			name: "Handle CreateResultMessage error",
+			name: "Handle UpdateParticipantScore error",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -1081,14 +1106,15 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Return(
-					nil, fmt.Errorf("create message error"),
+				// Expect UpdateParticipantScore to fail
+				mockRoundService.EXPECT().UpdateParticipantScore(gomock.Any(), gomock.Any()).Return(
+					roundservice.RoundOperationResult{}, fmt.Errorf("update score error"),
 				)
 			},
 			msg:            withScoresMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to create score update message: create message error",
+			expectedErrMsg: "failed to update imported score: update score error",
 		},
 	}
 
