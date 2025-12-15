@@ -383,7 +383,6 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 			// This ensures all scores are persisted and finalization check is triggered properly
 			outgoingMessages := make([]*message.Message, 0)
 
-			var lastParticipantScorePayload *roundevents.ParticipantScoreUpdatedPayload
 			for _, score := range completed.Scores {
 				// Build a ScoreUpdateValidatedPayload and call UpdateParticipantScore
 				// This follows the exact same path as manual score entry
@@ -425,9 +424,6 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 					// Override the EventMessageID with the import's message ID
 					participantScorePayload.EventMessageID = completed.EventMessageID
 
-					// Track the last payload for use in CheckAllScoresSubmitted
-					lastParticipantScorePayload = participantScorePayload
-
 					// Create message for score update (same as manual entry)
 					updatePayload := participantScorePayload
 
@@ -464,53 +460,10 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.Int("score_count", len(outgoingMessages)),
 			)
 
-			// After all scores are imported, check if all scores have been submitted
-			// This will trigger round finalization if all participants have scores
-			if len(completed.Scores) > 0 && lastParticipantScorePayload != nil {
-				// Use the last participant score payload which has the updated participants list
-				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, *lastParticipantScorePayload)
-				if err != nil {
-					h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-						attr.Error(err),
-					)
-					return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
-				}
-
-				if checkResult.Success != nil {
-					// CheckAllScoresSubmitted returns AllScoresSubmittedPayload
-					allScoresPayload := checkResult.Success.(*roundevents.AllScoresSubmittedPayload)
-
-					// Create message for round finalization
-					msgWithMetadata := msg
-					if completed.EventMessageID != "" {
-						msg.Metadata.Set("discord_message_id", completed.EventMessageID)
-						msgWithMetadata = msg
-					}
-
-					finalizationMsg, err := h.helpers.CreateResultMessage(
-						msgWithMetadata,
-						allScoresPayload,
-						roundevents.RoundAllScoresSubmitted,
-					)
-					if err != nil {
-						h.logger.ErrorContext(ctx, "Failed to create all scores submitted message after import",
-							attr.CorrelationIDFromMsg(msg),
-							attr.String("import_id", completed.ImportID),
-							attr.Error(err),
-						)
-						return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
-					}
-
-					outgoingMessages = append(outgoingMessages, finalizationMsg)
-					h.logger.InfoContext(ctx, "All scores submitted after import - round finalization triggered",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-						attr.StringUUID("round_id", completed.RoundID.String()),
-					)
-				}
-			}
+			// NOTE: We intentionally do NOT call CheckAllScoresSubmitted directly here.
+			// Instead, we let the RoundParticipantScoreUpdated messages be routed by the event bus
+			// to HandleParticipantScoreUpdated, which will call CheckAllScoresSubmitted.
+			// This ensures the same flow as manual score entry and allows proper event sequencing.
 
 			return outgoingMessages, nil
 		},

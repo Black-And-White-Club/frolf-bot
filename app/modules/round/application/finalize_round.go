@@ -31,15 +31,26 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 			return RoundOperationResult{Failure: &failurePayload}, nil
 		}
 
-		// Use the round data from the payload which contains verified participants with scores
-		// Do NOT fetch fresh from database as it would lose the verified participant data
-		roundData := payload.RoundData
+		// Fetch the finalized round data from the database to get the current state
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
+		if err != nil {
+			s.metrics.RecordDBOperationError(ctx, "get_round")
+			failurePayload := roundevents.RoundFinalizationErrorPayload{
+				RoundID: payload.RoundID,
+				Error:   fmt.Sprintf("failed to fetch round data: %v", err),
+			}
+			s.logger.ErrorContext(ctx, "Failed to fetch round data after finalization",
+				attr.StringUUID("round_id", payload.RoundID.String()),
+				attr.Error(err),
+			)
+			return RoundOperationResult{Failure: &failurePayload}, nil
+		}
 
 		// Prepare the success payload with round data
 		finalizedPayload := roundevents.RoundFinalizedPayload{
 			GuildID:   payload.GuildID,
 			RoundID:   payload.RoundID,
-			RoundData: roundData,
+			RoundData: *round,
 		}
 		s.logger.InfoContext(ctx, "Round state updated to finalized successfully",
 			attr.StringUUID("round_id", payload.RoundID.String()),

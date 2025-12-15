@@ -52,6 +52,8 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				// Expect GetRound to be called to fetch fresh data after state update
+				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(testFinalizedRound, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
