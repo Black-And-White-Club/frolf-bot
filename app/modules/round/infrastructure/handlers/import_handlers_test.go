@@ -1066,10 +1066,6 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 						require.Equal(t, sharedtypes.Score(6), scorePayload.Score)
 						return message.NewMessage("score-update-id", nil), nil
 					})
-
-				// NOTE: CheckAllScoresSubmitted is NOT called directly in the import handler anymore.
-				// It follows EDA pattern: the RoundParticipantScoreUpdated message is published and routed
-				// to HandleParticipantScoreUpdated handler, which will call CheckAllScoresSubmitted.
 			},
 			msg:     withScoresMsg,
 			want:    []*message.Message{message.NewMessage("score-update-id", nil)},

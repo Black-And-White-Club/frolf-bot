@@ -379,13 +379,10 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				return nil, nil
 			}
 
-			// Process imported scores the same way as manual entries: UpdateParticipantScore → CheckAllScoresSubmitted
-			// This ensures all scores are persisted and finalization check is triggered properly
 			outgoingMessages := make([]*message.Message, 0)
 
+			// For each imported score, call UpdateParticipantScore (same as manual entry)
 			for _, score := range completed.Scores {
-				// Build a ScoreUpdateValidatedPayload and call UpdateParticipantScore
-				// This follows the exact same path as manual score entry
 				validatedPayload := roundevents.ScoreUpdateValidatedPayload{
 					GuildID: completed.GuildID,
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
@@ -396,7 +393,6 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 					},
 				}
 
-				// Call UpdateParticipantScore (this saves to DB and returns ParticipantScoreUpdatedPayload)
 				result, err := h.roundService.UpdateParticipantScore(ctx, validatedPayload)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to update participant score from import",
@@ -419,25 +415,19 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				}
 
 				if result.Success != nil {
-					// UpdateParticipantScore returns ParticipantScoreUpdatedPayload
 					participantScorePayload := result.Success.(*roundevents.ParticipantScoreUpdatedPayload)
-					// Override the EventMessageID with the import's message ID
 					participantScorePayload.EventMessageID = completed.EventMessageID
 
-					// Create message for score update (same as manual entry)
-					updatePayload := participantScorePayload
-
-					// Ensure discord_message_id is in metadata for proper routing through the pipeline
 					msgWithMetadata := msg
 					if completed.EventMessageID != "" {
-						// Add discord_message_id to the incoming message's metadata
 						msg.Metadata.Set("discord_message_id", completed.EventMessageID)
 						msgWithMetadata = msg
 					}
 
+					// Publish RoundParticipantScoreUpdated - same as manual entry
 					scoreUpdateMsg, err := h.helpers.CreateResultMessage(
 						msgWithMetadata,
-						updatePayload,
+						participantScorePayload,
 						roundevents.RoundParticipantScoreUpdated,
 					)
 					if err != nil {
@@ -459,11 +449,6 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.String("import_id", completed.ImportID),
 				attr.Int("score_count", len(outgoingMessages)),
 			)
-
-			// NOTE: We intentionally do NOT call CheckAllScoresSubmitted directly here.
-			// Instead, we let the RoundParticipantScoreUpdated messages be routed by the event bus
-			// to HandleParticipantScoreUpdated, which will call CheckAllScoresSubmitted.
-			// This ensures the same flow as manual score entry and allows proper event sequencing.
 
 			return outgoingMessages, nil
 		},
