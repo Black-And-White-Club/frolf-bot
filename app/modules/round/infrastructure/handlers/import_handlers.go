@@ -383,6 +383,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 			// This ensures all scores are persisted and finalization check is triggered properly
 			outgoingMessages := make([]*message.Message, 0)
 
+			var lastParticipantScorePayload *roundevents.ParticipantScoreUpdatedPayload
 			for _, score := range completed.Scores {
 				// Build a ScoreUpdateValidatedPayload and call UpdateParticipantScore
 				// This follows the exact same path as manual score entry
@@ -424,7 +425,10 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 					// Override the EventMessageID with the import's message ID
 					participantScorePayload.EventMessageID = completed.EventMessageID
 
-					// Create message for CheckAllScoresSubmitted (same as manual entry)
+					// Track the last payload for use in CheckAllScoresSubmitted
+					lastParticipantScorePayload = participantScorePayload
+
+					// Create message for score update (same as manual entry)
 					updatePayload := participantScorePayload
 
 					// Ensure discord_message_id is in metadata for proper routing through the pipeline
@@ -462,18 +466,9 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 
 			// After all scores are imported, check if all scores have been submitted
 			// This will trigger round finalization if all participants have scores
-			if len(completed.Scores) > 0 {
-				// Use the last score to check all scores submitted
-				lastScore := completed.Scores[len(completed.Scores)-1]
-				checkPayload := roundevents.ParticipantScoreUpdatedPayload{
-					GuildID:        completed.GuildID,
-					RoundID:        completed.RoundID,
-					EventMessageID: completed.EventMessageID,
-					Participant:    lastScore.UserID,
-					Score:          lastScore.Score,
-				}
-
-				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, checkPayload)
+			if len(completed.Scores) > 0 && lastParticipantScorePayload != nil {
+				// Use the last participant score payload which has the updated participants list
+				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, *lastParticipantScorePayload)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
 						attr.CorrelationIDFromMsg(msg),
