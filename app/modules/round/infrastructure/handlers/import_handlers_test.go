@@ -1066,46 +1066,9 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 						require.Equal(t, sharedtypes.Score(6), scorePayload.Score)
 						return message.NewMessage("score-update-id", nil), nil
 					})
-
-				// After all scores are imported, CheckAllScoresSubmitted is called
-				mockRoundService.EXPECT().CheckAllScoresSubmitted(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (roundservice.RoundOperationResult, error) {
-						require.Equal(t, testGuildID, payload.GuildID)
-						require.Equal(t, testRoundID, payload.RoundID)
-
-						// Return AllScoresSubmittedPayload since all scores are now submitted
-						return roundservice.RoundOperationResult{
-							Success: &roundevents.AllScoresSubmittedPayload{
-								GuildID:        testGuildID,
-								RoundID:        testRoundID,
-								EventMessageID: "",
-								RoundData: roundtypes.Round{
-									ID:    testRoundID,
-									Title: "Test Round",
-								},
-								Participants: []roundtypes.Participant{
-									{
-										UserID: sharedtypes.DiscordID("u1"),
-										Score:  &testScore,
-									},
-								},
-							},
-						}, nil
-					},
-				)
-
-				// Expect CreateResultMessage to be called for the finalization message
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundAllScoresSubmitted).
-					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
-						finalizationPayload, ok := payload.(*roundevents.AllScoresSubmittedPayload)
-						require.True(t, ok)
-						require.Equal(t, testGuildID, finalizationPayload.GuildID)
-						require.Equal(t, testRoundID, finalizationPayload.RoundID)
-						return message.NewMessage("finalization-id", nil), nil
-					})
 			},
 			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("score-update-id", nil), message.NewMessage("finalization-id", nil)},
+			want:    []*message.Message{message.NewMessage("score-update-id", nil)},
 			wantErr: false,
 		},
 		{
@@ -1150,7 +1113,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			msg:            withScoresMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to update imported score: update score error",
+			expectedErrMsg: "all score updates failed during import",
 		},
 	}
 

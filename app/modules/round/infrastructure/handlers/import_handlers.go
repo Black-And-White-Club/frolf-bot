@@ -8,6 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -369,6 +370,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				attr.String("round_id", completed.RoundID.String()),
 				attr.Int("matched_players", completed.MatchedPlayers),
 				attr.Int("auto_added_players", completed.PlayersAutoAdded),
+				attr.Int("scores_to_import", len(completed.Scores)),
 			)
 
 			if len(completed.Scores) == 0 {
@@ -379,10 +381,12 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				return nil, nil
 			}
 
-			outgoingMessages := make([]*message.Message, 0)
+			// BATCH UPDATE: Save all scores to DB first WITHOUT publishing individual events
+			// This prevents race conditions and ensures atomic import
+			successCount := 0
+			failedScores := make([]string, 0)
 
-			// For each imported score, call UpdateParticipantScore (same as manual entry)
-			for _, score := range completed.Scores {
+			for i, score := range completed.Scores {
 				validatedPayload := roundevents.ScoreUpdateValidatedPayload{
 					GuildID: completed.GuildID,
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
@@ -399,118 +403,114 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 						attr.CorrelationIDFromMsg(msg),
 						attr.String("import_id", completed.ImportID),
 						attr.String("user_id", string(score.UserID)),
+						attr.Int("score_index", i),
 						attr.Error(err),
 					)
-					return nil, fmt.Errorf("failed to update imported score: %w", err)
+					failedScores = append(failedScores, string(score.UserID))
+					continue
 				}
 
 				if result.Failure != nil {
-					h.logger.ErrorContext(ctx, "Score update failed for imported score",
+					h.logger.WarnContext(ctx, "Score update failed for imported score",
 						attr.CorrelationIDFromMsg(msg),
 						attr.String("import_id", completed.ImportID),
 						attr.String("user_id", string(score.UserID)),
+						attr.Int("score_index", i),
 						attr.Any("failure", result.Failure),
 					)
-					return nil, fmt.Errorf("score update failed for imported score")
+					failedScores = append(failedScores, string(score.UserID))
+					continue
 				}
 
-				if result.Success != nil {
-					participantScorePayload := result.Success.(*roundevents.ParticipantScoreUpdatedPayload)
-					participantScorePayload.EventMessageID = completed.EventMessageID
-
-					msgWithMetadata := msg
-					if completed.EventMessageID != "" {
-						msg.Metadata.Set("discord_message_id", completed.EventMessageID)
-						msgWithMetadata = msg
-					}
-
-					// Publish RoundParticipantScoreUpdated - same as manual entry
-					scoreUpdateMsg, err := h.helpers.CreateResultMessage(
-						msgWithMetadata,
-						participantScorePayload,
-						roundevents.RoundParticipantScoreUpdated,
-					)
-					if err != nil {
-						h.logger.ErrorContext(ctx, "Failed to create participant score updated message for imported score",
-							attr.CorrelationIDFromMsg(msg),
-							attr.String("import_id", completed.ImportID),
-							attr.String("user_id", string(score.UserID)),
-							attr.Error(err),
-						)
-						return nil, fmt.Errorf("failed to create score update message: %w", err)
-					}
-
-					outgoingMessages = append(outgoingMessages, scoreUpdateMsg)
-				}
+				successCount++
 			}
 
-			h.logger.InfoContext(ctx, "Publishing participant score updates for imported scores",
+			h.logger.InfoContext(ctx, "Batch import completed",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("import_id", completed.ImportID),
-				attr.Int("score_count", len(outgoingMessages)),
+				attr.Int("successful_updates", successCount),
+				attr.Int("failed_updates", len(failedScores)),
+				attr.Int("total_scores", len(completed.Scores)),
 			)
 
-			// Import is batch - all scores are persisted at this point
-			// Check if all scores have been submitted and handle finalization if needed
-			// Use the first score's payload to get guild/round IDs (all same for this import)
-			if len(completed.Scores) > 0 {
-				firstScore := completed.Scores[0]
-				checkPayload := roundevents.ParticipantScoreUpdatedPayload{
-					GuildID:        completed.GuildID,
-					RoundID:        completed.RoundID,
-					Participant:    firstScore.UserID,
-					EventMessageID: completed.EventMessageID,
-				}
+			// If all scores failed, return error
+			if successCount == 0 {
+				h.logger.ErrorContext(ctx, "All score updates failed during import",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+				)
+				return nil, fmt.Errorf("all score updates failed during import")
+			}
 
-				checkResult, err := h.roundService.CheckAllScoresSubmitted(ctx, checkPayload)
-				if err != nil {
-					h.logger.ErrorContext(ctx, "Failed to check if all scores submitted after import",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-						attr.Error(err),
-					)
-					return nil, fmt.Errorf("failed to check all scores submitted: %w", err)
-				}
+			// NOW: Trigger the normal score update flow by publishing ONE event for the last successful score
+			// This will flow through HandleParticipantScoreUpdated -> CheckAllScoresSubmitted
+			// Just like manual score entry does
 
-				if checkResult.Failure != nil {
-					h.logger.ErrorContext(ctx, "All scores check failed for import",
-						attr.CorrelationIDFromMsg(msg),
-						attr.String("import_id", completed.ImportID),
-					)
-					// Don't fail the entire import if the check fails - log and continue
-				}
-
-				if checkResult.Success != nil {
-					if allScoresData, ok := checkResult.Success.(*roundevents.AllScoresSubmittedPayload); ok {
-						h.logger.InfoContext(ctx, "All scores submitted after import, publishing finalization",
-							attr.CorrelationIDFromMsg(msg),
-							attr.String("import_id", completed.ImportID),
-						)
-
-						allScoresMsg, err := h.helpers.CreateResultMessage(
-							msg,
-							allScoresData,
-							roundevents.RoundAllScoresSubmitted,
-						)
-						if err != nil {
-							h.logger.ErrorContext(ctx, "Failed to create all scores submitted message for import",
-								attr.CorrelationIDFromMsg(msg),
-								attr.String("import_id", completed.ImportID),
-								attr.Error(err),
-							)
-							return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
-						}
-						outgoingMessages = append(outgoingMessages, allScoresMsg)
-					} else if _, ok := checkResult.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
-						h.logger.InfoContext(ctx, "Not all scores submitted yet after import",
-							attr.CorrelationIDFromMsg(msg),
-							attr.String("import_id", completed.ImportID),
-						)
+			// Find the last successfully imported score to use as the trigger
+			var lastSuccessfulScore *sharedtypes.ScoreInfo
+			for i := len(completed.Scores) - 1; i >= 0; i-- {
+				// Check if this score wasn't in the failed list
+				isFailed := false
+				for _, failedUserID := range failedScores {
+					if string(completed.Scores[i].UserID) == failedUserID {
+						isFailed = true
+						break
 					}
+				}
+				if !isFailed {
+					lastSuccessfulScore = &completed.Scores[i]
+					break
 				}
 			}
 
-			return outgoingMessages, nil
+			if lastSuccessfulScore == nil {
+				h.logger.ErrorContext(ctx, "No successful scores found to trigger check",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+				)
+				return nil, fmt.Errorf("no successful scores found")
+			}
+
+			// Create a ParticipantScoreUpdated event for the last imported score
+			// This will trigger the existing flow: HandleParticipantScoreUpdated -> CheckAllScoresSubmitted
+			triggerPayload := roundevents.ParticipantScoreUpdatedPayload{
+				GuildID:        completed.GuildID,
+				RoundID:        completed.RoundID,
+				Participant:    lastSuccessfulScore.UserID,
+				Score:          lastSuccessfulScore.Score,
+				EventMessageID: completed.EventMessageID,
+			}
+
+			msgWithMetadata := msg
+			if completed.EventMessageID != "" {
+				msg.Metadata.Set("discord_message_id", completed.EventMessageID)
+				msgWithMetadata = msg
+			}
+
+			// Publish the trigger event - this will flow through the normal pipeline
+			triggerMsg, err := h.helpers.CreateResultMessage(
+				msgWithMetadata,
+				&triggerPayload,
+				roundevents.RoundParticipantScoreUpdated,
+			)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "Failed to create trigger message for score check",
+					attr.CorrelationIDFromMsg(msg),
+					attr.String("import_id", completed.ImportID),
+					attr.Error(err),
+				)
+				return nil, fmt.Errorf("failed to create trigger message: %w", err)
+			}
+
+			h.logger.InfoContext(ctx, "Import scores saved - triggering score check via normal flow",
+				attr.CorrelationIDFromMsg(msg),
+				attr.String("import_id", completed.ImportID),
+				attr.String("trigger_participant", string(lastSuccessfulScore.UserID)),
+			)
+
+			// Return the trigger message - it will flow through HandleParticipantScoreUpdated
+			// which will check if all scores are submitted and finalize if needed
+			return []*message.Message{triggerMsg}, nil
 		},
 	)
 
