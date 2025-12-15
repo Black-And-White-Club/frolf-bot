@@ -220,9 +220,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		{
 			name: "success notifying score module with various participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// Mock GetRound call that happens in NotifyScoreModule
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
+				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
@@ -253,9 +251,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		{
 			name: "failure with no participants having scores",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// Mock GetRound call that happens in NotifyScoreModule
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
+				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
@@ -280,9 +276,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		{
 			name: "failure with empty participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// Mock GetRound call that happens in NotifyScoreModule
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
+				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),
@@ -304,9 +298,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		{
 			name: "failure with nil participants",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// Mock GetRound call that happens in NotifyScoreModule
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{ID: testRoundID, GuildID: guildID}, nil)
+				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayload{
 				GuildID: sharedtypes.GuildID("guild-123"),

@@ -62,21 +62,8 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 // NotifyScoreModule prepares the data needed by the Score Module after a round is finalized.
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
-		// Check if round exists first
-		_, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "Round not found for score processing",
-				attr.StringUUID("round_id", payload.RoundID.String()),
-				attr.Error(err),
-			)
-			failurePayload := roundevents.RoundFinalizationErrorPayload{
-				RoundID: payload.RoundID,
-				Error:   fmt.Sprintf("round not found: %v", err),
-			}
-			return RoundOperationResult{Failure: &failurePayload}, nil
-		}
-
 		// Use the round data directly from the payload
+		// The payload.RoundData is populated by FinalizeRound which fetches fresh data from the database
 		round := payload.RoundData
 
 		// Prepare the participant score data for the Score Module

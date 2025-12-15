@@ -428,6 +428,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			name: "all scores submitted",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
+				// GetParticipants is called twice: once in checkIfAllScoresSubmitted, once to get updated list
 				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return([]roundtypes.Participant{
 					{
 						UserID: sharedtypes.DiscordID("user1"),
@@ -438,6 +439,15 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 						Score:  &testScore,
 					},
 				}, nil).Times(2)
+				// GetRound is now called to fetch round data for AllScoresSubmittedPayload
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testScoreRoundID).Return(&roundtypes.Round{
+					ID:      testScoreRoundID,
+					GuildID: guildID,
+					Participants: []roundtypes.Participant{
+						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+					},
+				}, nil)
 			},
 			payload: roundevents.ParticipantScoreUpdatedPayload{
 				GuildID:        sharedtypes.GuildID("guild-123"),
@@ -447,10 +457,18 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.AllScoresSubmittedPayload{ // Changed to pointer
+				Success: &roundevents.AllScoresSubmittedPayload{
 					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        testScoreRoundID,
 					EventMessageID: testDiscordMessageID,
+					RoundData: roundtypes.Round{
+						ID:      testScoreRoundID,
+						GuildID: sharedtypes.GuildID("guild-123"),
+						Participants: []roundtypes.Participant{
+							{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
+							{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+						},
+					},
 					Participants: []roundtypes.Participant{
 						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
 						{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},

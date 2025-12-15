@@ -183,11 +183,32 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 				attr.RoundID("round_id", payload.RoundID),
 				attr.String("guild_id", string(payload.GuildID)),
 			)
+
+			// Fetch the round data to include in the payload
+			// This ensures finalization has the complete round data with all participants
+			round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "Failed to fetch round data for AllScoresSubmitted payload",
+					attr.RoundID("round_id", payload.RoundID),
+					attr.String("guild_id", string(payload.GuildID)),
+					attr.Error(err),
+				)
+				// Return failure if we can't get the round data
+				return RoundOperationResult{
+					Failure: &roundevents.RoundErrorPayload{
+						GuildID: payload.GuildID,
+						RoundID: payload.RoundID,
+						Error:   "Failed to fetch round data: " + err.Error(),
+					},
+				}, nil
+			}
+
 			return RoundOperationResult{
 				Success: &roundevents.AllScoresSubmittedPayload{
 					GuildID:        payload.GuildID,
 					RoundID:        payload.RoundID,
 					EventMessageID: payload.EventMessageID,
+					RoundData:      *round,
 					Participants:   updatedParticipants,
 				},
 			}, nil

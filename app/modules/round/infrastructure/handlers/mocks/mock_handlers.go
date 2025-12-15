@@ -100,6 +100,21 @@ func (mr *MockHandlersMockRecorder) HandleGetRoundRequest(msg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetRoundRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetRoundRequest), msg)
 }
 
+// HandleImportCompleted mocks base method.
+func (m *MockHandlers) HandleImportCompleted(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleImportCompleted", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleImportCompleted indicates an expected call of HandleImportCompleted.
+func (mr *MockHandlersMockRecorder) HandleImportCompleted(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleImportCompleted", reflect.TypeOf((*MockHandlers)(nil).HandleImportCompleted), msg)
+}
+
 // HandleParseScorecardRequest mocks base method.
 func (m *MockHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
@@ -415,36 +430,6 @@ func (mr *MockHandlersMockRecorder) HandleScoreUpdateValidated(msg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScoreUpdateValidated", reflect.TypeOf((*MockHandlers)(nil).HandleScoreUpdateValidated), msg)
 }
 
-// HandleScorecardParsed mocks base method.
-func (m *MockHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleScorecardParsed", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleScorecardParsed indicates an expected call of HandleScorecardParsed.
-func (mr *MockHandlersMockRecorder) HandleScorecardParsed(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScorecardParsed", reflect.TypeOf((*MockHandlers)(nil).HandleScorecardParsed), msg)
-}
-
-// HandleImportCompleted mocks base method.
-func (m *MockHandlers) HandleImportCompleted(msg *message.Message) ([]*message.Message, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleImportCompleted", msg)
-	ret0, _ := ret[0].([]*message.Message)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleImportCompleted indicates an expected call of HandleImportCompleted.
-func (mr *MockHandlersMockRecorder) HandleImportCompleted(msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleImportCompleted", reflect.TypeOf((*MockHandlers)(nil).HandleImportCompleted), msg)
-}
-
 // HandleScorecardURLRequested mocks base method.
 func (m *MockHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*message.Message, error) {
 	m.ctrl.T.Helper()
@@ -518,4 +503,19 @@ func (m *MockHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*message
 func (mr *MockHandlersMockRecorder) HandleTagNumberNotFound(msg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagNumberNotFound", reflect.TypeOf((*MockHandlers)(nil).HandleTagNumberNotFound), msg)
+}
+
+// HandleUserMatchConfirmedForIngest mocks base method.
+func (m *MockHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) ([]*message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleUserMatchConfirmedForIngest", msg)
+	ret0, _ := ret[0].([]*message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleUserMatchConfirmedForIngest indicates an expected call of HandleUserMatchConfirmedForIngest.
+func (mr *MockHandlersMockRecorder) HandleUserMatchConfirmedForIngest(msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUserMatchConfirmedForIngest", reflect.TypeOf((*MockHandlers)(nil).HandleUserMatchConfirmedForIngest), msg)
 }
