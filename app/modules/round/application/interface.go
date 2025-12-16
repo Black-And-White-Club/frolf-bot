@@ -63,4 +63,5 @@ type Service interface {
 	HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (RoundOperationResult, error)
 	ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (RoundOperationResult, error)
 	IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (RoundOperationResult, error)
+	ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (RoundOperationResult, error)
 }

@@ -428,18 +428,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			name: "all scores submitted",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
-				// GetParticipants is called twice: once in checkIfAllScoresSubmitted, once to get updated list
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return([]roundtypes.Participant{
-					{
-						UserID: sharedtypes.DiscordID("user1"),
-						Score:  &testScore,
-					},
-					{
-						UserID: sharedtypes.DiscordID("user2"),
-						Score:  &testScore,
-					},
-				}, nil).Times(2)
-				// GetRound is now called to fetch round data for AllScoresSubmittedPayload
+				// Round fetch is called once to build AllScoresSubmitted payload
 				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testScoreRoundID).Return(&roundtypes.Round{
 					ID:      testScoreRoundID,
 					GuildID: guildID,
@@ -455,6 +444,10 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participant:    testParticipant,
 				Score:          testScore,
 				EventMessageID: testDiscordMessageID,
+				Participants: []roundtypes.Participant{
+					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+				},
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.AllScoresSubmittedPayload{
@@ -480,17 +473,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 		{
 			name: "not all scores submitted",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return([]roundtypes.Participant{
-					{
-						UserID: sharedtypes.DiscordID("user1"),
-						Score:  &testScore,
-					},
-					{
-						UserID: sharedtypes.DiscordID("user2"),
-						Score:  nil,
-					},
-				}, nil).Times(2)
+				// No DB calls expected when payload includes participants
 			},
 			payload: roundevents.ParticipantScoreUpdatedPayload{
 				GuildID:        sharedtypes.GuildID("guild-123"),
@@ -498,6 +481,10 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participant:    testParticipant,
 				Score:          testScore,
 				EventMessageID: testDiscordMessageID,
+				Participants: []roundtypes.Participant{
+					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Score: nil},
+				},
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.NotAllScoresSubmittedPayload{ // Changed to pointer
@@ -517,9 +504,9 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 		{
 			name: "error checking if all scores submitted (GetParticipants fails in checkIfAllScoresSubmitted)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				// When all participants have scores the service will call GetRound; simulate GetRound failure
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return(nil, errors.New("database error from checkIfAllScoresSubmitted")).Times(1)
-				// No second GetParticipants call expected if the first one fails and returns early
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testScoreRoundID).Return(nil, errors.New("database error from checkIfAllScoresSubmitted"))
 			},
 			payload: roundevents.ParticipantScoreUpdatedPayload{
 				GuildID:        sharedtypes.GuildID("guild-123"),
@@ -527,6 +514,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participant:    testParticipant,
 				Score:          testScore,
 				EventMessageID: testDiscordMessageID,
+				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
@@ -541,12 +529,8 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			name: "error getting participants for success payload (GetParticipants fails after checkIfAllScoresSubmitted)",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
-				// First call to GetParticipants (inside checkIfAllScoresSubmitted) succeeds
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return([]roundtypes.Participant{
-					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-				}, nil).Times(1)
-				// Second call to GetParticipants (for the success payload) fails
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testScoreRoundID).Return(nil, errors.New("database error from main func GetParticipants")).Times(1)
+				// When all participants are present the service will call GetRound to fetch round data; simulate GetRound failure
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testScoreRoundID).Return(nil, errors.New("database error from main func GetRound"))
 			},
 			payload: roundevents.ParticipantScoreUpdatedPayload{
 				GuildID:        sharedtypes.GuildID("guild-123"),
@@ -554,12 +538,13 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participant:    testParticipant,
 				Score:          testScore,
 				EventMessageID: testDiscordMessageID,
+				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testScoreRoundID,
-					Error:   "Failed to retrieve updated participants list for score check: database error from main func GetParticipants",
+					Error:   "database error from main func GetRound",
 				},
 			},
 			expectedError: nil, // Changed from error to nil

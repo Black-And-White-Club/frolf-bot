@@ -46,6 +46,21 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// ApplyImportedScores mocks base method.
+func (m *MockService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyImportedScores", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyImportedScores indicates an expected call of ApplyImportedScores.
+func (mr *MockServiceMockRecorder) ApplyImportedScores(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyImportedScores", reflect.TypeOf((*MockService)(nil).ApplyImportedScores), ctx, payload)
+}
+
 // CheckAllScoresSubmitted mocks base method.
 func (m *MockService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()

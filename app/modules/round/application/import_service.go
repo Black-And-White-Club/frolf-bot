@@ -696,3 +696,112 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 func normalizeName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
+
+// ApplyImportedScores applies imported scores one-by-one using the same path as manual updates.
+// It calls UpdateParticipantScore for each score and publishes ParticipantScoreUpdated events
+// so downstream logic (CheckAllScoresSubmitted -> FinalizeRound) runs unchanged.
+func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "ApplyImportedScores", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		if len(payload.Scores) == 0 {
+			s.logger.InfoContext(ctx, "No scores to apply in import",
+				attr.String("import_id", payload.ImportID),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.String("round_id", payload.RoundID.String()),
+			)
+			return RoundOperationResult{Success: nil}, nil
+		}
+
+		// Fetch participants once to minimize DB reads
+		participants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+		if err != nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayload{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					Error:   err.Error(),
+				},
+			}, nil
+		}
+
+		participantMap := make(map[sharedtypes.DiscordID]*roundtypes.Participant, len(participants))
+		for i := range participants {
+			p := &participants[i]
+			participantMap[p.UserID] = p
+		}
+
+		failedUserIDs := make([]string, 0)
+		successCount := 0
+
+		// Apply DB updates directly (batch-friendly)
+		for _, score := range payload.Scores {
+			if err := s.RoundDB.UpdateParticipantScore(ctx, payload.GuildID, payload.RoundID, score.UserID, score.Score); err != nil {
+				s.logger.ErrorContext(ctx, "failed to update participant score during import",
+					attr.String("import_id", payload.ImportID),
+					attr.String("guild_id", string(payload.GuildID)),
+					attr.String("round_id", payload.RoundID.String()),
+					attr.String("participant_id", string(score.UserID)),
+					attr.Error(err),
+				)
+				failedUserIDs = append(failedUserIDs, string(score.UserID))
+				continue
+			}
+
+			// Update local view
+			if p, ok := participantMap[score.UserID]; ok {
+				copyScore := score.Score
+				p.Score = &copyScore
+			}
+
+			successCount++
+		}
+
+		// Re-fetch authoritative participants after applying updates
+		finalParticipants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+		if err != nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayload{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					Error:   err.Error(),
+				},
+			}, nil
+		}
+
+		// Do not publish from service. The handler will fan-out ParticipantScoreUpdated events.
+
+		s.logger.InfoContext(ctx, "Imported scores application summary",
+			attr.String("import_id", payload.ImportID),
+			attr.String("guild_id", string(payload.GuildID)),
+			attr.String("round_id", payload.RoundID.String()),
+			attr.Int("successful_updates", successCount),
+			attr.Int("failed_updates", len(failedUserIDs)),
+			attr.Int("total_scores", len(payload.Scores)),
+		)
+
+		if successCount == 0 {
+			return RoundOperationResult{
+				Failure: &roundevents.ImportFailedPayload{
+					GuildID:   payload.GuildID,
+					RoundID:   payload.RoundID,
+					ImportID:  payload.ImportID,
+					UserID:    payload.UserID,
+					ChannelID: payload.ChannelID,
+					Error:     "all score updates failed during import",
+					ErrorCode: "IMPORT_APPLY_FAILED",
+					Timestamp: time.Now().UTC(),
+				},
+			}, nil
+		}
+
+		return RoundOperationResult{
+			Success: &roundevents.ImportScoresAppliedPayload{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				Participants:   finalParticipants,
+				EventMessageID: payload.EventMessageID,
+				Timestamp:      payload.Timestamp,
+			},
+		}, nil
+	})
+}

@@ -135,7 +135,6 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 	})
 }
 
-// CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
 // CheckAllScoresSubmittedResult is a custom struct to return data from CheckAllScoresSubmitted.
 type CheckAllScoresSubmittedResult struct {
 	AllScoresSubmitted bool
@@ -143,15 +142,29 @@ type CheckAllScoresSubmittedResult struct {
 }
 
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
-func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) CheckAllScoresSubmitted(
+	ctx context.Context,
+	payload roundevents.ParticipantScoreUpdatedPayload,
+) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
-		allScoresSubmitted, err := s.checkIfAllScoresSubmitted(ctx, payload.GuildID, payload.RoundID)
+		for _, p := range payload.Participants {
+			if p.Score == nil {
+				return RoundOperationResult{
+					Success: &roundevents.NotAllScoresSubmittedPayload{
+						GuildID:        payload.GuildID,
+						RoundID:        payload.RoundID,
+						Participant:    payload.Participant,
+						Score:          payload.Score,
+						EventMessageID: payload.EventMessageID,
+						Participants:   payload.Participants,
+					},
+				}, nil
+			}
+		}
+
+		// Only happens ONCE
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to check if all scores have been submitted",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
-				attr.Error(err),
-			)
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayload{
 					GuildID: payload.GuildID,
@@ -161,94 +174,32 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, payload roun
 			}, nil
 		}
 
-		// Fetch the full, updated list of participants for this round
-		updatedParticipants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to get updated participants list for score check",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
-				attr.Error(err),
-			)
-			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
-					Error:   "Failed to retrieve updated participants list for score check: " + err.Error(),
-				},
-			}, nil
-		}
+		round.Participants = payload.Participants
 
-		if allScoresSubmitted {
-			s.logger.InfoContext(ctx, "All scores submitted for round",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
-			)
-
-			// Fetch the round data to include in the payload
-			// This ensures finalization has the complete round data with all participants
-			round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "Failed to fetch round data for AllScoresSubmitted payload",
-					attr.RoundID("round_id", payload.RoundID),
-					attr.String("guild_id", string(payload.GuildID)),
-					attr.Error(err),
-				)
-				// Return failure if we can't get the round data
-				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
-						GuildID: payload.GuildID,
-						RoundID: payload.RoundID,
-						Error:   "Failed to fetch round data: " + err.Error(),
-					},
-				}, nil
-			}
-
-			// Use the updated participants (which we've verified have scores)
-			// instead of whatever participants are in the database
-			round.Participants = updatedParticipants
-
-			return RoundOperationResult{
-				Success: &roundevents.AllScoresSubmittedPayload{
-					GuildID:        payload.GuildID,
-					RoundID:        payload.RoundID,
-					EventMessageID: payload.EventMessageID,
-					RoundData:      *round,
-					Participants:   updatedParticipants,
-				},
-			}, nil
-		} else {
-			s.logger.InfoContext(ctx, "Not all scores submitted yet",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
-				attr.String("participant_id", string(payload.Participant)),
-				attr.Int("score", int(payload.Score)),
-			)
-			return RoundOperationResult{
-				Success: &roundevents.NotAllScoresSubmittedPayload{
-					GuildID:        payload.GuildID,
-					RoundID:        payload.RoundID,
-					Participant:    payload.Participant,
-					Score:          payload.Score,
-					EventMessageID: payload.EventMessageID,
-					Participants:   updatedParticipants,
-				},
-			}, nil
-		}
+		return RoundOperationResult{
+			Success: &roundevents.AllScoresSubmittedPayload{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				EventMessageID: payload.EventMessageID,
+				RoundData:      *round,
+				Participants:   payload.Participants,
+			},
+		}, nil
 	})
 }
 
 // CheckIfAllScoresSubmitted checks if all participants in the round have submitted scores.
-func (s *RoundService) checkIfAllScoresSubmitted(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (bool, error) {
-	participants, err := s.RoundDB.GetParticipants(ctx, guildID, roundID)
-	if err != nil {
-		return false, err
-	}
+// func (s *RoundService) checkIfAllScoresSubmitted(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (bool, error) {
+// 	participants, err := s.RoundDB.GetParticipants(ctx, guildID, roundID)
+// 	if err != nil {
+// 		return false, err
+// 	}
 
-	for _, p := range participants {
-		if p.Score == nil {
-			return false, nil
-		}
-	}
+// 	for _, p := range participants {
+// 		if p.Score == nil {
+// 			return false, nil
+// 		}
+// 	}
 
-	return true, nil
-}
+// 	return true, nil
+// }

@@ -541,3 +541,120 @@ func buildXLSXBytes(t *testing.T, rows [][]string) []byte {
 	require.NoError(t, f.Close())
 	return buf.Bytes()
 }
+
+func TestRoundService_ApplyImportedScores(t *testing.T) {
+	t.Run("no scores", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		ctx := context.Background()
+		payload := roundevents.ImportCompletedPayload{
+			GuildID:  sharedtypes.GuildID("g-1"),
+			RoundID:  sharedtypes.RoundID(uuid.New()),
+			ImportID: "imp-none",
+			Scores:   []sharedtypes.ScoreInfo{},
+		}
+
+		service := newTestRoundService(mockDB, nil, nil)
+		res, err := service.ApplyImportedScores(ctx, payload)
+		require.NoError(t, err)
+		// Success with nil indicates nothing to do
+		require.NotNil(t, res)
+		require.Nil(t, res.Failure)
+		require.Nil(t, res.Success)
+	})
+
+	t.Run("get participants error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		ctx := context.Background()
+		payload := roundevents.ImportCompletedPayload{
+			GuildID:  sharedtypes.GuildID("g-1"),
+			RoundID:  sharedtypes.RoundID(uuid.New()),
+			ImportID: "imp-err",
+			Scores:   []sharedtypes.ScoreInfo{{UserID: sharedtypes.DiscordID("u1"), Score: 3}},
+		}
+
+		mockDB.EXPECT().GetParticipants(gomock.Any(), payload.GuildID, payload.RoundID).Return(nil, fmt.Errorf("db fail"))
+
+		service := newTestRoundService(mockDB, nil, nil)
+		res, err := service.ApplyImportedScores(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, res.Failure)
+		// Expect RoundErrorPayload
+		_, ok := res.Failure.(*roundevents.RoundErrorPayload)
+		require.True(t, ok)
+	})
+
+	t.Run("partial failures and success", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		ctx := context.Background()
+		roundID := sharedtypes.RoundID(uuid.New())
+		payload := roundevents.ImportCompletedPayload{
+			GuildID:  sharedtypes.GuildID("g-1"),
+			RoundID:  roundID,
+			ImportID: "imp-partial",
+			Scores: []sharedtypes.ScoreInfo{
+				{UserID: sharedtypes.DiscordID("u1"), Score: 2},
+				{UserID: sharedtypes.DiscordID("u2"), Score: 4},
+			},
+		}
+
+		// initial participants
+		participants := []roundtypes.Participant{
+			{UserID: sharedtypes.DiscordID("u1"), Score: nil},
+			{UserID: sharedtypes.DiscordID("u2"), Score: nil},
+		}
+		gomock.InOrder(
+			mockDB.EXPECT().GetParticipants(gomock.Any(), payload.GuildID, payload.RoundID).Return(participants, nil),
+			// u1 update succeeds
+			mockDB.EXPECT().UpdateParticipantScore(gomock.Any(), payload.GuildID, payload.RoundID, sharedtypes.DiscordID("u1"), sharedtypes.Score(2)).Return(nil),
+			// u2 update fails
+			mockDB.EXPECT().UpdateParticipantScore(gomock.Any(), payload.GuildID, payload.RoundID, sharedtypes.DiscordID("u2"), sharedtypes.Score(4)).Return(fmt.Errorf("update fail")),
+			// final participants reflect only u1 updated
+			mockDB.EXPECT().GetParticipants(gomock.Any(), payload.GuildID, payload.RoundID).Return([]roundtypes.Participant{{UserID: sharedtypes.DiscordID("u1"), Score: func() *sharedtypes.Score { s := sharedtypes.Score(2); return &s }()}}, nil),
+		)
+
+		service := newTestRoundService(mockDB, nil, nil)
+		res, err := service.ApplyImportedScores(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, res.Success)
+		success, ok := res.Success.(*roundevents.ImportScoresAppliedPayload)
+		require.True(t, ok)
+		require.Len(t, success.Participants, 1)
+		require.Equal(t, sharedtypes.DiscordID("u1"), success.Participants[0].UserID)
+	})
+
+	t.Run("all updates fail", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		ctx := context.Background()
+		payload := roundevents.ImportCompletedPayload{
+			GuildID:  sharedtypes.GuildID("g-1"),
+			RoundID:  sharedtypes.RoundID(uuid.New()),
+			ImportID: "imp-allfail",
+			Scores:   []sharedtypes.ScoreInfo{{UserID: sharedtypes.DiscordID("u1"), Score: 1}},
+		}
+
+		gomock.InOrder(
+			mockDB.EXPECT().GetParticipants(gomock.Any(), payload.GuildID, payload.RoundID).Return([]roundtypes.Participant{{UserID: sharedtypes.DiscordID("u1")}}, nil),
+			mockDB.EXPECT().UpdateParticipantScore(gomock.Any(), payload.GuildID, payload.RoundID, sharedtypes.DiscordID("u1"), sharedtypes.Score(1)).Return(fmt.Errorf("boom")),
+			mockDB.EXPECT().GetParticipants(gomock.Any(), payload.GuildID, payload.RoundID).Return([]roundtypes.Participant{{UserID: sharedtypes.DiscordID("u1")}}, nil),
+		)
+
+		service := newTestRoundService(mockDB, nil, nil)
+		res, err := service.ApplyImportedScores(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, res.Failure)
+		_, ok := res.Failure.(*roundevents.ImportFailedPayload)
+		require.True(t, ok)
+	})
+}

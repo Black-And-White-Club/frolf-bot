@@ -1031,44 +1031,37 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 						return nil
 					},
 				)
-
-				// Expect UpdateParticipantScore to be called (persists score to DB)
-				testScore := sharedtypes.Score(6)
-				mockRoundService.EXPECT().UpdateParticipantScore(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
-						require.Equal(t, testGuildID, payload.GuildID)
-						require.Equal(t, testRoundID, payload.ScoreUpdateRequestPayload.RoundID)
-						require.Equal(t, sharedtypes.DiscordID("u1"), payload.ScoreUpdateRequestPayload.Participant)
-						require.Equal(t, &testScore, payload.ScoreUpdateRequestPayload.Score)
-
-						// Return a ParticipantScoreUpdatedPayload
+				// Expect ApplyImportedScores to be called (service applies DB updates and returns final snapshot)
+				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, payload roundevents.ImportCompletedPayload) (roundservice.RoundOperationResult, error) {
+						// Return final participants snapshot
 						return roundservice.RoundOperationResult{
-							Success: &roundevents.ParticipantScoreUpdatedPayload{
-								GuildID:        testGuildID,
-								RoundID:        testRoundID,
-								Participant:    sharedtypes.DiscordID("u1"),
-								Score:          testScore,
+							Success: &roundevents.ImportScoresAppliedPayload{
+								GuildID:  payload.GuildID,
+								RoundID:  payload.RoundID,
+								ImportID: payload.ImportID,
+								Participants: []roundtypes.Participant{
+									{UserID: sharedtypes.DiscordID("u1"), Score: func() *sharedtypes.Score { s := sharedtypes.Score(6); return &s }()},
+								},
 								EventMessageID: "",
-								Participants:   []roundtypes.Participant{},
 							},
 						}, nil
 					},
 				)
 
-				// Expect CreateResultMessage to be called for the imported score update
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).
+				// Expect CreateResultMessage to be called twice per imported score (discord + backend)
+				callCount := 0
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Times(2).
 					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
-						scorePayload, ok := payload.(*roundevents.ParticipantScoreUpdatedPayload)
-						require.True(t, ok)
-						require.Equal(t, testGuildID, scorePayload.GuildID)
-						require.Equal(t, testRoundID, scorePayload.RoundID)
-						require.Equal(t, sharedtypes.DiscordID("u1"), scorePayload.Participant)
-						require.Equal(t, sharedtypes.Score(6), scorePayload.Score)
-						return message.NewMessage("score-update-id", nil), nil
+						callCount++
+						if callCount == 1 {
+							return message.NewMessage("score-update-id", nil), nil
+						}
+						return message.NewMessage("score-update-id-backend", nil), nil
 					})
 			},
 			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("score-update-id", nil)},
+			want:    []*message.Message{message.NewMessage("score-update-id", nil), message.NewMessage("score-update-id-backend", nil)},
 			wantErr: false,
 		},
 		{
@@ -1096,7 +1089,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
 		},
 		{
-			name: "Handle UpdateParticipantScore error",
+			name: "Handle Import apply failure",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
@@ -1105,15 +1098,20 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				// Expect UpdateParticipantScore to fail
-				mockRoundService.EXPECT().UpdateParticipantScore(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{}, fmt.Errorf("update score error"),
+				// Service reports failure applying import
+				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
+					roundservice.RoundOperationResult{Failure: &roundevents.ImportFailedPayload{Error: "all score updates failed during import"}}, nil,
 				)
+
+				// Expect CreateResultMessage to produce the failure message returned by the handler
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedTopic).
+					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
+						return message.NewMessage("import-failed-id", nil), nil
+					})
 			},
-			msg:            withScoresMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "all score updates failed during import",
+			msg:     withScoresMsg,
+			want:    []*message.Message{message.NewMessage("import-failed-id", nil)},
+			wantErr: false,
 		},
 	}
 
