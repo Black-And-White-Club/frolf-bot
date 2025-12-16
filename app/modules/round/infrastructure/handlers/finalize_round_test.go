@@ -119,7 +119,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				)
 
 				// ✅ First call: Discord finalization message
-				expectedDiscordPayload := &roundevents.RoundFinalizedEmbedUpdatePayload{
+				expectedDiscordPayload := &roundevents.RoundFinalizedDiscordPayload{
 					RoundID:        testRoundID,
 					Title:          testTitle,
 					StartTime:      &testStartTime,
@@ -131,7 +131,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					expectedDiscordPayload,
-					roundevents.RoundFinalized,
+					roundevents.RoundFinalizedDiscord,
 				).Return(discordMsg, nil) // ✅ Use the pre-defined message
 
 				// ✅ Second call: Backend finalization message
@@ -255,7 +255,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundFinalized,
+					roundevents.RoundFinalizedDiscord,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -285,14 +285,14 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					nil,
 				)
 
-				// First call succeeds
+				// First call succeeds (Discord topic)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundFinalized,
+					roundevents.RoundFinalizedDiscord,
 				).Return(discordMsg, nil)
 
-				// Second call fails
+				// Second call fails (Backend topic)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),

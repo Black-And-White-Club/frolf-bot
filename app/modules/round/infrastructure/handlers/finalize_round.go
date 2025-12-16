@@ -61,8 +61,11 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			// Use the round data from the payload instead of fetching again
 			fetchedRound := &allScoresSubmittedPayload.RoundData
 
-			// Create Discord finalization message
-			discordFinalizationPayload := roundevents.RoundFinalizedEmbedUpdatePayload{
+			// Create Discord-specific finalization payload and message FIRST. This uses a
+			// separate topic so Discord consumers receive a type-safe payload. Creating
+			// the Discord message first ensures mocks expecting the Discord publication
+			// order are satisfied (Discord then backend).
+			discordFinalizationPayload := roundevents.RoundFinalizedDiscordPayload{
 				GuildID:        allScoresSubmittedPayload.GuildID,
 				RoundID:        allScoresSubmittedPayload.RoundID,
 				Title:          fetchedRound.Title,
@@ -75,17 +78,22 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			discordFinalizedMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				&discordFinalizationPayload,
-				roundevents.RoundFinalized,
+				roundevents.RoundFinalizedDiscord,
 			)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create RoundFinalized message",
+				h.logger.ErrorContext(ctx, "Failed to create Discord RoundFinalized message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
 				return nil, fmt.Errorf("failed to create RoundFinalized message: %w", err)
 			}
 
-			// CREATE BACKEND FINALIZED MESSAGE WITH PARTICIPANTS FROM PAYLOAD
+			// Preserve discord event metadata so downstream Discord handlers can locate the message
+			if discordFinalizedMsg != nil && fetchedRound.EventMessageID != "" {
+				discordFinalizedMsg.Metadata.Set("discord_message_id", fetchedRound.EventMessageID)
+			}
+
+			// Create BACKEND finalization message with authoritative participants from payload
 			backendFinalizationPayload := roundevents.RoundFinalizedPayload{
 				GuildID: allScoresSubmittedPayload.GuildID,
 				RoundID: allScoresSubmittedPayload.RoundID,
@@ -106,10 +114,10 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			backendFinalizedMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				&backendFinalizationPayload,
-				roundevents.RoundFinalized, // This triggers HandleRoundFinalized
+				roundevents.RoundFinalized, // Backend consumers subscribe to this domain topic
 			)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create RoundFinalized message",
+				h.logger.ErrorContext(ctx, "Failed to create backend RoundFinalized message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Error(err),
 				)
@@ -118,12 +126,12 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 
 			h.logger.InfoContext(ctx, "Publishing parallel messages for round finalization",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("discord_topic", roundevents.RoundFinalized),
+				attr.String("discord_topic", roundevents.RoundFinalizedDiscord),
 				attr.String("backend_topic", roundevents.RoundFinalized),
 				attr.Int("participants_with_scores", len(allScoresSubmittedPayload.Participants)),
 			)
 
-			// Return BOTH messages
+			// Return BOTH messages: discord-specific and backend domain message
 			return []*message.Message{discordFinalizedMsg, backendFinalizedMsg}, nil
 		},
 	)
