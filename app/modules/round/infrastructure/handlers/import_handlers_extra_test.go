@@ -54,19 +54,16 @@ func TestHandleImportCompleted_FanOutMessages(t *testing.T) {
 	// Service returns applied snapshot
 	finalParticipants := []roundtypes.Participant{{UserID: sharedtypes.DiscordID("u1"), Score: func() *sharedtypes.Score { s := sharedtypes.Score(5); return &s }()}}
 	mockService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-		roundservice.RoundOperationResult{Success: &roundevents.ImportScoresAppliedPayload{GuildID: guildID, RoundID: roundID, ImportID: importID, Participants: finalParticipants, EventMessageID: ""}}, nil,
+		roundservice.RoundOperationResult{Success: &roundevents.ImportScoresAppliedPayload{GuildID: guildID, RoundID: roundID, ImportID: importID, Participants: finalParticipants, EventMessageID: "evt-1"}}, nil,
 	)
 
-	// Expect two CreateResultMessage calls (discord + backend)
-	mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Times(2).
-		DoAndReturn(func(original *message.Message, payload any, topic string) (*message.Message, error) {
-			return message.NewMessage("out", nil), nil
-		})
+	// Expect a single AllScoresSubmitted message to be created
+	mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.AssignableToTypeOf(&roundevents.AllScoresSubmittedPayload{}), roundevents.RoundAllScoresSubmitted).Return(message.NewMessage("out", nil), nil)
 
 	h := NewRoundHandlers(mockService, logger, tracer, mockHelpers, metrics)
 	out, err := h.HandleImportCompleted(msg)
 	require.NoError(t, err)
-	require.Len(t, out, 2)
+	require.Len(t, out, 1)
 }
 
 func TestHandleImportCompleted_ServiceFailureProducesImportFailedMsg(t *testing.T) {
@@ -229,10 +226,8 @@ func TestHandleImportCompleted_CreateResultMessageBackendError(t *testing.T) {
 		roundservice.RoundOperationResult{Success: &roundevents.ImportScoresAppliedPayload{GuildID: guildID, RoundID: roundID, ImportID: importID, Participants: finalParticipants, EventMessageID: ""}}, nil,
 	)
 
-	// First CreateResultMessage (discord) returns ok
-	mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Return(message.NewMessage("ok", nil), nil)
-	// Second CreateResultMessage (backend) returns an error
-	mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Return(nil, assert.AnError).Times(1)
+	// CreateResultMessage for RoundAllScoresSubmitted returns an error to simulate backend failure
+	mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.AssignableToTypeOf(&roundevents.AllScoresSubmittedPayload{}), roundevents.RoundAllScoresSubmitted).Return(nil, assert.AnError).Times(1)
 
 	h := NewRoundHandlers(mockService, logger, tracer, mockHelpers, metrics)
 	_, err := h.HandleImportCompleted(msg)

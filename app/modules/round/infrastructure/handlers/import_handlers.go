@@ -8,6 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
@@ -400,43 +401,32 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				return []*message.Message{failureMsg}, nil
 			}
 
-			// Service returned the authoritative final participants snapshot. Fan out
-			// ParticipantScoreUpdated events for each imported score so downstream
-			// handlers (discord embed updates and backend checks) run as usual.
+			// Service returned the authoritative final participants snapshot.
+			// Emit a single AllScoresSubmitted event using the authoritative snapshot
+			// so downstream finalization runs exactly as in manual flow.
 			appliedPayload, ok := res.Success.(*roundevents.ImportScoresAppliedPayload)
 			if !ok {
 				return nil, fmt.Errorf("unexpected success payload type from ApplyImportedScores: %T", res.Success)
 			}
 
-			finalParticipants := appliedPayload.Participants
-
-			var outMsgs []*message.Message
-			for _, score := range completed.Scores {
-				updated := roundevents.ParticipantScoreUpdatedPayload{
-					GuildID:        completed.GuildID,
-					RoundID:        completed.RoundID,
-					Participant:    score.UserID,
-					Score:          score.Score,
+			allSubmitted := roundevents.AllScoresSubmittedPayload{
+				GuildID:        appliedPayload.GuildID,
+				RoundID:        appliedPayload.RoundID,
+				EventMessageID: appliedPayload.EventMessageID,
+				RoundData: roundtypes.Round{
+					ID:             appliedPayload.RoundID,
 					EventMessageID: appliedPayload.EventMessageID,
-					Participants:   finalParticipants,
-				}
-
-				// Discord message (embed update)
-				discordMsg, err := h.helpers.CreateResultMessage(msg, &updated, roundevents.RoundParticipantScoreUpdated)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create discord participant updated message: %w", err)
-				}
-
-				// Backend message (check scores & possibly finalize)
-				backendMsg, err := h.helpers.CreateResultMessage(msg, &updated, roundevents.RoundParticipantScoreUpdated)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create backend participant updated message: %w", err)
-				}
-
-				outMsgs = append(outMsgs, discordMsg, backendMsg)
+					Participants:   appliedPayload.Participants,
+				},
+				Participants: appliedPayload.Participants,
 			}
 
-			return outMsgs, nil
+			allMsg, err := h.helpers.CreateResultMessage(msg, &allSubmitted, roundevents.RoundAllScoresSubmitted)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create RoundAllScoresSubmitted message: %w", err)
+			}
+
+			return []*message.Message{allMsg}, nil
 		},
 	)
 

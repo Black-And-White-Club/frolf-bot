@@ -1049,19 +1049,11 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					},
 				)
 
-				// Expect CreateResultMessage to be called twice per imported score (discord + backend)
-				callCount := 0
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.RoundParticipantScoreUpdated).Times(2).
-					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
-						callCount++
-						if callCount == 1 {
-							return message.NewMessage("score-update-id", nil), nil
-						}
-						return message.NewMessage("score-update-id-backend", nil), nil
-					})
+				// Expect CreateResultMessage to be called once for RoundAllScoresSubmitted
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.AssignableToTypeOf(&roundevents.AllScoresSubmittedPayload{}), roundevents.RoundAllScoresSubmitted).Return(message.NewMessage("all-scores-id", nil), nil)
 			},
 			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("score-update-id", nil), message.NewMessage("score-update-id-backend", nil)},
+			want:    []*message.Message{message.NewMessage("all-scores-id", nil)},
 			wantErr: false,
 		},
 		{
