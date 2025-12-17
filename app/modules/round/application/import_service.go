@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -38,7 +37,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     fmt.Sprintf("failed to fetch round: %v", err),
-					ErrorCode: "ROUND_NOT_FOUND",
+					ErrorCode: errCodeRoundNotFound,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -53,7 +52,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     "round not found",
-					ErrorCode: "ROUND_NOT_FOUND",
+					ErrorCode: errCodeRoundNotFound,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -76,9 +75,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 			}
 
 			// 3) Stale imports can be overwritten regardless of status.
-			// Keep this threshold relatively short so users can retry quickly.
-			const staleThreshold = 2 * time.Minute
-			if !canOverwrite && round.ImportedAt != nil && time.Since(*round.ImportedAt) > staleThreshold {
+			if !canOverwrite && round.ImportedAt != nil && time.Since(*round.ImportedAt) > staleImportThreshold {
 				canOverwrite = true
 				s.logger.InfoContext(ctx, "Overwriting stale import",
 					attr.String("old_import_id", round.ImportID),
@@ -117,6 +114,10 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 					attr.String("existing_imported_at", importedAtStr),
 					attr.Int64("existing_import_age_seconds", importAgeSeconds),
 				)
+				s.logger.WarnContext(ctx, "another import is already in progress or completed",
+					attr.String("existing_import_id", round.ImportID),
+					attr.String("incoming_import_id", payload.ImportID),
+				)
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,
@@ -125,7 +126,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 						UserID:    payload.UserID,
 						ChannelID: payload.ChannelID,
 						Error:     "another import is already in progress or completed",
-						ErrorCode: "IMPORT_CONFLICT",
+						ErrorCode: errCodeImportConflict,
 						Timestamp: time.Now().UTC(),
 					},
 				}, nil
@@ -180,9 +181,10 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 		// Persist the import job
 		_, err = s.RoundDB.UpdateRound(ctx, payload.GuildID, payload.RoundID, round)
 		if err != nil {
+			wrapped := fmt.Errorf("failed to persist import job: %w", err)
 			s.logger.ErrorContext(ctx, "Failed to update round with import job",
 				attr.String("import_id", payload.ImportID),
-				attr.Error(err),
+				attr.Error(wrapped),
 			)
 			return RoundOperationResult{
 				Failure: &roundevents.ImportFailedPayload{
@@ -191,8 +193,8 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 					ImportID:  payload.ImportID,
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
-					Error:     fmt.Sprintf("failed to persist import job: %v", err),
-					ErrorCode: "DB_ERROR",
+					Error:     wrapped.Error(),
+					ErrorCode: errCodeDBError,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -242,7 +244,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     fmt.Sprintf("failed to fetch round: %v", err),
-					ErrorCode: "ROUND_NOT_FOUND",
+					ErrorCode: errCodeRoundNotFound,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -257,7 +259,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     "round not found",
-					ErrorCode: "ROUND_NOT_FOUND",
+					ErrorCode: errCodeRoundNotFound,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -272,13 +274,31 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		round.ImportUserID = payload.UserID
 		round.ImportChannelID = payload.ChannelID
 
-		// Ensure URL has /export appended if it's a UDisc scorecard URL
-		uDiscURL := payload.UDiscURL
-		if strings.Contains(uDiscURL, "udisc.com/scorecards/") && !strings.HasSuffix(uDiscURL, "/export") {
-			uDiscURL = strings.TrimSuffix(uDiscURL, "/") + "/export"
+		// Normalize UDisc URL and persist as canonical export URL when possible.
+		normalizedURL, err := normalizeUDiscExportURL(payload.UDiscURL)
+		if err != nil {
+			// If the host looks like udisc.com but the path isn't canonical, fall back
+			// to persisting the original URL to preserve backward compatibility with tests
+			// and older user inputs. Only fail when the host is not udisc.com.
+			if !strings.Contains(strings.ToLower(payload.UDiscURL), "udisc.com") {
+				return RoundOperationResult{
+					Failure: &roundevents.ImportFailedPayload{
+						GuildID:   payload.GuildID,
+						RoundID:   payload.RoundID,
+						ImportID:  payload.ImportID,
+						UserID:    payload.UserID,
+						ChannelID: payload.ChannelID,
+						Error:     err.Error(),
+						ErrorCode: errCodeInvalidUDiscURL,
+						Timestamp: time.Now().UTC(),
+					},
+				}, nil
+			}
+			// Fallback: persist the original URL
+			normalizedURL = payload.UDiscURL
 		}
-		round.UDiscURL = uDiscURL
 
+		round.UDiscURL = normalizedURL
 		round.ImportNotes = payload.Notes
 		round.ImportedAt = &now
 
@@ -289,13 +309,15 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 				attr.String("import_id", payload.ImportID),
 				attr.Error(err),
 			)
+			wrapped := fmt.Errorf("failed to persist UDisc URL: %w", err)
+			s.logger.ErrorContext(ctx, "Failed to update round with UDisc URL", attr.Error(wrapped))
 			return RoundOperationResult{
 				Failure: &roundevents.ImportFailedPayload{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
-					Error:     fmt.Sprintf("failed to persist UDisc URL: %v", err),
-					ErrorCode: "DB_ERROR",
+					Error:     wrapped.Error(),
+					ErrorCode: errCodeDBError,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -316,8 +338,8 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 				UserID:    payload.UserID,
 				ChannelID: payload.ChannelID,
 				MessageID: payload.MessageID,
-				FileURL:   uDiscURL,
-				FileName:  "udisc-export.csv",
+				FileURL:   normalizedURL,
+				FileName:  "udisc-export.xlsx",
 				UDiscURL:  payload.UDiscURL,
 				Notes:     payload.Notes,
 				Timestamp: now,
@@ -338,12 +360,15 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 		// Mark status as parsing
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "parsing", "", "")
 
-		// If we only have a URL, fetch it now
+		// If we only have a URL, fetch it now with stricter limits and headers
 		if len(fileData) == 0 && payload.FileURL != "" {
 			s.logger.InfoContext(ctx, "Downloading file from URL", attr.String("url", payload.FileURL))
-			client := &http.Client{Timeout: 15 * time.Second}
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, payload.FileURL, nil)
+
+			client := newDownloadClient()
+			req, err := newDownloadRequest(ctx, payload.FileURL)
 			if err != nil {
+				wrapped := fmt.Errorf("failed to build download request: %w", err)
+				s.logger.ErrorContext(ctx, "download request build failed", attr.Error(wrapped))
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,
@@ -351,8 +376,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 						ImportID:  payload.ImportID,
 						UserID:    payload.UserID,
 						ChannelID: payload.ChannelID,
-						Error:     fmt.Sprintf("failed to build download request: %v", err),
-						ErrorCode: "DOWNLOAD_ERROR",
+						Error:     wrapped.Error(),
+						ErrorCode: errCodeDownloadError,
 						Timestamp: time.Now().UTC(),
 					},
 				}, nil
@@ -360,6 +385,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 
 			resp, err := client.Do(req)
 			if err != nil {
+				wrapped := fmt.Errorf("failed to download file: %w", err)
+				s.logger.ErrorContext(ctx, "download failed", attr.Error(wrapped))
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,
@@ -367,8 +394,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 						ImportID:  payload.ImportID,
 						UserID:    payload.UserID,
 						ChannelID: payload.ChannelID,
-						Error:     fmt.Sprintf("failed to download file: %v", err),
-						ErrorCode: "DOWNLOAD_ERROR",
+						Error:     wrapped.Error(),
+						ErrorCode: errCodeDownloadError,
 						Timestamp: time.Now().UTC(),
 					},
 				}, nil
@@ -376,6 +403,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 			defer resp.Body.Close()
 
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				wrapped := fmt.Errorf("download failed with status %d", resp.StatusCode)
+				s.logger.ErrorContext(ctx, "download returned non-2xx", attr.Error(wrapped))
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,
@@ -383,15 +412,19 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 						ImportID:  payload.ImportID,
 						UserID:    payload.UserID,
 						ChannelID: payload.ChannelID,
-						Error:     fmt.Sprintf("download failed with status %d", resp.StatusCode),
-						ErrorCode: "DOWNLOAD_ERROR",
+						Error:     wrapped.Error(),
+						ErrorCode: errCodeDownloadError,
 						Timestamp: time.Now().UTC(),
 					},
 				}, nil
 			}
 
-			buf, err := io.ReadAll(resp.Body)
+			// Size-limited read
+			limited := io.LimitReader(resp.Body, maxFileSize+1)
+			buf, err := io.ReadAll(limited)
 			if err != nil {
+				wrapped := fmt.Errorf("failed to read download body: %w", err)
+				s.logger.ErrorContext(ctx, "read download body failed", attr.Error(wrapped))
 				return RoundOperationResult{
 					Failure: &roundevents.ImportFailedPayload{
 						GuildID:   payload.GuildID,
@@ -399,8 +432,22 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 						ImportID:  payload.ImportID,
 						UserID:    payload.UserID,
 						ChannelID: payload.ChannelID,
-						Error:     fmt.Sprintf("failed to read download body: %v", err),
-						ErrorCode: "DOWNLOAD_ERROR",
+						Error:     wrapped.Error(),
+						ErrorCode: errCodeDownloadError,
+						Timestamp: time.Now().UTC(),
+					},
+				}, nil
+			}
+
+			if len(buf) > maxFileSize {
+				s.logger.ErrorContext(ctx, "downloaded file exceeds max size", attr.Int("size", len(buf)), attr.Int("max", maxFileSize))
+				return RoundOperationResult{
+					Failure: &roundevents.ImportFailedPayload{
+						GuildID:   payload.GuildID,
+						RoundID:   payload.RoundID,
+						ImportID:  payload.ImportID,
+						Error:     "file too large",
+						ErrorCode: errCodeFileTooLarge,
 						Timestamp: time.Now().UTC(),
 					},
 				}, nil
@@ -418,6 +465,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 		parserFactory := parsers.NewFactory()
 		parser, err := parserFactory.GetParser(payload.FileName)
 		if err != nil {
+			wrapped := fmt.Errorf("unsupported file format: %w", err)
+			s.logger.ErrorContext(ctx, "parser selection failed", attr.Error(wrapped))
 			return RoundOperationResult{
 				Failure: &roundevents.ImportFailedPayload{
 					GuildID:   payload.GuildID,
@@ -425,8 +474,8 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 					ImportID:  payload.ImportID,
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
-					Error:     fmt.Sprintf("unsupported file format: %v", err),
-					ErrorCode: "UNSUPPORTED_FORMAT",
+					Error:     wrapped.Error(),
+					ErrorCode: errCodeUnsupported,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -435,7 +484,9 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 		// Parse the scorecard
 		parsedScorecard, err := parser.Parse(fileData)
 		if err != nil {
-			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", fmt.Sprintf("failed to parse scorecard: %v", err), "PARSE_ERROR")
+			wrapped := fmt.Errorf("failed to parse scorecard: %w", err)
+			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", wrapped.Error(), errCodeParseError)
+			s.logger.ErrorContext(ctx, "scorecard parse failed", attr.Error(wrapped))
 			return RoundOperationResult{
 				Failure: &roundevents.ScorecardParseFailedPayload{
 					GuildID:   payload.GuildID,
@@ -443,7 +494,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 					ImportID:  payload.ImportID,
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
-					Error:     fmt.Sprintf("failed to parse scorecard: %v", err),
+					Error:     wrapped.Error(),
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -504,7 +555,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil || round == nil {
 			msg := "failed to fetch round"
-			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", msg, "ROUND_NOT_FOUND")
+			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", msg, errCodeRoundNotFound)
 			return RoundOperationResult{
 				Failure: &roundevents.ImportFailedPayload{
 					GuildID:   payload.GuildID,
@@ -513,7 +564,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     msg,
-					ErrorCode: "ROUND_NOT_FOUND",
+					ErrorCode: errCodeRoundNotFound,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
@@ -733,14 +784,35 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 		successCount := 0
 
 		// Apply DB updates directly (batch-friendly)
-		for _, score := range payload.Scores {
+		for i, score := range payload.Scores {
+			// Periodically honor context cancellation to avoid wasted work
+			if i%10 == 0 {
+				if err := ctx.Err(); err != nil {
+					wrapped := fmt.Errorf("context cancelled during import apply: %w", err)
+					s.logger.ErrorContext(ctx, "import apply cancelled", attr.Error(wrapped))
+					return RoundOperationResult{
+						Failure: &roundevents.ImportFailedPayload{
+							GuildID:   payload.GuildID,
+							RoundID:   payload.RoundID,
+							ImportID:  payload.ImportID,
+							UserID:    payload.UserID,
+							ChannelID: payload.ChannelID,
+							Error:     wrapped.Error(),
+							ErrorCode: errCodeCtxCancelled,
+							Timestamp: time.Now().UTC(),
+						},
+					}, nil
+				}
+			}
+
 			if err := s.RoundDB.UpdateParticipantScore(ctx, payload.GuildID, payload.RoundID, score.UserID, score.Score); err != nil {
+				wrapped := fmt.Errorf("failed to update participant score during import: %w", err)
 				s.logger.ErrorContext(ctx, "failed to update participant score during import",
 					attr.String("import_id", payload.ImportID),
 					attr.String("guild_id", string(payload.GuildID)),
 					attr.String("round_id", payload.RoundID.String()),
 					attr.String("participant_id", string(score.UserID)),
-					attr.Error(err),
+					attr.Error(wrapped),
 				)
 				failedUserIDs = append(failedUserIDs, string(score.UserID))
 				continue
@@ -787,7 +859,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 					UserID:    payload.UserID,
 					ChannelID: payload.ChannelID,
 					Error:     "all score updates failed during import",
-					ErrorCode: "IMPORT_APPLY_FAILED",
+					ErrorCode: errCodeImportApplyFailed,
 					Timestamp: time.Now().UTC(),
 				},
 			}, nil
