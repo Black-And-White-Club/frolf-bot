@@ -11,11 +11,12 @@ import (
 )
 
 // ValidateRoundDeleteRequest validates the round delete request.
-func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ValidateRoundDeleteRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
+					GuildID:            payload.GuildID,
 					RoundDeleteRequest: &payload,
 					Error:              "round ID cannot be zero",
 				},
@@ -24,7 +25,8 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 
 		if payload.RequestingUserUserID == "" {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
+					GuildID:            payload.GuildID,
 					RoundDeleteRequest: &payload,
 					Error:              "requesting user's Discord ID cannot be empty",
 				},
@@ -39,7 +41,8 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
+					GuildID:            payload.GuildID,
 					RoundDeleteRequest: &payload,
 					Error:              fmt.Sprintf("round not found: %v", err),
 				},
@@ -53,7 +56,8 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 				attr.String("round_created_by", string(round.CreatedBy)),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
+					GuildID:            payload.GuildID,
 					RoundDeleteRequest: &payload,
 					Error:              "unauthorized: only the round creator can delete the round",
 				},
@@ -66,19 +70,22 @@ func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload r
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.RoundDeleteValidatedPayload{
+			Success: &roundevents.RoundDeleteValidatedPayloadV1{
+				GuildID:                   payload.GuildID,
 				RoundDeleteRequestPayload: payload,
 			},
 		}, nil
 	})
 }
 
-func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (RoundOperationResult, error) {
+func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (RoundOperationResult, error) {
 	if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 		s.logger.ErrorContext(ctx, "Cannot delete round with nil UUID")
 		return RoundOperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayload{
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+			Failure: &roundevents.RoundDeleteErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
+					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 				},
 				Error: "round ID cannot be nil",
@@ -97,8 +104,10 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 			attr.Error(err),
 		)
 		return RoundOperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayload{
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+			Failure: &roundevents.RoundDeleteErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
+					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 				},
 				Error: fmt.Sprintf("round not found: %v", err),
@@ -116,8 +125,10 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 			attr.Error(err),
 		)
 		return RoundOperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayload{
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+			Failure: &roundevents.RoundDeleteErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
+					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 				},
 				Error: fmt.Sprintf("failed to delete round from database: %v", err),
@@ -141,7 +152,8 @@ func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.Roun
 		attr.RoundID("round_id", payload.RoundID),
 	)
 
-	successPayload := &roundevents.RoundDeletedPayload{
+	successPayload := &roundevents.RoundDeletedPayloadV1{
+		GuildID:        payload.GuildID,
 		RoundID:        payload.RoundID,
 		EventMessageID: eventMessageID,
 	}

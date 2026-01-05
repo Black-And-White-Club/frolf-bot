@@ -11,7 +11,7 @@ import (
 
 // ProcessRoundStart handles the start of a round, updates participant data, updates DB, and notifies Discord.
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error) {
+func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ProcessRoundStart", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round start",
 			attr.RoundID("round_id", payload.RoundID),
@@ -28,7 +28,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -46,7 +46,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRoundState")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -54,10 +54,10 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			}, nil
 		}
 
-		// Convert []roundtypes.Participant to []roundevents.RoundParticipant
-		participants := make([]roundevents.RoundParticipant, len(round.Participants))
+		// Convert []roundtypes.Participant to []roundevents.RoundParticipantV1
+		participants := make([]roundevents.RoundParticipantV1, len(round.Participants))
 		for i, p := range round.Participants {
-			participants[i] = roundevents.RoundParticipant{
+			participants[i] = roundevents.RoundParticipantV1{
 				UserID:    sharedtypes.DiscordID(p.UserID),
 				TagNumber: p.TagNumber,
 				Response:  roundtypes.Response(p.Response),
@@ -66,7 +66,7 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 		}
 
 		// Use the payload data for the Discord event (not the DB data)
-		discordPayload := &roundevents.DiscordRoundStartPayload{
+		discordPayload := &roundevents.DiscordRoundStartPayloadV1{
 			GuildID:        payload.GuildID,
 			RoundID:        round.ID,
 			Title:          payload.Title,        // Use payload title

@@ -22,7 +22,7 @@ func TestProcessRoundStart(t *testing.T) {
 		name                  string
 		roundID               sharedtypes.RoundID
 		initialSetup          func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID)
-		payload               roundevents.RoundStartedPayload
+		payload               roundevents.RoundStartedPayloadV1
 		expectedError         bool
 		expectedErrorContains string
 		validateResponse      func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID)
@@ -38,8 +38,13 @@ func TestProcessRoundStart(t *testing.T) {
 						{UserID: sharedtypes.DiscordID("user_A"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: nil},
 					})
 			},
-			payload: roundevents.RoundStartedPayload{
-				RoundID: sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+			payload: roundevents.RoundStartedPayloadV1{
+				GuildID:   "test-guild",
+				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+				Title:     roundtypes.Title("Test Round"),
+				Location:  nil,
+				StartTime: nil,
+				ChannelID: "",
 			},
 			expectedError: false,
 			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
@@ -47,7 +52,7 @@ func TestProcessRoundStart(t *testing.T) {
 					t.Fatalf("Expected success payload, got nil")
 				}
 				// Fix: Expect pointer type instead of value type
-				successPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayload)
+				successPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayloadV1)
 				if !ok {
 					t.Fatalf("Expected *DiscordRoundStartPayload, got %T", result.Success)
 				}
@@ -83,8 +88,13 @@ func TestProcessRoundStart(t *testing.T) {
 			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
 				// No setup, so the round won't exist
 			},
-			payload: roundevents.RoundStartedPayload{
-				RoundID: sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+			payload: roundevents.RoundStartedPayloadV1{
+				GuildID:   "test-guild",
+				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+				Title:     roundtypes.Title("Test Round"),
+				Location:  nil,
+				StartTime: nil,
+				ChannelID: "",
 			},
 			expectedError:         false,           // Service uses failure payload instead of error
 			expectedErrorContains: "round with ID", // Error from GetRound
@@ -93,7 +103,7 @@ func TestProcessRoundStart(t *testing.T) {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
 				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
 					t.Fatalf("Expected *RoundErrorPayload, got %T", result.Failure)
 				}
@@ -113,8 +123,13 @@ func TestProcessRoundStart(t *testing.T) {
 						{UserID: sharedtypes.DiscordID("user_B"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: nil},
 					})
 			},
-			payload: roundevents.RoundStartedPayload{
-				RoundID: sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+			payload: roundevents.RoundStartedPayloadV1{
+				GuildID:   "test-guild",
+				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+				Title:     roundtypes.Title("Test Round"),
+				Location:  nil,
+				StartTime: nil,
+				ChannelID: "",
 			},
 			expectedError:         false,           // Service uses failure payload instead of error
 			expectedErrorContains: "round with ID", // Updated to match the actual error from GetRound
@@ -123,7 +138,7 @@ func TestProcessRoundStart(t *testing.T) {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
 				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
 					t.Fatalf("Expected *RoundErrorPayload, got %T", result.Failure)
 				}
@@ -178,7 +193,7 @@ func TestProcessRoundStart(t *testing.T) {
 					t.Errorf("Expected nil success payload, but got %v", result.Success)
 				}
 				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 					if ok && !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
 						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
 					}
@@ -198,7 +213,7 @@ func TestProcessRoundStart(t *testing.T) {
 
 				// Handle validation failures when expectedError is false but operation fails
 				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 					if ok && !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
 						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
 					}

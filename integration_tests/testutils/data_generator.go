@@ -77,7 +77,7 @@ func (g *TestDataGenerator) GenerateUsers(count int) []User {
 			ID:      int64(i + 1),
 			UserID:  DiscordID(g.faker.Numerify("#########")),
 			Role:    roles[g.faker.Number(0, len(roles)-1)],
-			GuildID: "test_guild", // Always set a valid guild ID for integration tests
+			GuildID: "test-guild", // Always set a valid guild ID for integration tests (must match handler test payloads)
 		}
 	}
 

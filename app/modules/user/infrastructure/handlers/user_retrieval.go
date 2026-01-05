@@ -14,9 +14,9 @@ import (
 func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetUserRequest",
-		&userevents.GetUserRequestPayload{},
+		&userevents.GetUserRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			getUserPayload := payload.(*userevents.GetUserRequestPayload)
+			getUserPayload := payload.(*userevents.GetUserRequestedPayloadV1)
 
 			userID := getUserPayload.UserID
 			guildID := getUserPayload.GuildID
@@ -37,7 +37,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Failure != nil {
-				failedPayload, ok := result.Failure.(*userevents.GetUserFailedPayload)
+				failedPayload, ok := result.Failure.(*userevents.GetUserFailedPayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "Unexpected type for failure payload from GetUser",
 						attr.CorrelationIDFromMsg(msg),
@@ -53,7 +53,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 				failureMsg, createMsgErr := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
-					userevents.GetUserFailed,
+					userevents.GetUserFailedV1,
 				)
 				if createMsgErr != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after service returned failure",
@@ -67,7 +67,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Success != nil {
-				successPayload, ok := result.Success.(*userevents.GetUserResponsePayload)
+				successPayload, ok := result.Success.(*userevents.GetUserResponsePayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "Unexpected type for success payload from GetUser",
 						attr.CorrelationIDFromMsg(msg),
@@ -83,7 +83,7 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 				successMsg, createMsgErr := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.GetUserResponse,
+					userevents.GetUserResponseV1,
 				)
 				if createMsgErr != nil {
 					h.logger.ErrorContext(ctx, "Failed to create success message after service returned success",
@@ -111,9 +111,9 @@ func (h *UserHandlers) HandleGetUserRequest(msg *message.Message) ([]*message.Me
 func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetUserRoleRequest",
-		&userevents.GetUserRoleRequestPayload{},
+		&userevents.GetUserRoleRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			getUserRolePayload := payload.(*userevents.GetUserRoleRequestPayload)
+			getUserRolePayload := payload.(*userevents.GetUserRoleRequestedPayloadV1)
 
 			userID := getUserRolePayload.UserID
 			guildID := getUserRolePayload.GuildID
@@ -133,7 +133,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			}
 
 			if result.Failure != nil {
-				failedPayload, ok := result.Failure.(*userevents.GetUserRoleFailedPayload)
+				failedPayload, ok := result.Failure.(*userevents.GetUserRoleFailedPayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "Unexpected type for failure payload from GetUserRole",
 						attr.CorrelationIDFromMsg(msg),
@@ -149,7 +149,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 				failureMsg, createMsgErr := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
-					userevents.GetUserRoleFailed,
+					userevents.GetUserRoleFailedV1,
 				)
 				if createMsgErr != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after service returned failure (GetUserRole)",
@@ -163,7 +163,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 			}
 
 			if result.Success != nil {
-				successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayload)
+				successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "Unexpected type for success payload from GetUserRole",
 						attr.CorrelationIDFromMsg(msg),
@@ -180,7 +180,7 @@ func (h *UserHandlers) HandleGetUserRoleRequest(msg *message.Message) ([]*messag
 				successMsg, createMsgErr := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.GetUserRoleResponse,
+					userevents.GetUserRoleResponseV1,
 				)
 				if createMsgErr != nil {
 					h.logger.ErrorContext(ctx, "Failed to create success message after service returned success (GetUserRole)",

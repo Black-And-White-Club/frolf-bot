@@ -15,9 +15,9 @@ import (
 func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagAvailable",
-		&userevents.TagAvailablePayload{},
+		&userevents.TagAvailablePayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagAvailablePayload := payload.(*userevents.TagAvailablePayload)
+			tagAvailablePayload := payload.(*userevents.TagAvailablePayloadV1)
 
 			userID := tagAvailablePayload.UserID
 			guildID := tagAvailablePayload.GuildID
@@ -35,7 +35,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			result, err := h.userService.CreateUser(ctx, guildID, userID, &tagNumber, nil, nil)
 
 			if result.Failure != nil {
-				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
 					span.RecordError(errors.New("unexpected type for failure payload"))
 					return nil, errors.New("unexpected type for failure payload")
@@ -50,7 +50,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 				failureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
-					userevents.UserCreationFailed,
+					userevents.UserCreationFailedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -73,7 +73,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 			}
 
 			if result.Success != nil {
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
 					span.RecordError(errors.New("unexpected type for success payload"))
 					return nil, errors.New("unexpected type for success payload")
@@ -88,7 +88,7 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.UserCreated,
+					userevents.UserCreatedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -115,9 +115,9 @@ func (h *UserHandlers) HandleTagAvailable(msg *message.Message) ([]*message.Mess
 func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagUnavailable",
-		&userevents.TagUnavailablePayload{},
+		&userevents.TagUnavailablePayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagUnavailablePayload := payload.(*userevents.TagUnavailablePayload)
+			tagUnavailablePayload := payload.(*userevents.TagUnavailablePayloadV1)
 
 			// Create convenient variables for frequently used fields
 			userID := tagUnavailablePayload.UserID
@@ -136,7 +136,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 			}
 
 			// Create the UserCreationFailed payload directly in the handler
-			failedPayload := &userevents.UserCreationFailedPayload{
+			failedPayload := &userevents.UserCreationFailedPayloadV1{
 				GuildID:   tagUnavailablePayload.GuildID,
 				UserID:    userID,
 				TagNumber: &tagNumber,
@@ -148,7 +148,7 @@ func (h *UserHandlers) HandleTagUnavailable(msg *message.Message) ([]*message.Me
 			defer span.End()
 
 			// Create message to publish the UserCreationFailed event
-			failedMsg, err := h.helpers.CreateResultMessage(msg, failedPayload, userevents.UserCreationFailed)
+			failedMsg, err := h.helpers.CreateResultMessage(msg, failedPayload, userevents.UserCreationFailedV1)
 			if err != nil {
 				span.RecordError(err)
 				return nil, fmt.Errorf("failed to create UserCreationFailed message: %w", err)

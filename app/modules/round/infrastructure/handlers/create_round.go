@@ -18,9 +18,9 @@ import (
 func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleCreateRoundRequest",
-		&roundevents.CreateRoundRequestedPayload{},
+		&roundevents.CreateRoundRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			createRoundRequestedPayload := payload.(*roundevents.CreateRoundRequestedPayload)
+			createRoundRequestedPayload := payload.(*roundevents.CreateRoundRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received CreateRoundRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -53,7 +53,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundValidationFailed,
+					roundevents.RoundValidationFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -69,7 +69,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(msg *message.Message) ([]*messa
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.RoundEntityCreated,
+					roundevents.RoundEntityCreatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -105,9 +105,9 @@ func (h *RoundHandlers) extractAnchorClock(msg *message.Message) roundutil.Clock
 func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundEntityCreated",
-		&roundevents.RoundEntityCreatedPayload{},
+		&roundevents.RoundEntityCreatedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundEntityCreatedPayload := payload.(*roundevents.RoundEntityCreatedPayload)
+			roundEntityCreatedPayload := payload.(*roundevents.RoundEntityCreatedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundEntityCreated event",
 				attr.CorrelationIDFromMsg(msg),
@@ -139,7 +139,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundCreationFailed,
+					roundevents.RoundCreationFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -155,7 +155,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(msg *message.Message) ([]*messa
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.RoundCreated,
+					roundevents.RoundCreatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -180,13 +180,13 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 	// Use the handlerWrapper for consistent logging, tracing, and error handling
 	return h.handlerWrapper(
 		"HandleRoundEventMessageIDUpdate",          // Operation name for logging/tracing
-		&roundevents.RoundMessageIDUpdatePayload{}, // Expected payload type for unmarshalling
+		&roundevents.RoundMessageIDUpdatePayloadV1{}, // Expected payload type for unmarshalling
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			// Bound handler work by a short timeout to reduce inherited cancellations
-			hCtx, hCancel := context.WithTimeout(ctx, 7*time.Second)
+			hCtx, hCancel := context.WithTimeout(ctx, 15*time.Second)
 			defer hCancel()
 			// Assert the unmarshalled payload to the correct type
-			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayload)
+			updatePayload, ok := payload.(*roundevents.RoundMessageIDUpdatePayloadV1)
 			if !ok {
 				h.logger.ErrorContext(ctx, "Received unexpected payload type for RoundEventMessageIDUpdate",
 					attr.CorrelationIDFromMsg(msg),
@@ -214,7 +214,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 
 			// 1. Update the round in the database with the Discord message ID
 			// Use a short-lived context to avoid premature cancellation from message lifecycle.
-			dbCtx, cancel := context.WithTimeout(hCtx, 5*time.Second)
+			dbCtx, cancel := context.WithTimeout(hCtx, 10*time.Second)
 			defer cancel()
 
 			// Call the service method which now returns the updated round object
@@ -252,7 +252,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			if guildID == "" {
 				guildID = updatedRound.GuildID
 			}
-			scheduledPayload := roundevents.RoundScheduledPayload{
+			scheduledPayload := roundevents.RoundScheduledPayloadV1{
 				GuildID: guildID,
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     updatedRound.ID,
@@ -270,7 +270,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(msg *message.Message) ([
 			scheduledMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				scheduledPayload,
-				roundevents.RoundEventMessageIDUpdated,
+				roundevents.RoundEventMessageIDUpdatedV1,
 			)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to create RoundScheduled message",

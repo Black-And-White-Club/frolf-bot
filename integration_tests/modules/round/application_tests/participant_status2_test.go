@@ -16,14 +16,14 @@ import (
 func TestParticipantRemoval(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Valid removal of existing participant - Expecting ParticipantRemovedPayload",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_removal_1"),
@@ -61,9 +61,10 @@ func TestParticipantRemoval(t *testing.T) {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: roundForDBInsertion.ID,
 					UserID:  sharedtypes.DiscordID("participant_to_remove"),
+					GuildID: "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
@@ -73,9 +74,9 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 
 				// Fixed: expecting pointer type
-				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -105,7 +106,7 @@ func TestParticipantRemoval(t *testing.T) {
 		},
 		{
 			name: "Attempt to remove non-existent participant - Should succeed with no changes",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_removal_2"),
@@ -130,9 +131,10 @@ func TestParticipantRemoval(t *testing.T) {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: roundForDBInsertion.ID,
 					UserID:  sharedtypes.DiscordID("non_existent_participant"),
+					GuildID: "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
@@ -142,9 +144,9 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 
 				// Fixed: expecting pointer type
-				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -166,7 +168,7 @@ func TestParticipantRemoval(t *testing.T) {
 		},
 		{
 			name: "Remove participant from round with multiple participants of same response type",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_removal_3"),
@@ -205,9 +207,10 @@ func TestParticipantRemoval(t *testing.T) {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: roundForDBInsertion.ID,
 					UserID:  sharedtypes.DiscordID("accepted_participant_to_remove"),
+					GuildID: "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
@@ -217,9 +220,9 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 
 				// Fixed: expecting pointer type
-				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -248,11 +251,12 @@ func TestParticipantRemoval(t *testing.T) {
 		},
 		{
 			name: "Attempt to remove participant from non-existent round - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1) {
 				nonExistentID := sharedtypes.RoundID(uuid.New())
-				return nonExistentID, roundevents.ParticipantRemovalRequestPayload{
+				return nonExistentID, roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: nonExistentID,
 					UserID:  sharedtypes.DiscordID("some_user"),
+					GuildID: "test-guild",
 				}
 			},
 			expectedFailure:          true,                            // Changed from expectedError
@@ -266,7 +270,7 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantRemovalErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantRemovalErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ParticipantRemovalErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -278,7 +282,7 @@ func TestParticipantRemoval(t *testing.T) {
 		},
 		{
 			name: "Remove last participant from round - Should result in empty lists",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_removal_4"),
@@ -302,9 +306,10 @@ func TestParticipantRemoval(t *testing.T) {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
-				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: roundForDBInsertion.ID,
 					UserID:  sharedtypes.DiscordID("only_participant"),
+					GuildID: "test-guild",
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
@@ -314,9 +319,9 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 
 				// Fixed: expecting pointer type
-				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayload)
+				removedPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantRemovedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantRemovedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -342,7 +347,7 @@ func TestParticipantRemoval(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload roundevents.ParticipantRemovalRequestPayload
+			var payload roundevents.ParticipantRemovalRequestPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
@@ -357,7 +362,7 @@ func TestParticipantRemoval(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create default round for test setup: %v", err)
 				}
-				payload = roundevents.ParticipantRemovalRequestPayload{
+				payload = roundevents.ParticipantRemovalRequestPayloadV1{
 					RoundID: dummyRound.ID,
 					UserID:  sharedtypes.DiscordID("default_user_payload"),
 				}
@@ -375,7 +380,7 @@ func TestParticipantRemoval(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.ParticipantRemovalErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.ParticipantRemovalErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *ParticipantRemovalErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {

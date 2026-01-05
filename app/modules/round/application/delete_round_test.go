@@ -36,7 +36,7 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 		name                    string
 		mockDBSetup             func(*rounddbmocks.MockRoundDB)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
-		payload                 roundevents.RoundDeleteRequestPayload
+		payload                 roundevents.RoundDeleteRequestPayloadV1
 		expectedResult          RoundOperationResult
 		expectedError           error
 	}{
@@ -54,14 +54,14 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No specific validator mocks needed for validation
 			},
-			payload: roundevents.RoundDeleteRequestPayload{
+			payload: roundevents.RoundDeleteRequestPayloadV1{
 				GuildID:              sharedtypes.GuildID("guild-123"),
 				RoundID:              sharedtypes.RoundID(uuid.MustParse("b236f541-e988-41b4-ab81-0e906f2ac270")),
 				RequestingUserUserID: "Test User",
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.RoundDeleteValidatedPayload{
-					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayload{
+				Success: &roundevents.RoundDeleteValidatedPayloadV1{
+					RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayloadV1{
 						GuildID:              sharedtypes.GuildID("guild-123"),
 						RoundID:              sharedtypes.RoundID(uuid.MustParse("b236f541-e988-41b4-ab81-0e906f2ac270")),
 						RequestingUserUserID: "Test User",
@@ -77,14 +77,14 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
-			payload: roundevents.RoundDeleteRequestPayload{
+			payload: roundevents.RoundDeleteRequestPayloadV1{
 				GuildID:              sharedtypes.GuildID("guild-123"),
 				RoundID:              sharedtypes.RoundID(uuid.Nil), // Use uuid.Nil for empty UUID
 				RequestingUserUserID: "Test User",
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
-					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
+					RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
 						GuildID:              sharedtypes.GuildID("guild-123"),
 						RoundID:              sharedtypes.RoundID(uuid.Nil),
 						RequestingUserUserID: "Test User",
@@ -101,10 +101,10 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 			},
-			payload: func() roundevents.RoundDeleteRequestPayload {
+			payload: func() roundevents.RoundDeleteRequestPayloadV1 {
 				guildID := sharedtypes.GuildID("guild-123")
 				roundID := sharedtypes.RoundID(uuid.New())
-				return roundevents.RoundDeleteRequestPayload{
+				return roundevents.RoundDeleteRequestPayloadV1{
 					GuildID:              guildID,
 					RoundID:              roundID,
 					RequestingUserUserID: "",
@@ -114,8 +114,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				roundID := sharedtypes.RoundID(uuid.New()) // This will be overwritten in the test
 				return RoundOperationResult{
-					Failure: &roundevents.RoundDeleteErrorPayload{
-						RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+					Failure: &roundevents.RoundDeleteErrorPayloadV1{
+						RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
 							GuildID:              guildID,
 							RoundID:              roundID,
 							RequestingUserUserID: "",
@@ -169,8 +169,8 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 				// Type assertion for Success payload
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.RoundDeleteValidatedPayload); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundDeleteValidatedPayload, got %T", result.Success)
+				} else if successPayload, ok := result.Success.(*roundevents.RoundDeleteValidatedPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundDeleteValidatedPayloadV1, got %T", result.Success)
 				} else {
 					// Validate the payload content
 					if successPayload.RoundDeleteRequestPayload.RequestingUserUserID != tt.payload.RequestingUserUserID {
@@ -181,10 +181,10 @@ func TestRoundService_ValidateRoundDeleteRequest(t *testing.T) {
 				// Type assertion for Failure payload
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayloadV1); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundDeleteErrorPayloadV1, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundDeleteErrorPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundDeleteErrorPayloadV1, got %T", tt.expectedResult.Failure)
 				} else if failurePayload.Error != expectedFailurePayload.Error {
 					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}
@@ -212,7 +212,7 @@ func TestRoundService_DeleteRound(t *testing.T) {
 		name           string
 		mockDBSetup    func(*rounddbmocks.MockRoundDB)
 		mockQueueSetup func(*queuemocks.MockQueueService)
-		payload        roundevents.RoundDeleteAuthorizedPayload
+		payload        roundevents.RoundDeleteAuthorizedPayloadV1
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
@@ -231,12 +231,12 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				mockQueue.EXPECT().CancelRoundJobs(ctx, gomock.Eq(id)).Return(nil)
 			},
-			payload: roundevents.RoundDeleteAuthorizedPayload{
+			payload: roundevents.RoundDeleteAuthorizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.RoundDeletedPayload{
+				Success: &roundevents.RoundDeletedPayloadV1{
 					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        id,
 					EventMessageID: "test-event-message-id",
@@ -255,12 +255,12 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				// No queue calls expected when DB delete fails
 			},
-			payload: roundevents.RoundDeleteAuthorizedPayload{
+			payload: roundevents.RoundDeleteAuthorizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayload{
+				Failure: &roundevents.RoundDeleteErrorPayloadV1{
 					RoundDeleteRequest: nil,
 					Error:              fmt.Sprintf("failed to delete round from database: %v", errors.New("delete round error")),
 				},
@@ -282,12 +282,12 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService) {
 				mockQueue.EXPECT().CancelRoundJobs(ctx, gomock.Eq(id)).Return(errors.New("cancel queue jobs error"))
 			},
-			payload: roundevents.RoundDeleteAuthorizedPayload{
+			payload: roundevents.RoundDeleteAuthorizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: id,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.RoundDeletedPayload{
+				Success: &roundevents.RoundDeletedPayloadV1{
 					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        id,
 					EventMessageID: "test-event-message-id",
@@ -340,10 +340,10 @@ func TestRoundService_DeleteRound(t *testing.T) {
 				// Type assertion for Success payload
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.RoundDeletedPayload); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundDeletedPayload, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundDeletedPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundDeletedPayload, got %T", tt.expectedResult.Success)
+				} else if successPayload, ok := result.Success.(*roundevents.RoundDeletedPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundDeletedPayloadV1, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundDeletedPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundDeletedPayloadV1, got %T", tt.expectedResult.Success)
 				} else if successPayload.RoundID != expectedSuccessPayload.RoundID {
 					t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
 				}
@@ -351,10 +351,10 @@ func TestRoundService_DeleteRound(t *testing.T) {
 				// Type assertion for Failure payload
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundDeleteErrorPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundDeleteErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundDeleteErrorPayloadV1); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundDeleteErrorPayloadV1, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundDeleteErrorPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundDeleteErrorPayloadV1, got %T", tt.expectedResult.Failure)
 				} else if failurePayload.Error != expectedFailurePayload.Error {
 					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}

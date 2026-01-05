@@ -13,9 +13,9 @@ import (
 func (h *GuildHandlers) HandleDeleteGuildConfig(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleDeleteGuildConfig",
-		&guildevents.GuildConfigDeletionRequestedPayload{},
+		&guildevents.GuildConfigDeletionRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			deletePayload := payload.(*guildevents.GuildConfigDeletionRequestedPayload)
+			deletePayload := payload.(*guildevents.GuildConfigDeletionRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received GuildConfigDeletionRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -39,7 +39,7 @@ func (h *GuildHandlers) HandleDeleteGuildConfig(msg *message.Message) ([]*messag
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					guildevents.GuildConfigDeletionFailed,
+					guildevents.GuildConfigDeletionFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -62,7 +62,7 @@ func (h *GuildHandlers) HandleDeleteGuildConfig(msg *message.Message) ([]*messag
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					guildevents.GuildConfigDeleted,
+					guildevents.GuildConfigDeletedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

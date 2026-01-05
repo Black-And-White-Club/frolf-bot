@@ -13,7 +13,7 @@ import (
 
 // ValidateScoreUpdateRequest validates the score update request.
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ValidateScoreUpdateRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		var errs []string
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
@@ -38,7 +38,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID:            payload.GuildID,
 					ScoreUpdateRequest: &payload,
 					Error:              err.Error(),
@@ -51,7 +51,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.ScoreUpdateValidatedPayload{
+			Success: &roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID:                   payload.GuildID,
 				ScoreUpdateRequestPayload: payload,
 			},
@@ -60,7 +60,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 }
 
 // UpdateParticipantScore updates the participant's score in the database and publishes an event with the full participant list.
-func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateParticipantScore", payload.ScoreUpdateRequestPayload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Update the participant's score in the database
 		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.GuildID, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.Participant, *payload.ScoreUpdateRequestPayload.Score)
@@ -71,7 +71,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundScoreUpdateErrorPayload{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID:            payload.ScoreUpdateRequestPayload.GuildID,
 					ScoreUpdateRequest: &payload.ScoreUpdateRequestPayload,
 					Error:              "Failed to update score in database: " + err.Error(),
@@ -88,7 +88,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.ScoreUpdateRequestPayload.GuildID,
 					RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 					Error:   "Failed to retrieve updated participants list after score update: " + err.Error(),
@@ -105,7 +105,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.ScoreUpdateRequestPayload.GuildID,
 					RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 					Error:   "Failed to retrieve round details for event payload: " + err.Error(),
@@ -123,7 +123,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 
 		// Publish the event with the full list of updated participants
 		return RoundOperationResult{
-			Success: &roundevents.ParticipantScoreUpdatedPayload{
+			Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        payload.ScoreUpdateRequestPayload.GuildID,
 				RoundID:        payload.ScoreUpdateRequestPayload.RoundID,
 				Participant:    payload.ScoreUpdateRequestPayload.Participant,
@@ -144,7 +144,7 @@ type CheckAllScoresSubmittedResult struct {
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
 func (s *RoundService) CheckAllScoresSubmitted(
 	ctx context.Context,
-	payload roundevents.ParticipantScoreUpdatedPayload,
+	payload roundevents.ParticipantScoreUpdatedPayloadV1,
 ) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		for _, p := range payload.Participants {
@@ -166,7 +166,7 @@ func (s *RoundService) CheckAllScoresSubmitted(
 		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -177,7 +177,7 @@ func (s *RoundService) CheckAllScoresSubmitted(
 		round.Participants = payload.Participants
 
 		return RoundOperationResult{
-			Success: &roundevents.AllScoresSubmittedPayload{
+			Success: &roundevents.AllScoresSubmittedPayloadV1{
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				EventMessageID: payload.EventMessageID,

@@ -12,7 +12,7 @@ import (
 
 // ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
 // It handles cases where the round start time might be too close for certain reminders.
-func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error) {
+func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ScheduleRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round scheduling",
 			attr.RoundID("round_id", payload.RoundID),
@@ -30,7 +30,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
 				},
@@ -49,7 +49,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				attr.Time("reminder_time", reminderTimeUTC),
 			)
 
-			reminderPayload := roundevents.DiscordReminderPayload{
+			reminderPayload := roundevents.DiscordReminderPayloadV1{
 				GuildID:        guildID, // Multi-tenant scope required downstream
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
@@ -84,7 +84,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayloadV1{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
@@ -98,14 +98,14 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 			)
 		}
 
-		// Schedule round start if in the future (at least 30 seconds buffer)
-		if startTimeUTC.After(now.Add(30 * time.Second)) {
+		// Schedule round start if in the future (at least 5 seconds buffer)
+		if startTimeUTC.After(now.Add(5 * time.Second)) {
 			s.logger.InfoContext(ctx, "Scheduling round start",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Time("start_time", startTimeUTC),
 			)
 
-			startPayload := roundevents.RoundStartedPayload{
+			startPayload := roundevents.RoundStartedPayloadV1{
 				GuildID:   guildID, // Ensure downstream start processing has tenant scope
 				RoundID:   payload.RoundID,
 				Title:     payload.Title,
@@ -119,7 +119,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: &roundevents.RoundErrorPayload{
+					Failure: &roundevents.RoundErrorPayloadV1{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
 					},
@@ -134,7 +134,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 
 		// Return success with the original payload
 		return RoundOperationResult{
-			Success: &roundevents.RoundScheduledPayload{
+			Success: &roundevents.RoundScheduledPayloadV1{
 				GuildID: guildID, // ensure guild scope propagates for downstream handlers
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     payload.RoundID,

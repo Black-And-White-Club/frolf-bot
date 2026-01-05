@@ -326,12 +326,12 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 					Return(&userrepo.User{UserID: "discord-user-1"}, nil)
 			},
 			want: UserOperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayload{
+				Success: &userevents.UDiscMatchConfirmedPayloadV1{
 					ImportID: testImportID,
 					GuildID:  testGuildID,
 					RoundID:  testRoundID,
 					UserID:   testUserID,
-					Mappings: []userevents.UDiscConfirmedMapping{
+					Mappings: []userevents.UDiscConfirmedMappingV1{
 						{PlayerName: "TestUser", DiscordUserID: "discord-user-1"},
 					},
 				},
@@ -362,12 +362,12 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 					Return(&userrepo.User{UserID: "discord-user-2"}, nil)
 			},
 			want: UserOperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayload{
+				Success: &userevents.UDiscMatchConfirmedPayloadV1{
 					ImportID: testImportID,
 					GuildID:  testGuildID,
 					RoundID:  testRoundID,
 					UserID:   testUserID,
-					Mappings: []userevents.UDiscConfirmedMapping{
+					Mappings: []userevents.UDiscConfirmedMappingV1{
 						{PlayerName: "Test User", DiscordUserID: "discord-user-2"},
 					},
 				},
@@ -398,7 +398,7 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 					Return(nil, userrepo.ErrUserNotFound)
 			},
 			want: UserOperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayload{
+				Success: &userevents.UDiscMatchConfirmedPayloadV1{
 					ImportID: testImportID,
 					GuildID:  testGuildID,
 					RoundID:  testRoundID,
@@ -438,12 +438,12 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 
 			if !tt.wantErr {
 				// Verify success payload
-				gotPayload, ok := got.Success.(*userevents.UDiscMatchConfirmedPayload)
+				gotPayload, ok := got.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
 				if !ok {
 					t.Errorf("MatchParsedScorecard() success type mismatch, got %T", got.Success)
 					return
 				}
-				wantPayload := tt.want.Success.(*userevents.UDiscMatchConfirmedPayload)
+				wantPayload := tt.want.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
 
 				if gotPayload.ImportID != wantPayload.ImportID {
 					t.Errorf("ImportID mismatch")

@@ -26,7 +26,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([
 	// We’ll unmarshal to the superset we need depending on topic.
 	return h.handlerWrapper(handlerName, nil, func(ctx context.Context, msg *message.Message, _ interface{}) ([]*message.Message, error) {
 		// Determine if this is bulk or single success
-		isBulk := topic == scoreevents.ScoreBulkUpdateSuccess
+		isBulk := topic == scoreevents.ScoreBulkUpdatedV1
 
 		if !isBulk {
 			// Single success; skip if part of bulk to prevent double-run
@@ -40,7 +40,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([
 		var roundID sharedtypes.RoundID
 
 		if isBulk {
-			var p scoreevents.ScoreBulkUpdateSuccessPayload
+			var p scoreevents.ScoreBulkUpdatedPayloadV1
 			if err := h.Helpers.UnmarshalPayload(msg, &p); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal bulk success payload: %w", err)
 			}
@@ -53,7 +53,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([
 			guildID = p.GuildID
 			roundID = p.RoundID
 		} else {
-			var p scoreevents.ScoreUpdateSuccessPayload
+			var p scoreevents.ScoreUpdatedPayloadV1
 			if err := h.Helpers.UnmarshalPayload(msg, &p); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal success payload: %w", err)
 			}
@@ -75,17 +75,17 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([
 		}
 
 		// Build and publish a ProcessRoundScoresRequest with existing scores
-		req := scoreevents.ProcessRoundScoresRequestPayload{
+		req := scoreevents.ProcessRoundScoresRequestedPayloadV1{
 			GuildID: guildID,
 			RoundID: roundID,
 			Scores:  scores,
 		}
-		out, err := h.Helpers.CreateResultMessage(msg, &req, scoreevents.ProcessRoundScoresRequest)
+		out, err := h.Helpers.CreateResultMessage(msg, &req, scoreevents.ProcessRoundScoresRequestedV1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create reprocess request message: %w", err)
 		}
 		// Ensure routing metadata present
-		out.Metadata.Set("topic", scoreevents.ProcessRoundScoresRequest)
+		out.Metadata.Set("topic", scoreevents.ProcessRoundScoresRequestedV1)
 		h.logger.InfoContext(ctx, "Published reprocess request after score override",
 			attr.RoundID("round_id", roundID), attr.Int("score_count", len(scores)))
 		return []*message.Message{out}, nil

@@ -1,6 +1,7 @@
 package leaderboardintegrationtests
 
 import (
+	"time"
 	"context"
 	"io"
 	"log"
@@ -65,20 +66,13 @@ func SetupTestLeaderboardService(t *testing.T) TestDeps {
 	// Get the shared test environment
 	env := GetTestEnv(t)
 
-	// Check if containers should be recreated for stability
-	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
-		t.Fatalf("Failed to handle container recreation: %v", err)
+	// Reset environment for clean state
+	resetCtx, resetCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer resetCancel()
+	if err := env.Reset(resetCtx); err != nil {
+		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-	// Perform deep cleanup between tests for better isolation
-	if err := env.DeepCleanup(); err != nil {
-		t.Fatalf("Failed to perform deep cleanup: %v", err)
-	}
-
-	// Clean up database tables before each test
-	if err := testutils.TruncateTables(env.Ctx, env.DB, "leaderboards"); err != nil {
-		t.Fatalf("Failed to truncate DB tables: %v", err)
-	}
 
 	realDB := &leaderboarddb.LeaderboardDBImpl{DB: env.DB}
 

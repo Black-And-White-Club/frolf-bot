@@ -15,17 +15,17 @@ import (
 func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error) {
 	return h.handlerWrapper(
 		"HandleProcessRoundScoresRequest",
-		&scoreevents.ProcessRoundScoresRequestPayload{},
+		&scoreevents.ProcessRoundScoresRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			processRoundScoresRequestPayload, ok := payload.(*scoreevents.ProcessRoundScoresRequestPayload)
+			processRoundScoresRequestPayload, ok := payload.(*scoreevents.ProcessRoundScoresRequestedPayloadV1)
 			if !ok {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, sharedtypes.RoundID{})
-				return nil, fmt.Errorf("invalid payload type: expected ProcessRoundScoresRequestPayload")
+				return nil, fmt.Errorf("invalid payload type: expected ProcessRoundScoresRequestedPayloadV1")
 			}
 
 			if processRoundScoresRequestPayload == nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, sharedtypes.RoundID{})
-				return nil, fmt.Errorf("received nil ProcessRoundScoresRequestPayload after type assertion")
+				return nil, fmt.Errorf("received nil ProcessRoundScoresRequestedPayloadV1 after type assertion")
 			}
 
 			// Call the service to process round scores.
@@ -40,12 +40,12 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			// Handle direct system errors from the service.
 			if err != nil && result.Failure == nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+				failurePayload := &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: processRoundScoresRequestPayload.GuildID,
 					RoundID: processRoundScoresRequestPayload.RoundID,
-					Error:   err.Error(),
+					Reason:  err.Error(),
 				}
-				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailure)
+				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailedV1)
 				if errCreateResult != nil {
 					return nil, fmt.Errorf("failed to create failure message for system error: %w", errCreateResult)
 				}
@@ -55,12 +55,12 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			// Handle business-level failures returned by the service via result.Failure.
 			if result.Failure != nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				failurePayload, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
+				failurePayload, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailedPayloadV1)
 				if !ok {
-					return nil, fmt.Errorf("unexpected failure payload type from service: expected *scoreevents.ProcessRoundScoresFailurePayload, got %T", result.Failure)
+					return nil, fmt.Errorf("unexpected failure payload type from service: expected *scoreevents.ProcessRoundScoresFailedPayloadV1, got %T", result.Failure)
 				}
 
-				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailure)
+				failureMsg, errCreateResult := h.Helpers.CreateResultMessage(msg, failurePayload, scoreevents.ProcessRoundScoresFailedV1)
 				if errCreateResult != nil {
 					return nil, fmt.Errorf("failed to create failure message from result failure payload: %w", errCreateResult)
 				}
@@ -68,10 +68,10 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			}
 
 			// Process success case
-			successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+			successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSucceededPayloadV1)
 			if !ok {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)
-				return nil, fmt.Errorf("unexpected result from service: expected *scoreevents.ProcessRoundScoresSuccessPayload, got %T", result.Success)
+				return nil, fmt.Errorf("unexpected result from service: expected *scoreevents.ProcessRoundScoresSucceededPayloadV1, got %T", result.Success)
 			}
 
 			tagMappings := successPayload.TagMappings
@@ -96,7 +96,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([
 			batchAssignMsg, err := h.Helpers.CreateResultMessage(
 				msg,
 				batchPayload,
-				sharedevents.LeaderboardBatchTagAssignmentRequested,
+				sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
 			)
 			if err != nil {
 				h.metrics.RecordRoundScoresProcessingAttempt(ctx, false, processRoundScoresRequestPayload.RoundID)

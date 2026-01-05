@@ -27,7 +27,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
-	testPayload := &roundevents.RoundDeleteRequestPayload{
+	testPayload := &roundevents.RoundDeleteRequestPayloadV1{
 		RoundID:              testRoundID,
 		RequestingUserUserID: testUserID,
 	}
@@ -38,7 +38,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Create an expected message for the successful output (RoundDeleteValidated)
-	expectedValidatedPayload := roundevents.RoundDeleteValidatedPayload{
+	expectedValidatedPayload := roundevents.RoundDeleteValidatedPayloadV1{
 		RoundDeleteRequestPayload: *testPayload,
 	}
 	expectedValidatedPayloadBytes, _ := json.Marshal(expectedValidatedPayload)
@@ -65,21 +65,21 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
 						// CORRECTED: Service returns RoundDeleteValidatedPayload on success
-						Success: &roundevents.RoundDeleteValidatedPayload{
+						Success: &roundevents.RoundDeleteValidatedPayloadV1{
 							RoundDeleteRequestPayload: *testPayload, // Populate with the original request payload
 						},
 					},
@@ -87,14 +87,14 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 				)
 
 				// The payload passed to CreateResultMessage is the validated payload
-				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayload{
+				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayloadV1{
 					RoundDeleteRequestPayload: *testPayload,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					validatedPayloadForMock, // Use the correct payload type for the mock expectation
-					roundevents.RoundDeleteValidated,
+					roundevents.RoundDeleteValidatedV1,
 				).Return(expectedValidatedMsg, nil) // Return the message created with RoundDeleteValidatedPayload
 			},
 			msg:     testMsg,
@@ -116,14 +116,14 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
@@ -142,21 +142,21 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
 						// CORRECTED: Service returns RoundDeleteValidatedPayload on success
-						Success: &roundevents.RoundDeleteValidatedPayload{
+						Success: &roundevents.RoundDeleteValidatedPayloadV1{
 							RoundDeleteRequestPayload: *testPayload, // Populate with the original request payload
 						},
 					},
@@ -164,14 +164,14 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 				)
 
 				// The payload passed to CreateResultMessage is the validated payload
-				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayload{
+				validatedPayloadForMock := roundevents.RoundDeleteValidatedPayloadV1{
 					RoundDeleteRequestPayload: *testPayload,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					validatedPayloadForMock, // Use the correct payload type for the mock expectation
-					roundevents.RoundDeleteValidated,
+					roundevents.RoundDeleteValidatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -184,34 +184,34 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayload{
+						Failure: &roundevents.RoundDeleteErrorPayloadV1{
 							Error: "non-error failure",
 						},
 					},
 					nil,
 				)
 
-				failureResultPayload := &roundevents.RoundDeleteErrorPayload{
+				failureResultPayload := &roundevents.RoundDeleteErrorPayloadV1{
 					Error: "non-error failure",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					roundevents.RoundDeleteError,
+					roundevents.RoundDeleteErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -224,20 +224,20 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayload{
+						Failure: &roundevents.RoundDeleteErrorPayloadV1{
 							Error: "internal service error",
 						},
 					},
@@ -254,14 +254,14 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteRequestPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
-					roundevents.RoundDeleteRequestPayload{
+					roundevents.RoundDeleteRequestPayloadV1{
 						RoundID:              testRoundID,
 						RequestingUserUserID: testUserID,
 					},
@@ -324,7 +324,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	testPayload := &roundevents.RoundDeleteAuthorizedPayload{
+	testPayload := &roundevents.RoundDeleteAuthorizedPayloadV1{
 		RoundID: testRoundID,
 	}
 
@@ -354,33 +354,33 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundDeletedPayload{
+						Success: &roundevents.RoundDeletedPayloadV1{
 							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundDeletedPayload{
+				updateResultPayload := &roundevents.RoundDeletedPayloadV1{
 					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundDeleted,
+					roundevents.RoundDeletedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -402,14 +402,14 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(
@@ -428,33 +428,33 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundDeletedPayload{
+						Success: &roundevents.RoundDeletedPayloadV1{
 							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &roundevents.RoundDeletedPayload{
+				updateResultPayload := &roundevents.RoundDeletedPayloadV1{
 					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					roundevents.RoundDeleted,
+					roundevents.RoundDeletedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:     testMsg,
@@ -468,20 +468,20 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayload{
-							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayload{
+						Failure: &roundevents.RoundDeleteErrorPayloadV1{
+							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
 								RoundID: testRoundID,
 							},
 							Error: "failed to delete round from database: connection timeout",
@@ -500,19 +500,19 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayload{
+						Failure: &roundevents.RoundDeleteErrorPayloadV1{
 							Error: "internal service error",
 						},
 					},
@@ -530,14 +530,14 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundDeleteAuthorizedPayload) = *testPayload
+						*out.(*roundevents.RoundDeleteAuthorizedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
-					roundevents.RoundDeleteAuthorizedPayload{
+					roundevents.RoundDeleteAuthorizedPayloadV1{
 						RoundID: testRoundID,
 					},
 				).Return(

@@ -31,14 +31,14 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	testScore := sharedtypes.Score(72)
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testProcessRoundScoresRequestPayload := &scoreevents.ProcessRoundScoresRequestPayload{
+	testProcessRoundScoresRequestedPayloadV1 := &scoreevents.ProcessRoundScoresRequestedPayloadV1{
 		GuildID: testGuildID,
 		RoundID: testRoundID,
 		Scores: []sharedtypes.ScoreInfo{
 			{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
 		},
 	}
-	payloadBytes, _ := json.Marshal(testProcessRoundScoresRequestPayload)
+	payloadBytes, _ := json.Marshal(testProcessRoundScoresRequestedPayloadV1)
 	testMsg := message.NewMessage("test-id", payloadBytes)
 
 	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
@@ -64,7 +64,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
@@ -73,11 +73,11 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+						Success: &scoreevents.ProcessRoundScoresSucceededPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
 							TagMappings: []sharedtypes.TagMapping{
@@ -91,7 +91,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // Use Any() because BatchID is dynamic
-					sharedevents.LeaderboardBatchTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
 				).DoAndReturn(func(msg *message.Message, payload interface{}, eventType string) (*message.Message, error) {
 					// Verify payload structure
 					actualPayload, ok := payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
@@ -126,23 +126,23 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
 
 				// Service returns proper failure payload
-				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+				failurePayload := &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "internal service error",
+					Reason:  "internal service error",
 				}
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
@@ -154,7 +154,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					scoreevents.ProcessRoundScoresFailure,
+					scoreevents.ProcessRoundScoresFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -166,7 +166,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
@@ -175,11 +175,11 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+						Success: &scoreevents.ProcessRoundScoresSucceededPayloadV1{
 							GuildID:     testGuildID,
 							RoundID:     testRoundID,
 							TagMappings: []sharedtypes.TagMapping{},
@@ -191,7 +191,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					sharedevents.LeaderboardBatchTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -204,23 +204,23 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
 
 				// Service returns proper failure payload
-				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+				failurePayload := &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "internal service error",
+					Reason:  "internal service error",
 				}
 
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
@@ -232,7 +232,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					scoreevents.ProcessRoundScoresFailure,
+					scoreevents.ProcessRoundScoresFailedV1,
 				).Return(nil, fmt.Errorf("failed to create result message for failure"))
 			},
 			msg:            testMsg,
@@ -245,7 +245,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
@@ -254,7 +254,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{}, // Neither success nor failure
@@ -264,14 +264,14 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service: expected *scoreevents.ProcessRoundScoresSuccessPayload, got <nil>",
+			expectedErrMsg: "unexpected result from service: expected *scoreevents.ProcessRoundScoresSucceededPayloadV1, got <nil>",
 		},
 		{
 			name: "Service returns direct error",
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
@@ -280,7 +280,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{}, // No failure payload
@@ -288,16 +288,16 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				)
 
 				// Handler creates failure payload from direct error
-				failurePayload := &scoreevents.ProcessRoundScoresFailurePayload{
+				failurePayload := &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "direct service error",
+					Reason:  "direct service error",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					scoreevents.ProcessRoundScoresFailure,
+					scoreevents.ProcessRoundScoresFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -309,7 +309,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ProcessRoundScoresRequestPayload) = *testProcessRoundScoresRequestPayload
+						*out.(*scoreevents.ProcessRoundScoresRequestedPayloadV1) = *testProcessRoundScoresRequestedPayloadV1
 						return nil
 					},
 				)
@@ -318,11 +318,11 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
-					testProcessRoundScoresRequestPayload.Scores,
+					testProcessRoundScoresRequestedPayloadV1.Scores,
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Failure: "wrong type", // Wrong type, should be *ProcessRoundScoresFailurePayload
+						Failure: "wrong type", // Wrong type, should be *ProcessRoundScoresFailedPayloadV1
 					},
 					nil,
 				)
@@ -330,7 +330,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			msg:            testMsg,
 			want:           nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected failure payload type from service: expected *scoreevents.ProcessRoundScoresFailurePayload, got string",
+			expectedErrMsg: "unexpected failure payload type from service: expected *scoreevents.ProcessRoundScoresFailedPayloadV1, got string",
 		},
 	}
 

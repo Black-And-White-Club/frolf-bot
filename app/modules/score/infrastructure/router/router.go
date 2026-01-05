@@ -102,15 +102,16 @@ func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreser
 	return nil
 }
 
-// RegisterHandlers registers event handlers using the provided context.
+// RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandlers.Handlers) error {
 	eventsToHandlers := map[string]message.HandlerFunc{
-		scoreevents.ProcessRoundScoresRequest: handlers.HandleProcessRoundScoresRequest,
-		scoreevents.ScoreUpdateRequest:        handlers.HandleCorrectScoreRequest,
-		scoreevents.ScoreBulkUpdateRequest:    handlers.HandleBulkCorrectScoreRequest,
-		// Reprocessing triggers after overrides
-		scoreevents.ScoreUpdateSuccess:     handlers.HandleReprocessAfterScoreUpdate,
-		scoreevents.ScoreBulkUpdateSuccess: handlers.HandleReprocessAfterScoreUpdate,
+		// Score Processing Flow (from processing.go)
+		scoreevents.ProcessRoundScoresRequestedV1: handlers.HandleProcessRoundScoresRequest,
+
+		// Score Update Flow (from updates.go)
+		// These handlers now trigger reprocessing directly, so we don't need separate subscriptions
+		scoreevents.ScoreUpdateRequestedV1:     handlers.HandleCorrectScoreRequest,
+		scoreevents.ScoreBulkUpdateRequestedV1: handlers.HandleBulkCorrectScoreRequest,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

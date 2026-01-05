@@ -25,14 +25,15 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 
 	tests := []struct {
 		name                     string
-		payload                  roundevents.UpdateRoundRequestedPayload
+		payload                  roundevents.UpdateRoundRequestedPayloadV1
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Valid update request - Title only",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
+				GuildID:   "test-guild",
 				RoundID:   sharedtypes.RoundID(uuid.New()),
 				UserID:    testUserID,
 				ChannelID: "123456789",
@@ -45,7 +46,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				validatedPayload, ok := returnedResult.Success.(*roundevents.RoundUpdateValidatedPayload)
+				validatedPayload, ok := returnedResult.Success.(*roundevents.RoundUpdateValidatedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateValidatedPayload, got %T", returnedResult.Success)
 				}
@@ -59,7 +60,8 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Valid update request - All fields",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
 				RoundID:     sharedtypes.RoundID(uuid.New()),
 				UserID:      testUserID,
 				ChannelID:   "123456789",
@@ -75,7 +77,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				validatedPayload, ok := returnedResult.Success.(*roundevents.RoundUpdateValidatedPayload)
+				validatedPayload, ok := returnedResult.Success.(*roundevents.RoundUpdateValidatedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateValidatedPayload, got %T", returnedResult.Success)
 				}
@@ -95,7 +97,8 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid update request - Zero RoundID",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
+				GuildID:   "test-guild",
 				RoundID:   sharedtypes.RoundID(uuid.Nil),
 				UserID:    testUserID,
 				ChannelID: "123456789",
@@ -109,7 +112,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayload)
+				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateErrorPayload, got %T", returnedResult.Failure)
 				}
@@ -120,7 +123,8 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid update request - No fields to update",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
+				GuildID:   "test-guild",
 				RoundID:   sharedtypes.RoundID(uuid.New()),
 				UserID:    testUserID,
 				ChannelID: "123456789",
@@ -133,7 +137,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayload)
+				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateErrorPayload, got %T", returnedResult.Failure)
 				}
@@ -144,7 +148,8 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid update request - Invalid time format",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
+				GuildID:   "test-guild",
 				RoundID:   sharedtypes.RoundID(uuid.New()),
 				UserID:    testUserID,
 				ChannelID: "123456789",
@@ -159,7 +164,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayload)
+				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateErrorPayload, got %T", returnedResult.Failure)
 				}
@@ -190,7 +195,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 
 				// Handle validation failures when expectedError is false but validation fails
 				if result.Failure != nil {
-					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayload)
+					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundUpdateErrorPayload, got %T", result.Failure)
 					}
@@ -238,14 +243,14 @@ func TestUpdateRoundEntity(t *testing.T) {
 
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID)
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful update of title",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				originalRound := &roundtypes.Round{
 					ID:        sharedtypes.RoundID(uuid.New()),
 					Title:     roundtypes.Title("Original Title"),
@@ -261,13 +266,13 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Fatalf("Failed to create initial round in DB: %v", err)
 				}
 
-				payload := roundevents.RoundUpdateValidatedPayload{
+				payload := roundevents.RoundUpdateValidatedPayloadV1{
 					GuildID: "test-guild",
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
+						GuildID: "test-guild",
 						RoundID: originalRound.ID,
 						Title:   roundtypes.Title("Updated Title"),
 						UserID:  testUserID,
-						GuildID: "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -277,7 +282,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
+				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundEntityUpdatedPayload, got %T", returnedResult.Success)
 				}
@@ -296,7 +301,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 		},
 		{
 			name: "Successful update of description, location, and start time",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				originalRound := &roundtypes.Round{
 					ID:          sharedtypes.RoundID(uuid.New()),
 					Title:       roundtypes.Title("Original Title"),
@@ -315,15 +320,15 @@ func TestUpdateRoundEntity(t *testing.T) {
 				}
 
 				newStartTime := time.Now().Add(48 * time.Hour)
-				payload := roundevents.RoundUpdateValidatedPayload{
+				payload := roundevents.RoundUpdateValidatedPayloadV1{
 					GuildID: "test-guild",
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
+						GuildID:     "test-guild",
 						RoundID:     originalRound.ID,
 						Description: roundtypes.DescriptionPtr("New Description"),
 						Location:    roundtypes.LocationPtr("New Location"),
 						StartTime:   (*sharedtypes.StartTime)(&newStartTime),
 						UserID:      testUserID,
-						GuildID:     "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -333,7 +338,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
+				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundEntityUpdatedPayload, got %T", returnedResult.Success)
 				}
@@ -364,7 +369,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 		},
 		{
 			name: "Successful update of EventType",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				originalRound := &roundtypes.Round{
 					ID:        sharedtypes.RoundID(uuid.New()),
 					Title:     roundtypes.Title("Original Title"),
@@ -381,13 +386,13 @@ func TestUpdateRoundEntity(t *testing.T) {
 				}
 
 				newEventType := roundtypes.EventType("tournament")
-				payload := roundevents.RoundUpdateValidatedPayload{
+				payload := roundevents.RoundUpdateValidatedPayloadV1{
 					GuildID: "test-guild",
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
+						GuildID:   "test-guild",
 						RoundID:   originalRound.ID,
 						EventType: &newEventType,
 						UserID:    testUserID,
-						GuildID:   "test-guild",
 					},
 				}
 				return payload, originalRound.ID
@@ -397,7 +402,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayload)
+				entityUpdatedPayload, ok := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundEntityUpdatedPayload, got %T", returnedResult.Success)
 				}
@@ -416,15 +421,15 @@ func TestUpdateRoundEntity(t *testing.T) {
 		},
 		{
 			name: "Failed to fetch existing round (round not in DB)",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				roundID := sharedtypes.RoundID(uuid.New())
-				payload := roundevents.RoundUpdateValidatedPayload{
+				payload := roundevents.RoundUpdateValidatedPayloadV1{
 					GuildID: "test-guild",
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
+						GuildID: "test-guild",
 						RoundID: roundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  testUserID,
-						GuildID: "test-guild",
 					},
 				}
 				return payload, roundID
@@ -435,7 +440,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayload)
+				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateErrorPayload, got %T", returnedResult.Failure)
 				}
@@ -467,7 +472,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 
 				// Handle failures when expectedError is false but operation fails
 				if result.Failure != nil {
-					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayload)
+					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundUpdateErrorPayload, got %T", result.Failure)
 					}
@@ -490,18 +495,18 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayload, sharedtypes.RoundID)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID)
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Failed to fetch round for rescheduling - round not found",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID) {
 				// Use a non-existent round ID
 				roundID := sharedtypes.RoundID(uuid.New())
 				futureTime := sharedtypes.StartTime(time.Now().Add(2 * time.Hour))
-				payload := roundevents.RoundScheduleUpdatePayload{
+				payload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   roundID,
 					Title:     roundtypes.Title("Non-existent Round"),
 					StartTime: &futureTime,
@@ -515,7 +520,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayload)
+				errorPayload, ok := returnedResult.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundUpdateErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -527,7 +532,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 		},
 		{
 			name: "Failed to update schedule - invalid round state",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID) {
 				// Create a finalized round that shouldn't be rescheduled
 				round := &roundtypes.Round{
 					ID:        sharedtypes.RoundID(uuid.New()),
@@ -545,7 +550,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				}
 
 				futureTime := sharedtypes.StartTime(time.Now().Add(2 * time.Hour))
-				payload := roundevents.RoundScheduleUpdatePayload{
+				payload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Attempted Update"),
 					StartTime: &futureTime,
@@ -561,7 +566,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result (since validation not implemented), but got nil")
 				}
-				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayload)
+				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundScheduleUpdatePayload, got %T", returnedResult.Success)
 				}
@@ -572,7 +577,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 		},
 		{
 			name: "Successful rescheduling with new start time",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID) {
 				originalStartTime := time.Now().Add(24 * time.Hour)
 				round := &roundtypes.Round{
 					ID:        sharedtypes.RoundID(uuid.New()),
@@ -590,7 +595,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				}
 
 				newStartTime := time.Now().Add(48 * time.Hour)
-				payload := roundevents.RoundScheduleUpdatePayload{
+				payload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Rescheduled Round"),
 					StartTime: (*sharedtypes.StartTime)(&newStartTime),
@@ -604,7 +609,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
 
-				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayload)
+				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundScheduleUpdatePayload, got %T. Value: %#v", returnedResult.Success, returnedResult.Success)
 					return
@@ -621,7 +626,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 		},
 		{
 			name: "Successful update with location and start time",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayload, sharedtypes.RoundID) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID) {
 				round := &roundtypes.Round{
 					ID:        sharedtypes.RoundID(uuid.New()),
 					Title:     roundtypes.Title("Location Update Round"),
@@ -640,7 +645,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 
 				newStartTime := time.Now().Add(36 * time.Hour)
 				newLocation := roundtypes.Location("New Location")
-				payload := roundevents.RoundScheduleUpdatePayload{
+				payload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Location Update Round"),
 					StartTime: (*sharedtypes.StartTime)(&newStartTime),
@@ -655,7 +660,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayload)
+				schedulePayload, ok := returnedResult.Success.(*roundevents.RoundScheduleUpdatePayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundScheduleUpdatePayload, got %T", returnedResult.Success)
 					return
@@ -692,7 +697,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 
 				// Handle failures when expectedError is false but operation fails
 				if result.Failure != nil {
-					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayload)
+					errorPayload, ok := result.Failure.(*roundevents.RoundUpdateErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundUpdateErrorPayload, got %T", result.Failure)
 					}

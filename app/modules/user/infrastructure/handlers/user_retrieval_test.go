@@ -31,7 +31,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		Role:   "member",
 	}
 
-	testPayload := &userevents.GetUserRequestPayload{
+	testPayload := &userevents.GetUserRequestedPayloadV1{
 		GuildID: testGuildID,
 		UserID:  testUserID,
 	}
@@ -61,14 +61,14 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.GetUserResponsePayload{User: testUserData},
+						Success: &userevents.GetUserResponsePayloadV1{User: testUserData},
 						Failure: nil,
 						Error:   nil,
 					},
@@ -77,8 +77,8 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.GetUserResponsePayload{User: testUserData},
-					userevents.GetUserResponse,
+					&userevents.GetUserResponsePayloadV1{User: testUserData},
+					userevents.GetUserResponseV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -90,7 +90,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -98,7 +98,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
-						Failure: &userevents.GetUserFailedPayload{
+						Failure: &userevents.GetUserFailedPayloadV1{
 							UserID: testUserID,
 							Reason: "user not found",
 						},
@@ -109,8 +109,8 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.GetUserFailedPayload{UserID: testUserID, Reason: "user not found"},
-					userevents.GetUserFailed,
+					&userevents.GetUserFailedPayloadV1{UserID: testUserID, Reason: "user not found"},
+					userevents.GetUserFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -132,7 +132,7 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -186,7 +186,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
-	testPayload := &userevents.GetUserRoleRequestPayload{
+	testPayload := &userevents.GetUserRoleRequestedPayloadV1{
 		GuildID: testGuildID,
 		UserID:  testUserID,
 	}
@@ -216,14 +216,14 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
+						Success: &userevents.GetUserRoleResponsePayloadV1{UserID: testUserID, Role: "admin"},
 						Failure: nil,
 						Error:   nil,
 					},
@@ -232,8 +232,8 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.GetUserRoleResponsePayload{UserID: testUserID, Role: "admin"},
-					userevents.GetUserRoleResponse,
+					&userevents.GetUserRoleResponsePayloadV1{UserID: testUserID, Role: "admin"},
+					userevents.GetUserRoleResponseV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -245,7 +245,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -253,7 +253,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
-						Failure: &userevents.GetUserRoleFailedPayload{
+						Failure: &userevents.GetUserRoleFailedPayloadV1{
 							UserID: testUserID,
 							Reason: "user role not found",
 						},
@@ -264,8 +264,8 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.GetUserRoleFailedPayload{UserID: testUserID, Reason: "user role not found"},
-					userevents.GetUserRoleFailed,
+					&userevents.GetUserRoleFailedPayloadV1{UserID: testUserID, Reason: "user role not found"},
+					userevents.GetUserRoleFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -287,7 +287,7 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestPayload) = *testPayload
+						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)

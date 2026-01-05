@@ -17,9 +17,9 @@ import (
 )
 
 func TestHandleTagNumberFound(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -28,59 +28,64 @@ func TestHandleTagNumberFound(t *testing.T) {
 		{
 			name: "Success - Accept Response with Tag Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
 				tagNumber := sharedtypes.TagNumber(42)
-				payload := createTagLookupFoundPayload(roundID, userID, &tagNumber, roundtypes.ResponseAccept, boolPtr(false))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFound)
+				payload := createTagLookupFoundPayload(roundID, data.UserID, &tagNumber, roundtypes.ResponseAccept, boolPtr(false))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFoundV1)
 			},
 		},
 		{
 			name: "Success - Tentative Response with Tag Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
 				tagNumber := sharedtypes.TagNumber(99)
-				payload := createTagLookupFoundPayload(roundID, userID, &tagNumber, roundtypes.ResponseTentative, boolPtr(false))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFound)
+				payload := createTagLookupFoundPayload(roundID, data.UserID, &tagNumber, roundtypes.ResponseTentative, boolPtr(false))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFoundV1)
 			},
 		},
 		{
 			name: "Success - Accept Response with Late Join",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateInProgress)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
 				tagNumber := sharedtypes.TagNumber(77)
-				payload := createTagLookupFoundPayload(roundID, userID, &tagNumber, roundtypes.ResponseAccept, boolPtr(true))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFound)
+				payload := createTagLookupFoundPayload(roundID, data.UserID, &tagNumber, roundtypes.ResponseAccept, boolPtr(true))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFoundV1)
 			},
 		},
 		{
 			name: "Failure - Round Not Found (Tag Found)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				data := NewTestData()
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				tagNumber := sharedtypes.TagNumber(42)
-				payload := createTagLookupFoundPayload(nonExistentRoundID, userID, &tagNumber, roundtypes.ResponseAccept, boolPtr(false))
-				publishAndExpectJoinErrorFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFound, nonExistentRoundID, userID)
+				payload := createTagLookupFoundPayload(nonExistentRoundID, data.UserID, &tagNumber, roundtypes.ResponseAccept, boolPtr(false))
+				publishAndExpectJoinErrorFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupFoundV1, nonExistentRoundID, data.UserID)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
+			// Create helper for each subtest since these tests use custom helper functions
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
 
-			helper.ClearMessages()
+			// Run the test
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 func TestHandleTagNumberNotFound(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -89,52 +94,58 @@ func TestHandleTagNumberNotFound(t *testing.T) {
 		{
 			name: "Success - Accept Response with No Tag (Still Allows Join)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
-				payload := createTagLookupNotFoundPayload(roundID, userID, roundtypes.ResponseAccept, boolPtr(false))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFound)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				payload := createTagLookupNotFoundPayload(roundID, data.UserID, roundtypes.ResponseAccept, boolPtr(false))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFoundV1)
 			},
 		},
 		{
 			name: "Success - Tentative Response with No Tag",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
-				payload := createTagLookupNotFoundPayload(roundID, userID, roundtypes.ResponseTentative, boolPtr(false))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFound)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				payload := createTagLookupNotFoundPayload(roundID, data.UserID, roundtypes.ResponseTentative, boolPtr(false))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFoundV1)
 			},
 		},
 		{
 			name: "Success - Accept Response with Late Join and No Tag",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateInProgress)
-				payload := createTagLookupNotFoundPayload(roundID, userID, roundtypes.ResponseAccept, boolPtr(true))
-				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFound)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
+				payload := createTagLookupNotFoundPayload(roundID, data.UserID, roundtypes.ResponseAccept, boolPtr(true))
+				publishAndExpectParticipantJoinedFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFoundV1)
 			},
 		},
 		{
 			name: "Failure - Round Not Found (Tag Not Found)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				data := NewTestData()
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createTagLookupNotFoundPayload(nonExistentRoundID, userID, roundtypes.ResponseAccept, boolPtr(false))
-				publishAndExpectJoinErrorFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFound, nonExistentRoundID, userID)
+				payload := createTagLookupNotFoundPayload(nonExistentRoundID, data.UserID, roundtypes.ResponseAccept, boolPtr(false))
+				publishAndExpectJoinErrorFromTagLookup(t, deps, deps.MessageCapture, payload, sharedevents.RoundTagLookupNotFoundV1, nonExistentRoundID, data.UserID)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			helper.ClearMessages()
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 func TestHandleTagLookupInvalidMessages(t *testing.T) {
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
+
 	testCases := []struct {
 		name        string
 		topic       string
@@ -142,37 +153,37 @@ func TestHandleTagLookupInvalidMessages(t *testing.T) {
 	}{
 		{
 			name:  "Invalid JSON - Tag Found Handler",
-			topic: sharedevents.RoundTagLookupFound,
+			topic: sharedevents.RoundTagLookupFoundV1,
 			setupAndRun: func(t *testing.T, deps *RoundHandlerTestDeps) {
-				publishInvalidJSONAndExpectNoTagLookupMessages(t, deps, deps.MessageCapture, sharedevents.RoundTagLookupFound)
+				publishInvalidJSONAndExpectNoTagLookupMessages(t, deps, deps.MessageCapture, sharedevents.RoundTagLookupFoundV1)
 			},
 		},
 		{
 			name:  "Invalid JSON - Tag Not Found Handler",
-			topic: sharedevents.RoundTagLookupNotFound,
+			topic: sharedevents.RoundTagLookupNotFoundV1,
 			setupAndRun: func(t *testing.T, deps *RoundHandlerTestDeps) {
-				publishInvalidJSONAndExpectNoTagLookupMessages(t, deps, deps.MessageCapture, sharedevents.RoundTagLookupNotFound)
+				publishInvalidJSONAndExpectNoTagLookupMessages(t, deps, deps.MessageCapture, sharedevents.RoundTagLookupNotFoundV1)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			helper.ClearMessages()
+			_ = helper
 			tc.setupAndRun(t, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 // Helper functions for creating payloads - UNIQUE TO TAG LOOKUP TESTS
-func createTagLookupFoundPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, tagNumber *sharedtypes.TagNumber, originalResponse roundtypes.Response, originalJoinedLate *bool) sharedevents.RoundTagLookupResultPayload {
-	return sharedevents.RoundTagLookupResultPayload{
+func createTagLookupFoundPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, tagNumber *sharedtypes.TagNumber, originalResponse roundtypes.Response, originalJoinedLate *bool) sharedevents.RoundTagLookupResultPayloadV1 {
+	return sharedevents.RoundTagLookupResultPayloadV1{
+		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: "test-guild"},
 		RoundID:            roundID,
 		UserID:             userID,
 		TagNumber:          tagNumber,
@@ -181,8 +192,9 @@ func createTagLookupFoundPayload(roundID sharedtypes.RoundID, userID sharedtypes
 	}
 }
 
-func createTagLookupNotFoundPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, originalResponse roundtypes.Response, originalJoinedLate *bool) sharedevents.RoundTagLookupResultPayload {
-	return sharedevents.RoundTagLookupResultPayload{
+func createTagLookupNotFoundPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, originalResponse roundtypes.Response, originalJoinedLate *bool) sharedevents.RoundTagLookupResultPayloadV1 {
+	return sharedevents.RoundTagLookupResultPayloadV1{
+		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: "test-guild"},
 		RoundID:            roundID,
 		UserID:             userID,
 		TagNumber:          nil, // No tag found
@@ -192,7 +204,7 @@ func createTagLookupNotFoundPayload(roundID sharedtypes.RoundID, userID sharedty
 }
 
 // Publishing functions - UNIQUE TO TAG LOOKUP TESTS
-func publishTagLookupResultMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *sharedevents.RoundTagLookupResultPayload, topic string) *message.Message {
+func publishTagLookupResultMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *sharedevents.RoundTagLookupResultPayloadV1, topic string) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -212,27 +224,27 @@ func publishTagLookupResultMessage(t *testing.T, deps *RoundHandlerTestDeps, pay
 
 // Wait functions - UNIQUE TO TAG LOOKUP TESTS
 func waitForParticipantJoinedFromTagLookup(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantJoined, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantJoinedV1, count, defaultTimeout)
 }
 
 func waitForParticipantJoinErrorFromTagLookup(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantJoinError, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantJoinErrorV1, count, defaultTimeout)
 }
 
 // Message retrieval functions - UNIQUE TO TAG LOOKUP TESTS
 func getParticipantJoinedFromTagLookupMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantJoined)
+	return capture.GetMessages(roundevents.RoundParticipantJoinedV1)
 }
 
 func getParticipantJoinErrorFromTagLookupMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantJoinError)
+	return capture.GetMessages(roundevents.RoundParticipantJoinErrorV1)
 }
 
 // Validation functions - UNIQUE TO TAG LOOKUP TESTS
-func validateParticipantJoinedFromTagLookup(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ParticipantJoinedPayload {
+func validateParticipantJoinedFromTagLookup(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ParticipantJoinedPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant joined message: %v", err)
 	}
@@ -247,7 +259,7 @@ func validateParticipantJoinedFromTagLookup(t *testing.T, msg *message.Message, 
 func validateParticipantJoinErrorFromTagLookup(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join error message: %v", err)
 	}
@@ -271,29 +283,69 @@ func validateParticipantJoinErrorFromTagLookup(t *testing.T, msg *message.Messag
 }
 
 // Test expectation functions - UNIQUE TO TAG LOOKUP TESTS
-func publishAndExpectParticipantJoinedFromTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload sharedevents.RoundTagLookupResultPayload, topic string) {
+func publishAndExpectParticipantJoinedFromTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload sharedevents.RoundTagLookupResultPayloadV1, topic string) {
 	publishTagLookupResultMessage(t, deps, &payload, topic)
 
-	if !waitForParticipantJoinedFromTagLookup(capture, 1) {
-		t.Fatalf("Expected participant joined message from %s", topic)
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantJoinedFromTagLookupMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg)
+			if err == nil && parsed.RoundID == payload.RoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantJoinedFromTagLookupMessages(capture)
-	validateParticipantJoinedFromTagLookup(t, msgs[0], payload.RoundID)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant joined message from %s for round %s", topic, payload.RoundID)
+	}
+
+	validateParticipantJoinedFromTagLookup(t, foundMsg, payload.RoundID)
 }
 
-func publishAndExpectJoinErrorFromTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload sharedevents.RoundTagLookupResultPayload, topic string, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
+func publishAndExpectJoinErrorFromTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload sharedevents.RoundTagLookupResultPayloadV1, topic string, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	publishTagLookupResultMessage(t, deps, &payload, topic)
 
-	if !waitForParticipantJoinErrorFromTagLookup(capture, 1) {
-		t.Fatalf("Expected participant join error message from %s", topic)
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantJoinErrorFromTagLookupMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
+			if err == nil && parsed.ParticipantJoinRequest != nil && parsed.ParticipantJoinRequest.RoundID == expectedRoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantJoinErrorFromTagLookupMessages(capture)
-	validateParticipantJoinErrorFromTagLookup(t, msgs[0], expectedRoundID, expectedUserID)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant join error message from %s for round %s", topic, expectedRoundID)
+	}
+
+	validateParticipantJoinErrorFromTagLookup(t, foundMsg, expectedRoundID, expectedUserID)
 }
 
 func publishInvalidJSONAndExpectNoTagLookupMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, topic string) {
+	// Count messages BEFORE
+	joinedMsgsBefore := len(getParticipantJoinedFromTagLookupMessages(capture))
+	errorMsgsBefore := len(getParticipantJoinErrorFromTagLookupMessages(capture))
+
 	msg := message.NewMessage(uuid.New().String(), []byte("not valid json"))
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
@@ -301,13 +353,17 @@ func publishInvalidJSONAndExpectNoTagLookupMessages(t *testing.T, deps *RoundHan
 		t.Fatalf("Publish failed: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 
-	joinedMsgs := getParticipantJoinedFromTagLookupMessages(capture)
-	errorMsgs := getParticipantJoinErrorFromTagLookupMessages(capture)
+	// Count messages AFTER
+	joinedMsgsAfter := len(getParticipantJoinedFromTagLookupMessages(capture))
+	errorMsgsAfter := len(getParticipantJoinErrorFromTagLookupMessages(capture))
 
-	if len(joinedMsgs) > 0 || len(errorMsgs) > 0 {
-		t.Errorf("Expected no messages for invalid JSON on %s, got %d joined, %d error msgs",
-			topic, len(joinedMsgs), len(errorMsgs))
+	newJoinedMsgs := joinedMsgsAfter - joinedMsgsBefore
+	newErrorMsgs := errorMsgsAfter - errorMsgsBefore
+
+	if newJoinedMsgs > 0 || newErrorMsgs > 0 {
+		t.Errorf("Expected no NEW messages for invalid JSON on %s, got %d new joined, %d new error msgs",
+			topic, newJoinedMsgs, newErrorMsgs)
 	}
 }

@@ -14,9 +14,9 @@ import (
 func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleUserRoleUpdateRequest",
-		&userevents.UserRoleUpdateRequestPayload{},
+		&userevents.UserRoleUpdateRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			requestPayload := payload.(*userevents.UserRoleUpdateRequestPayload)
+			requestPayload := payload.(*userevents.UserRoleUpdateRequestedPayloadV1)
 			userID := requestPayload.UserID
 			guildID := requestPayload.GuildID
 			newRole := requestPayload.Role
@@ -33,7 +33,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 			// Handle each outcome with a separate CreateResultMessage call
 			if result.Failure != nil {
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayloadV1)
 
 				if !ok {
 					// Unexpected payload type - create detailed log about the actual type
@@ -57,17 +57,18 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 					}
 
 					// Create a new payload manually
-					errorPayload := userevents.UserRoleUpdateResultPayload{
+					errorPayload := userevents.UserRoleUpdateResultPayloadV1{
+						GuildID: guildID,
 						Success: false,
 						UserID:  userID,
 						Role:    newRole, // Always include the requested role
-						Error:   fmt.Sprintf("validation error: %s", errorStr),
+						Reason:  fmt.Sprintf("validation error: %s", errorStr),
 					}
 
 					resultMsg, createErr := h.helpers.CreateResultMessage(
 						msg,
 						errorPayload,
-						userevents.DiscordUserRoleUpdateFailed,
+						userevents.UserRoleUpdateFailedV1,
 					)
 
 					if createErr != nil {
@@ -80,7 +81,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 					h.logger.InfoContext(ctx, "Created failure message (unexpected type)",
 						attr.CorrelationIDFromMsg(msg),
-						attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+						attr.String("topic", userevents.UserRoleUpdateFailedV1),
 						attr.String("msg_uuid", resultMsg.UUID),
 					)
 
@@ -96,7 +97,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 				resultMsg, createErr := h.helpers.CreateResultMessage(
 					msg,
 					failurePayload,
-					userevents.DiscordUserRoleUpdateFailed,
+					userevents.UserRoleUpdateFailedV1,
 				)
 
 				if createErr != nil {
@@ -109,7 +110,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Created failure message",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("topic", userevents.UserRoleUpdateFailedV1),
 					attr.String("msg_uuid", resultMsg.UUID),
 				)
 
@@ -122,17 +123,18 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 					attr.Error(err),
 				)
 
-				technicalErrorPayload := userevents.UserRoleUpdateResultPayload{
+				technicalErrorPayload := userevents.UserRoleUpdateResultPayloadV1{
+					GuildID: guildID,
 					Success: false,
 					UserID:  userID,
 					Role:    newRole, // Always include the requested role
-					Error:   fmt.Sprintf("internal service error: %v", err),
+					Reason:  fmt.Sprintf("internal service error: %v", err),
 				}
 
 				resultMsg, createErr := h.helpers.CreateResultMessage(
 					msg,
 					technicalErrorPayload,
-					userevents.DiscordUserRoleUpdateFailed,
+					userevents.UserRoleUpdateFailedV1,
 				)
 
 				if createErr != nil {
@@ -145,7 +147,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Created technical error message",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("topic", userevents.UserRoleUpdateFailedV1),
 					attr.String("msg_uuid", resultMsg.UUID),
 				)
 
@@ -153,7 +155,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 			} else if result.Success != nil {
 				// Success case - create success message
-				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayload)
+				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "UNEXPECTED SUCCESS PAYLOAD TYPE",
 						attr.CorrelationIDFromMsg(msg),
@@ -166,7 +168,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 				resultMsg, createErr := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.DiscordUserRoleUpdated, // Success topic is not environment dependent
+					userevents.UserRoleUpdatedV1,
 				)
 
 				if createErr != nil {
@@ -179,7 +181,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Created success message",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("topic", userevents.DiscordUserRoleUpdated), // Success topic is not environment dependent
+					attr.String("topic", userevents.UserRoleUpdatedV1),
 					attr.String("msg_uuid", resultMsg.UUID),
 				)
 
@@ -193,17 +195,18 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 					attr.String("role", string(newRole)),
 				)
 
-				unexpectedResultPayload := userevents.UserRoleUpdateResultPayload{
+				unexpectedResultPayload := userevents.UserRoleUpdateResultPayloadV1{
+					GuildID: guildID,
 					Success: false,
 					UserID:  userID,
 					Role:    newRole, // Always include the requested role
-					Error:   "service returned unexpected result structure",
+					Reason:  "service returned unexpected result structure",
 				}
 
 				resultMsg, createErr := h.helpers.CreateResultMessage(
 					msg,
 					unexpectedResultPayload,
-					userevents.DiscordUserRoleUpdateFailed,
+					userevents.UserRoleUpdateFailedV1,
 				)
 
 				if createErr != nil {
@@ -216,7 +219,7 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Created message for unexpected result",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("topic", userevents.DiscordUserRoleUpdateFailed),
+					attr.String("topic", userevents.UserRoleUpdateFailedV1),
 					attr.String("msg_uuid", resultMsg.UUID),
 				)
 

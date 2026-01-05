@@ -12,9 +12,9 @@ import (
 func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundStarted",
-		&roundevents.RoundStartedPayload{},
+		&roundevents.RoundStartedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundStartedPayload := payload.(*roundevents.RoundStartedPayload)
+			roundStartedPayload := payload.(*roundevents.RoundStartedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundStarted event",
 				attr.CorrelationIDFromMsg(msg),
@@ -41,7 +41,7 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -54,11 +54,11 @@ func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Mes
 				h.logger.InfoContext(ctx, "Round start processed successfully", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				discordStartPayload := result.Success.(*roundevents.DiscordRoundStartPayload)
+				discordStartPayload := result.Success.(*roundevents.DiscordRoundStartPayloadV1)
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					discordStartPayload,
-					roundevents.RoundStarted,
+					roundevents.RoundStartedDiscordV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

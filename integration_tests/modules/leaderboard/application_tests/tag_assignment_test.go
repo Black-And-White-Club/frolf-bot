@@ -30,7 +30,7 @@ package leaderboardintegrationtests
 // 		payload         leaderboardevents.TagAssignmentRequestedPayload
 // 		expectedError   bool                                                                                                                                             // Expected error from the service function call itself
 // 		expectedSuccess bool                                                                                                                                             // Expected a non-nil Success field in LeaderboardOperationResult
-// 		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) // Modified signature
+// 		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) // Modified signature
 // 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 // 	}{
 // 		{
@@ -51,7 +51,7 @@ package leaderboardintegrationtests
 // 				}
 // 				return initialLeaderboard, nil
 // 			},
-// 			payload: leaderboardevents.TagAssignmentRequestedPayload{
+// 			payload: leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1{
 // 				UserID:     "new_user_1",
 // 				TagNumber:  tagPtr(3),
 // 				UpdateID:   sharedtypes.RoundID(uuid.New()),
@@ -60,14 +60,14 @@ package leaderboardintegrationtests
 // 			},
 // 			expectedError:   false,
 // 			expectedSuccess: true,
-// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) { // Added payload parameter
 // 				if result.Success == nil {
 // 					t.Errorf("Expected success result, but got nil")
 // 					return
 // 				}
-// 				successPayload, ok := result.Success.(*leaderboardevents.TagAssignedPayload)
+// 				successPayload, ok := result.Success.(*leaderboardevents.LeaderboardTagAssignedPayloadV1)
 // 				if !ok {
-// 					t.Errorf("Expected success result of type *leaderboardevents.TagAssignedPayload, but got %T", result.Success)
+// 					t.Errorf("Expected success result of type *leaderboardevents.LeaderboardTagAssignedPayloadV1, but got %T", result.Success)
 // 					return
 // 				}
 
@@ -164,7 +164,7 @@ package leaderboardintegrationtests
 // 				}
 // 				return initialLeaderboard, nil
 // 			},
-// 			payload: leaderboardevents.TagAssignmentRequestedPayload{
+// 			payload: leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1{
 // 				UserID:     "user_A",   // Already has tag 10
 // 				TagNumber:  tagPtr(20), // Wants to claim tag 20 (owned by user_B)
 // 				UpdateID:   sharedtypes.RoundID(uuid.New()),
@@ -173,8 +173,8 @@ package leaderboardintegrationtests
 // 			},
 // 			expectedError:   false, // Swap is a successful outcome for this handler
 // 			expectedSuccess: true,  // Swap returns a success payload
-// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
-// 				swapPayload, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayload)
+// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) { // Added payload parameter
+// 				swapPayload, ok := result.Success.(*leaderboardevents.TagSwapRequestedPayloadV1)
 // 				if !ok {
 // 					t.Errorf("Expected swap result of type *TagSwapRequestedPayload, but got %T", result.Success)
 // 					return
@@ -218,7 +218,7 @@ package leaderboardintegrationtests
 // 				}
 // 				return initialLeaderboard, nil
 // 			},
-// 			payload: leaderboardevents.TagAssignmentRequestedPayload{
+// 			payload: leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1{
 // 				UserID:     "user_C",
 // 				TagNumber:  tagPtr(10), // Tag 10 is already assigned to user_A
 // 				UpdateID:   sharedtypes.RoundID(uuid.New()),
@@ -227,14 +227,14 @@ package leaderboardintegrationtests
 // 			},
 // 			expectedError:   false, // Service returns nil error for validation failures
 // 			expectedSuccess: false, // Service returns a failure payload
-// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) { // Added payload parameter
 // 				if result.Failure == nil {
 // 					t.Errorf("Expected failure result, but got nil")
 // 					return
 // 				}
-// 				failurePayload, ok := result.Failure.(*leaderboardevents.TagAssignmentFailedPayload)
+// 				failurePayload, ok := result.Failure.(*leaderboardevents.LeaderboardTagAssignmentFailedPayloadV1)
 // 				if !ok {
-// 					t.Errorf("Expected failure result of type *leaderboardevents.TagAssignmentFailedPayload, but got %T", result.Failure)
+// 					t.Errorf("Expected failure result of type *leaderboardevents.LeaderboardTagAssignmentFailedPayloadV1, but got %T", result.Failure)
 // 					return
 // 				}
 
@@ -292,7 +292,7 @@ package leaderboardintegrationtests
 // 				}
 // 				return nil, nil
 // 			},
-// 			payload: leaderboardevents.TagAssignmentRequestedPayload{
+// 			payload: leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1{
 // 				UserID:     "user_D",
 // 				TagNumber:  tagPtr(4),
 // 				UpdateID:   sharedtypes.RoundID(uuid.New()),
@@ -301,7 +301,7 @@ package leaderboardintegrationtests
 // 			},
 // 			expectedError:   true, // Service returns an error if getting active leaderboard fails
 // 			expectedSuccess: false,
-// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) { // Added payload parameter
 // 				// This case expects an error from the service call itself, not a failure payload.
 // 				// The check for `result.Failure == nil` is sufficient here based on expectedSuccess: false.
 // 			},
@@ -333,7 +333,7 @@ package leaderboardintegrationtests
 // 				}
 // 				return initialLeaderboard, nil
 // 			},
-// 			payload: leaderboardevents.TagAssignmentRequestedPayload{
+// 			payload: leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1{
 // 				UserID:     "user_E",
 // 				TagNumber:  tagPtr(-5), // Invalid tag number
 // 				UpdateID:   sharedtypes.RoundID(uuid.New()),
@@ -342,14 +342,14 @@ package leaderboardintegrationtests
 // 			},
 // 			expectedError:   false, // Service returns nil error for validation failures
 // 			expectedSuccess: false, // Service returns a failure payload
-// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.TagAssignmentRequestedPayload) { // Added payload parameter
+// 			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult, payload leaderboardevents.LeaderboardTagAssignmentRequestedPayloadV1) { // Added payload parameter
 // 				if result.Failure == nil {
 // 					t.Errorf("Expected failure result, but got nil")
 // 					return
 // 				}
-// 				failurePayload, ok := result.Failure.(*leaderboardevents.TagAssignmentFailedPayload)
+// 				failurePayload, ok := result.Failure.(*leaderboardevents.LeaderboardTagAssignmentFailedPayloadV1)
 // 				if !ok {
-// 					t.Errorf("Expected failure result of type *leaderboardevents.TagAssignmentFailedPayload, but got %T", result.Failure)
+// 					t.Errorf("Expected failure result of type *leaderboardevents.LeaderboardTagAssignmentFailedPayloadV1, but got %T", result.Failure)
 // 					return
 // 				}
 

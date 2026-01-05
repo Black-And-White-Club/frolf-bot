@@ -62,7 +62,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
-		payload        roundevents.DiscordReminderPayload
+		payload        roundevents.DiscordReminderPayloadV1
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
@@ -72,7 +72,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
 			},
-			payload: roundevents.DiscordReminderPayload{
+			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
@@ -82,7 +82,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.DiscordReminderPayload{
+				Success: roundevents.DiscordReminderPayloadV1{
 					RoundID:        testReminderRoundID,
 					RoundTitle:     testReminderRoundTitle,
 					StartTime:      &testReminderStartTime,
@@ -100,7 +100,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
 			},
-			payload: roundevents.DiscordReminderPayload{
+			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
@@ -122,7 +122,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
 			},
-			payload: roundevents.DiscordReminderPayload{
+			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
@@ -132,7 +132,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Add pointer here
+				Failure: &roundevents.RoundErrorPayloadV1{ // Add pointer here
 					RoundID: testReminderRoundID,
 					Error:   "database error",
 				},
@@ -182,8 +182,8 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got nil")
 				} else {
-					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload)
-					actualFailure := result.Failure.(*roundevents.RoundErrorPayload)
+					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayloadV1)
+					actualFailure := result.Failure.(*roundevents.RoundErrorPayloadV1)
 					if expectedFailure.RoundID != actualFailure.RoundID {
 						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
 					}

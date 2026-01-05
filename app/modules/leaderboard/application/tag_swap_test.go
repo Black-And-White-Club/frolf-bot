@@ -46,7 +46,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 	tests := []struct {
 		name           string
 		guildID        sharedtypes.GuildID
-		payload        leaderboardevents.TagSwapRequestedPayload
+		payload        leaderboardevents.TagSwapRequestedPayloadV1
 		mockSetup      func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
 		expectedResult *LeaderboardOperationResult
 		expectError    bool
@@ -54,7 +54,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Successful tag swap",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
@@ -68,7 +68,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				mdb.EXPECT().SwapTags(gomock.Any(), guildID, requestorID, targetID).Return(nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Success: &leaderboardevents.TagSwapProcessedPayload{
+				Success: &leaderboardevents.TagSwapProcessedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    targetID,
 				},
@@ -78,7 +78,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Cannot swap tag with self",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    requestorID,
 			},
@@ -86,7 +86,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				// No DB calls should happen in this case
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    requestorID,
 					Reason:      "cannot swap tag with self",
@@ -97,7 +97,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "No active leaderboard found",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
@@ -105,7 +105,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    targetID,
 					Reason:      "no active leaderboard found",
@@ -116,7 +116,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Database error while fetching leaderboard",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
@@ -124,7 +124,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				mdb.EXPECT().GetActiveLeaderboard(gomock.Any(), guildID).Return(nil, errors.New("db error")).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    targetID,
 					Reason:      "db error",
@@ -135,7 +135,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Requestor does not have a tag",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: nonExistentID,
 				TargetID:    targetID,
 			},
@@ -147,7 +147,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: nonExistentID,
 					TargetID:    targetID,
 					Reason:      "one or both users do not have tags on the leaderboard",
@@ -158,7 +158,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Target does not have a tag",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    nonExistentID,
 			},
@@ -170,7 +170,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    nonExistentID,
 					Reason:      "one or both users do not have tags on the leaderboard",
@@ -181,7 +181,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Neither user has a tag",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: nonExistentID,
 				TargetID:    targetID,
 			},
@@ -191,7 +191,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				}, nil).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: nonExistentID,
 					TargetID:    targetID,
 					Reason:      "one or both users do not have tags on the leaderboard",
@@ -202,7 +202,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 		{
 			name:    "Database error while swapping tags",
 			guildID: sharedtypes.GuildID("test-guild"),
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
 				RequestorID: requestorID,
 				TargetID:    targetID,
 			},
@@ -216,7 +216,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				mdb.EXPECT().SwapTags(gomock.Any(), guildID, requestorID, targetID).Return(errors.New("db error")).Times(1)
 			},
 			expectedResult: &LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: requestorID,
 					TargetID:    targetID,
 					Reason:      "db error",
@@ -242,11 +242,11 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 			}
 
 			if tt.expectedResult.Success != nil {
-				expectedSuccess, ok := tt.expectedResult.Success.(*leaderboardevents.TagSwapProcessedPayload)
+				expectedSuccess, ok := tt.expectedResult.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
 				if !ok {
-					t.Fatalf("Test setup error: expected Success payload of type *leaderboardevents.TagSwapProcessedPayload")
+					t.Fatalf("Test setup error: expected Success payload of type *leaderboardevents.TagSwapProcessedPayloadV1")
 				}
-				actualSuccess, ok := got.Success.(*leaderboardevents.TagSwapProcessedPayload)
+				actualSuccess, ok := got.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
 				if !ok {
 					t.Errorf("Expected success result, but got an unexpected type: %+v", got.Success)
 					return
@@ -259,11 +259,11 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 					t.Errorf("Expected success result, but Failure was not nil: %+v", got.Failure)
 				}
 			} else if tt.expectedResult.Failure != nil {
-				expectedFailure, ok := tt.expectedResult.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				expectedFailure, ok := tt.expectedResult.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Test setup error: expected Failure payload of type *leaderboardevents.TagSwapFailedPayload")
+					t.Fatalf("Test setup error: expected Failure payload of type *leaderboardevents.TagSwapFailedPayloadV1")
 				}
-				actualFailure, ok := got.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				actualFailure, ok := got.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
 					t.Errorf("Expected failure result, but got an unexpected type: %+v", got.Failure)
 					return

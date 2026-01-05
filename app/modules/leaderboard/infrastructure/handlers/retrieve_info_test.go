@@ -51,7 +51,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -61,21 +61,21 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 					gomock.Any(), // guildID argument required
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetLeaderboardResponsePayload{
+						Success: &leaderboardevents.GetLeaderboardResponsePayloadV1{
 							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayload{
+				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayloadV1{
 					Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					leaderboardevents.GetLeaderboardResponse,
+					leaderboardevents.GetLeaderboardResponseV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -97,7 +97,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -120,7 +120,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -130,21 +130,21 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetLeaderboardResponsePayload{
+						Success: &leaderboardevents.GetLeaderboardResponsePayloadV1{
 							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayload{
+				updateResultPayload := &leaderboardevents.GetLeaderboardResponsePayloadV1{
 					Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					leaderboardevents.GetLeaderboardResponse,
+					leaderboardevents.GetLeaderboardResponseV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -157,7 +157,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -167,21 +167,21 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.GetLeaderboardFailedPayload{
+						Failure: &leaderboardevents.GetLeaderboardFailedPayloadV1{
 							Reason: "non-error failure",
 						},
 					},
 					nil,
 				)
 
-				failureResultPayload := &leaderboardevents.GetLeaderboardFailedPayload{
+				failureResultPayload := &leaderboardevents.GetLeaderboardFailedPayloadV1{
 					Reason: "non-error failure",
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetLeaderboardFailed,
+					leaderboardevents.GetLeaderboardFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -194,7 +194,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -204,7 +204,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 					gomock.Any(), // guildID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.GetLeaderboardFailedPayload{
+						Failure: &leaderboardevents.GetLeaderboardFailedPayloadV1{
 							Reason: "internal service error",
 						},
 					},
@@ -221,7 +221,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.GetLeaderboardRequestPayload) = leaderboardevents.GetLeaderboardRequestPayload{}
+						*out.(*leaderboardevents.GetLeaderboardRequestedPayloadV1) = leaderboardevents.GetLeaderboardRequestedPayloadV1{}
 						return nil
 					},
 				)
@@ -281,7 +281,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 	testResponse := roundtypes.ResponseAccept
 	testJoinedLate := true
 
-	testPayload := &sharedevents.RoundTagLookupRequestPayload{
+	testPayload := &sharedevents.RoundTagLookupRequestedPayloadV1{
 		UserID:     testUserID,
 		RoundID:    testRoundID,
 		Response:   testResponse,
@@ -315,7 +315,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed with the test payload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -328,7 +328,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayload{
+						Success: &sharedevents.RoundTagLookupResultPayloadV1{
 							UserID:    testUserID,
 							RoundID:   testRoundID,
 							TagNumber: &testTagNumber,
@@ -339,7 +339,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage for the success case
-				successResultPayload := &sharedevents.RoundTagLookupResultPayload{
+				successResultPayload := &sharedevents.RoundTagLookupResultPayloadV1{
 					UserID:    testUserID,
 					RoundID:   testRoundID,
 					TagNumber: &testTagNumber,
@@ -348,7 +348,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					sharedevents.RoundTagLookupFound, // Expected event type for Tag Found
+					sharedevents.RoundTagLookupFoundV1, // Expected event type for Tag Found
 				).Return(testMsg, nil) // Return a mock message and no error
 			},
 			msg:     testMsg,
@@ -361,7 +361,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed with the test payload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -373,7 +373,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayload{
+						Success: &sharedevents.RoundTagLookupResultPayloadV1{
 							UserID:    testUserID,
 							RoundID:   testRoundID,
 							TagNumber: nil, // Tag not found
@@ -384,7 +384,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage for the not found case
-				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayload{
+				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayloadV1{
 					UserID:    testUserID,
 					RoundID:   testRoundID,
 					TagNumber: nil,
@@ -393,7 +393,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					notFoundResultPayload,
-					sharedevents.RoundTagLookupNotFound, // Expected event type for Tag Not Found
+					sharedevents.RoundTagLookupNotFoundV1, // Expected event type for Tag Not Found
 				).Return(testMsg, nil) // Return a mock message and no error
 			},
 			msg:     testMsg,
@@ -420,7 +420,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -449,7 +449,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -462,7 +462,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayload{
+						Success: &sharedevents.RoundTagLookupResultPayloadV1{
 							UserID:    testUserID,
 							RoundID:   testRoundID,
 							TagNumber: &testTagNumber,
@@ -473,7 +473,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage to return an error
-				successResultPayload := &sharedevents.RoundTagLookupResultPayload{
+				successResultPayload := &sharedevents.RoundTagLookupResultPayloadV1{
 					UserID:    testUserID,
 					RoundID:   testRoundID,
 					TagNumber: &testTagNumber,
@@ -482,7 +482,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					sharedevents.RoundTagLookupFound,
+					sharedevents.RoundTagLookupFoundV1,
 				).Return(nil, fmt.Errorf("failed to create result message")) // Return error from CreateResultMessage
 			},
 			msg:            testMsg,
@@ -496,7 +496,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -508,7 +508,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayload{
+						Success: &sharedevents.RoundTagLookupResultPayloadV1{
 							UserID:    testUserID,
 							RoundID:   testRoundID,
 							TagNumber: nil,
@@ -519,7 +519,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage to return an error
-				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayload{
+				notFoundResultPayload := &sharedevents.RoundTagLookupResultPayloadV1{
 					UserID:    testUserID,
 					RoundID:   testRoundID,
 					TagNumber: nil,
@@ -528,7 +528,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					notFoundResultPayload,
-					sharedevents.RoundTagLookupNotFound,
+					sharedevents.RoundTagLookupNotFoundV1,
 				).Return(nil, fmt.Errorf("failed to create result message")) // Return error from CreateResultMessage
 			},
 			msg:            testMsg,
@@ -542,7 +542,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -554,7 +554,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &sharedevents.RoundTagLookupFailedPayload{
+						Failure: &sharedevents.RoundTagLookupFailedPayloadV1{
 							UserID:  testUserID,
 							RoundID: testRoundID,
 							Reason:  "No active round found",
@@ -564,7 +564,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage for the failure case
-				failureResultPayload := &sharedevents.RoundTagLookupFailedPayload{
+				failureResultPayload := &sharedevents.RoundTagLookupFailedPayloadV1{
 					UserID:  testUserID,
 					RoundID: testRoundID,
 					Reason:  "No active round found",
@@ -572,7 +572,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed, // Expected event type for failure
+					leaderboardevents.GetTagNumberFailedV1, // Expected event type for failure
 				).Return(testMsg, nil) // Return a mock failure message and no error
 			},
 			msg:     testMsg,
@@ -585,7 +585,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -597,7 +597,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &sharedevents.RoundTagLookupFailedPayload{
+						Failure: &sharedevents.RoundTagLookupFailedPayloadV1{
 							UserID:  testUserID,
 							RoundID: testRoundID,
 							Reason:  "No active round found",
@@ -607,7 +607,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage to return an error
-				failureResultPayload := &sharedevents.RoundTagLookupFailedPayload{
+				failureResultPayload := &sharedevents.RoundTagLookupFailedPayloadV1{
 					UserID:  testUserID,
 					RoundID: testRoundID,
 					Reason:  "No active round found",
@@ -615,7 +615,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed,
+					leaderboardevents.GetTagNumberFailedV1,
 				).Return(nil, fmt.Errorf("failed to create failure message")) // Return error from CreateResultMessage
 			},
 			msg:            testMsg,
@@ -629,7 +629,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -648,7 +648,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage for the failure case due to system error
-				failureResultPayload := sharedevents.RoundTagLookupFailedPayload{
+				failureResultPayload := sharedevents.RoundTagLookupFailedPayloadV1{
 					UserID:  testUserID,
 					RoundID: testRoundID,
 					Reason:  serviceErr.Error(), // Reason should be the error message
@@ -656,7 +656,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed,
+					leaderboardevents.GetTagNumberFailedV1,
 				).Return(testMsg, nil) // Return a mock failure message and no error
 			},
 			msg:     testMsg,
@@ -669,7 +669,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -688,7 +688,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				)
 
 				// Mock CreateResultMessage to return an error
-				failureResultPayload := sharedevents.RoundTagLookupFailedPayload{
+				failureResultPayload := sharedevents.RoundTagLookupFailedPayloadV1{
 					UserID:  testUserID,
 					RoundID: testRoundID,
 					Reason:  serviceErr.Error(),
@@ -696,7 +696,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.GetTagNumberFailed,
+					leaderboardevents.GetTagNumberFailedV1,
 				).Return(nil, fmt.Errorf("failed to create failure message")) // Return error from CreateResultMessage
 			},
 			msg:            testMsg,
@@ -710,7 +710,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 				// Mock UnmarshalPayload to succeed
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.RoundTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.RoundTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -796,7 +796,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testTag := sharedtypes.TagNumber(1)
 
-	testPayload := &sharedevents.DiscordTagLookupRequestPayload{
+	testPayload := &sharedevents.DiscordTagLookupRequestedPayloadV1{
 		UserID: testUserID,
 	}
 	payloadBytes, _ := json.Marshal(testPayload)
@@ -826,7 +826,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -838,7 +838,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					testUserID,   // Just passing the UserID rather than payload struct
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.DiscordTagLookupResultPayload{
+						Success: &sharedevents.DiscordTagLookupResultPayloadV1{
 							TagNumber:        &testTag,
 							UserID:           testUserID,
 							RequestingUserID: testRqstUserID,
@@ -848,7 +848,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					nil,
 				)
 
-				successResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+				successResponsePayload := &sharedevents.DiscordTagLookupResultPayloadV1{
 					TagNumber:        &testTag,
 					UserID:           testUserID,
 					RequestingUserID: testRqstUserID,
@@ -859,7 +859,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResponsePayload,
-					sharedevents.DiscordTagLookupByUserIDSuccess,
+					sharedevents.DiscordTagLookupSucceededV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -871,7 +871,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -882,7 +882,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.DiscordTagLookupResultPayload{
+						Success: &sharedevents.DiscordTagLookupResultPayloadV1{
 							TagNumber:        nil,
 							UserID:           testUserID,
 							RequestingUserID: testRqstUserID,
@@ -892,7 +892,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					nil,
 				)
 
-				notFoundResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+				notFoundResponsePayload := &sharedevents.DiscordTagLookupResultPayloadV1{
 					TagNumber:        nil,
 					UserID:           testUserID,
 					RequestingUserID: testRqstUserID,
@@ -903,7 +903,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					notFoundResponsePayload,
-					sharedevents.DiscordTagLookupByUserIDNotFound,
+					sharedevents.DiscordTagLookupNotFoundV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -925,7 +925,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -949,7 +949,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -960,7 +960,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.DiscordTagLookupResultPayload{
+						Success: &sharedevents.DiscordTagLookupResultPayloadV1{
 							TagNumber:        &testTag,
 							UserID:           testUserID,
 							RequestingUserID: testRqstUserID,
@@ -970,7 +970,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					nil,
 				)
 
-				successResponsePayload := &sharedevents.DiscordTagLookupResultPayload{
+				successResponsePayload := &sharedevents.DiscordTagLookupResultPayloadV1{
 					TagNumber:        &testTag,
 					UserID:           testUserID,
 					RequestingUserID: testRqstUserID,
@@ -980,7 +980,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResponsePayload,
-					sharedevents.DiscordTagLookupByUserIDSuccess,
+					sharedevents.DiscordTagLookupSucceededV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -993,7 +993,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -1004,7 +1004,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					testUserID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &sharedevents.DiscordTagLookupByUserIDFailedPayload{
+						Failure: &sharedevents.DiscordTagLookupFailedPayloadV1{
 							UserID: testUserID,
 							Reason: "No active leaderboard found",
 						},
@@ -1012,7 +1012,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					nil,
 				)
 
-				failureResultPayload := &sharedevents.DiscordTagLookupByUserIDFailedPayload{
+				failureResultPayload := &sharedevents.DiscordTagLookupFailedPayloadV1{
 					UserID: testUserID,
 					Reason: "No active leaderboard found",
 				}
@@ -1020,7 +1020,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					sharedevents.DiscordTagLookupByUserIDFailed,
+					sharedevents.DiscordTagLookupFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -1033,7 +1033,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -1051,11 +1051,11 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					sharedevents.DiscordTagLookupByUserIDFailedPayload{
+					sharedevents.DiscordTagLookupFailedPayloadV1{
 						UserID: testUserID,
 						Reason: "database connection failed",
 					},
-					sharedevents.DiscordTagLookupByUserIDFailed,
+					sharedevents.DiscordTagLookupFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -1068,7 +1068,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.DiscordTagLookupRequestPayload) = *testPayload
+						*out.(*sharedevents.DiscordTagLookupRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)

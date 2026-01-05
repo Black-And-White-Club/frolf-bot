@@ -160,7 +160,7 @@ func (mr *MockQueueServiceMockRecorder) HealthCheck(ctx any) *gomock.Call {
 }
 
 // ScheduleRoundReminder mocks base method.
-func (m *MockQueueService) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayload) error {
+func (m *MockQueueService) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayloadV1) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScheduleRoundReminder", ctx, guildID, roundID, reminderTime, payload)
 	ret0, _ := ret[0].(error)
@@ -174,7 +174,7 @@ func (mr *MockQueueServiceMockRecorder) ScheduleRoundReminder(ctx, guildID, roun
 }
 
 // ScheduleRoundStart mocks base method.
-func (m *MockQueueService) ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayload) error {
+func (m *MockQueueService) ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayloadV1) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScheduleRoundStart", ctx, guildID, roundID, startTime, payload)
 	ret0, _ := ret[0].(error)

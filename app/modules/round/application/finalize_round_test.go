@@ -43,7 +43,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		mockDBSetup             func(*rounddb.MockRoundDB)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
 		mockEventBusSetup       func(*eventbus.MockEventBus)
-		payload                 roundevents.AllScoresSubmittedPayload
+		payload                 roundevents.AllScoresSubmittedPayloadV1
 		expectedResult          RoundOperationResult
 		expectedError           error
 	}{
@@ -60,13 +60,13 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
 			},
-			payload: roundevents.AllScoresSubmittedPayload{
+			payload: roundevents.AllScoresSubmittedPayloadV1{
 				RoundID:   testRoundID,
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundData: *testFinalizedRound,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.RoundFinalizedPayload{
+				Success: &roundevents.RoundFinalizedPayloadV1{
 					RoundID:   testRoundID,
 					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundData: *testFinalizedRound,
@@ -85,12 +85,12 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
 			},
-			payload: roundevents.AllScoresSubmittedPayload{
+			payload: roundevents.AllScoresSubmittedPayloadV1{
 				RoundID: testRoundID,
 				GuildID: sharedtypes.GuildID("guild-123"),
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
 				},
@@ -142,20 +142,20 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			if tt.expectedResult.Success != nil {
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.RoundFinalizedPayload); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundFinalizedPayload, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundFinalizedPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundFinalizedPayload, got %T", tt.expectedResult.Success)
+				} else if successPayload, ok := result.Success.(*roundevents.RoundFinalizedPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundFinalizedPayloadV1, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundFinalizedPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundFinalizedPayloadV1, got %T", tt.expectedResult.Success)
 				} else if successPayload.RoundID != expectedSuccessPayload.RoundID {
 					t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
 				}
 			} else if tt.expectedResult.Failure != nil {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", tt.expectedResult.Failure)
 				} else if failurePayload.Error != expectedFailurePayload.Error {
 					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}
@@ -191,7 +191,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
-		payload        roundevents.RoundFinalizedPayload
+		payload        roundevents.RoundFinalizedPayloadV1
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
@@ -200,7 +200,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
-			payload: roundevents.RoundFinalizedPayload{
+			payload: roundevents.RoundFinalizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -215,9 +215,9 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.ProcessRoundScoresRequestPayload{
+				Success: &roundevents.ProcessRoundScoresRequestPayloadV1{
 					RoundID: testRoundID,
-					Scores: []roundevents.ParticipantScore{
+					Scores: []roundevents.ParticipantScoreV1{
 						// ✅ Only participants with scores are included
 						{UserID: user1ID, TagNumber: &tag1, Score: score1},
 						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Zero tag becomes 0
@@ -231,7 +231,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
-			payload: roundevents.RoundFinalizedPayload{
+			payload: roundevents.RoundFinalizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -244,7 +244,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
 				},
@@ -256,7 +256,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
-			payload: roundevents.RoundFinalizedPayload{
+			payload: roundevents.RoundFinalizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -266,7 +266,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
 				},
@@ -278,7 +278,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
-			payload: roundevents.RoundFinalizedPayload{
+			payload: roundevents.RoundFinalizedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testRoundID,
 				RoundData: roundtypes.Round{
@@ -288,7 +288,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayload{
+				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
 				},
@@ -336,10 +336,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			if tt.expectedResult.Success != nil {
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayload); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.ProcessRoundScoresRequestPayload, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.ProcessRoundScoresRequestPayload, got %T", tt.expectedResult.Success)
+				} else if successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.ProcessRoundScoresRequestPayloadV1, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.ProcessRoundScoresRequestPayloadV1, got %T", tt.expectedResult.Success)
 				} else {
 					// Validate RoundID
 					if successPayload.RoundID != expectedSuccessPayload.RoundID {
@@ -368,10 +368,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			} else if tt.expectedResult.Failure != nil {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayload); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayload, got %T", tt.expectedResult.Failure)
+				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", result.Failure)
+				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", tt.expectedResult.Failure)
 				} else if failurePayload.Error != expectedFailurePayload.Error {
 					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
 				}

@@ -50,11 +50,11 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			},
 			newRole: testRole,
 			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserRoleUpdateResultPayload{
+				Success: &userevents.UserRoleUpdateResultPayloadV1{
 					UserID:  testUserID,
 					Role:    testRole,
 					Success: true,
-					Error:   "",
+					Reason:  "",
 				},
 				Failure: nil,
 				Error:   nil,
@@ -69,11 +69,11 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			newRole: invalidRole,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
 					UserID:  testUserID,
 					Role:    invalidRole,
 					Success: false,
-					Error:   "invalid role", // Reason set in the service code (Error field)
+					Reason:  "invalid role", // Reason set in the service code (Reason field)
 				},
 				Error: errors.New("invalid role"), // Error within the result
 			},
@@ -89,11 +89,11 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			newRole: testRole,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
 					UserID:  testUserID,
 					Role:    testRole,
 					Success: false,
-					Error:   "user not found", // Reason set in the service code (Error field)
+					Reason:  "user not found", // Reason set in the service code (Reason field)
 				},
 				Error: userdbtypes.ErrUserNotFound, // Error within the result
 			},
@@ -110,11 +110,11 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 			newRole: testRole,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayload{ // Expecting UserRoleUpdateResultPayload
+				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
 					UserID:  testUserID,
 					Role:    testRole,
 					Success: false,
-					Error:   "failed to update user role", // Reason set in the service code (Error field)
+					Reason:  "failed to update user role", // Reason set in the service code (Reason field)
 				},
 				Error: dbErr, // Error within the result
 			},
@@ -145,10 +145,10 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
-				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserRoleUpdateResultPayload)
-				gotSuccess, ok := gotResult.Success.(*userevents.UserRoleUpdateResultPayload)
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserRoleUpdateResultPayloadV1)
+				gotSuccess, ok := gotResult.Success.(*userevents.UserRoleUpdateResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success payload of type *userevents.UserRoleUpdateResultPayload, got %T", gotResult.Success)
+					t.Errorf("Expected success payload of type *userevents.UserRoleUpdateResultPayloadV1, got %T", gotResult.Success)
 				} else if gotSuccess == nil {
 					t.Errorf("Expected non-nil success payload, got nil")
 				} else if gotSuccess.UserID != expectedSuccess.UserID {
@@ -157,23 +157,23 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 					t.Errorf("Mismatched Role, got: %v, expected: %v", gotSuccess.Role, expectedSuccess.Role)
 				} else if gotSuccess.Success != expectedSuccess.Success {
 					t.Errorf("Mismatched Success status, got: %v, expected: %v", gotSuccess.Success, expectedSuccess.Success)
-				} else if gotSuccess.Error != expectedSuccess.Error {
-					t.Errorf("Mismatched Error message in success payload, got: %v, expected: %v", gotSuccess.Error, expectedSuccess.Error)
+				} else if gotSuccess.Reason != expectedSuccess.Reason {
+					t.Errorf("Mismatched Reason message in success payload, got: %v, expected: %v", gotSuccess.Reason, expectedSuccess.Reason)
 				}
 			} else if gotResult.Success != nil {
 				t.Errorf("Unexpected success payload: %v", gotResult.Success)
 			}
 
 			if tt.expectedOpResult.Failure != nil {
-				// The service function returns UserRoleUpdateResultPayload for failures, not UserRoleUpdateFailedPayload
-				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserRoleUpdateResultPayload)
-				gotFailure, ok := gotResult.Failure.(*userevents.UserRoleUpdateResultPayload)
+				// The service function returns UserRoleUpdateResultPayloadV1 for failures, not UserRoleUpdateFailedPayload
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserRoleUpdateResultPayloadV1)
+				gotFailure, ok := gotResult.Failure.(*userevents.UserRoleUpdateResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure payload of type *userevents.UserRoleUpdateResultPayload, got %T", gotResult.Failure)
+					t.Errorf("Expected failure payload of type *userevents.UserRoleUpdateResultPayloadV1, got %T", gotResult.Failure)
 				} else if gotFailure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
-				} else if gotFailure.Error != expectedFailure.Error { // Check the Error field
-					t.Errorf("Mismatched failure reason (Error field), got: %v, expected: %v", gotFailure.Error, expectedFailure.Error)
+				} else if gotFailure.Reason != expectedFailure.Reason { // Check the Reason field
+					t.Errorf("Mismatched failure reason (Reason field), got: %v, expected: %v", gotFailure.Reason, expectedFailure.Reason)
 				} else if gotFailure.UserID != expectedFailure.UserID {
 					t.Errorf("Mismatched failure UserID, got: %v, expected: %v", gotFailure.UserID, expectedFailure.UserID)
 				} else if gotFailure.Success != expectedFailure.Success {

@@ -33,13 +33,13 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	// Corrected type for testScheduledRoundID
 
-	testPayload := &roundevents.ScheduledRoundTagUpdatePayload{
+	testPayload := &roundevents.ScheduledRoundTagUpdatePayloadV1{
 		ChangedTags: testChangedTags,
 	}
 
 	// Create the correct payload type that the handler expects
-	tagsUpdatedPayload := &roundevents.TagsUpdatedForScheduledRoundsPayload{
-		UpdatedRounds: []roundevents.RoundUpdateInfo{
+	tagsUpdatedPayload := &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+		UpdatedRounds: []roundevents.RoundUpdateInfoV1{
 			{
 				RoundID:             testRoundID,
 				Title:               roundtypes.Title("Test Round"),
@@ -48,7 +48,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				ParticipantsChanged: 2,
 			},
 		},
-		Summary: roundevents.UpdateSummary{
+		Summary: roundevents.UpdateSummaryV1{
 			TotalRoundsProcessed: 1,
 			RoundsUpdated:        1,
 			ParticipantsUpdated:  2,
@@ -110,7 +110,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					tagsUpdatedPayload,
-					roundevents.TagsUpdatedForScheduledRounds,
+					roundevents.TagsUpdatedForScheduledRoundsV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -252,7 +252,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					tagsUpdatedPayload,
-					roundevents.TagsUpdatedForScheduledRounds,
+					roundevents.TagsUpdatedForScheduledRoundsV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,

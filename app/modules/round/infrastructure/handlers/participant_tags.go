@@ -66,7 +66,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 			}
 
 			// Create the service payload
-			servicePayload := roundevents.ScheduledRoundTagUpdatePayload{
+			servicePayload := roundevents.ScheduledRoundTagUpdatePayloadV1{
 				GuildID:     guildID,
 				ChangedTags: changedTags,
 			}
@@ -114,7 +114,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 
 			if result.Success != nil {
 				// FOLLOW THE SAME PATTERN AS REMINDER HANDLER - Extract and log the success payload details
-				tagsUpdatedPayload := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
+				tagsUpdatedPayload := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 
 				h.logger.InfoContext(ctx, "Scheduled round tag update processed successfully",
 					attr.CorrelationIDFromMsg(msg),
@@ -140,7 +140,7 @@ func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*
 					successMsg, err := h.helpers.CreateResultMessage(
 						msg,
 						tagsUpdatedPayload, // Pass the extracted payload, not result.Success
-						roundevents.TagsUpdatedForScheduledRounds,
+						roundevents.TagsUpdatedForScheduledRoundsV1,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create success message: %w", err)

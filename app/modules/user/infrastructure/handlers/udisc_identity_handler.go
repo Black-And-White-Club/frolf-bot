@@ -13,9 +13,9 @@ import (
 func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(msg *message.Message) ([]*message.Message, error) {
 	return h.handlerWrapper(
 		"HandleUpdateUDiscIdentityRequest",
-		&userevents.UpdateUDiscIdentityRequestPayload{},
+		&userevents.UpdateUDiscIdentityRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			updatePayload := payload.(*userevents.UpdateUDiscIdentityRequestPayload)
+			updatePayload := payload.(*userevents.UpdateUDiscIdentityRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received UpdateUDiscIdentity request",
 				attr.CorrelationIDFromMsg(msg),
@@ -42,7 +42,7 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(msg *message.Message) ([
 				failureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					userevents.UDiscIdentityUpdateFailed,
+					userevents.UDiscIdentityUpdateFailedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
@@ -54,7 +54,7 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(msg *message.Message) ([
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					userevents.UDiscIdentityUpdated,
+					userevents.UDiscIdentityUpdatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

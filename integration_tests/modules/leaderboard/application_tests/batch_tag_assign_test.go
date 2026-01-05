@@ -101,9 +101,9 @@ func TestProcessTagAssignments(t *testing.T) {
 					return
 				}
 				// Assert the type of the success payload
-				successPayload, ok := result.Success.(*leaderboardevents.BatchTagAssignedPayload)
+				successPayload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.BatchTagAssignedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1, but got %T", result.Success)
 					return
 				}
 				// Validate fields in the success payload
@@ -250,9 +250,9 @@ func TestProcessTagAssignments(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.BatchTagAssignedPayload)
+				successPayload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.BatchTagAssignedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -406,9 +406,9 @@ func TestProcessTagAssignments(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.BatchTagAssignedPayload)
+				successPayload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.BatchTagAssignedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1, but got %T", result.Success)
 					return
 				}
 				// For empty assignments, the service should return the current leaderboard state (1 existing user)
@@ -521,9 +521,9 @@ func TestProcessTagAssignments(t *testing.T) {
 					return
 				}
 				// Validate it's the correct failure type
-				failurePayload, ok := result.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.BatchTagAssignmentFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 				// Validate failure payload contents

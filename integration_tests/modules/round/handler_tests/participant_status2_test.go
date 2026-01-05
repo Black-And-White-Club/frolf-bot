@@ -15,12 +15,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const defaultTimeout = 3 * time.Second
-
 func TestHandleParticipantJoinValidationRequest(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -29,41 +27,49 @@ func TestHandleParticipantJoinValidationRequest(t *testing.T) {
 		{
 			name: "Success - Accept Response for Scheduled Round",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
-				payload := createPayload(roundID, userID, roundtypes.ResponseAccept)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				data = data.WithRoundID(roundID)
+				payload := createPayload(data.RoundID, data.UserID, roundtypes.ResponseAccept)
 				publishAndExpectTagLookup(t, deps, deps.MessageCapture, payload, false)
 			},
 		},
 		{
 			name: "Success - Accept Response for InProgress Round (Late Join)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateInProgress)
-				payload := createPayload(roundID, userID, roundtypes.ResponseAccept)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
+				data = data.WithRoundID(roundID)
+				payload := createPayload(data.RoundID, data.UserID, roundtypes.ResponseAccept)
 				publishAndExpectTagLookup(t, deps, deps.MessageCapture, payload, true)
 			},
 		},
 		{
 			name: "Success - Decline Response for Scheduled Round",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
-				payload := createPayload(roundID, userID, roundtypes.ResponseDecline)
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				data = data.WithRoundID(roundID)
+				payload := createPayload(data.RoundID, data.UserID, roundtypes.ResponseDecline)
 				publishAndExpectStatusUpdate(t, deps, deps.MessageCapture, payload, false)
 			},
 		},
 		{
 			name: "Failure - Round Not Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createPayload(nonExistentRoundID, userID, roundtypes.ResponseAccept)
-				publishAndExpectError(t, deps, deps.MessageCapture, payload, nonExistentRoundID, userID)
+				data := NewTestData().WithRoundID(sharedtypes.RoundID(uuid.New())) // Non-existent round
+				payload := createPayload(data.RoundID, data.UserID, roundtypes.ResponseAccept)
+				publishAndExpectError(t, deps, deps.MessageCapture, payload, data.RoundID, data.UserID)
 			},
 		},
 		{
 			name: "Failure - Empty User ID",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, userID, roundtypes.RoundStateUpcoming)
-				payload := createPayload(roundID, "", roundtypes.ResponseAccept)
-				publishAndExpectError(t, deps, deps.MessageCapture, payload, roundID, "")
+				data := NewTestData()
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				data = data.WithRoundID(roundID)
+				payload := createPayload(data.RoundID, "", roundtypes.ResponseAccept)  // Empty user ID
+				publishAndExpectError(t, deps, deps.MessageCapture, payload, data.RoundID, "")
 			},
 		},
 		{
@@ -74,31 +80,34 @@ func TestHandleParticipantJoinValidationRequest(t *testing.T) {
 		},
 	}
 
+	// Run all subtests with SHARED setup - no need to clear messages between tests!
+	// Each test uses unique IDs so messages won't interfere
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
+			// Create helper for each subtest
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
 
-			helper.ClearMessages()
+			// Run the test - no cleanup needed!
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 // Test-specific helper functions - only used in this file
 
-func createPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, response roundtypes.Response) roundevents.ParticipantJoinValidationRequestPayload {
-	return roundevents.ParticipantJoinValidationRequestPayload{
+func createPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, response roundtypes.Response) roundevents.ParticipantJoinValidationRequestPayloadV1 {
+	return roundevents.ParticipantJoinValidationRequestPayloadV1{
 		RoundID:  roundID,
 		UserID:   userID,
 		Response: response,
+		GuildID:  "test-guild",
 	}
 }
 
-func publishParticipantJoinValidationRequest(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantJoinValidationRequestPayload) *message.Message {
+func publishParticipantJoinValidationRequest(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantJoinValidationRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -109,7 +118,7 @@ func publishParticipantJoinValidationRequest(t *testing.T, deps *RoundHandlerTes
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantJoinValidationRequest, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantJoinValidationRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -117,33 +126,33 @@ func publishParticipantJoinValidationRequest(t *testing.T, deps *RoundHandlerTes
 }
 
 func waitForTagLookupRequest(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.LeaderboardGetTagNumberRequest, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.LeaderboardGetTagNumberRequestedV1, count, defaultTimeout)
 }
 
 func getTagLookupRequestMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.LeaderboardGetTagNumberRequest)
+	return capture.GetMessages(roundevents.LeaderboardGetTagNumberRequestedV1)
 }
 
 func waitForParticipantStatusUpdateRequest(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantStatusUpdateRequest, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantStatusUpdateRequestedV1, count, defaultTimeout)
 }
 
 func waitForParticipantJoinError(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantJoinError, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantJoinErrorV1, count, defaultTimeout)
 }
 
 func getParticipantStatusUpdateRequestMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantStatusUpdateRequest)
+	return capture.GetMessages(roundevents.RoundParticipantStatusUpdateRequestedV1)
 }
 
 func getParticipantJoinErrorMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantJoinError)
+	return capture.GetMessages(roundevents.RoundParticipantJoinErrorV1)
 }
 
-func validateTagLookupRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.TagLookupRequestPayload {
+func validateTagLookupRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.TagLookupRequestPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.TagLookupRequestPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.TagLookupRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse tag lookup request message: %v", err)
 	}
@@ -163,10 +172,10 @@ func validateTagLookupRequest(t *testing.T, msg *message.Message, expectedRoundI
 	return result
 }
 
-func validateParticipantStatusUpdateRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.ParticipantJoinRequestPayload {
+func validateParticipantStatusUpdateRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.ParticipantJoinRequestPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.ParticipantJoinRequestPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.ParticipantJoinRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant status update request message: %v", err)
 	}
@@ -189,7 +198,7 @@ func validateParticipantStatusUpdateRequest(t *testing.T, msg *message.Message, 
 func validateParticipantJoinError(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join error message: %v", err)
 	}
@@ -212,62 +221,141 @@ func validateParticipantJoinError(t *testing.T, msg *message.Message, expectedRo
 	}
 }
 
-func publishAndExpectTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayload, expectedLateJoin bool) {
+func publishAndExpectTagLookup(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayloadV1, expectedLateJoin bool) {
 	publishParticipantJoinValidationRequest(t, deps, &payload)
 
-	if !waitForTagLookupRequest(capture, 1) {
-		t.Fatalf("Expected tag lookup request message")
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getTagLookupRequestMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.TagLookupRequestPayloadV1](msg)
+			if err == nil && parsed.RoundID == payload.RoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getTagLookupRequestMessages(capture)
-	result := validateTagLookupRequest(t, msgs[0], payload.RoundID, payload.UserID, payload.Response)
+	if foundMsg == nil {
+		// Debug: Show what messages we DID receive
+		allTagMsgs := getTagLookupRequestMessages(capture)
+		allErrorMsgs := getParticipantJoinErrorMessages(capture)
+		allStatusMsgs := getParticipantStatusUpdateRequestMessages(capture)
+		t.Logf("DEBUG: Looking for round %s, found %d tag lookup messages, %d error messages, %d status messages",
+			payload.RoundID, len(allTagMsgs), len(allErrorMsgs), len(allStatusMsgs))
+
+		for i, msg := range allTagMsgs {
+			if parsed, err := testutils.ParsePayload[roundevents.TagLookupRequestPayloadV1](msg); err == nil {
+				t.Logf("DEBUG: Tag message %d has round ID: %s", i, parsed.RoundID)
+			}
+		}
+		for i, msg := range allErrorMsgs {
+			if parsed, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg); err == nil {
+				t.Logf("DEBUG: Error message %d: %s", i, parsed.Error)
+			}
+		}
+		t.Fatalf("Expected tag lookup request message for round %s", payload.RoundID)
+	}
+
+	result := validateTagLookupRequest(t, foundMsg, payload.RoundID, payload.UserID, payload.Response)
 
 	if result.JoinedLate == nil || *result.JoinedLate != expectedLateJoin {
 		t.Errorf("Expected JoinedLate=%t, got %v", expectedLateJoin, result.JoinedLate)
 	}
 }
 
-func publishAndExpectStatusUpdate(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayload, expectedLateJoin bool) {
+func publishAndExpectStatusUpdate(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayloadV1, expectedLateJoin bool) {
 	publishParticipantJoinValidationRequest(t, deps, &payload)
 
-	if !waitForParticipantStatusUpdateRequest(capture, 1) {
-		t.Fatalf("Expected participant status update request message")
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantStatusUpdateRequestMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinRequestPayloadV1](msg)
+			if err == nil && parsed.RoundID == payload.RoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantStatusUpdateRequestMessages(capture)
-	result := validateParticipantStatusUpdateRequest(t, msgs[0], payload.RoundID, payload.UserID, payload.Response)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant status update request message for round %s", payload.RoundID)
+	}
+
+	result := validateParticipantStatusUpdateRequest(t, foundMsg, payload.RoundID, payload.UserID, payload.Response)
 
 	if result.JoinedLate == nil || *result.JoinedLate != expectedLateJoin {
 		t.Errorf("Expected JoinedLate=%t, got %v", expectedLateJoin, result.JoinedLate)
 	}
 }
 
-func publishAndExpectError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayload, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
+func publishAndExpectError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantJoinValidationRequestPayloadV1, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	publishParticipantJoinValidationRequest(t, deps, &payload)
 
-	if !waitForParticipantJoinError(capture, 1) {
-		t.Fatalf("Expected participant join error message")
+	// Wait up to 1 second for the specific error message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantJoinErrorMessages(capture)
+		// Find the error message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
+			if err == nil && parsed.ParticipantJoinRequest != nil && parsed.ParticipantJoinRequest.RoundID == expectedRoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantJoinErrorMessages(capture)
-	validateParticipantJoinError(t, msgs[0], expectedRoundID, expectedUserID)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant join error message for round %s", expectedRoundID)
+	}
+
+	validateParticipantJoinError(t, foundMsg, expectedRoundID, expectedUserID)
 }
 
 func publishInvalidJSONAndExpectNoMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
+	// Count messages before publishing invalid JSON
+	tagMsgsBefore := len(getTagLookupRequestMessages(capture))
+	statusMsgsBefore := len(getParticipantStatusUpdateRequestMessages(capture))
+
 	msg := message.NewMessage(uuid.New().String(), []byte("not valid json"))
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantJoinValidationRequest, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantJoinValidationRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 
-	tagMsgs := getTagLookupRequestMessages(capture)
-	statusMsgs := getParticipantStatusUpdateRequestMessages(capture)
+	// Count messages after - should be the same (no new messages)
+	tagMsgsAfter := len(getTagLookupRequestMessages(capture))
+	statusMsgsAfter := len(getParticipantStatusUpdateRequestMessages(capture))
 
-	if len(tagMsgs) > 0 || len(statusMsgs) > 0 {
-		t.Errorf("Expected no success messages for invalid JSON, got %d tag msgs and %d status msgs",
-			len(tagMsgs), len(statusMsgs))
+	newTagMsgs := tagMsgsAfter - tagMsgsBefore
+	newStatusMsgs := statusMsgsAfter - statusMsgsBefore
+
+	if newTagMsgs > 0 || newStatusMsgs > 0 {
+		t.Errorf("Expected no NEW success messages for invalid JSON, got %d new tag msgs and %d new status msgs",
+			newTagMsgs, newStatusMsgs)
 	}
 }

@@ -24,7 +24,7 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	validPayload := &guildevents.GuildConfigDeletionRequestedPayload{
+	validPayload := &guildevents.GuildConfigDeletionRequestedPayloadV1{
 		GuildID: sharedtypes.GuildID("guild-1"),
 	}
 	payloadBytes, _ := json.Marshal(validPayload)
@@ -50,21 +50,21 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigDeletionRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigDeletionRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigDeletedPayload{
+					Success: &guildevents.GuildConfigDeletedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigDeletedPayload{
+					&guildevents.GuildConfigDeletedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 					},
-					guildevents.GuildConfigDeleted,
+					guildevents.GuildConfigDeletedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -86,7 +86,7 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigDeletionRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigDeletionRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
@@ -102,23 +102,23 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigDeletionRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigDeletionRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigDeletionFailedPayload{
+					Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Reason:  "some failure",
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigDeletionFailedPayload{
+					&guildevents.GuildConfigDeletionFailedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Reason:  "some failure",
 					},
-					guildevents.GuildConfigDeletionFailed,
+					guildevents.GuildConfigDeletionFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -130,7 +130,7 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigDeletionRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigDeletionRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)

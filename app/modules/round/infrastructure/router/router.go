@@ -139,44 +139,62 @@ func (r *RoundRouter) Configure(routerCtx context.Context, roundService roundser
 	return nil
 }
 
-// RegisterHandlers registers event handlers.
+// RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering RegisterHandlers for Round")
 
 	eventsToHandlers := map[string]message.HandlerFunc{
-		roundevents.RoundCreateRequest:                    handlers.HandleCreateRoundRequest,
-		roundevents.RoundUpdateRequest:                    handlers.HandleRoundUpdateRequest,
-		roundevents.RoundUpdateValidated:                  handlers.HandleRoundUpdateValidated,
-		roundevents.RoundFinalized:                        handlers.HandleRoundFinalized,
-		roundevents.RoundDeleteRequest:                    handlers.HandleRoundDeleteRequest,
-		roundevents.RoundDeleteValidated:                  handlers.HandleRoundDeleteValidated,
-		roundevents.RoundDeleteAuthorized:                 handlers.HandleRoundDeleteAuthorized,
-		roundevents.RoundParticipantJoinRequest:           handlers.HandleParticipantJoinRequest,
-		roundevents.RoundParticipantJoinValidationRequest: handlers.HandleParticipantJoinValidationRequest,
-		roundevents.RoundParticipantRemovalRequest:        handlers.HandleParticipantRemovalRequest,
-		roundevents.RoundScoreUpdateRequest:               handlers.HandleScoreUpdateRequest,
-		roundevents.RoundScoreUpdateValidated:             handlers.HandleScoreUpdateValidated,
-		roundevents.RoundAllScoresSubmitted:               handlers.HandleAllScoresSubmitted,
-		roundevents.RoundReminder:                         handlers.HandleRoundReminder,
-		roundevents.RoundStarted:                          handlers.HandleRoundStarted,
-		sharedevents.RoundTagLookupFound:                  handlers.HandleTagNumberFound,
-		sharedevents.RoundTagLookupNotFound:               handlers.HandleTagNumberNotFound,
-		leaderboardevents.GetTagNumberFailed:              handlers.HandleTagNumberLookupFailed,
-		roundevents.RoundEntityCreated:                    handlers.HandleRoundEntityCreated,
-		roundevents.RoundParticipantStatusUpdateRequest:   handlers.HandleParticipantStatusUpdateRequest,
-		roundevents.RoundParticipantDeclined:              handlers.HandleParticipantDeclined,
-		roundevents.RoundEventMessageIDUpdate:             handlers.HandleRoundEventMessageIDUpdate,
-		roundevents.RoundEventMessageIDUpdated:            handlers.HandleDiscordMessageIDUpdated,
-		roundevents.RoundParticipantScoreUpdated:          handlers.HandleParticipantScoreUpdated,
-		sharedevents.TagUpdateForScheduledRounds:          handlers.HandleScheduledRoundTagUpdate,
-		roundevents.GetRoundRequest:                       handlers.HandleGetRoundRequest,
-		roundevents.RoundUpdated:                          handlers.HandleRoundScheduleUpdate,
-		// Scorecard import handlers
-		roundevents.ScorecardUploadedTopic:     handlers.HandleScorecardUploaded,
-		roundevents.ScorecardURLRequestedTopic: handlers.HandleScorecardURLRequested,
-		roundevents.ScorecardParseRequestTopic: handlers.HandleParseScorecardRequest,
-		userevents.UserUDiscMatchConfirmed:     handlers.HandleUserMatchConfirmedForIngest,
-		roundevents.ImportCompletedTopic:       handlers.HandleImportCompleted,
+		// Round Creation Flow (from creation.go)
+		roundevents.RoundCreationRequestedV1:       handlers.HandleCreateRoundRequest,
+		roundevents.RoundEntityCreatedV1:           handlers.HandleRoundEntityCreated,
+		roundevents.RoundEventMessageIDUpdateV1:    handlers.HandleRoundEventMessageIDUpdate,
+		roundevents.RoundEventMessageIDUpdatedV1:   handlers.HandleDiscordMessageIDUpdated,
+
+		// Round Update Flow (from update.go)
+		roundevents.RoundUpdateRequestedV1:  handlers.HandleRoundUpdateRequest,
+		roundevents.RoundUpdateValidatedV1:  handlers.HandleRoundUpdateValidated,
+		roundevents.RoundUpdatedV1:          handlers.HandleRoundScheduleUpdate,
+
+		// Round Delete Flow (from delete.go)
+		roundevents.RoundDeleteRequestedV1:  handlers.HandleRoundDeleteRequest,
+		roundevents.RoundDeleteValidatedV1:  handlers.HandleRoundDeleteValidated,
+		roundevents.RoundDeleteAuthorizedV1: handlers.HandleRoundDeleteAuthorized,
+
+		// Round Participant Flow (from participants.go)
+		roundevents.RoundParticipantJoinRequestedV1:           handlers.HandleParticipantJoinRequest,
+		roundevents.RoundParticipantJoinValidationRequestedV1: handlers.HandleParticipantJoinValidationRequest,
+		roundevents.RoundParticipantRemovalRequestedV1:        handlers.HandleParticipantRemovalRequest,
+		roundevents.RoundParticipantStatusUpdateRequestedV1:   handlers.HandleParticipantStatusUpdateRequest,
+		roundevents.RoundParticipantDeclinedV1:                handlers.HandleParticipantDeclined,
+
+		// Round Scoring Flow (from scoring.go)
+		roundevents.RoundScoreUpdateRequestedV1:   handlers.HandleScoreUpdateRequest,
+		roundevents.RoundScoreUpdateValidatedV1:   handlers.HandleScoreUpdateValidated,
+		roundevents.RoundParticipantScoreUpdatedV1: handlers.HandleParticipantScoreUpdated,
+		roundevents.RoundAllScoresSubmittedV1:     handlers.HandleAllScoresSubmitted,
+
+		// Round Lifecycle Flow (from lifecycle.go)
+		roundevents.RoundFinalizedV1:         handlers.HandleRoundFinalized,
+		roundevents.RoundReminderScheduledV1: handlers.HandleRoundReminder,
+		roundevents.RoundStartedV1:           handlers.HandleRoundStarted,
+
+		// Tag Lookup Flow - cross-module events (from shared/tags.go)
+		sharedevents.RoundTagLookupFoundV1:          handlers.HandleTagNumberFound,
+		sharedevents.RoundTagLookupNotFoundV1:       handlers.HandleTagNumberNotFound,
+		leaderboardevents.GetTagNumberFailedV1:      handlers.HandleTagNumberLookupFailed,
+		sharedevents.TagUpdateForScheduledRoundsV1:  handlers.HandleScheduledRoundTagUpdate,
+
+		// Round Retrieval Flow (from retrieval.go)
+		roundevents.GetRoundRequestedV1: handlers.HandleGetRoundRequest,
+
+		// Scorecard Import Flow (from import.go)
+		roundevents.ScorecardUploadedV1:     handlers.HandleScorecardUploaded,
+		roundevents.ScorecardURLRequestedV1: handlers.HandleScorecardURLRequested,
+		roundevents.ScorecardParseRequestedV1: handlers.HandleParseScorecardRequest,
+		roundevents.ImportCompletedV1:       handlers.HandleImportCompleted,
+
+		// Cross-module events (user module - from udisc.go)
+		userevents.UDiscMatchConfirmedV1: handlers.HandleUserMatchConfirmedForIngest,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

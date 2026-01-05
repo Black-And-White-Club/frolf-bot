@@ -18,9 +18,9 @@ import (
 )
 
 // Helper for creating and publishing a get leaderboard request message
-func createGetLeaderboardRequestMessage(t *testing.T, requestingUserID sharedtypes.DiscordID) (*message.Message, error) {
+func createGetLeaderboardRequestMessage(t *testing.T) (*message.Message, error) {
 	t.Helper() // Mark this as a helper function
-	payload := leaderboardevents.GetLeaderboardRequestPayload{}
+	payload := leaderboardevents.GetLeaderboardRequestedPayloadV1{GuildID: sharedtypes.GuildID("test_guild")}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
@@ -57,20 +57,18 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				requestingUser := generator.GenerateUsers(1)[0]
-
-				msg, err := createGetLeaderboardRequestMessage(t, sharedtypes.DiscordID(requestingUser.UserID))
+				msg, err := createGetLeaderboardRequestMessage(t)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := leaderboardevents.GetLeaderboardResponse
+				expectedTopic := leaderboardevents.GetLeaderboardResponseV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -79,7 +77,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.GetLeaderboardResponsePayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.GetLeaderboardResponsePayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -97,12 +95,12 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 
 				// Check for error messages
-				unexpectedTopic := leaderboardevents.GetLeaderboardFailed
+				unexpectedTopic := leaderboardevents.GetLeaderboardFailedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.GetLeaderboardResponse},
+			expectedOutgoingTopics: []string{leaderboardevents.GetLeaderboardResponseV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -113,26 +111,24 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				requestingUser := generator.GenerateUsers(1)[0]
-
-				msg, err := createGetLeaderboardRequestMessage(t, sharedtypes.DiscordID(requestingUser.UserID))
+				msg, err := createGetLeaderboardRequestMessage(t)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardResponse, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := leaderboardevents.GetLeaderboardResponse
+				expectedTopic := leaderboardevents.GetLeaderboardResponseV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.GetLeaderboardResponsePayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.GetLeaderboardResponsePayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -142,7 +138,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 					t.Errorf("Expected empty leaderboard data, got %d entries", len(responsePayload.Leaderboard))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.GetLeaderboardResponse},
+			expectedOutgoingTopics: []string{leaderboardevents.GetLeaderboardResponseV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -158,20 +154,20 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardResponse, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for unexpected success messages
-				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponse
+				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponseV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
 
 				// Check for unexpected error messages
-				unexpectedFailureTopic := leaderboardevents.GetLeaderboardFailed
+				unexpectedFailureTopic := leaderboardevents.GetLeaderboardFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}
@@ -186,27 +182,25 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, []leaderboardtypes.LeaderboardEntry{}, false, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				requestingUser := generator.GenerateUsers(1)[0]
-
-				msg, err := createGetLeaderboardRequestMessage(t, sharedtypes.DiscordID(requestingUser.UserID))
+				msg, err := createGetLeaderboardRequestMessage(t)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardResponse, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.GetLeaderboardRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// No success messages should be sent
-				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponse
+				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponseV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
 
 				// No explicit error messages should be sent either in this case
-				unexpectedFailureTopic := leaderboardevents.GetLeaderboardFailed
+				unexpectedFailureTopic := leaderboardevents.GetLeaderboardFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}

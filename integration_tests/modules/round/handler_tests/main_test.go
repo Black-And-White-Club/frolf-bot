@@ -49,6 +49,20 @@ func TestMain(m *testing.M) {
 		// Restore the original APP_ENV value
 		os.Setenv("APP_ENV", oldAppEnv)
 
+		// Close shared router and module
+		if sharedRouter != nil {
+			log.Println("TestMain defer: Closing shared Watermill router...")
+			if err := sharedRouter.Close(); err != nil {
+				log.Printf("TestMain defer: Error closing router: %v", err)
+			}
+		}
+		if sharedModule != nil {
+			log.Println("TestMain defer: Closing shared round module...")
+			if err := sharedModule.Close(); err != nil {
+				log.Printf("TestMain defer: Error closing module: %v", err)
+			}
+		}
+
 		if testEnv != nil {
 			// Perform a final container health check and cleanup
 			log.Println("TestMain defer: Performing final container cleanup...")

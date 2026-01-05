@@ -32,10 +32,10 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 				attr.Error(err),
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
-					Error:   "failed to check existing scores",
+					Reason:  "failed to check existing scores",
 				},
 			}, nil
 		}
@@ -46,10 +46,10 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 				roundIDAttr,
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
-					Error:   "SCORES_ALREADY_EXIST",
+					Reason:  "SCORES_ALREADY_EXIST",
 				},
 			}, nil
 		}
@@ -68,10 +68,10 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 			)
 			// Return a failure payload for business logic errors from ProcessScoresForStorage
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
-					Error:   err.Error(),
+					Reason:  err.Error(),
 				},
 			}, nil // Return nil error to indicate handled business failure
 		}
@@ -104,10 +104,10 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 			)
 			// Return a failure payload for business logic errors from LogScores
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
-					Error:   err.Error(),
+					Reason:  err.Error(),
 				},
 			}, nil // Return nil error to indicate handled business failure
 		}
@@ -129,7 +129,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		)
 		// Wrap the tagMappingPayload in the expected success struct
 		return ScoreOperationResult{
-			Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+			Success: &scoreevents.ProcessRoundScoresSucceededPayloadV1{
 				GuildID:     guildID,
 				RoundID:     roundID,
 				TagMappings: tagMappingPayload,

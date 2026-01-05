@@ -13,50 +13,50 @@ import (
 )
 
 // type-assert helpers: explicit, tiny, and readable.
-func (h *RoundHandlers) toJoined(v any) (*roundevents.ParticipantJoinedPayload, error) {
-	p, ok := v.(*roundevents.ParticipantJoinedPayload)
+func (h *RoundHandlers) toJoined(v any) (*roundevents.ParticipantJoinedPayloadV1, error) {
+	p, ok := v.(*roundevents.ParticipantJoinedPayloadV1)
 	if !ok {
-		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinedPayload, got %T", v)
+		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinedPayloadV1, got %T", v)
 	}
 	return p, nil
 }
 
-func (h *RoundHandlers) toJoinError(v any) (*roundevents.RoundParticipantJoinErrorPayload, error) {
-	p, ok := v.(*roundevents.RoundParticipantJoinErrorPayload)
+func (h *RoundHandlers) toJoinError(v any) (*roundevents.RoundParticipantJoinErrorPayloadV1, error) {
+	p, ok := v.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 	if !ok {
-		return nil, fmt.Errorf("expected *roundevents.RoundParticipantJoinErrorPayload, got %T", v)
+		return nil, fmt.Errorf("expected *roundevents.RoundParticipantJoinErrorPayloadV1, got %T", v)
 	}
 	return p, nil
 }
 
-// func (h *RoundHandlers) toRemovalRequest(v any) (*roundevents.ParticipantRemovalRequestPayload, error) {
-// 	p, ok := v.(*roundevents.ParticipantRemovalRequestPayload)
+// func (h *RoundHandlers) toRemovalRequest(v any) (*roundevents.ParticipantRemovalRequestPayloadV1, error) {
+// 	p, ok := v.(*roundevents.ParticipantRemovalRequestPayloadV1)
 // 	if !ok {
-// 		return nil, fmt.Errorf("expected *roundevents.ParticipantRemovalRequestPayload, got %T", v)
+// 		return nil, fmt.Errorf("expected *roundevents.ParticipantRemovalRequestPayloadV1, got %T", v)
 // 	}
 // 	return p, nil
 // }
 
-// func (h *RoundHandlers) toValidationRequest(v any) (*roundevents.ParticipantJoinValidationRequestPayload, error) {
-// 	p, ok := v.(*roundevents.ParticipantJoinValidationRequestPayload)
+// func (h *RoundHandlers) toValidationRequest(v any) (*roundevents.ParticipantJoinValidationRequestPayloadV1, error) {
+// 	p, ok := v.(*roundevents.ParticipantJoinValidationRequestPayloadV1)
 // 	if !ok {
-// 		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinValidationRequestPayload, got %T", v)
+// 		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinValidationRequestPayloadV1, got %T", v)
 // 	}
 // 	return p, nil
 // }
 
-func (h *RoundHandlers) toTagLookupRequest(v any) (*roundevents.TagLookupRequestPayload, error) {
-	p, ok := v.(*roundevents.TagLookupRequestPayload)
+func (h *RoundHandlers) toTagLookupRequest(v any) (*roundevents.TagLookupRequestPayloadV1, error) {
+	p, ok := v.(*roundevents.TagLookupRequestPayloadV1)
 	if !ok {
-		return nil, fmt.Errorf("expected *roundevents.TagLookupRequestPayload, got %T", v)
+		return nil, fmt.Errorf("expected *roundevents.TagLookupRequestPayloadV1, got %T", v)
 	}
 	return p, nil
 }
 
-func (h *RoundHandlers) toJoinRequest(v any) (*roundevents.ParticipantJoinRequestPayload, error) {
-	p, ok := v.(*roundevents.ParticipantJoinRequestPayload)
+func (h *RoundHandlers) toJoinRequest(v any) (*roundevents.ParticipantJoinRequestPayloadV1, error) {
+	p, ok := v.(*roundevents.ParticipantJoinRequestPayloadV1)
 	if !ok {
-		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinRequestPayload, got %T", v)
+		return nil, fmt.Errorf("expected *roundevents.ParticipantJoinRequestPayloadV1, got %T", v)
 	}
 	return p, nil
 }
@@ -85,28 +85,28 @@ func (h *RoundHandlers) createResultMessage(
 // 	// many of your payload structs have GuildID string; we only log existence and keep behavior unchanged.
 // 	// Do a simple switch to access GuildID fields where available
 // 	switch p := payload.(type) {
-// 	case *roundevents.ParticipantJoinRequestPayload:
+// 	case *roundevents.ParticipantJoinRequestPayloadV1:
 // 		if p.GuildID == "" {
 // 			h.logger.WarnContext(ctx, "Missing guild_id in ParticipantJoinRequestPayload",
 // 				attr.CorrelationIDFromMsg(msg),
 // 				attr.String("guild_id", ""),
 // 			)
 // 		}
-// 	case *roundevents.ParticipantJoinValidationRequestPayload:
+// 	case *roundevents.ParticipantJoinValidationRequestPayloadV1:
 // 		if p.GuildID == "" {
 // 			h.logger.WarnContext(ctx, "Missing guild_id in ParticipantJoinValidationRequestPayload",
 // 				attr.CorrelationIDFromMsg(msg),
 // 				attr.String("guild_id", ""),
 // 			)
 // 		}
-// 	case *roundevents.ParticipantRemovalRequestPayload:
+// 	case *roundevents.ParticipantRemovalRequestPayloadV1:
 // 		if p.GuildID == "" {
 // 			h.logger.WarnContext(ctx, "Missing guild_id in ParticipantRemovalRequestPayload",
 // 				attr.CorrelationIDFromMsg(msg),
 // 				attr.String("guild_id", ""),
 // 			)
 // 		}
-// 	case *roundevents.TagLookupRequestPayload:
+// 	case *roundevents.TagLookupRequestPayloadV1:
 // 		if p.GuildID == "" {
 // 			h.logger.WarnContext(ctx, "Missing guild_id in TagLookupRequestPayload",
 // 				attr.CorrelationIDFromMsg(msg),
@@ -125,9 +125,9 @@ func (h *RoundHandlers) createResultMessage(
 func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantJoinRequest",
-		&roundevents.ParticipantJoinRequestPayload{},
+		&roundevents.ParticipantJoinRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			participantJoinRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayload)
+			participantJoinRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantJoinRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -149,7 +149,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 			// Patch: propagate guild_id into outgoing success payloads if missing
 			if result.Success != nil {
 				switch s := result.Success.(type) {
-				case *roundevents.ParticipantJoinValidationRequestPayload:
+				case *roundevents.ParticipantJoinValidationRequestPayloadV1:
 					if s.GuildID == "" {
 						s.GuildID = participantJoinRequestPayload.GuildID
 						h.logger.WarnContext(ctx, "Patched missing guild_id in ParticipantJoinValidationRequestPayload",
@@ -157,7 +157,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 							attr.String("guild_id", string(s.GuildID)),
 						)
 					}
-				case *roundevents.ParticipantRemovalRequestPayload:
+				case *roundevents.ParticipantRemovalRequestPayloadV1:
 					if s.GuildID == "" {
 						s.GuildID = participantJoinRequestPayload.GuildID
 						h.logger.WarnContext(ctx, "Patched missing guild_id in ParticipantRemovalRequestPayload",
@@ -179,7 +179,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					ctx,
 					msg,
 					result.Failure,
-					roundevents.RoundParticipantStatusCheckError,
+					roundevents.RoundParticipantStatusCheckErrorV1,
 					"Failed to create failure message after status check",
 				)
 				if err != nil {
@@ -197,9 +197,9 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 				)
 
 				switch successPayload := result.Success.(type) {
-				case *roundevents.ParticipantRemovalRequestPayload:
+				case *roundevents.ParticipantRemovalRequestPayloadV1:
 					removalRequestMsg, err := h.createResultMessage(
-						ctx, msg, successPayload, roundevents.RoundParticipantRemovalRequest,
+						ctx, msg, successPayload, roundevents.RoundParticipantRemovalRequestedV1,
 						"Failed to create removal request message",
 					)
 					if err != nil {
@@ -208,13 +208,13 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					h.logger.InfoContext(ctx, "Publishing RoundParticipantRemovalRequest",
 						attr.CorrelationIDFromMsg(msg),
 						attr.String("message_id", removalRequestMsg.UUID),
-						attr.String("topic", roundevents.RoundParticipantRemovalRequest),
+						attr.String("topic", roundevents.RoundParticipantRemovalRequestedV1),
 					)
 					return []*message.Message{removalRequestMsg}, nil
 
-				case *roundevents.ParticipantJoinValidationRequestPayload:
+				case *roundevents.ParticipantJoinValidationRequestPayloadV1:
 					validationRequestMsg, err := h.createResultMessage(
-						ctx, msg, successPayload, roundevents.RoundParticipantJoinValidationRequest,
+						ctx, msg, successPayload, roundevents.RoundParticipantJoinValidationRequestedV1,
 						"Failed to create validation request message",
 					)
 					if err != nil {
@@ -223,7 +223,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 					h.logger.InfoContext(ctx, "Publishing RoundParticipantJoinValidationRequest",
 						attr.CorrelationIDFromMsg(msg),
 						attr.String("message_id", validationRequestMsg.UUID),
-						attr.String("topic", roundevents.RoundParticipantJoinValidationRequest),
+						attr.String("topic", roundevents.RoundParticipantJoinValidationRequestedV1),
 					)
 					return []*message.Message{validationRequestMsg}, nil
 
@@ -251,9 +251,9 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(msg *message.Message) ([]*m
 func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantJoinValidationRequest",
-		&roundevents.ParticipantJoinValidationRequestPayload{},
+		&roundevents.ParticipantJoinValidationRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			p := payload.(*roundevents.ParticipantJoinValidationRequestPayload)
+			p := payload.(*roundevents.ParticipantJoinValidationRequestPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantJoinValidationRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -266,22 +266,22 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 				h.logger.ErrorContext(ctx, "ParticipantJoinValidationRequest has empty UserID",
 					attr.CorrelationIDFromMsg(msg),
 				)
-				errorPayload := &roundevents.RoundParticipantJoinErrorPayload{
-					ParticipantJoinRequest: &roundevents.ParticipantJoinRequestPayload{
+				errorPayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
+					ParticipantJoinRequest: &roundevents.ParticipantJoinRequestPayloadV1{
 						RoundID:  p.RoundID,
 						UserID:   p.UserID,
 						Response: p.Response,
 					},
 					Error: "User ID cannot be empty",
 				}
-				failureMsg, err := h.createResultMessage(ctx, msg, errorPayload, roundevents.RoundParticipantJoinError, "Failed to create failure message for empty user ID")
+				failureMsg, err := h.createResultMessage(ctx, msg, errorPayload, roundevents.RoundParticipantJoinErrorV1, "Failed to create failure message for empty user ID")
 				if err != nil {
 					return nil, err
 				}
 				return []*message.Message{failureMsg}, nil
 			}
 
-			result, err := h.roundService.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayload{
+			result, err := h.roundService.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayloadV1{
 				RoundID:  p.RoundID,
 				UserID:   p.UserID,
 				Response: p.Response,
@@ -300,7 +300,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
-				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantJoinError, "Failed to create failure message after validation")
+				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantJoinErrorV1, "Failed to create failure message after validation")
 				if err != nil {
 					return nil, err
 				}
@@ -345,14 +345,14 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 					attr.Any("update_request_payload", updateRequest),
 				)
 
-				successMsg, err := h.createResultMessage(ctx, msg, updateRequest, roundevents.RoundParticipantStatusUpdateRequest, "Failed to create StatusUpdateRequest message")
+				successMsg, err := h.createResultMessage(ctx, msg, updateRequest, roundevents.RoundParticipantStatusUpdateRequestedV1, "Failed to create StatusUpdateRequest message")
 				if err != nil {
 					return nil, err
 				}
 				h.logger.InfoContext(ctx, "Publishing RoundParticipantStatusUpdateRequest message",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("message_id", successMsg.UUID),
-					attr.String("topic", roundevents.RoundParticipantStatusUpdateRequest),
+					attr.String("topic", roundevents.RoundParticipantStatusUpdateRequestedV1),
 				)
 				return []*message.Message{successMsg}, nil
 			}
@@ -380,14 +380,14 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 				attr.Any("tag_lookup_request_payload", tagLookupRequest),
 			)
 
-			successMsg, err := h.createResultMessage(ctx, msg, tagLookupRequest, roundevents.LeaderboardGetTagNumberRequest, "Failed to create TagLookupRequest message")
+			successMsg, err := h.createResultMessage(ctx, msg, tagLookupRequest, roundevents.LeaderboardGetTagNumberRequestedV1, "Failed to create TagLookupRequest message")
 			if err != nil {
 				return nil, err
 			}
 			h.logger.InfoContext(ctx, "Publishing LeaderboardGetTagNumberRequest message",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("message_id", successMsg.UUID),
-				attr.String("topic", roundevents.LeaderboardGetTagNumberRequest),
+				attr.String("topic", roundevents.LeaderboardGetTagNumberRequestedV1),
 			)
 			return []*message.Message{successMsg}, nil
 		},
@@ -400,9 +400,9 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(msg *message.Mess
 func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantStatusUpdateRequest",
-		&roundevents.ParticipantJoinRequestPayload{},
+		&roundevents.ParticipantJoinRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			updateRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayload)
+			updateRequestPayload := payload.(*roundevents.ParticipantJoinRequestPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantStatusUpdateRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -427,7 +427,7 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Messag
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
-				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantJoinError, "Failed to create failure message after status update")
+				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantJoinErrorV1, "Failed to create failure message after status update")
 				if err != nil {
 					return nil, err
 				}
@@ -454,12 +454,12 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Messag
 				attr.Any("payload_to_publish", result.Success),
 			)
 
-			successMsg, err := h.createResultMessage(ctx, msg, result.Success, roundevents.RoundParticipantJoined, "Failed to create RoundParticipantJoined message")
+			successMsg, err := h.createResultMessage(ctx, msg, result.Success, roundevents.RoundParticipantJoinedV1, "Failed to create RoundParticipantJoined message")
 			if err != nil {
 				return nil, err
 			}
 
-			if pj, ok := result.Success.(*roundevents.ParticipantJoinedPayload); ok {
+			if pj, ok := result.Success.(*roundevents.ParticipantJoinedPayloadV1); ok {
 				if pj.EventMessageID != "" && successMsg.Metadata.Get("discord_message_id") == "" {
 					successMsg.Metadata.Set("discord_message_id", pj.EventMessageID)
 				}
@@ -468,7 +468,7 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Messag
 			h.logger.InfoContext(ctx, "Publishing RoundParticipantJoined message for Discord",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("message_id", successMsg.UUID),
-				attr.String("topic", roundevents.RoundParticipantJoined),
+				attr.String("topic", roundevents.RoundParticipantJoinedV1),
 			)
 
 			return []*message.Message{successMsg}, nil
@@ -482,9 +482,9 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(msg *message.Messag
 func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantRemovalRequest",
-		&roundevents.ParticipantRemovalRequestPayload{},
+		&roundevents.ParticipantRemovalRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			participantRemovalRequestPayload := payload.(*roundevents.ParticipantRemovalRequestPayload)
+			participantRemovalRequestPayload := payload.(*roundevents.ParticipantRemovalRequestPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantRemovalRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -506,7 +506,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("failure_payload", result.Failure),
 				)
-				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantRemovalError, "Failed to create failure message")
+				failureMsg, err := h.createResultMessage(ctx, msg, result.Failure, roundevents.RoundParticipantRemovalErrorV1, "Failed to create failure message")
 				if err != nil {
 					return nil, err
 				}
@@ -520,7 +520,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(msg *message.Message) ([
 				return nil, fmt.Errorf("ParticipantRemoval service returned unexpected nil result")
 			}
 
-			successMsg, err := h.createResultMessage(ctx, msg, result.Success, roundevents.RoundParticipantRemoved, "Failed to create success message")
+			successMsg, err := h.createResultMessage(ctx, msg, result.Success, roundevents.RoundParticipantRemovedV1, "Failed to create success message")
 			if err != nil {
 				return nil, err
 			}
@@ -548,7 +548,7 @@ func (h *RoundHandlers) HandleTagNumberFound(msg *message.Message) ([]*message.M
 				attr.Any("original_joined_late", tagLookupResultPayload.OriginalJoinedLate),
 			)
 
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+			updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
 				RoundID:    tagLookupResultPayload.RoundID,
 				UserID:     tagLookupResultPayload.UserID,
 				TagNumber:  tagLookupResultPayload.TagNumber,
@@ -592,7 +592,7 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 				attr.Any("original_joined_late", tagLookupResultPayload.OriginalJoinedLate),
 			)
 
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+			updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
 				RoundID:    tagLookupResultPayload.RoundID,
 				UserID:     tagLookupResultPayload.UserID,
 				TagNumber:  nil,
@@ -612,9 +612,9 @@ func (h *RoundHandlers) HandleTagNumberNotFound(msg *message.Message) ([]*messag
 func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantDeclined",
-		&roundevents.ParticipantDeclinedPayload{},
+		&roundevents.ParticipantDeclinedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			d := payload.(*roundevents.ParticipantDeclinedPayload)
+			d := payload.(*roundevents.ParticipantDeclinedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantDeclined event",
 				attr.CorrelationIDFromMsg(msg),
@@ -622,7 +622,8 @@ func (h *RoundHandlers) HandleParticipantDeclined(msg *message.Message) ([]*mess
 				attr.String("user_id", string(d.UserID)),
 			)
 
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+			updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
+				GuildID:    d.GuildID,
 				RoundID:    d.RoundID,
 				UserID:     d.UserID,
 				Response:   roundtypes.ResponseDecline,
@@ -662,7 +663,7 @@ func (h *RoundHandlers) HandleTagNumberLookupFailed(msg *message.Message) ([]*me
 				attr.String("reason", failurePayload.Reason),
 			)
 
-			updatePayload := &roundevents.ParticipantJoinRequestPayload{
+			updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
 				GuildID:   failurePayload.GuildID,
 				RoundID:   failurePayload.RoundID,
 				UserID:    failurePayload.UserID,
@@ -680,7 +681,7 @@ func (h *RoundHandlers) HandleTagNumberLookupFailed(msg *message.Message) ([]*me
 func (h *RoundHandlers) handleParticipantUpdate(
 	ctx context.Context,
 	msg *message.Message,
-	updatePayload *roundevents.ParticipantJoinRequestPayload,
+	updatePayload *roundevents.ParticipantJoinRequestPayloadV1,
 	originalResponse roundtypes.Response,
 ) ([]*message.Message, error) {
 	// Log missing GuildID; do not mutate or enforce it here (handler callers already patch where needed).
@@ -725,7 +726,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 			return nil, err
 		}
 
-		failureMsg, err := h.createResultMessage(ctx, msg, payload, roundevents.RoundParticipantJoinError, "Failed to create failure message after update")
+		failureMsg, err := h.createResultMessage(ctx, msg, payload, roundevents.RoundParticipantJoinErrorV1, "Failed to create failure message after update")
 		if err != nil {
 			return nil, err
 		}
@@ -748,7 +749,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 			return nil, err
 		}
 
-		discordUpdateMsg, err := h.createResultMessage(ctx, msg, payload, roundevents.RoundParticipantJoined, "Failed to create RoundParticipantJoined message")
+		discordUpdateMsg, err := h.createResultMessage(ctx, msg, payload, roundevents.RoundParticipantJoinedV1, "Failed to create RoundParticipantJoined message")
 		if err != nil {
 			return nil, err
 		}
@@ -761,7 +762,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 		h.logger.InfoContext(ctx, "Publishing RoundParticipantJoined message for Discord",
 			attr.CorrelationIDFromMsg(msg),
 			attr.String("message_id", discordUpdateMsg.UUID),
-			attr.String("topic", roundevents.RoundParticipantJoined),
+			attr.String("topic", roundevents.RoundParticipantJoinedV1),
 		)
 
 		return []*message.Message{discordUpdateMsg}, nil

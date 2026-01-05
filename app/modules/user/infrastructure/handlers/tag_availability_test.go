@@ -27,7 +27,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testPayload := &userevents.TagAvailablePayload{
+	testPayload := &userevents.TagAvailablePayloadV1{
 		GuildID:   testGuildID,
 		UserID:    testUserID,
 		TagNumber: testTagNumber,
@@ -58,14 +58,14 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayload) = *testPayload
+						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
+						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
 						Error:   nil,
 					},
@@ -74,8 +74,8 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
-					userevents.UserCreated,
+					&userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
+					userevents.UserCreatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -87,7 +87,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayload) = *testPayload
+						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -95,7 +95,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
 					userservice.UserOperationResult{
 						Success: nil,
-						Failure: &userevents.UserCreationFailedPayload{
+						Failure: &userevents.UserCreationFailedPayloadV1{
 							GuildID:   testGuildID,
 							UserID:    testUserID,
 							TagNumber: &testTagNumber,
@@ -108,8 +108,8 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreationFailedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
-					userevents.UserCreationFailed,
+					&userevents.UserCreationFailedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
+					userevents.UserCreationFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -131,7 +131,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayload) = *testPayload
+						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -150,21 +150,21 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayload) = *testPayload
+						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
 					userservice.UserOperationResult{
-						Success: &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
+						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
 						Error:   nil,
 					},
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreated).Return(nil, fmt.Errorf("failed to create success message"))
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreatedV1).Return(nil, fmt.Errorf("failed to create success message"))
 			},
 			msg:            testMsg,
 			wantErr:        true,
@@ -175,7 +175,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayload) = *testPayload
+						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -231,7 +231,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(2)
 
-	testPayload := &userevents.TagUnavailablePayload{
+	testPayload := &userevents.TagUnavailablePayloadV1{
 		GuildID:   testGuildID,
 		UserID:    testUserID,
 		TagNumber: testTagNumber,
@@ -263,14 +263,14 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagUnavailablePayload) = *testPayload
+						*out.(*userevents.TagUnavailablePayloadV1) = *testPayload
 						return nil
 					},
 				)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&userevents.UserCreationFailedPayload{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
-					userevents.UserCreationFailed,
+					&userevents.UserCreationFailedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
+					userevents.UserCreationFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

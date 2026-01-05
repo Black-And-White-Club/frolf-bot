@@ -152,83 +152,18 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	return nil
 }
 
-// MaybeRecreateContainers checks if containers should be recreated and does so if needed
-func (env *TestEnvironment) MaybeRecreateContainers(ctx context.Context) error {
-	env.testCount++
-
-	// Recreate containers periodically for stability
-	shouldRecreate := env.testCount%env.recreateAfter == 0 ||
-		time.Since(env.lastRecreation) > 45*time.Minute
-
-	if shouldRecreate {
-		log.Printf("Recreating containers after %d tests or %v elapsed for stability",
-			env.testCount, time.Since(env.lastRecreation))
-		return env.RecreateContainers(ctx)
-	}
-	return nil
-}
-
-// RecreateContainers terminates existing containers and creates new ones
-func (env *TestEnvironment) RecreateContainers(ctx context.Context) error {
-	log.Println("Recreating containers for stability...")
-
-	// Store references to old containers
-	oldNats := env.NatsContainer
-	oldPg := env.PgContainer
-
-	// Close connections gracefully
-	if env.EventBus != nil {
-		if closer, ok := env.EventBus.(interface{ Close() error }); ok {
-			if err := closer.Close(); err != nil {
-				log.Printf("Error closing EventBus: %v", err)
-			}
-		}
-		env.EventBus = nil
+// Reset cleans up the environment for the next test
+func (env *TestEnvironment) Reset(ctx context.Context) error {
+	// Clean up database
+	if err := CleanupDatabase(ctx, env.DB); err != nil {
+		return fmt.Errorf("failed to cleanup database: %w", err)
 	}
 
-	if env.NatsConn != nil {
-		env.NatsConn.Close()
-		env.NatsConn = nil
+	// Reset JetStream
+	if err := env.ResetJetStreamState(ctx, "round", "user", "discord", "delayed", "leaderboard", "score"); err != nil {
+		return fmt.Errorf("failed to reset JetStream: %w", err)
 	}
 
-	if env.DB != nil {
-		env.DB.Close()
-		env.DB = nil
-	}
-
-	if env.DBService != nil {
-		env.DBService = nil
-	}
-
-	if env.JetStream != nil {
-		env.JetStream = nil
-	}
-
-	// Terminate old containers with timeout
-	terminateCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-
-	if oldNats != nil {
-		if err := oldNats.Terminate(terminateCtx); err != nil {
-			log.Printf("Error terminating old NATS container: %v", err)
-		}
-	}
-	if oldPg != nil {
-		if err := oldPg.Terminate(terminateCtx); err != nil {
-			log.Printf("Error terminating old PostgreSQL container: %v", err)
-		}
-	}
-
-	// Small delay to ensure cleanup
-	time.Sleep(2 * time.Second)
-
-	// Create new containers and connections
-	if err := env.setupContainers(ctx); err != nil {
-		return fmt.Errorf("failed to recreate containers: %w", err)
-	}
-
-	env.lastRecreation = time.Now()
-	log.Println("Containers successfully recreated")
 	return nil
 }
 
@@ -269,32 +204,6 @@ func (env *TestEnvironment) CheckContainerHealth() error {
 	return nil
 }
 
-// DeepCleanup performs comprehensive cleanup between tests
-func (env *TestEnvironment) DeepCleanup() error {
-	// Clear all NATS JetStream state
-	if err := env.ResetJetStreamState(env.Ctx, "round", "user", "discord", "delayed"); err != nil {
-		return fmt.Errorf("failed to reset JetStream: %w", err)
-	}
-
-	// Use existing helper functions - these handle table existence checking
-	if err := CleanRoundIntegrationTables(env.Ctx, env.DB); err != nil {
-		log.Printf("Warning: failed to clean round tables: %v", err)
-	}
-
-	if err := CleanUserIntegrationTables(env.Ctx, env.DB); err != nil {
-		log.Printf("Warning: failed to clean user tables: %v", err)
-	}
-
-	if err := CleanScoreIntegrationTables(env.Ctx, env.DB); err != nil {
-		log.Printf("Warning: failed to clean score tables: %v", err)
-	}
-
-	if err := CleanLeaderboardIntegrationTables(env.Ctx, env.DB); err != nil {
-		log.Printf("Warning: failed to clean leaderboard tables: %v", err)
-	}
-
-	return nil
-}
 
 // Cleanup tears down all resources created for testing
 func (env *TestEnvironment) Cleanup() {
@@ -322,7 +231,7 @@ func (env *TestEnvironment) Cleanup() {
 	}
 
 	// Terminate containers with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if env.NatsContainer != nil {

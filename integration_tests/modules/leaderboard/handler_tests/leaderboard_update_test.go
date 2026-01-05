@@ -20,11 +20,15 @@ import (
 )
 
 // Helper: Validate success response for leaderboard update
-func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.LeaderboardUpdateRequestedPayload, outgoing *message.Message, incoming *message.Message) leaderboardevents.LeaderboardUpdatedPayload {
+func validateLeaderboardUpdatedPayload(t *testing.T, req leaderboardevents.LeaderboardUpdateRequestedPayloadV1, outgoing *message.Message, incoming *message.Message) leaderboardevents.LeaderboardUpdatedPayloadV1 {
 	t.Helper()
-	var res leaderboardevents.LeaderboardUpdatedPayload
+	var res leaderboardevents.LeaderboardUpdatedPayloadV1
 	if err := json.Unmarshal(outgoing.Payload, &res); err != nil {
 		t.Fatalf("Failed to parse payload: %v", err)
+	}
+
+	if res.GuildID != req.GuildID {
+		t.Errorf("GuildID mismatch: expected %s, got %s", req.GuildID, res.GuildID)
 	}
 
 	if res.RoundID != req.RoundID {
@@ -84,9 +88,12 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 					fmt.Sprintf("2:%s", users[1].UserID), // User 1 should get tag 2
 				}
 				// The RoundID in the payload should be the identifier for the NEW leaderboard state.
-				payload := leaderboardevents.LeaderboardUpdateRequestedPayload{
+				payload := leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+					GuildID:               sharedtypes.GuildID("test_guild"),
 					RoundID:               sharedtypes.RoundID(uuid.New()),
 					SortedParticipantTags: sorted,
+					Source:                "integration-test",
+					UpdateID:              uuid.New().String(),
 				}
 				payloadBytes, _ := json.Marshal(payload)
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
@@ -95,17 +102,17 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 					payload.RoundID, payload.SortedParticipantTags)
 				t.Logf("PublishMsgFn: Using actual user IDs: [%s, %s, %s]",
 					users[0].UserID, users[1].UserID, users[2].UserID)
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("failed publishing message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
-				msgs := received[leaderboardevents.LeaderboardUpdated]
+				msgs := received[leaderboardevents.LeaderboardUpdatedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 success message, got %d", len(msgs))
 				}
-				var req leaderboardevents.LeaderboardUpdateRequestedPayload
+				var req leaderboardevents.LeaderboardUpdateRequestedPayloadV1
 				if err := json.Unmarshal(incoming.Payload, &req); err != nil {
 					t.Fatalf("Invalid request payload: %v", err)
 				}
@@ -211,7 +218,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 					}
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardUpdated},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardUpdatedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -226,16 +233,16 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				msg := message.NewMessage(uuid.New().String(), []byte("not-a-json"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
-				if len(received[leaderboardevents.LeaderboardUpdated]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
 					t.Errorf("Unexpected success message published")
 				}
-				if len(received[leaderboardevents.LeaderboardUpdateFailed]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {
 					t.Errorf("Unexpected failure message published")
 				}
 			},
@@ -249,23 +256,26 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, []leaderboardtypes.LeaderboardEntry{}, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				payload := leaderboardevents.LeaderboardUpdateRequestedPayload{
+				payload := leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+					GuildID:               sharedtypes.GuildID("test_guild"),
 					RoundID:               sharedtypes.RoundID(uuid.New()),
 					SortedParticipantTags: []string{},
+					Source:                "integration-test",
+					UpdateID:              uuid.New().String(),
 				}
 				b, _ := json.Marshal(payload)
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
-				if len(received[leaderboardevents.LeaderboardUpdated]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
 					t.Errorf("Expected no success messages, but found some")
 				}
-				if len(received[leaderboardevents.LeaderboardUpdateFailed]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {
 					t.Errorf("Unexpected failure message published")
 				}
 			},
@@ -279,25 +289,28 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, []leaderboardtypes.LeaderboardEntry{}, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				payload := leaderboardevents.LeaderboardUpdateRequestedPayload{
+				payload := leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test_guild"),
 					RoundID: sharedtypes.RoundID(uuid.New()),
 					SortedParticipantTags: []string{
 						"user_no_tag",
 					},
+					Source:   "integration-test",
+					UpdateID: uuid.New().String(),
 				}
 				b, _ := json.Marshal(payload)
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.LeaderboardUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
-				if len(received[leaderboardevents.LeaderboardUpdated]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
 					t.Errorf("Unexpected success message")
 				}
-				if len(received[leaderboardevents.LeaderboardUpdateFailed]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {
 					t.Errorf("Unexpected failure message")
 				}
 			},

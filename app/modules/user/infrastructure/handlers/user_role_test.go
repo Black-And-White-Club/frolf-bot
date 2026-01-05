@@ -27,7 +27,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testNewRole := sharedtypes.UserRoleEnum("admin")
 
-	testPayload := &userevents.UserRoleUpdateRequestPayload{
+	testPayload := &userevents.UserRoleUpdateRequestedPayloadV1{
 		GuildID: testGuildID,
 		UserID:  testUserID,
 		Role:    testNewRole,
@@ -58,16 +58,17 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
+						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				updateResultPayload := &userevents.UserRoleUpdateResultPayload{
+				updateResultPayload := &userevents.UserRoleUpdateResultPayloadV1{
+					GuildID: testGuildID,
 					Success: true,
 					UserID:  testUserID,
 					Role:    testNewRole,
-					Error:   "",
+					Reason:  "",
 				}
 
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
@@ -83,7 +84,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload, // This is the pointer that the handler passes
-					userevents.DiscordUserRoleUpdated,
+					userevents.UserRoleUpdatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -95,16 +96,17 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
+						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				failurePayload := &userevents.UserRoleUpdateResultPayload{
+				failurePayload := &userevents.UserRoleUpdateResultPayloadV1{
+					GuildID: testGuildID,
 					Success: false,
 					UserID:  testUserID,
 					Role:    testNewRole,
-					Error:   "user not found",
+					Reason:  "user not found",
 				}
 
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
@@ -120,7 +122,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload, // This is the pointer that the handler passes
-					userevents.DiscordUserRoleUpdateFailed,
+					userevents.UserRoleUpdateFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -142,7 +144,7 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestPayload) = *testPayload
+						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -155,13 +157,14 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				// Handler creates a new payload and passes a value - expect the value
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					userevents.UserRoleUpdateResultPayload{
+					userevents.UserRoleUpdateResultPayloadV1{
+						GuildID: testGuildID,
 						Success: false,
 						UserID:  testUserID,
 						Role:    testNewRole,
-						Error:   "internal service error: service error",
+						Reason:  "internal service error: service error",
 					},
-					userevents.DiscordUserRoleUpdateFailed,
+					userevents.UserRoleUpdateFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

@@ -28,7 +28,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 		operationID               uuid.UUID
 		batchID                   uuid.UUID
 		expectedSuccessType       string
-		expectedBatchPayload      *leaderboardevents.BatchTagAssignedPayload
+		expectedBatchPayload      *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1
 		expectedTagAssigned       *leaderboardevents.TagAssignedPayload
 		expectedLeaderboardUpdate *leaderboardevents.LeaderboardUpdatedPayload
 		expectedSwapRequested     *leaderboardevents.TagSwapRequestedPayload
@@ -67,11 +67,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				AssignmentCount:  3,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 					{UserID: "user2", TagNumber: 2},
 					{UserID: "existing_user", TagNumber: 10},
@@ -106,11 +106,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 				},
 			},
@@ -209,11 +209,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user2", TagNumber: 2},
 				},
 			},
@@ -239,7 +239,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_user_id"); return &id }(),
 			operationID:      uuid.New(),
 			batchID:          uuid.New(),
-			expectedFailurePayload: &leaderboardevents.BatchTagAssignmentFailedPayload{
+			expectedFailurePayload: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				Reason:           "database error",
@@ -266,11 +266,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				AssignmentCount:  0,
-				Assignments:      []leaderboardevents.TagAssignmentInfo{},
+				Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
 			},
 			expectedError: nil,
 		},
@@ -290,11 +290,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				AssignmentCount:  0,
-				Assignments:      []leaderboardevents.TagAssignmentInfo{},
+				Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
 			},
 			expectedError: nil,
 		},
@@ -313,7 +313,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID: func() *sharedtypes.DiscordID { id := sharedtypes.DiscordID("test_user_id"); return &id }(),
 			operationID:      uuid.New(),
 			batchID:          uuid.New(),
-			expectedFailurePayload: &leaderboardevents.BatchTagAssignmentFailedPayload{
+			expectedFailurePayload: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 				RequestingUserID: "test_user_id",
 				BatchID:          "",
 				Reason:           "failed to get leaderboard",
@@ -343,11 +343,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 				},
 			},
@@ -376,11 +376,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 				},
 			},
@@ -424,11 +424,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  3,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "target_user", TagNumber: 1},
 					{UserID: "user2", TagNumber: 2},
 					{UserID: "user1", TagNumber: 5},
@@ -454,7 +454,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID: nil,
 			operationID:      uuid.New(),
 			batchID:          uuid.New(),
-			expectedFailurePayload: &leaderboardevents.BatchTagAssignmentFailedPayload{
+			expectedFailurePayload: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "", // Will be set in test setup
 				Reason:           "invalid tag number: 0",
@@ -486,11 +486,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 5},
 				},
 			},
@@ -521,11 +521,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "admin",
 				BatchID:          "",
 				AssignmentCount:  2,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 					{UserID: "user2", TagNumber: 2},
 				},
@@ -555,11 +555,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 1},
 				},
 			},
@@ -590,11 +590,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "batch",
-			expectedBatchPayload: &leaderboardevents.BatchTagAssignedPayload{
+			expectedBatchPayload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				RequestingUserID: "system",
 				BatchID:          "",
 				AssignmentCount:  1,
-				Assignments: []leaderboardevents.TagAssignmentInfo{
+				Assignments: []leaderboardevents.TagAssignmentInfoV1{
 					{UserID: "user1", TagNumber: 5},
 				},
 			},
@@ -662,7 +662,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			if tt.expectedBatchPayload != nil {
 				tt.expectedBatchPayload.BatchID = tt.batchID.String()
 			}
-			if batchFailure, ok := tt.expectedFailurePayload.(*leaderboardevents.BatchTagAssignmentFailedPayload); ok {
+			if batchFailure, ok := tt.expectedFailurePayload.(*leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1); ok {
 				batchFailure.BatchID = tt.batchID.String()
 			}
 			if tt.expectedTagAssigned != nil {
@@ -700,9 +700,9 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 
 				switch tt.expectedSuccessType {
 				case "batch":
-					batchPayload, ok := got.Success.(*leaderboardevents.BatchTagAssignedPayload)
+					batchPayload, ok := got.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 					if !ok {
-						t.Errorf("expected result to be *leaderboardevents.BatchTagAssignedPayload, got: %T", got.Success)
+						t.Errorf("expected result to be *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1, got: %T", got.Success)
 					} else {
 						validateBatchPayload(t, tt.expectedBatchPayload, batchPayload)
 					}
@@ -736,10 +736,10 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 					t.Errorf("expected failure result, got: nil")
 				} else {
 					switch expectedFailure := tt.expectedFailurePayload.(type) {
-					case *leaderboardevents.BatchTagAssignmentFailedPayload:
-						failurePayload, ok := got.Failure.(*leaderboardevents.BatchTagAssignmentFailedPayload)
+					case *leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1:
+						failurePayload, ok := got.Failure.(*leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1)
 						if !ok {
-							t.Errorf("expected result to be *leaderboardevents.BatchTagAssignmentFailedPayload, got: %T", got.Failure)
+							t.Errorf("expected result to be *leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1, got: %T", got.Failure)
 						} else {
 							validateFailurePayload(t, expectedFailure, failurePayload)
 						}
@@ -757,7 +757,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 	}
 }
 
-func validateBatchPayload(t *testing.T, expected, actual *leaderboardevents.BatchTagAssignedPayload) {
+func validateBatchPayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1) {
 	if actual.RequestingUserID != expected.RequestingUserID {
 		t.Errorf("RequestingUserID mismatch: expected %q, got %q", expected.RequestingUserID, actual.RequestingUserID)
 	}
@@ -801,7 +801,7 @@ func validateTagAssignedPayload(t *testing.T, expected, actual *leaderboardevent
 	}
 }
 
-func validateFailurePayload(t *testing.T, expected, actual *leaderboardevents.BatchTagAssignmentFailedPayload) {
+func validateFailurePayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1) {
 	if actual.RequestingUserID != expected.RequestingUserID {
 		t.Errorf("RequestingUserID mismatch: expected %q, got %q", expected.RequestingUserID, actual.RequestingUserID)
 	}

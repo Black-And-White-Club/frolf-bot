@@ -13,55 +13,55 @@ import (
 // Service defines the interface for the round service.
 type Service interface {
 	// Create Round
-	ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error)
-	ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
-	StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error)
+	ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error)
+	ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
+	StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (RoundOperationResult, error)
 	UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 
 	// Update Round
-	ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error)
-	ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
-	UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error)
-	UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error)
+	ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error)
+	ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error)
+	UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayloadV1) (RoundOperationResult, error)
+	UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayloadV1) (RoundOperationResult, error)
 
 	// Delete Round
-	ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (RoundOperationResult, error)
-	DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (RoundOperationResult, error)
+	ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) (RoundOperationResult, error)
+	DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (RoundOperationResult, error)
 
 	// Start Round
-	ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (RoundOperationResult, error)
+	ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (RoundOperationResult, error)
 
 	// Join Round
-	ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
-	UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
-	ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (RoundOperationResult, error)
-	CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error)
+	ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error)
+	UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error)
+	ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayloadV1) (RoundOperationResult, error)
+	CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error)
 
 	// Score Round
-	ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (RoundOperationResult, error)
-	UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (RoundOperationResult, error)
-	CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (RoundOperationResult, error)
+	ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayloadV1) (RoundOperationResult, error)
+	UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (RoundOperationResult, error)
+	CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayloadV1) (RoundOperationResult, error)
 
 	// Finalize Round
-	FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (RoundOperationResult, error)
-	NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (RoundOperationResult, error)
+	FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayloadV1) (RoundOperationResult, error)
+	NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) (RoundOperationResult, error)
 
 	// Round Reminder
-	ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (RoundOperationResult, error)
+	ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (RoundOperationResult, error)
 
 	// Retrieve Round
 	GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (RoundOperationResult, error)
 
 	// Schedule Round Events
-	ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayload, discordMessageID string) (RoundOperationResult, error)
+	ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (RoundOperationResult, error)
 
 	// Update Participant Tags
-	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error)
+	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (RoundOperationResult, error)
 
 	// Scorecard Import
-	CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayload) (RoundOperationResult, error)
-	HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (RoundOperationResult, error)
-	ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (RoundOperationResult, error)
-	IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (RoundOperationResult, error)
-	ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (RoundOperationResult, error)
+	CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (RoundOperationResult, error)
+	HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (RoundOperationResult, error)
+	ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1, fileData []byte) (RoundOperationResult, error)
+	IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (RoundOperationResult, error)
+	ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (RoundOperationResult, error)
 }

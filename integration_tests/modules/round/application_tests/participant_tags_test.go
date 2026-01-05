@@ -17,14 +17,14 @@ import (
 func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayload
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayloadV1
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful update of scheduled rounds with new tags",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				// Create two upcoming rounds with participants
@@ -83,12 +83,12 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, "test-guild", &round1)
+				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round1)
 				if err != nil {
 					t.Fatalf("Failed to create round1 in DB for test setup: %v", err)
 				}
 
-				err = deps.DB.CreateRound(ctx, "test-guild", &round2)
+				err = deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round2)
 				if err != nil {
 					t.Fatalf("Failed to create round2 in DB for test setup: %v", err)
 				}
@@ -97,8 +97,8 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				newTag1 := sharedtypes.TagNumber(111)
 				newTag2 := sharedtypes.TagNumber(222)
 
-				return roundevents.ScheduledRoundTagUpdatePayload{
-					GuildID: "test-guild",
+				return roundevents.ScheduledRoundTagUpdatePayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"user1": &newTag1, // This user is in both rounds
 						"user2": &newTag2, // This user is only in round1
@@ -112,7 +112,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if !ok {
 					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
@@ -165,7 +165,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				}
 
 				// Verify the rounds were actually updated in the database
-				rounds, err := deps.DB.GetUpcomingRounds(ctx, "test-guild")
+				rounds, err := deps.DB.GetUpcomingRounds(ctx, sharedtypes.GuildID("test-guild"))
 				if err != nil {
 					t.Fatalf("Failed to get upcoming rounds from DB: %v", err)
 				}
@@ -193,7 +193,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 		},
 		{
 			name: "No rounds to update when no participants match changed tags",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -217,15 +217,15 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, "test-guild", &round)
+				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 
 				// Define tag changes for users not in any rounds
 				newTag := sharedtypes.TagNumber(999)
-				return roundevents.ScheduledRoundTagUpdatePayload{
-					GuildID: "test-guild",
+				return roundevents.ScheduledRoundTagUpdatePayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"nonexistent_user": &newTag,
 					},
@@ -237,7 +237,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if !ok {
 					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
@@ -260,7 +260,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 		},
 		{
 			name: "Update with empty ChangedTags map",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -283,13 +283,13 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, "test-guild", &round)
+				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 
-				return roundevents.ScheduledRoundTagUpdatePayload{
-					GuildID:     "test-guild",
+				return roundevents.ScheduledRoundTagUpdatePayloadV1{
+					GuildID:     sharedtypes.GuildID("test-guild"),
 					ChangedTags: make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber),
 				}
 			},
@@ -299,7 +299,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if !ok {
 					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
@@ -322,7 +322,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 		},
 		{
 			name: "Update with nil tag values",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.ScheduledRoundTagUpdatePayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -345,14 +345,14 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					},
 				}
 
-				err := deps.DB.CreateRound(ctx, "test-guild", &round)
+				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 
 				// Set tag to nil (removing the tag)
-				return roundevents.ScheduledRoundTagUpdatePayload{
-					GuildID: "test-guild",
+				return roundevents.ScheduledRoundTagUpdatePayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
 					ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
 						"user1": nil,
 					},
@@ -364,7 +364,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayload)
+				updatePayload, ok := returnedResult.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if !ok {
 					t.Errorf("Expected *TagsUpdatedForScheduledRoundsPayload, got %T", returnedResult.Success)
 					return
@@ -408,11 +408,11 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload roundevents.ScheduledRoundTagUpdatePayload
+			var payload roundevents.ScheduledRoundTagUpdatePayloadV1
 			if tt.setupTestEnv != nil {
 				payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
-				payload = roundevents.ScheduledRoundTagUpdatePayload{
+				payload = roundevents.ScheduledRoundTagUpdatePayloadV1{
 					ChangedTags: make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber),
 				}
 			}

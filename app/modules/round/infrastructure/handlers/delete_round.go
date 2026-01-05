@@ -14,9 +14,9 @@ import (
 func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"OnRoundDeleteRequested",
-		&roundevents.RoundDeleteRequestPayload{},
+		&roundevents.RoundDeleteRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteRequestPayload := payload.(*roundevents.RoundDeleteRequestPayload)
+			roundDeleteRequestPayload := payload.(*roundevents.RoundDeleteRequestPayloadV1)
 
 			// Check for nil/zero UUID before proceeding
 			if roundDeleteRequestPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
@@ -52,7 +52,7 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					validateResult.Failure,
-					roundevents.RoundDeleteError,
+					roundevents.RoundDeleteErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create validation failure message: %w", errMsg)
@@ -71,8 +71,8 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 				// Create success message with the validated payload (dereference the pointer)
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
-					*validateResult.Success.(*roundevents.RoundDeleteValidatedPayload),
-					roundevents.RoundDeleteValidated,
+					*validateResult.Success.(*roundevents.RoundDeleteValidatedPayloadV1),
+					roundevents.RoundDeleteValidatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -96,9 +96,9 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*messa
 func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundDeleteValidated",
-		&roundevents.RoundDeleteValidatedPayload{},
+		&roundevents.RoundDeleteValidatedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteValidatedPayload := payload.(*roundevents.RoundDeleteValidatedPayload)
+			roundDeleteValidatedPayload := payload.(*roundevents.RoundDeleteValidatedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundDeleteValidated event",
 				attr.CorrelationIDFromMsg(msg),
@@ -106,7 +106,7 @@ func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*mes
 			)
 
 			// Convert validated payload to authorized payload
-			authorizedPayload := &roundevents.RoundDeleteAuthorizedPayload{
+			authorizedPayload := &roundevents.RoundDeleteAuthorizedPayloadV1{
 				GuildID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.GuildID,
 				RoundID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID,
 			}
@@ -114,7 +114,7 @@ func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*mes
 			successMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				authorizedPayload,
-				roundevents.RoundDeleteAuthorized,
+				roundevents.RoundDeleteAuthorizedV1,
 			)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to create RoundDeleteAuthorized message",
@@ -135,9 +135,9 @@ func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*mes
 func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundDeleteAuthorized",
-		&roundevents.RoundDeleteAuthorizedPayload{},
+		&roundevents.RoundDeleteAuthorizedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteAuthorizedPayload := payload.(*roundevents.RoundDeleteAuthorizedPayload)
+			roundDeleteAuthorizedPayload := payload.(*roundevents.RoundDeleteAuthorizedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundDeleteAuthorized event",
 				attr.CorrelationIDFromMsg(msg),
@@ -166,7 +166,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundDeleteError,
+					roundevents.RoundDeleteErrorV1,
 				)
 				if errMsg != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after RoundService.DeleteRound failure",
@@ -190,7 +190,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*me
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.RoundDeleted,
+					roundevents.RoundDeletedV1,
 				)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to create RoundDeleted success message after service success",

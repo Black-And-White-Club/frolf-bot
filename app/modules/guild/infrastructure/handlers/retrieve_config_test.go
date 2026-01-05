@@ -25,7 +25,7 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	validPayload := &guildevents.GuildConfigRetrievalRequestedPayload{
+	validPayload := &guildevents.GuildConfigRetrievalRequestedPayloadV1{
 		GuildID: sharedtypes.GuildID("guild-1"),
 	}
 	validConfig := &guildtypes.GuildConfig{
@@ -63,23 +63,23 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigRetrievalRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigRetrievedPayload{
+					Success: &guildevents.GuildConfigRetrievedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Config:  *validConfig,
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigRetrievedPayload{
+					&guildevents.GuildConfigRetrievedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Config:  *validConfig,
 					},
-					guildevents.GuildConfigRetrieved,
+					guildevents.GuildConfigRetrievedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -101,7 +101,7 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigRetrievalRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
@@ -117,23 +117,23 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigRetrievalRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigRetrievalFailedPayload{
+					Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Reason:  "some failure",
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigRetrievalFailedPayload{
+					&guildevents.GuildConfigRetrievalFailedPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-1"),
 						Reason:  "some failure",
 					},
-					guildevents.GuildConfigRetrievalFailed,
+					guildevents.GuildConfigRetrievalFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -145,7 +145,7 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigRetrievalRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
@@ -155,6 +155,112 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 			want:           nil,
 			wantErr:        true,
 			expectedErrMsg: "unexpected result from service",
+		},
+		{
+			name: "guild config not found",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
+						return nil
+					},
+				)
+				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
+					Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
+						GuildID: sharedtypes.GuildID("guild-1"),
+						Reason:  guildservice.ErrGuildConfigNotFound.Error(),
+					},
+				}, guildservice.ErrGuildConfigNotFound)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					&guildevents.GuildConfigRetrievalFailedPayloadV1{
+						GuildID: sharedtypes.GuildID("guild-1"),
+						Reason:  guildservice.ErrGuildConfigNotFound.Error(),
+					},
+					guildevents.GuildConfigRetrievalFailedV1,
+				).Return(testMsg, nil)
+			},
+			msg:     testMsg,
+			want:    []*message.Message{testMsg},
+			wantErr: false,
+		},
+		{
+			name: "guild config not found - error creating failure message",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
+						return nil
+					},
+				)
+				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
+					Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
+						GuildID: sharedtypes.GuildID("guild-1"),
+						Reason:  guildservice.ErrGuildConfigNotFound.Error(),
+					},
+				}, guildservice.ErrGuildConfigNotFound)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					guildevents.GuildConfigRetrievalFailedV1,
+				).Return(nil, fmt.Errorf("message creation error"))
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create failure message: message creation error",
+		},
+		{
+			name: "error creating success message",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
+						return nil
+					},
+				)
+				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
+					Success: &guildevents.GuildConfigRetrievedPayloadV1{
+						GuildID: sharedtypes.GuildID("guild-1"),
+						Config:  *validConfig,
+					},
+				}, nil)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					guildevents.GuildConfigRetrievedV1,
+				).Return(nil, fmt.Errorf("message creation error"))
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create success message: message creation error",
+		},
+		{
+			name: "error creating failure message for general failure",
+			mockSetup: func() {
+				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(msg *message.Message, out interface{}) error {
+						*out.(*guildevents.GuildConfigRetrievalRequestedPayloadV1) = *validPayload
+						return nil
+					},
+				)
+				mockService.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
+					Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
+						GuildID: sharedtypes.GuildID("guild-1"),
+						Reason:  "some failure",
+					},
+				}, nil)
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(),
+					guildevents.GuildConfigRetrievalFailedV1,
+				).Return(nil, fmt.Errorf("message creation error"))
+			},
+			msg:            testMsg,
+			want:           nil,
+			wantErr:        true,
+			expectedErrMsg: "failed to create failure message: message creation error",
 		},
 	}
 

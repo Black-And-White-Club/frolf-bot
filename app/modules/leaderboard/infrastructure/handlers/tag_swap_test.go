@@ -26,7 +26,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 	testRequestorID := sharedtypes.DiscordID("2468")
 	testTargetID := sharedtypes.DiscordID("13579")
 
-	testPayload := &leaderboardevents.TagSwapRequestedPayload{
+	testPayload := &leaderboardevents.TagSwapRequestedPayloadV1{
 		RequestorID: testRequestorID,
 		TargetID:    testTargetID,
 	}
@@ -57,7 +57,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -68,7 +68,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.TagSwapProcessedPayload{
+						Success: &leaderboardevents.TagSwapProcessedPayloadV1{
 							RequestorID: testRequestorID,
 							TargetID:    testTargetID,
 						},
@@ -76,7 +76,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					nil,
 				)
 
-				successResultPayload := &leaderboardevents.TagSwapProcessedPayload{
+				successResultPayload := &leaderboardevents.TagSwapProcessedPayloadV1{
 					RequestorID: testRequestorID,
 					TargetID:    testTargetID,
 				}
@@ -84,7 +84,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					leaderboardevents.TagSwapProcessed,
+					leaderboardevents.TagSwapProcessedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -106,7 +106,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -130,7 +130,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -141,7 +141,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.TagSwapProcessedPayload{
+						Success: &leaderboardevents.TagSwapProcessedPayloadV1{
 							RequestorID: testRequestorID,
 							TargetID:    testTargetID,
 						},
@@ -149,7 +149,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					nil,
 				)
 
-				successResultPayload := &leaderboardevents.TagSwapProcessedPayload{
+				successResultPayload := &leaderboardevents.TagSwapProcessedPayloadV1{
 					RequestorID: testRequestorID,
 					TargetID:    testTargetID,
 				}
@@ -157,7 +157,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					leaderboardevents.TagSwapProcessed,
+					leaderboardevents.TagSwapProcessedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -170,7 +170,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -181,7 +181,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.TagSwapFailedPayload{
+						Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 							RequestorID: testRequestorID,
 							TargetID:    testTargetID,
 							Reason:      "test reason",
@@ -190,7 +190,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					nil,
 				)
 
-				failureResultPayload := &leaderboardevents.TagSwapFailedPayload{
+				failureResultPayload := &leaderboardevents.TagSwapFailedPayloadV1{
 					RequestorID: testRequestorID,
 					TargetID:    testTargetID,
 					Reason:      "test reason",
@@ -199,7 +199,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failureResultPayload,
-					leaderboardevents.TagSwapFailed,
+					leaderboardevents.TagSwapFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:            testMsg,
@@ -212,7 +212,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -223,7 +223,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					*testPayload,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.TagSwapFailedPayload{
+						Failure: &leaderboardevents.TagSwapFailedPayloadV1{
 							RequestorID: testRequestorID,
 							TargetID:    testTargetID,
 							Reason:      "test reason",
@@ -242,7 +242,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.TagSwapRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.TagSwapRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)

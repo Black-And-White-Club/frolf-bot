@@ -34,7 +34,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagAvailablePayload{
+				payload := userevents.TagAvailablePayloadV1{
 					GuildID:   "test-guild",
 					UserID:    "test-tag-user-available",
 					TagNumber: 21,
@@ -46,18 +46,18 @@ func TestHandleTagAvailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage as RunTest does not publish the message
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailable, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreated},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[userevents.UserCreated]
+				msgs := receivedMsgs[userevents.UserCreatedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 UserCreated message, got %d", len(msgs))
 				}
-				var payload userevents.UserCreatedPayload
+				var payload userevents.UserCreatedPayloadV1
 				// Access Helper via the passed deps argument
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
@@ -87,7 +87,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagAvailablePayload{
+				payload := userevents.TagAvailablePayloadV1{
 					GuildID:   "test-guild",
 					UserID:    "existing-tag-user",
 					TagNumber: 22,
@@ -99,18 +99,18 @@ func TestHandleTagAvailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailable, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailed},
+			expectedOutgoingTopics: []string{userevents.UserCreationFailedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[userevents.UserCreationFailed]
+				msgs := receivedMsgs[userevents.UserCreationFailedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 UserCreationFailed message, got %d", len(msgs))
 				}
-				var payload userevents.UserCreationFailedPayload
+				var payload userevents.UserCreationFailedPayloadV1
 				// Access Helper via the passed deps argument
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
@@ -181,7 +181,7 @@ func TestHandleTagUnavailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagUnavailablePayload{
+				payload := userevents.TagUnavailablePayloadV1{
 					UserID:    "tag-unavail-user",
 					TagNumber: 77,
 				}
@@ -192,18 +192,18 @@ func TestHandleTagUnavailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagUnavailable, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagUnavailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailed},
+			expectedOutgoingTopics: []string{userevents.UserCreationFailedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[userevents.UserCreationFailed]
+				msgs := receivedMsgs[userevents.UserCreationFailedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 UserCreationFailed message, got %d", len(msgs))
 				}
-				var payload userevents.UserCreationFailedPayload
+				var payload userevents.UserCreationFailedPayloadV1
 				// Access Helper via the passed deps argument
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)

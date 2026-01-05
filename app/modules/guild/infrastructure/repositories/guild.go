@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -16,7 +17,7 @@ type GuildDBImpl struct {
 
 func (db *GuildDBImpl) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
 	var config GuildConfig
-	err := db.DB.NewSelect().Model(&config).Where("guild_id = ?", guildID).Scan(ctx)
+	err := db.DB.NewSelect().Model(&config).Where("guild_id = ? AND is_active = true", guildID).Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Config not found, return nil without error
@@ -75,12 +76,35 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 }
 
 func (db *GuildDBImpl) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates map[string]interface{}) error {
-	q := db.DB.NewUpdate().Model(&GuildConfig{}).Where("guild_id = ?", guildID)
+	// Convert Go field names to snake_case column names for database
+	columnUpdates := make(map[string]interface{})
 	for k, v := range updates {
+		columnName := toSnakeCase(k)
+		columnUpdates[columnName] = v
+	}
+	
+	q := db.DB.NewUpdate().Model(&GuildConfig{}).Where("guild_id = ?", guildID)
+	for k, v := range columnUpdates {
 		q = q.Set(fmt.Sprintf("%s = ?", k), v)
 	}
 	_, err := q.Exec(ctx)
 	return err
+}
+
+// toSnakeCase converts a Go field name to snake_case
+// e.g., "EventChannelID" -> "event_channel_id", "EditorRoleID" -> "editor_role_id"
+func toSnakeCase(s string) string {
+	var result []rune
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			// Don't insert underscore if previous character was uppercase (handles acronyms)
+			if i > 0 && s[i-1] >= 'a' && s[i-1] <= 'z' {
+				result = append(result, '_')
+			}
+		}
+		result = append(result, r)
+	}
+	return strings.ToLower(string(result))
 }
 
 func (db *GuildDBImpl) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {

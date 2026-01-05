@@ -29,7 +29,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 
 	// Updated: Use UpdateRoundRequestedPayload (Discord payload)
 	testTimezone := roundtypes.Timezone("America/Chicago")
-	testPayload := &roundevents.UpdateRoundRequestedPayload{
+	testPayload := &roundevents.UpdateRoundRequestedPayloadV1{
 		RoundID:   testRoundID,
 		UserID:    testUserID,
 		Title:     &testTitle,
@@ -61,7 +61,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				// Updated: Unmarshal to UpdateRoundRequestedPayload
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.UpdateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.UpdateRoundRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -74,8 +74,8 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(), // clock
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundUpdateValidatedPayload{
-							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+						Success: &roundevents.RoundUpdateValidatedPayloadV1{
+							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 								RoundID: testRoundID,
 								Title:   testTitle,
 								UserID:  testUserID,
@@ -88,7 +88,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdateValidated,
+					roundevents.RoundUpdateValidatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -110,7 +110,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.UpdateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.UpdateRoundRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -136,7 +136,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.UpdateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.UpdateRoundRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -148,8 +148,8 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundUpdateValidatedPayload{
-							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+						Success: &roundevents.RoundUpdateValidatedPayloadV1{
+							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 								RoundID: testRoundID,
 								Title:   testTitle,
 								UserID:  testUserID,
@@ -162,7 +162,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdateValidated,
+					roundevents.RoundUpdateValidatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -175,7 +175,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.UpdateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.UpdateRoundRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -200,7 +200,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.UpdateRoundRequestedPayload) = *testPayload
+						*out.(*roundevents.UpdateRoundRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -212,7 +212,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayload{
+						Failure: &roundevents.RoundUpdateErrorPayloadV1{
 							Error: "validation failed",
 						},
 					},
@@ -222,7 +222,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -274,8 +274,8 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("1234567890")
 
 	// Updated: Use simplified RoundUpdateRequestPayload structure
-	testPayload := &roundevents.RoundUpdateValidatedPayload{
-		RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+	testPayload := &roundevents.RoundUpdateValidatedPayloadV1{
+		RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 			RoundID: testRoundID,
 			Title:   testTitle,
 			UserID:  testUserID,
@@ -305,7 +305,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.RoundUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -315,7 +315,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundEntityUpdatedPayload{
+						Success: &roundevents.RoundEntityUpdatedPayloadV1{
 							Round: roundtypes.Round{
 								ID:        testRoundID,
 								Title:     testTitle,
@@ -329,7 +329,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdated,
+					roundevents.RoundUpdatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -351,7 +351,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.RoundUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -374,7 +374,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.RoundUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -384,7 +384,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundEntityUpdatedPayload{
+						Success: &roundevents.RoundEntityUpdatedPayloadV1{
 							Round: roundtypes.Round{
 								ID:        testRoundID,
 								Title:     testTitle,
@@ -398,7 +398,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdated,
+					roundevents.RoundUpdatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -411,7 +411,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.RoundUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -434,7 +434,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.RoundUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -444,8 +444,8 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayload{
-							RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+						Failure: &roundevents.RoundUpdateErrorPayloadV1{
+							RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
 								RoundID: testRoundID,
 								Title:   testTitle,
 								UserID:  testUserID,
@@ -459,7 +459,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -512,7 +512,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 	testLocation := roundtypes.Location("Test Location")
 
 	// The handler receives RoundEntityUpdatedPayload, not RoundScheduleUpdatePayload
-	testPayload := &roundevents.RoundEntityUpdatedPayload{
+	testPayload := &roundevents.RoundEntityUpdatedPayloadV1{
 		Round: roundtypes.Round{
 			ID:        testRoundID,
 			Title:     testTitle,
@@ -543,13 +543,13 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityUpdatedPayload) = *testPayload
+						*out.(*roundevents.RoundEntityUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				// The handler converts RoundEntityUpdatedPayload to RoundScheduleUpdatePayload
-				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayload{
+				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   testPayload.Round.ID,
 					Title:     testPayload.Round.Title,
 					StartTime: testPayload.Round.StartTime,
@@ -561,7 +561,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					expectedSchedulePayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundScheduleUpdatePayload{
+						Success: &roundevents.RoundScheduleUpdatePayloadV1{
 							RoundID:   testRoundID,
 							Title:     testTitle,
 							StartTime: &testStartTime,
@@ -592,13 +592,13 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityUpdatedPayload) = *testPayload
+						*out.(*roundevents.RoundEntityUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				// The handler converts RoundEntityUpdatedPayload to RoundScheduleUpdatePayload
-				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayload{
+				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   testPayload.Round.ID,
 					Title:     testPayload.Round.Title,
 					StartTime: testPayload.Round.StartTime,
@@ -623,13 +623,13 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityUpdatedPayload) = *testPayload
+						*out.(*roundevents.RoundEntityUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				// The handler converts RoundEntityUpdatedPayload to RoundScheduleUpdatePayload
-				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayload{
+				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   testPayload.Round.ID,
 					Title:     testPayload.Round.Title,
 					StartTime: testPayload.Round.StartTime,
@@ -641,7 +641,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					expectedSchedulePayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.RoundScheduleUpdatePayload{
+						Success: &roundevents.RoundScheduleUpdatePayloadV1{
 							RoundID:   testRoundID,
 							Title:     testTitle,
 							StartTime: &testStartTime,
@@ -662,13 +662,13 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityUpdatedPayload) = *testPayload
+						*out.(*roundevents.RoundEntityUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				// The handler converts RoundEntityUpdatedPayload to RoundScheduleUpdatePayload
-				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayload{
+				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   testPayload.Round.ID,
 					Title:     testPayload.Round.Title,
 					StartTime: testPayload.Round.StartTime,
@@ -693,13 +693,13 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.RoundEntityUpdatedPayload) = *testPayload
+						*out.(*roundevents.RoundEntityUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				// The handler converts RoundEntityUpdatedPayload to RoundScheduleUpdatePayload
-				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayload{
+				expectedSchedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 					RoundID:   testPayload.Round.ID,
 					Title:     testPayload.Round.Title,
 					StartTime: testPayload.Round.StartTime,
@@ -722,7 +722,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

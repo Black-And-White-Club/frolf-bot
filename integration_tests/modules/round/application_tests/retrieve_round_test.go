@@ -83,7 +83,7 @@ func TestGetRound(t *testing.T) {
 				}
 
 				round.GuildID = "test-guild"
-				err := deps.DB.CreateRound(ctx, "test-guild", &round)
+				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round)
 				if err != nil {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
@@ -106,7 +106,7 @@ func TestGetRound(t *testing.T) {
 
 				// Retrieve the original round from the DB to compare
 				// Assumed deps.DB.GetUpcomingRounds returns []*roundtypes.Round based on observed compiler error
-				rounds, err := deps.DB.GetUpcomingRounds(ctx, "test-guild")
+								rounds, err := deps.DB.GetUpcomingRounds(ctx, sharedtypes.GuildID("test-guild"))
 				if err != nil {
 					t.Fatalf("Failed to get rounds from DB for validation: %v", err)
 				}
@@ -212,9 +212,9 @@ func TestGetRound(t *testing.T) {
 				}
 
 				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayloadV1, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {
@@ -236,7 +236,7 @@ func TestGetRound(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
 			roundIDToFetch := tt.setupTestEnv(deps.Ctx, deps)
-			result, err := deps.Service.GetRound(deps.Ctx, "test-guild", roundIDToFetch)
+			result, err := deps.Service.GetRound(deps.Ctx, sharedtypes.GuildID("test-guild"), roundIDToFetch)
 
 			if tt.expectedError {
 				if err == nil {

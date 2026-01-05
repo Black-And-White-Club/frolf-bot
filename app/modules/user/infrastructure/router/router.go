@@ -145,26 +145,40 @@ func (r *UserRouter) Configure(routerCtx context.Context, userService userservic
 	return nil
 }
 
-// RegisterHandlers registers event handlers.
-// It now accepts a context.
+// RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers.Handlers) error {
 	fmt.Printf("DEBUG: RegisterHandlers() called for user module\n")
 	r.logger.InfoContext(ctx, "Entering Register Handlers for User")
 
 	// Map event topics to their corresponding handler functions.
 	eventsToHandlers := map[string]message.HandlerFunc{
-		userevents.UserSignupRequest:            handlers.HandleUserSignupRequest,
-		userevents.TagAvailable:                 handlers.HandleTagAvailable,
-		userevents.TagUnavailable:               handlers.HandleTagUnavailable,
-		userevents.UserRoleUpdateRequest:        handlers.HandleUserRoleUpdateRequest,
-		userevents.GetUserRoleRequest:           handlers.HandleGetUserRoleRequest,
-		userevents.GetUserRequest:               handlers.HandleGetUserRequest,
-		userevents.UserPermissionsCheckRequest:  handlers.HandleGetUserRoleRequest,
-		userevents.UpdateUDiscIdentityRequest:   handlers.HandleUpdateUDiscIdentityRequest,
-		roundevents.ScorecardParsedForUserTopic: handlers.HandleScorecardParsed,
+		// User Creation Flow (from creation.go)
+		userevents.UserSignupRequestedV1: handlers.HandleUserSignupRequest,
+
+		// Tag Availability Flow (from tags.go)
+		userevents.TagAvailableV1:   handlers.HandleTagAvailable,
+		userevents.TagUnavailableV1: handlers.HandleTagUnavailable,
+
+		// Role Update Flow (from roles.go)
+		userevents.UserRoleUpdateRequestedV1: handlers.HandleUserRoleUpdateRequest,
+
+		// Role Retrieval Flow (from roles.go)
+		userevents.GetUserRoleRequestedV1: handlers.HandleGetUserRoleRequest,
+
+		// User Retrieval Flow (from retrieval.go)
+		userevents.GetUserRequestedV1: handlers.HandleGetUserRequest,
+
+		// Permissions Check Flow (from roles.go)
+		userevents.UserPermissionsCheckRequestedV1: handlers.HandleGetUserRoleRequest,
+
+		// UDisc Identity Flow (from udisc.go)
+		userevents.UpdateUDiscIdentityRequestedV1: handlers.HandleUpdateUDiscIdentityRequest,
+
+		// Cross-module: Scorecard parsed for user (from round/import.go)
+		roundevents.ScorecardParsedForUserV1: handlers.HandleScorecardParsed,
 	}
 	r.logger.InfoContext(ctx, "Registering handlers for user module",
-		attr.String("TagAvailable_constant", userevents.TagAvailable))
+		attr.String("TagAvailable_constant", userevents.TagAvailableV1))
 
 	for topic, handlerFunc := range eventsToHandlers {
 		fmt.Printf("DEBUG: Registering handler for topic: %s\n", topic)

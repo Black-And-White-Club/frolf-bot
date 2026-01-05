@@ -32,6 +32,8 @@ func NewRoundTestHelper(eventBus eventbus.EventBus, capture *MessageCapture) *Ro
 // RoundRequest represents a round creation request - generic structure
 type RoundRequest struct {
 	UserID      sharedtypes.DiscordID
+	GuildID     sharedtypes.GuildID
+	ChannelID   string
 	Title       string
 	Description string
 	Location    string
@@ -43,12 +45,14 @@ type RoundRequest struct {
 func (h *RoundTestHelper) PublishRoundRequest(t *testing.T, ctx context.Context, req RoundRequest) *message.Message {
 	t.Helper()
 
-	payload := roundevents.CreateRoundRequestedPayload{
-		UserID:      req.UserID,
+	payload := roundevents.CreateRoundRequestedPayloadV1{
+		GuildID:     req.GuildID,
 		Title:       roundtypes.Title(req.Title),
 		Description: roundtypes.Description(req.Description),
 		Location:    roundtypes.Location(req.Location),
 		StartTime:   req.StartTime,
+		UserID:      req.UserID,
+		ChannelID:   req.ChannelID,
 		Timezone:    roundtypes.Timezone(req.Timezone),
 	}
 
@@ -60,7 +64,7 @@ func (h *RoundTestHelper) PublishRoundRequest(t *testing.T, ctx context.Context,
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundCreateRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -83,31 +87,31 @@ func (h *RoundTestHelper) PublishInvalidJSON(t *testing.T, ctx context.Context, 
 
 // WaitForRoundEntityCreated waits for round entity created messages
 func (h *RoundTestHelper) WaitForRoundEntityCreated(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundEntityCreated, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundEntityCreatedV1, expectedCount, timeout)
 }
 
 // WaitForRoundValidationFailed waits for round validation failed messages
 func (h *RoundTestHelper) WaitForRoundValidationFailed(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundValidationFailed, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundValidationFailedV1, expectedCount, timeout)
 }
 
 // GetRoundEntityCreatedMessages returns captured round entity created messages
 func (h *RoundTestHelper) GetRoundEntityCreatedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundEntityCreated)
+	return h.capture.GetMessages(roundevents.RoundEntityCreatedV1)
 }
 
 // GetRoundValidationFailedMessages returns captured round validation failed messages
 func (h *RoundTestHelper) GetRoundValidationFailedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundValidationFailed)
+	return h.capture.GetMessages(roundevents.RoundValidationFailedV1)
 }
 
 // GetAllCapturedMessages returns all captured messages for round topics
 func (h *RoundTestHelper) GetAllCapturedMessages() map[string][]*message.Message {
 	topics := []string{
-		roundevents.RoundEntityCreated,
-		roundevents.RoundValidationFailed,
-		roundevents.RoundCreated,
-		roundevents.RoundCreationFailed,
+		roundevents.RoundEntityCreatedV1,
+		roundevents.RoundValidationFailedV1,
+		roundevents.RoundCreatedV1,
+		roundevents.RoundCreationFailedV1,
 	}
 
 	result := make(map[string][]*message.Message)
@@ -122,11 +126,27 @@ func (h *RoundTestHelper) ClearMessages() {
 	h.capture.Clear()
 }
 
+// ClearMessagesAndDrain clears captured messages, waits for consumers to drain
+// any pending messages from NATS, then clears again. This ensures the capture
+// buffer only contains messages from the current subtest.
+func (h *RoundTestHelper) ClearMessagesAndDrain() {
+	// Clear the buffer
+	h.capture.Clear()
+	// Wait longer for consumers to drain any pending messages from NATS
+	// Consumers poll every 25ms, so we need enough time for multiple polling cycles
+	// plus message processing time. 300ms = ~12 polling cycles.
+	time.Sleep(300 * time.Millisecond)
+	// Clear again to remove any drained messages
+	h.capture.Clear()
+	// Small delay to ensure clean state before test publishes new messages
+	time.Sleep(50 * time.Millisecond)
+}
+
 // ValidateRoundEntityCreated parses and validates a round entity created message
-func (h *RoundTestHelper) ValidateRoundEntityCreated(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundEntityCreatedPayload {
+func (h *RoundTestHelper) ValidateRoundEntityCreated(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundEntityCreatedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundEntityCreatedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundEntityCreatedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round entity created message: %v", err)
 	}
@@ -143,10 +163,10 @@ func (h *RoundTestHelper) ValidateRoundEntityCreated(t *testing.T, msg *message.
 }
 
 // ValidateRoundValidationFailed parses and validates a round validation failed message
-func (h *RoundTestHelper) ValidateRoundValidationFailed(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundValidationFailedPayload {
+func (h *RoundTestHelper) ValidateRoundValidationFailed(t *testing.T, msg *message.Message, expectedUserID sharedtypes.DiscordID) *roundevents.RoundValidationFailedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundValidationFailedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundValidationFailedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round validation failed message: %v", err)
 	}
@@ -155,15 +175,15 @@ func (h *RoundTestHelper) ValidateRoundValidationFailed(t *testing.T, msg *messa
 		t.Errorf("UserID mismatch: expected %s, got %s", expectedUserID, result.UserID)
 	}
 
-	if len(result.ErrorMessage) == 0 {
-		t.Errorf("Expected error message to be populated")
+	if len(result.ErrorMessages) == 0 {
+		t.Errorf("Expected error messages to be populated")
 	}
 
 	return result
 }
 
 // PublishRoundEntityCreated publishes a RoundEntityCreated event and returns the message
-func (h *RoundTestHelper) PublishRoundEntityCreated(t *testing.T, ctx context.Context, payload roundevents.RoundEntityCreatedPayload) *message.Message {
+func (h *RoundTestHelper) PublishRoundEntityCreated(t *testing.T, ctx context.Context, payload roundevents.RoundEntityCreatedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -174,7 +194,7 @@ func (h *RoundTestHelper) PublishRoundEntityCreated(t *testing.T, ctx context.Co
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEntityCreated, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEntityCreatedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -183,29 +203,29 @@ func (h *RoundTestHelper) PublishRoundEntityCreated(t *testing.T, ctx context.Co
 
 // WaitForRoundCreated waits for round created messages
 func (h *RoundTestHelper) WaitForRoundCreated(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundCreated, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundCreatedV1, expectedCount, timeout)
 }
 
 // WaitForRoundCreationFailed waits for round creation failed messages
 func (h *RoundTestHelper) WaitForRoundCreationFailed(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundCreationFailed, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundCreationFailedV1, expectedCount, timeout)
 }
 
 // GetRoundCreatedMessages returns captured round created messages
 func (h *RoundTestHelper) GetRoundCreatedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundCreated)
+	return h.capture.GetMessages(roundevents.RoundCreatedV1)
 }
 
 // GetRoundCreationFailedMessages returns captured round creation failed messages
 func (h *RoundTestHelper) GetRoundCreationFailedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundCreationFailed)
+	return h.capture.GetMessages(roundevents.RoundCreationFailedV1)
 }
 
 // ValidateRoundCreated parses and validates a round created message
-func (h *RoundTestHelper) ValidateRoundCreated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreatedPayload {
+func (h *RoundTestHelper) ValidateRoundCreated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreatedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundCreatedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundCreatedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round created message: %v", err)
 	}
@@ -218,10 +238,10 @@ func (h *RoundTestHelper) ValidateRoundCreated(t *testing.T, msg *message.Messag
 }
 
 // ValidateRoundCreationFailed parses and validates a round creation failed message
-func (h *RoundTestHelper) ValidateRoundCreationFailed(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreationFailedPayload {
+func (h *RoundTestHelper) ValidateRoundCreationFailed(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundCreationFailedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundCreationFailedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundCreationFailedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round creation failed message: %v", err)
 	}
@@ -234,7 +254,7 @@ func (h *RoundTestHelper) ValidateRoundCreationFailed(t *testing.T, msg *message
 }
 
 // PublishRoundMessageIDUpdate publishes a RoundMessageIDUpdate event with Discord message ID in metadata
-func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayload, discordMessageID string) *message.Message {
+func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayloadV1, discordMessageID string) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -246,7 +266,7 @@ func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 	msg.Metadata.Set("discord_message_id", discordMessageID)
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdate, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdateV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -254,7 +274,7 @@ func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.
 }
 
 // PublishRoundMessageIDUpdateWithoutDiscordID publishes a RoundMessageIDUpdate event without Discord message ID
-func (h *RoundTestHelper) PublishRoundMessageIDUpdateWithoutDiscordID(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayload) *message.Message {
+func (h *RoundTestHelper) PublishRoundMessageIDUpdateWithoutDiscordID(t *testing.T, ctx context.Context, payload roundevents.RoundMessageIDUpdatePayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -266,7 +286,7 @@ func (h *RoundTestHelper) PublishRoundMessageIDUpdateWithoutDiscordID(t *testing
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 	// Intentionally not setting discord_message_id
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdate, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdateV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -275,25 +295,25 @@ func (h *RoundTestHelper) PublishRoundMessageIDUpdateWithoutDiscordID(t *testing
 
 // WaitForRoundEventMessageIDUpdated waits for round event message ID updated messages
 func (h *RoundTestHelper) WaitForRoundEventMessageIDUpdated(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundEventMessageIDUpdated, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundEventMessageIDUpdatedV1, expectedCount, timeout)
 }
 
 // GetRoundEventMessageIDUpdatedMessages returns captured round event message ID updated messages
 func (h *RoundTestHelper) GetRoundEventMessageIDUpdatedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundEventMessageIDUpdated)
+	return h.capture.GetMessages(roundevents.RoundEventMessageIDUpdatedV1)
 }
 
 // ValidateRoundEventMessageIDUpdated parses and validates a round event message ID updated message
-func (h *RoundTestHelper) ValidateRoundEventMessageIDUpdated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundScheduledPayload {
+func (h *RoundTestHelper) ValidateRoundEventMessageIDUpdated(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundScheduledPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundScheduledPayload](msg)
+	result, err := ParsePayload[roundevents.RoundScheduledPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round event message ID updated message: %v", err)
 	}
 
-	if result.BaseRoundPayload.RoundID != expectedRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.BaseRoundPayload.RoundID)
+	if result.RoundID != expectedRoundID {
+		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
 	}
 
 	if result.EventMessageID == "" {
@@ -303,8 +323,8 @@ func (h *RoundTestHelper) ValidateRoundEventMessageIDUpdated(t *testing.T, msg *
 	return result
 }
 
-// PublishRoundDeleteRequest publishes a RoundDeleteRequest event and returns the message
-func (h *RoundTestHelper) PublishRoundDeleteRequest(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteRequestPayload) *message.Message {
+// PublishRoundDeleteRequest publishes a RoundDeleteRequested event and returns the message.
+func (h *RoundTestHelper) PublishRoundDeleteRequest(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -315,7 +335,7 @@ func (h *RoundTestHelper) PublishRoundDeleteRequest(t *testing.T, ctx context.Co
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -323,7 +343,7 @@ func (h *RoundTestHelper) PublishRoundDeleteRequest(t *testing.T, ctx context.Co
 }
 
 // PublishRoundDeleteAuthorized publishes a RoundDeleteAuthorized event and returns the message
-func (h *RoundTestHelper) PublishRoundDeleteAuthorized(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) *message.Message {
+func (h *RoundTestHelper) PublishRoundDeleteAuthorized(t *testing.T, ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -334,7 +354,7 @@ func (h *RoundTestHelper) PublishRoundDeleteAuthorized(t *testing.T, ctx context
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteAuthorized, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundDeleteAuthorizedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -343,39 +363,39 @@ func (h *RoundTestHelper) PublishRoundDeleteAuthorized(t *testing.T, ctx context
 
 // WaitForRoundDeleteAuthorized waits for round delete authorized messages
 func (h *RoundTestHelper) WaitForRoundDeleteAuthorized(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundDeleteAuthorized, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundDeleteAuthorizedV1, expectedCount, timeout)
 }
 
 // WaitForRoundDeleteError waits for round delete error messages
 func (h *RoundTestHelper) WaitForRoundDeleteError(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundDeleteError, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundDeleteErrorV1, expectedCount, timeout)
 }
 
 // WaitForRoundDeleted waits for round deleted messages
 func (h *RoundTestHelper) WaitForRoundDeleted(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundDeleted, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundDeletedV1, expectedCount, timeout)
 }
 
 // GetRoundDeleteAuthorizedMessages returns captured round delete authorized messages
 func (h *RoundTestHelper) GetRoundDeleteAuthorizedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundDeleteAuthorized)
+	return h.capture.GetMessages(roundevents.RoundDeleteAuthorizedV1)
 }
 
 // GetRoundDeleteErrorMessages returns captured round delete error messages
 func (h *RoundTestHelper) GetRoundDeleteErrorMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundDeleteError)
+	return h.capture.GetMessages(roundevents.RoundDeleteErrorV1)
 }
 
 // GetRoundDeletedMessages returns captured round deleted messages
 func (h *RoundTestHelper) GetRoundDeletedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundDeleted)
+	return h.capture.GetMessages(roundevents.RoundDeletedV1)
 }
 
 // ValidateRoundDeleteAuthorized parses and validates a round delete authorized message
-func (h *RoundTestHelper) ValidateRoundDeleteAuthorized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeleteAuthorizedPayload {
+func (h *RoundTestHelper) ValidateRoundDeleteAuthorized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeleteAuthorizedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundDeleteAuthorizedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundDeleteAuthorizedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round delete authorized message: %v", err)
 	}
@@ -388,10 +408,10 @@ func (h *RoundTestHelper) ValidateRoundDeleteAuthorized(t *testing.T, msg *messa
 }
 
 // ValidateRoundDeleteError parses and validates a round delete error message
-func (h *RoundTestHelper) ValidateRoundDeleteError(t *testing.T, msg *message.Message) *roundevents.RoundDeleteErrorPayload {
+func (h *RoundTestHelper) ValidateRoundDeleteError(t *testing.T, msg *message.Message) *roundevents.RoundDeleteErrorPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundDeleteErrorPayload](msg)
+	result, err := ParsePayload[roundevents.RoundDeleteErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round delete error message: %v", err)
 	}
@@ -404,10 +424,10 @@ func (h *RoundTestHelper) ValidateRoundDeleteError(t *testing.T, msg *message.Me
 }
 
 // ValidateRoundDeleted parses and validates a round deleted message
-func (h *RoundTestHelper) ValidateRoundDeleted(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeletedPayload {
+func (h *RoundTestHelper) ValidateRoundDeleted(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundDeletedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundDeletedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundDeletedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round deleted message: %v", err)
 	}
@@ -420,7 +440,7 @@ func (h *RoundTestHelper) ValidateRoundDeleted(t *testing.T, msg *message.Messag
 }
 
 // PublishAllScoresSubmitted publishes an AllScoresSubmitted event and returns the message
-func (h *RoundTestHelper) PublishAllScoresSubmitted(t *testing.T, ctx context.Context, payload roundevents.AllScoresSubmittedPayload) *message.Message {
+func (h *RoundTestHelper) PublishAllScoresSubmitted(t *testing.T, ctx context.Context, payload roundevents.AllScoresSubmittedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -431,7 +451,7 @@ func (h *RoundTestHelper) PublishAllScoresSubmitted(t *testing.T, ctx context.Co
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundAllScoresSubmitted, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundAllScoresSubmittedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -439,7 +459,7 @@ func (h *RoundTestHelper) PublishAllScoresSubmitted(t *testing.T, ctx context.Co
 }
 
 // PublishRoundFinalized publishes a RoundFinalized event and returns the message
-func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Context, payload roundevents.RoundFinalizedPayload) *message.Message {
+func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -450,7 +470,7 @@ func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Contex
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundFinalized, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundFinalizedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -459,39 +479,39 @@ func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Contex
 
 // GetRoundFinalizedMessages returns captured discord round finalized messages
 func (h *RoundTestHelper) GetRoundFinalizedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundFinalized)
+	return h.capture.GetMessages(roundevents.RoundFinalizedV1)
 }
 
 // GetProcessRoundScoresRequestMessages returns captured process round scores request messages
 func (h *RoundTestHelper) GetProcessRoundScoresRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.ProcessRoundScoresRequest)
+	return h.capture.GetMessages(roundevents.ProcessRoundScoresRequestedV1)
 }
 
 // GetRoundFinalizationErrorMessages returns captured round finalization error messages
 func (h *RoundTestHelper) GetRoundFinalizationErrorMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundFinalizationError)
+	return h.capture.GetMessages(roundevents.RoundFinalizationErrorV1)
 }
 
 // WaitForRoundFinalized waits for discord round finalized messages
 func (h *RoundTestHelper) WaitForRoundFinalized(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundFinalized, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundFinalizedV1, expectedCount, timeout)
 }
 
 // WaitForProcessRoundScoresRequest waits for process round scores request messages
 func (h *RoundTestHelper) WaitForProcessRoundScoresRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.ProcessRoundScoresRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.ProcessRoundScoresRequestedV1, expectedCount, timeout)
 }
 
 // WaitForRoundFinalizationError waits for round finalization error messages
 func (h *RoundTestHelper) WaitForRoundFinalizationError(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundFinalizationError, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundFinalizationErrorV1, expectedCount, timeout)
 }
 
 // ValidateRoundFinalized parses and validates a discord round finalized message
-func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayload {
+func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundFinalizedPayload](msg)
+	result, err := ParsePayload[roundevents.RoundFinalizedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse discord round finalized message: %v", err)
 	}
@@ -504,10 +524,10 @@ func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Mess
 }
 
 // ValidateProcessRoundScoresRequest parses and validates a process round scores request message
-func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ProcessRoundScoresRequestPayload {
+func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ProcessRoundScoresRequestPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ProcessRoundScoresRequestPayload](msg)
+	result, err := ParsePayload[roundevents.ProcessRoundScoresRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse process round scores request message: %v", err)
 	}
@@ -520,10 +540,10 @@ func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *m
 }
 
 // ValidateRoundFinalizationError parses and validates a round finalization error message
-func (h *RoundTestHelper) ValidateRoundFinalizationError(t *testing.T, msg *message.Message) *roundevents.RoundFinalizationErrorPayload {
+func (h *RoundTestHelper) ValidateRoundFinalizationError(t *testing.T, msg *message.Message) *roundevents.RoundFinalizationErrorPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundFinalizationErrorPayload](msg)
+	result, err := ParsePayload[roundevents.RoundFinalizationErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round finalization error message: %v", err)
 	}

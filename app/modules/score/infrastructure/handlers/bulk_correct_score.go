@@ -32,9 +32,9 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(msg *message.Message) ([]*
 				}
 				if res.Failure != nil {
 					failed++
-					fail, _ := res.Failure.(*scoreevents.ScoreUpdateFailurePayload)
-					if fail != nil {
-						m, err := h.Helpers.CreateResultMessage(msg, fail, scoreevents.ScoreUpdateFailure)
+					fail, ok := res.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+					if ok {
+						m, err := h.Helpers.CreateResultMessage(msg, fail, scoreevents.ScoreUpdateFailedV1)
 						if err == nil {
 							out = append(out, m)
 						}
@@ -42,9 +42,9 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(msg *message.Message) ([]*
 					continue
 				}
 				if res.Success != nil {
-					succ, _ := res.Success.(*scoreevents.ScoreUpdateSuccessPayload)
-					if succ != nil {
-						m, err := h.Helpers.CreateResultMessage(msg, succ, scoreevents.ScoreUpdateSuccess)
+					succ, ok := res.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+					if ok {
+						m, err := h.Helpers.CreateResultMessage(msg, succ, scoreevents.ScoreUpdatedV1)
 						if err == nil {
 							out = append(out, m)
 						}
@@ -62,10 +62,37 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(msg *message.Message) ([]*
 				TotalRequested: len(bulk.Updates),
 				UserIDsApplied: appliedUsers,
 			}
-			aggMsg, err := h.Helpers.CreateResultMessage(msg, &agg, scoreevents.ScoreBulkUpdateSuccess)
+			aggMsg, err := h.Helpers.CreateResultMessage(msg, &agg, scoreevents.ScoreBulkUpdatedV1)
 			if err == nil {
 				out = append(out, aggMsg)
 			}
+
+			// Trigger reprocessing if any updates were applied
+			if applied > 0 {
+				scores, err := h.scoreService.GetScoresForRound(ctx, sharedtypes.GuildID(bulk.GuildID), bulk.RoundID)
+				if err != nil {
+					h.logger.WarnContext(ctx, "Failed to get scores for reprocessing after bulk score update",
+						"round_id", bulk.RoundID,
+						"error", err,
+					)
+				} else if len(scores) > 0 {
+					reprocessPayload := scoreevents.ProcessRoundScoresRequestedPayloadV1{
+						GuildID: bulk.GuildID,
+						RoundID: bulk.RoundID,
+						Scores:  scores,
+					}
+					reprocessMsg, err := h.Helpers.CreateResultMessage(msg, &reprocessPayload, scoreevents.ProcessRoundScoresRequestedV1)
+					if err == nil {
+						out = append(out, reprocessMsg)
+					} else {
+						h.logger.WarnContext(ctx, "Failed to create reprocess message after bulk score update",
+							"round_id", bulk.RoundID,
+							"error", err,
+						)
+					}
+				}
+			}
+
 			h.logger.InfoContext(ctx, "Processed bulk score override",
 				attr.RoundID("round_id", bulk.RoundID),
 				attr.Int("updates_requested", len(bulk.Updates)),

@@ -138,18 +138,33 @@ func (r *LeaderboardRouter) Configure(routerCtx context.Context, leaderboardServ
 	return nil
 }
 
-// RegisterHandlers registers event handlers.
+// RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
 	eventsToHandlers := map[string]message.HandlerFunc{
-		leaderboardevents.LeaderboardUpdateRequested:        handlers.HandleLeaderboardUpdateRequested,
-		leaderboardevents.TagSwapRequested:                  handlers.HandleTagSwapRequested,
-		leaderboardevents.GetLeaderboardRequest:             handlers.HandleGetLeaderboardRequest,
-		sharedevents.DiscordTagLookUpByUserIDRequest:        handlers.HandleGetTagByUserIDRequest,
-		leaderboardevents.TagAvailabilityCheckRequest:       handlers.HandleTagAvailabilityCheckRequested,
-		sharedevents.LeaderboardBatchTagAssignmentRequested: handlers.HandleBatchTagAssignmentRequested,
-		leaderboardevents.RoundGetTagByUserIDRequest:        handlers.HandleRoundGetTagRequest,
-		guildevents.GuildConfigCreated:                      handlers.HandleGuildConfigCreated,
+		// Leaderboard Update Flow (from updates.go)
+		leaderboardevents.LeaderboardUpdateRequestedV1: handlers.HandleLeaderboardUpdateRequested,
+
+		// Tag Swap Flow (from tags.go)
+		leaderboardevents.TagSwapRequestedV1: handlers.HandleTagSwapRequested,
+
+		// Leaderboard Retrieval Flow (from updates.go)
+		leaderboardevents.GetLeaderboardRequestedV1: handlers.HandleGetLeaderboardRequest,
+
+		// Discord Tag Lookup Flow (from shared/tags.go)
+		sharedevents.DiscordTagLookupRequestedV1: handlers.HandleGetTagByUserIDRequest,
+
+		// Tag Availability Check Flow (from tags.go)
+		leaderboardevents.TagAvailabilityCheckRequestedV1: handlers.HandleTagAvailabilityCheckRequested,
+
+		// Batch Tag Assignment Flow (from shared/tags.go)
+		sharedevents.LeaderboardBatchTagAssignmentRequestedV1: handlers.HandleBatchTagAssignmentRequested,
+
+		// Round Tag Lookup Flow (from tags.go)
+		leaderboardevents.RoundGetTagByUserIDRequestedV1: handlers.HandleRoundGetTagRequest,
+
+		// Cross-module: Guild Config Created (from guild/config.go)
+		guildevents.GuildConfigCreatedV1: handlers.HandleGuildConfigCreated,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

@@ -80,7 +80,7 @@ func TestRoundService_GetRound(t *testing.T) {
 				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "database error",
 				},
@@ -138,8 +138,8 @@ func TestRoundService_GetRound(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got nil")
 				} else {
-					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload)
-					actualFailure := result.Failure.(*roundevents.RoundErrorPayload)
+					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayloadV1)
+					actualFailure := result.Failure.(*roundevents.RoundErrorPayloadV1)
 					if expectedFailure.RoundID != actualFailure.RoundID {
 						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
 					}

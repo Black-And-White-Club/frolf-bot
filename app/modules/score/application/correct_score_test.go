@@ -58,7 +58,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdateSuccessPayload{
+				Success: &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -86,7 +86,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdateSuccessPayload{
+				Success: &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -110,7 +110,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: &testTag,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdateSuccessPayload{
+				Success: &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -137,11 +137,11 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailurePayload{
+				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
-					Error:   "database connection failed",
+					Reason:  "database connection failed",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -161,11 +161,11 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: &invalidTag,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailurePayload{
+				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
-					Error:   "invalid tag number",
+					Reason:  "invalid tag number",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -200,8 +200,8 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
 				t.Errorf("Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
 			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
-				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
-				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdateSuccessPayload)
+				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdatedPayloadV1)
 				if okGot && okExpected {
 					if successGot.GuildID != successExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
@@ -221,8 +221,8 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
 				t.Errorf("Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
 			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
-				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
-				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailurePayload)
+				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
 				if okGot && okExpected {
 					if failureGot.GuildID != failureExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)
@@ -233,8 +233,8 @@ func TestScoreService_CorrectScore(t *testing.T) {
 					if failureGot.UserID != failureExpected.UserID {
 						t.Errorf("Mismatched UserID, got: %v, expected: %v", failureGot.UserID, failureExpected.UserID)
 					}
-					if failureGot.Error != failureExpected.Error {
-						t.Errorf("Mismatched error message, got: %v, expected: %v", failureGot.Error, failureExpected.Error)
+					if failureGot.Reason != failureExpected.Reason {
+						t.Errorf("Mismatched error message, got: %v, expected: %v", failureGot.Reason, failureExpected.Reason)
 					}
 				}
 			}

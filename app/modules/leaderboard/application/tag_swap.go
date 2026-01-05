@@ -10,7 +10,7 @@ import (
 )
 
 // TagSwapRequested handles the TagSwapRequested event.
-func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayload) (LeaderboardOperationResult, error) {
+func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayloadV1) (LeaderboardOperationResult, error) {
 	s.metrics.RecordTagSwapAttempt(ctx, payload.RequestorID, payload.TargetID)
 
 	s.logger.InfoContext(ctx, "Tag swap triggered",
@@ -28,7 +28,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 			)
 			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, "cannot swap tag with self")
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
+					GuildID:     guildID,
 					RequestorID: payload.RequestorID,
 					TargetID:    payload.TargetID,
 					Reason:      "cannot swap tag with self",
@@ -47,7 +48,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 			)
 			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, err.Error())
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
+				GuildID:     guildID,
 					RequestorID: payload.RequestorID,
 					TargetID:    payload.TargetID,
 					Reason:      err.Error(),
@@ -60,7 +62,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 			)
 			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, "no active leaderboard found")
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
+				GuildID:     guildID,
 					RequestorID: payload.RequestorID,
 					TargetID:    payload.TargetID,
 					Reason:      "no active leaderboard found",
@@ -83,7 +86,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 			)
 			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, "one or both users do not have tags on the leaderboard")
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
+				GuildID:     guildID,
 					RequestorID: payload.RequestorID,
 					TargetID:    payload.TargetID,
 					Reason:      "one or both users do not have tags on the leaderboard",
@@ -101,7 +105,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 			)
 			s.metrics.RecordTagSwapFailure(ctx, payload.RequestorID, payload.TargetID, err.Error())
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagSwapFailedPayload{
+				Failure: &leaderboardevents.TagSwapFailedPayloadV1{
+				GuildID:     guildID,
 					RequestorID: payload.RequestorID,
 					TargetID:    payload.TargetID,
 					Reason:      err.Error(),
@@ -116,7 +121,8 @@ func (s *LeaderboardService) TagSwapRequested(ctx context.Context, guildID share
 		s.metrics.RecordTagSwapSuccess(ctx, payload.RequestorID, payload.TargetID)
 
 		return LeaderboardOperationResult{
-			Success: &leaderboardevents.TagSwapProcessedPayload{
+			Success: &leaderboardevents.TagSwapProcessedPayloadV1{
+				GuildID:     guildID,
 				RequestorID: payload.RequestorID,
 				TargetID:    payload.TargetID,
 			},

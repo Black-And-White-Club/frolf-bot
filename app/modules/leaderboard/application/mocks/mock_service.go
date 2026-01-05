@@ -46,11 +46,11 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CheckTagAvailability mocks base method.
-func (m *MockService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+func (m *MockService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayloadV1) (*leaderboardevents.TagAvailabilityCheckResultPayloadV1, *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, guildID, payload)
-	ret0, _ := ret[0].(*leaderboardevents.TagAvailabilityCheckResultPayload)
-	ret1, _ := ret[1].(*leaderboardevents.TagAvailabilityCheckFailedPayload)
+	ret0, _ := ret[0].(*leaderboardevents.TagAvailabilityCheckResultPayloadV1)
+	ret1, _ := ret[1].(*leaderboardevents.TagAvailabilityCheckFailedPayloadV1)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -121,7 +121,7 @@ func (mr *MockServiceMockRecorder) ProcessTagAssignments(ctx, guildID, source, r
 }
 
 // RoundGetTagByUserID mocks base method.
-func (m *MockService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RoundGetTagByUserID", ctx, guildID, payload)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
@@ -136,7 +136,7 @@ func (mr *MockServiceMockRecorder) RoundGetTagByUserID(ctx, guildID, payload any
 }
 
 // TagSwapRequested mocks base method.
-func (m *MockService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayload) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayloadV1) (leaderboardservice.LeaderboardOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TagSwapRequested", ctx, guildID, payload)
 	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)

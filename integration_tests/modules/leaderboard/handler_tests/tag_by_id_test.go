@@ -17,11 +17,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const testGuildID = sharedtypes.GuildID("test_guild")
+
 // Helper function to create a tag lookup request message
 func createTagLookupRequestMessage(t *testing.T, userID sharedtypes.DiscordID) (*message.Message, error) {
 	t.Helper()
-	payload := sharedevents.DiscordTagLookupRequestPayload{
-		UserID: userID,
+	payload := sharedevents.DiscordTagLookupRequestedPayloadV1{
+		ScopedGuildID:     sharedevents.ScopedGuildID{GuildID: testGuildID},
+		RequestingUserID: userID,
+		UserID:           userID,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -68,15 +72,15 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create tag lookup request message: %v", err)
 				}
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookUpByUserIDRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic := sharedevents.DiscordTagLookupByUserIDNotFound
-				unexpectedFailTopic := sharedevents.DiscordTagLookupByUserIDFailed
+				expectedTopic := sharedevents.DiscordTagLookupSucceededV1
+				unexpectedTopic := sharedevents.DiscordTagLookupNotFoundV1
+				unexpectedFailTopic := sharedevents.DiscordTagLookupFailedV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -94,12 +98,12 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var successPayload sharedevents.DiscordTagLookupResultPayload
+				var successPayload sharedevents.DiscordTagLookupResultPayloadV1
 				if err := json.Unmarshal(receivedMsg.Payload, &successPayload); err != nil {
 					t.Fatalf("Failed to unmarshal DiscordTagLookupResultPayload: %v", err)
 				}
 
-				var requestPayload sharedevents.DiscordTagLookupRequestPayload
+				var requestPayload sharedevents.DiscordTagLookupRequestedPayloadV1
 				if err := json.Unmarshal(incomingMsg.Payload, &requestPayload); err != nil {
 					t.Fatalf("Failed to unmarshal incoming request payload: %v", err)
 				}
@@ -122,7 +126,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 1, true)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupByUserIDSuccess},
+			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupSucceededV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -144,15 +148,15 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create tag lookup request message: %v", err)
 				}
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookUpByUserIDRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupByUserIDNotFound
-				unexpectedTopic := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedFailTopic := sharedevents.DiscordTagLookupByUserIDFailed
+				expectedTopic := sharedevents.DiscordTagLookupNotFoundV1
+				unexpectedTopic := sharedevents.DiscordTagLookupSucceededV1
+				unexpectedFailTopic := sharedevents.DiscordTagLookupFailedV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -170,12 +174,12 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var notFoundPayload sharedevents.DiscordTagLookupResultPayload
+				var notFoundPayload sharedevents.DiscordTagLookupResultPayloadV1
 				if err := json.Unmarshal(receivedMsg.Payload, &notFoundPayload); err != nil {
 					t.Fatalf("Failed to unmarshal DiscordTagLookupResultPayload: %v", err)
 				}
 
-				var requestPayload sharedevents.DiscordTagLookupRequestPayload
+				var requestPayload sharedevents.DiscordTagLookupRequestedPayloadV1
 				if err := json.Unmarshal(incomingMsg.Payload, &requestPayload); err != nil {
 					t.Fatalf("Failed to unmarshal incoming request payload: %v", err)
 				}
@@ -198,7 +202,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 1, true)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupByUserIDNotFound},
+			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupNotFoundV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -214,15 +218,15 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create tag lookup request message: %v", err)
 				}
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookUpByUserIDRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupByUserIDFailed
-				unexpectedTopic1 := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic2 := sharedevents.DiscordTagLookupByUserIDNotFound
+				expectedTopic := sharedevents.DiscordTagLookupFailedV1
+				unexpectedTopic1 := sharedevents.DiscordTagLookupSucceededV1
+				unexpectedTopic2 := sharedevents.DiscordTagLookupNotFoundV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -240,12 +244,12 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				}
 
 				receivedFailedMsg := msgs[0]
-				var failurePayload sharedevents.DiscordTagLookupByUserIDFailedPayload
+				var failurePayload sharedevents.DiscordTagLookupFailedPayloadV1
 				if err := json.Unmarshal(receivedFailedMsg.Payload, &failurePayload); err != nil {
 					t.Fatalf("Failed to unmarshal DiscordTagLookupByUserIDFailedPayload: %v", err)
 				}
 
-				var requestPayload sharedevents.DiscordTagLookupRequestPayload
+				var requestPayload sharedevents.DiscordTagLookupRequestedPayloadV1
 				if err := json.Unmarshal(incomingMsg.Payload, &requestPayload); err != nil {
 					t.Fatalf("Failed to unmarshal incoming request payload: %v", err)
 				}
@@ -262,7 +266,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 0, false)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupByUserIDFailed},
+			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupFailedV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -278,15 +282,15 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookUpByUserIDRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.DiscordTagLookupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				unexpectedTopic1 := sharedevents.DiscordTagLookupByUserIDSuccess
-				unexpectedTopic2 := sharedevents.DiscordTagLookupByUserIDNotFound
-				unexpectedTopic3 := sharedevents.DiscordTagLookupByUserIDFailed
+				unexpectedTopic1 := sharedevents.DiscordTagLookupSucceededV1
+				unexpectedTopic2 := sharedevents.DiscordTagLookupNotFoundV1
+				unexpectedTopic3 := sharedevents.DiscordTagLookupFailedV1
 
 				if len(receivedMsgs[unexpectedTopic1]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic1, len(receivedMsgs[unexpectedTopic1]))

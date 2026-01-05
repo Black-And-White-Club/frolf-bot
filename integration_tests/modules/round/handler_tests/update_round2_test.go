@@ -16,10 +16,8 @@ import (
 )
 
 func TestHandleRoundUpdateValidated(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	users := generator.GenerateUsers(2)
-	user1ID := sharedtypes.DiscordID(users[0].UserID)
-	user2ID := sharedtypes.DiscordID(users[1].UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
 
 	testCases := []struct {
 		name        string
@@ -28,9 +26,12 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Title Only",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
 				// Create a round to update
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
 				// Get original round for comparison
@@ -41,7 +42,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 
 				// Create validated payload with title update
 				newTitle := roundtypes.Title("Updated Round Title")
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, &newTitle, nil, nil, nil, nil)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, &newTitle, nil, nil, nil, nil)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -64,7 +65,9 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Description Only",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
 				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
 				if err != nil {
@@ -73,7 +76,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 
 				// Create validated payload with description update
 				newDesc := roundtypes.Description("Updated description for the round")
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, nil, &newDesc, nil, nil, nil)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, nil, &newDesc, nil, nil, nil)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -90,11 +93,13 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Location Only",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
 				// Create validated payload with location update
 				newLocation := roundtypes.Location("Updated Course Location")
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, nil, nil, &newLocation, nil, nil)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, nil, nil, &newLocation, nil, nil)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -107,12 +112,14 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Start Time Only",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
 				// Create validated payload with start time update
 				futureTime := time.Now().Add(48 * time.Hour)
 				startTime := sharedtypes.StartTime(futureTime)
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, nil, nil, nil, &startTime, nil)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, nil, nil, nil, &startTime, nil)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -129,11 +136,13 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Event Type Only",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
 				// Create validated payload with event type update
 				newEventType := roundtypes.DefaultEventType
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, nil, nil, nil, nil, &newEventType)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, nil, nil, nil, nil, &newEventType)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -146,8 +155,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Multiple Fields",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseTentative, Score: nil},
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseTentative, Score: nil},
 				})
 
 				// Create validated payload with multiple field updates
@@ -158,7 +170,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				startTime := sharedtypes.StartTime(futureTime)
 				newEventType := roundtypes.DefaultEventType
 
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, &newTitle, &newDesc, &newLocation, &startTime, &newEventType)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, &newTitle, &newDesc, &newLocation, &startTime, &newEventType)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -187,15 +199,18 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Round with Existing Participants",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
 				// Create round with multiple participants
 				score1 := sharedtypes.Score(3)
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: &score1},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 				})
 
 				// Update only the title
 				newTitle := roundtypes.Title("Updated Round with Participants")
-				payload := createRoundUpdateValidatedPayload(roundID, user1ID, &newTitle, nil, nil, nil, nil)
+				payload := createRoundUpdateValidatedPayload(roundID, data.UserID, &newTitle, nil, nil, nil, nil)
 
 				result := publishAndExpectRoundEntityUpdated(t, deps, deps.MessageCapture, payload)
 
@@ -203,8 +218,8 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				if len(result.Round.Participants) != 1 {
 					t.Errorf("Expected 1 participant, got %d", len(result.Round.Participants))
 				}
-				if result.Round.Participants[0].UserID != user2ID {
-					t.Errorf("Expected participant %s, got %s", user2ID, result.Round.Participants[0].UserID)
+				if result.Round.Participants[0].UserID != data2.UserID {
+					t.Errorf("Expected participant %s, got %s", data2.UserID, result.Round.Participants[0].UserID)
 				}
 				if result.Round.Participants[0].Score == nil || *result.Round.Participants[0].Score != score1 {
 					t.Errorf("Expected participant score %d, got %v", score1, result.Round.Participants[0].Score)
@@ -214,16 +229,18 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Failure - Round Not Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
 				// Use a non-existent round ID
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				newTitle := roundtypes.Title("Title for Nonexistent Round")
-				payload := createRoundUpdateValidatedPayload(nonExistentRoundID, user1ID, &newTitle, nil, nil, nil, nil)
+				payload := createRoundUpdateValidatedPayload(nonExistentRoundID, data.UserID, &newTitle, nil, nil, nil, nil)
 
 				result := publishAndExpectRoundUpdateEntityError(t, deps, deps.MessageCapture, payload)
 
 				// Validate the error
 				if result.RoundUpdateRequest == nil {
-					t.Error("Expected RoundUpdateRequest to be set in error payload")
+					t.Fatal("Expected RoundUpdateRequest to be set in error payload")
 				}
 				if result.Error == "" {
 					t.Error("Expected Error message to be populated")
@@ -236,21 +253,18 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		{
 			name: "Failure - Invalid JSON Message",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
 				publishInvalidJSONAndExpectNoRoundUpdateEntityMessages(t, deps, deps.MessageCapture)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			helper.ClearMessages()
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
@@ -264,9 +278,9 @@ func createRoundUpdateValidatedPayload(
 	location *roundtypes.Location,
 	startTime *sharedtypes.StartTime,
 	eventType *roundtypes.EventType,
-) roundevents.RoundUpdateValidatedPayload {
+) roundevents.RoundUpdateValidatedPayloadV1 {
 	// Create the inner request payload
-	requestPayload := roundevents.RoundUpdateRequestPayload{}
+	requestPayload := roundevents.RoundUpdateRequestPayloadV1{}
 	requestPayload.RoundID = roundID
 	requestPayload.UserID = userID
 	requestPayload.GuildID = "test-guild" // Always set for multi-tenant correctness
@@ -288,14 +302,14 @@ func createRoundUpdateValidatedPayload(
 		requestPayload.EventType = eventType
 	}
 
-	return roundevents.RoundUpdateValidatedPayload{
+	return roundevents.RoundUpdateValidatedPayloadV1{
 		GuildID:                   "test-guild",
 		RoundUpdateRequestPayload: requestPayload,
 	}
 }
 
 // Publishing functions - UNIQUE TO ROUND UPDATE VALIDATED TESTS
-func publishRoundUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.RoundUpdateValidatedPayload) *message.Message {
+func publishRoundUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.RoundUpdateValidatedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -306,7 +320,7 @@ func publishRoundUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateValidated, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateValidatedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -316,52 +330,56 @@ func publishRoundUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps
 func publishInvalidJSONAndExpectNoRoundUpdateEntityMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
 	t.Helper()
 
+	// Count BEFORE
+	updatedBefore := len(getRoundEntityUpdatedFromHandlerMessages(capture))
+	errorBefore := len(getRoundUpdateEntityErrorFromHandlerMessages(capture))
+
 	// Create invalid JSON message
 	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateValidated, invalidMsg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdateValidatedV1, invalidMsg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
-	// Wait a bit to ensure no messages are published
+	// Wait a bit to ensure no NEW messages are published
 	time.Sleep(500 * time.Millisecond)
 
-	updatedMsgs := getRoundEntityUpdatedFromHandlerMessages(capture)
-	errorMsgs := getRoundUpdateEntityErrorFromHandlerMessages(capture)
+	// Count AFTER
+	updatedAfter := len(getRoundEntityUpdatedFromHandlerMessages(capture))
+	errorAfter := len(getRoundUpdateEntityErrorFromHandlerMessages(capture))
 
-	if len(updatedMsgs) > 0 {
-		t.Errorf("Expected no updated messages for invalid JSON, got %d", len(updatedMsgs))
+	newUpdated := updatedAfter - updatedBefore
+	newErrors := errorAfter - errorBefore
+
+	if newUpdated > 0 {
+		t.Errorf("Expected no NEW updated messages for invalid JSON, got %d", newUpdated)
 	}
 
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for invalid JSON, got %d", len(errorMsgs))
+	if newErrors > 0 {
+		t.Errorf("Expected no NEW error messages for invalid JSON, got %d", newErrors)
 	}
 }
 
 // Wait functions - UNIQUE TO ROUND UPDATE VALIDATED TESTS
 func waitForRoundEntityUpdatedFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundUpdated, count, defaultTimeout)
-}
-
-func waitForRoundUpdateEntityErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundUpdateError, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundUpdatedV1, count, defaultTimeout)
 }
 
 // Message retrieval functions - UNIQUE TO ROUND UPDATE VALIDATED TESTS
 func getRoundEntityUpdatedFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundUpdated)
+	return capture.GetMessages(roundevents.RoundUpdatedV1)
 }
 
 func getRoundUpdateEntityErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundUpdateError)
+	return capture.GetMessages(roundevents.RoundUpdateErrorV1)
 }
 
 // Validation functions - UNIQUE TO ROUND UPDATE VALIDATED TESTS
-func validateRoundEntityUpdatedFromHandler(t *testing.T, msg *message.Message) *roundevents.RoundEntityUpdatedPayload {
+func validateRoundEntityUpdatedFromHandler(t *testing.T, msg *message.Message) *roundevents.RoundEntityUpdatedPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.RoundEntityUpdatedPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.RoundEntityUpdatedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round entity updated message: %v", err)
 	}
@@ -386,10 +404,10 @@ func validateRoundEntityUpdatedFromHandler(t *testing.T, msg *message.Message) *
 	return result
 }
 
-func validateRoundUpdateEntityErrorFromHandler(t *testing.T, msg *message.Message) *roundevents.RoundUpdateErrorPayload {
+func validateRoundUpdateEntityErrorFromHandler(t *testing.T, msg *message.Message) *roundevents.RoundUpdateErrorPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.RoundUpdateErrorPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.RoundUpdateErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse round update entity error message: %v", err)
 	}
@@ -409,11 +427,11 @@ func validateRoundUpdateEntityErrorFromHandler(t *testing.T, msg *message.Messag
 }
 
 // Test expectation functions - UNIQUE TO ROUND UPDATE VALIDATED TESTS
-func publishAndExpectRoundEntityUpdated(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateValidatedPayload) *roundevents.RoundEntityUpdatedPayload {
+func publishAndExpectRoundEntityUpdated(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateValidatedPayloadV1) *roundevents.RoundEntityUpdatedPayloadV1 {
 	publishRoundUpdateValidatedMessage(t, deps, &payload)
 
 	if !waitForRoundEntityUpdatedFromHandler(capture, 1) {
-		t.Fatalf("Expected round entity updated message from %s", roundevents.RoundUpdated)
+		t.Fatalf("Expected round entity updated message from %s", roundevents.RoundUpdatedV1)
 	}
 
 	msgs := getRoundEntityUpdatedFromHandlerMessages(capture)
@@ -422,15 +440,31 @@ func publishAndExpectRoundEntityUpdated(t *testing.T, deps *RoundHandlerTestDeps
 	return result
 }
 
-func publishAndExpectRoundUpdateEntityError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateValidatedPayload) *roundevents.RoundUpdateErrorPayload {
+func publishAndExpectRoundUpdateEntityError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundUpdateValidatedPayloadV1) *roundevents.RoundUpdateErrorPayloadV1 {
 	publishRoundUpdateValidatedMessage(t, deps, &payload)
 
-	if !waitForRoundUpdateEntityErrorFromHandler(capture, 1) {
-		t.Fatalf("Expected round update entity error message from %s", roundevents.RoundUpdateError)
+	// Wait and filter by round ID
+	deadline := time.Now().Add(defaultTimeout)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getRoundUpdateEntityErrorFromHandlerMessages(capture)
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.RoundUpdateErrorPayloadV1](msg)
+			if err == nil && parsed.RoundUpdateRequest != nil && parsed.RoundUpdateRequest.RoundID == payload.RoundUpdateRequestPayload.RoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
-	msgs := getRoundUpdateEntityErrorFromHandlerMessages(capture)
-	result := validateRoundUpdateEntityErrorFromHandler(t, msgs[0])
+	if foundMsg == nil {
+		t.Fatalf("Expected round update entity error message from %s for round %s", roundevents.RoundUpdateErrorV1, payload.RoundUpdateRequestPayload.RoundID)
+	}
 
+	result := validateRoundUpdateEntityErrorFromHandler(t, foundMsg)
 	return result
 }

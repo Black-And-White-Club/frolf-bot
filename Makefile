@@ -334,101 +334,82 @@ test-round-summary:
 	rm -f $$TEMP_FILE; \
 	exit $$EXIT_CODE)
 
-# --- Simplified Coverage Targets Using Go 1.20+ Native Coverage ---
-REPORTS_DIR := ./reports
+# --- Go Coverage Targets ---
+COV_DATA := $(REPORTS_DIR)/coverage_data
+COV_TEXT := $(REPORTS_DIR)/coverage.out
 
-# Build instrumented binaries for coverage (keep this)
-build-coverage:
-	@echo "Building instrumented binaries for coverage..."
-	-mkdir -p ./bin
-	go build -cover -o ./bin/app-instrumented ./app
-	go build -cover -o ./bin/bun-instrumented ./cmd/bun
+REPORTS_DIR = reports
+COVER_PKGS = ./app/...
 
-# Enhanced coverage using both test and binary coverage
-coverage-all: build-coverage
-	@echo "Running all tests with coverage across entire project..."
-	-mkdir -p $(REPORTS_DIR)
-	# Set environment variable for binary coverage
-	export GOCOVERDIR=$(REPORTS_DIR)/binary-coverage && \
-	mkdir -p $$GOCOVERDIR && \
-	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... && \
-	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
-	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/merged-coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-	else \
-		cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-	fi
-	@echo ""
+coverage-all:
+	@mkdir -p $(REPORTS_DIR)
+	@echo "Running all tests (Unit + Integration) cumulatively..."
+	
+	@# 1. Run everything at once. 
+	@# -coverpkg=./app/... ensures integration tests contribute to /app coverage.
+	@# We exclude the integration_tests folder from the "measured" packages so they don't bloat the denominator.
+	@go test -v ./app/... ./integration_tests/... \
+		-coverpkg=$(COVER_PKGS) \
+		-coverprofile=$(REPORTS_DIR)/coverage-raw.out
+	
+	@echo "Filtering out mocks, migrations, and test utils..."
+	@# 2. Use a cleaner filter for the final report
+	@grep -Ev "mock|_mock|migrations|testutils|app/app.go|main.go|module.go" $(REPORTS_DIR)/coverage-raw.out > $(REPORTS_DIR)/coverage.out
+	
 	@echo "=========================================="
-	@echo "OVERALL PROJECT COVERAGE SUMMARY:"
+	@echo "CUMULATIVE PERCENTAGE:"
+	@go tool cover -func=$(REPORTS_DIR)/coverage.out | grep total | awk '{print $$3}'
 	@echo "=========================================="
-	go tool cover -func $(REPORTS_DIR)/coverage.out
-	@echo ""
-	@echo "Total project coverage report generated: $(REPORTS_DIR)/coverage.out"
+	@echo "HTML Report: go tool cover -html=$(REPORTS_DIR)/coverage.out"
 
-# Enhanced coverage with test counts using binary coverage
-coverage-all-with-counts: build-coverage
+# Enhanced coverage with test counts
+coverage-all-with-counts:
 	@echo "=== RUNNING ALL TESTS WITH COVERAGE ==="
 	@echo ""
 	@echo "=== TEST COUNT SUMMARY ==="
 	@echo -n "Unit tests: "
-	@go test -list=. ./app/... | grep -c "^Test" || echo "0"
+	@go test -list=. ./app/... 2>/dev/null | grep -c "^Test" || echo "0"
 	@echo -n "Integration tests: "
-	@go test -list=. ./integration_tests/... | grep -c "^Test" || echo "0"
+	@go test -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0"
 	@echo -n "Total tests: "
-	@echo $$(( $$(go test -list=. ./app/... | grep -c "^Test" || echo "0") + $$(go test -list=. ./integration_tests/... | grep -c "^Test" || echo "0") ))
+	@echo $$(( $$(go test -list=. ./app/... 2>/dev/null | grep -c "^Test" || echo "0") + $$(go test -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0") ))
 	@echo ""
-	@echo "Running all tests with coverage across entire project..."
-	-mkdir -p $(REPORTS_DIR)
-	export GOCOVERDIR=$(REPORTS_DIR)/binary-coverage && \
-	mkdir -p $$GOCOVERDIR && \
-	go test -cover -coverprofile=$(REPORTS_DIR)/test-coverage.out ./app/... ./integration_tests/... -v && \
-	go tool covdata textfmt -i=$$GOCOVERDIR -o=$(REPORTS_DIR)/binary-coverage.out 2>/dev/null || echo "No binary coverage data" && \
-	if [ -f $(REPORTS_DIR)/binary-coverage.out ]; then \
-	go tool covdata merge -i=$(REPORTS_DIR) -o=$(REPORTS_DIR)/coverage.out || cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-	else \
-	cp $(REPORTS_DIR)/test-coverage.out $(REPORTS_DIR)/coverage.out; \
-	fi
-	@echo ""
-	@echo "=========================================="
-	@echo "OVERALL PROJECT COVERAGE SUMMARY:"
-	@echo "=========================================="
-	go tool cover -func $(REPORTS_DIR)/coverage.out
-	@echo ""
-	@echo "Total project coverage report generated: $(REPORTS_DIR)/coverage.out"
+	@$(MAKE) coverage-all
 
-# Clean coverage reports (update to include binary coverage)
-clean-coverage:
-	@echo "Cleaning coverage reports..."
-	-rm -rf $(REPORTS_DIR)
-	-rm -rf ./bin/*-instrumented
-# Generate HTML coverage report for entire project
+# Generate HTML coverage report
 coverage-html: coverage-all
 	@echo "Generating HTML coverage report..."
-	go tool cover -html $(REPORTS_DIR)/coverage.out -o $(REPORTS_DIR)/coverage.html
-	@echo "HTML coverage report: $(REPORTS_DIR)/coverage.html"
+	@go tool cover -html=$(COV_TEXT) -o $(REPORTS_DIR)/coverage.html
+	@echo "HTML report: $(REPORTS_DIR)/coverage.html"
+	@echo "Open with: open $(REPORTS_DIR)/coverage.html"
 
 # Run unit tests only with coverage
 coverage-unit:
-	@echo "Running unit tests with coverage..."
-	-mkdir -p $(REPORTS_DIR)
-	go test -cover -coverprofile=$(REPORTS_DIR)/unit-coverage.out -short ./app/...
-	@echo ""
+	@mkdir -p $(REPORTS_DIR)
+	@echo "Running unit tests only..."
+	@go test -v ./app/... -short \
+		-coverpkg=$(COVER_PKGS) \
+		-coverprofile=$(REPORTS_DIR)/unit-coverage-raw.out
+	@echo "Filtering out mocks, migrations, and test utils..."
+	@grep -Ev "mock|_mock|migrations|testutils" $(REPORTS_DIR)/unit-coverage-raw.out > $(REPORTS_DIR)/unit-coverage.out
 	@echo "=========================================="
-	@echo "UNIT TEST COVERAGE SUMMARY:"
+	@echo "UNIT TEST COVERAGE:"
+	@go tool cover -func=$(REPORTS_DIR)/unit-coverage.out | grep total | awk '{print $$3}'
 	@echo "=========================================="
-	go tool cover -func $(REPORTS_DIR)/unit-coverage.out
 
-# Run integration tests only with coverage  
+# Run integration tests only with coverage
 coverage-integration:
-	@echo "Running integration tests with coverage..."
-	-mkdir -p $(REPORTS_DIR)
-	go test -cover -coverprofile=$(REPORTS_DIR)/integration-coverage.out ./integration_tests/...
-	@echo ""
+	@mkdir -p $(REPORTS_DIR)
+	@echo "Running integration tests only..."
+	@go test -v ./integration_tests/... \
+		-coverpkg=$(COVER_PKGS) \
+		-coverprofile=$(REPORTS_DIR)/integration-coverage-raw.out
+	@echo "Filtering out mocks, migrations, and test utils..."
+	@grep -Ev "mock|_mock|migrations|testutils" $(REPORTS_DIR)/integration-coverage-raw.out > $(REPORTS_DIR)/integration-coverage.out
 	@echo "=========================================="
-	@echo "INTEGRATION TEST COVERAGE SUMMARY:"
+	@echo "INTEGRATION TEST COVERAGE:"
+	@go tool cover -func=$(REPORTS_DIR)/integration-coverage.out | grep total | awk '{print $$3}'
 	@echo "=========================================="
-	go tool cover -func $(REPORTS_DIR)/integration-coverage.out
 
 # Clean coverage reports
 clean-coverage:

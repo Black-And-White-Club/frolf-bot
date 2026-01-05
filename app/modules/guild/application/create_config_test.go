@@ -126,7 +126,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			wantErr: ErrGuildConfigConflict,
 		},
 		{
-			name:        "missing required field",
+			name:        "missing required field - signup channel",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {},
 			config: &guildtypes.GuildConfig{
 				GuildID: "guild-4",
@@ -139,6 +139,137 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				},
 			},
 			wantErr: errors.New("signup channel ID required"),
+		},
+		{
+			name:        "missing required field - event channel",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config: &guildtypes.GuildConfig{
+				GuildID:         "guild-5",
+				SignupChannelID: "signup-chan",
+				// Missing EventChannelID
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "guild-5",
+					Reason:  "event channel ID required",
+				},
+			},
+			wantErr: errors.New("event channel ID required"),
+		},
+		{
+			name:        "missing required field - leaderboard channel",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config: &guildtypes.GuildConfig{
+				GuildID:         "guild-6",
+				SignupChannelID: "signup-chan",
+				EventChannelID:  "event-chan",
+				// Missing LeaderboardChannelID
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "guild-6",
+					Reason:  "leaderboard channel ID required",
+				},
+			},
+			wantErr: errors.New("leaderboard channel ID required"),
+		},
+		{
+			name:        "missing required field - user role",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config: &guildtypes.GuildConfig{
+				GuildID:              "guild-7",
+				SignupChannelID:      "signup-chan",
+				EventChannelID:       "event-chan",
+				LeaderboardChannelID: "leaderboard-chan",
+				// Missing UserRoleID
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "guild-7",
+					Reason:  "user role ID required",
+				},
+			},
+			wantErr: errors.New("user role ID required"),
+		},
+		{
+			name:        "missing required field - signup emoji",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config: &guildtypes.GuildConfig{
+				GuildID:              "guild-8",
+				SignupChannelID:      "signup-chan",
+				EventChannelID:       "event-chan",
+				LeaderboardChannelID: "leaderboard-chan",
+				UserRoleID:           "role-1",
+				// Missing SignupEmoji
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "guild-8",
+					Reason:  "signup emoji required",
+				},
+			},
+			wantErr: errors.New("signup emoji required"),
+		},
+		{
+			name:        "nil context",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config:      validConfig,
+			wantResult: GuildOperationResult{
+				Error: ErrNilContext,
+			},
+			wantErr: ErrNilContext,
+		},
+		{
+			name:        "nil config",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config:      nil,
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "",
+					Reason:  "config payload is nil",
+				},
+			},
+			wantErr: errors.New("config payload is nil"),
+		},
+		{
+			name:        "empty guild ID",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			config: &guildtypes.GuildConfig{
+				GuildID:              "",
+				SignupChannelID:      "signup-chan",
+				EventChannelID:       "event-chan",
+				LeaderboardChannelID: "leaderboard-chan",
+				UserRoleID:           "role-1",
+				SignupEmoji:          ":frolf:",
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "",
+					Reason:  ErrInvalidGuildID.Error(),
+				},
+			},
+			wantErr: ErrInvalidGuildID,
+		},
+		{
+			name: "GetConfig returns database error",
+			mockDBSetup: func(m *guilddb.MockGuildDB) {
+				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-9")).Return(nil, errors.New("db lookup error"))
+			},
+			config: &guildtypes.GuildConfig{
+				GuildID:              "guild-9",
+				SignupChannelID:      "signup-chan",
+				EventChannelID:       "event-chan",
+				LeaderboardChannelID: "leaderboard-chan",
+				UserRoleID:           "role-1",
+				SignupEmoji:          ":frolf:",
+			},
+			wantResult: GuildOperationResult{
+				Failure: &guildevents.GuildConfigCreationFailedPayload{
+					GuildID: "guild-9",
+					Reason:  "db lookup error",
+				},
+			},
+			wantErr: errors.New("db lookup error"),
 		},
 	}
 
@@ -154,7 +285,14 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 					return serviceFunc(ctx)
 				},
 			}
-			got, err := s.CreateGuildConfig(ctx, tt.config)
+			
+			// Use nil context if the test name indicates it
+			testCtx := ctx
+			if tt.name == "nil context" {
+				testCtx = nil
+			}
+			
+			got, err := s.CreateGuildConfig(testCtx, tt.config)
 			if tt.wantErr != nil {
 				if err == nil || err.Error() != tt.wantErr.Error() {
 					t.Errorf("expected error: %v, got: %v", tt.wantErr, err)

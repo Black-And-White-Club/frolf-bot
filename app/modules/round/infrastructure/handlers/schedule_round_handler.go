@@ -15,9 +15,9 @@ import (
 func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleDiscordMessageIDUpdate",
-		&roundevents.RoundScheduledPayload{},
+		&roundevents.RoundScheduledPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scheduledPayload := payload.(*roundevents.RoundScheduledPayload)
+			scheduledPayload := payload.(*roundevents.RoundScheduledPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundScheduled event",
 				attr.CorrelationIDFromMsg(msg),
@@ -45,7 +45,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)

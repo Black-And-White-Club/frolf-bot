@@ -16,9 +16,9 @@ import (
 )
 
 func TestHandleParticipantRemovalRequest(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -27,33 +27,37 @@ func TestHandleParticipantRemovalRequest(t *testing.T) {
 		{
 			name: "Success - Remove Existing Accepted Participant",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, userID, roundtypes.ResponseAccept)
-				payload := createRemovalPayload(roundID, userID)
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, data.UserID, roundtypes.ResponseAccept)
+				payload := createRemovalPayload(roundID, data.UserID)
 				publishAndExpectParticipantRemoved(t, deps, deps.MessageCapture, payload)
 			},
 		},
 		{
 			name: "Success - Remove Existing Tentative Participant",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, userID, roundtypes.ResponseTentative)
-				payload := createRemovalPayload(roundID, userID)
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, data.UserID, roundtypes.ResponseTentative)
+				payload := createRemovalPayload(roundID, data.UserID)
 				publishAndExpectParticipantRemoved(t, deps, deps.MessageCapture, payload)
 			},
 		},
 		{
 			name: "Success - Remove Existing Declined Participant",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, userID, roundtypes.ResponseDecline)
-				payload := createRemovalPayload(roundID, userID)
+				data := NewTestData()
+				roundID := helper.CreateRoundWithParticipantInDB(t, deps.DB, data.UserID, roundtypes.ResponseDecline)
+				payload := createRemovalPayload(roundID, data.UserID)
 				publishAndExpectParticipantRemoved(t, deps, deps.MessageCapture, payload)
 			},
 		},
 		{
 			name: "Failure - Round Not Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				data := NewTestData()
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createRemovalPayload(nonExistentRoundID, userID)
-				publishAndExpectRemovalError(t, deps, deps.MessageCapture, payload, nonExistentRoundID, userID)
+				payload := createRemovalPayload(nonExistentRoundID, data.UserID)
+				publishAndExpectRemovalError(t, deps, deps.MessageCapture, payload, nonExistentRoundID, data.UserID)
 			},
 		},
 		{
@@ -64,30 +68,32 @@ func TestHandleParticipantRemovalRequest(t *testing.T) {
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
+			// Create helper for each subtest since these tests use custom helper functions
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
 
-			helper.ClearMessages()
+			// Run the test
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 // Test-specific helper functions for HandleParticipantRemovalRequest
 
-func createRemovalPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) roundevents.ParticipantRemovalRequestPayload {
-	return roundevents.ParticipantRemovalRequestPayload{
+func createRemovalPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) roundevents.ParticipantRemovalRequestPayloadV1 {
+	return roundevents.ParticipantRemovalRequestPayloadV1{
 		RoundID: roundID,
 		UserID:  userID,
+		GuildID: "test-guild",
 	}
 }
 
-func publishParticipantRemovalRequest(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantRemovalRequestPayload) *message.Message {
+func publishParticipantRemovalRequest(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantRemovalRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -98,7 +104,7 @@ func publishParticipantRemovalRequest(t *testing.T, deps *RoundHandlerTestDeps, 
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantRemovalRequest, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantRemovalRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -106,25 +112,25 @@ func publishParticipantRemovalRequest(t *testing.T, deps *RoundHandlerTestDeps, 
 }
 
 func waitForParticipantRemoved(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantRemoved, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantRemovedV1, count, defaultTimeout)
 }
 
 func waitForParticipantRemovalError(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantRemovalError, count, defaultTimeout)
+	return capture.WaitForMessages(roundevents.RoundParticipantRemovalErrorV1, count, defaultTimeout)
 }
 
 func getParticipantRemovedMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantRemoved)
+	return capture.GetMessages(roundevents.RoundParticipantRemovedV1)
 }
 
 func getParticipantRemovalErrorMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantRemovalError)
+	return capture.GetMessages(roundevents.RoundParticipantRemovalErrorV1)
 }
 
-func validateParticipantRemovedMessage(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantRemovedPayload {
+func validateParticipantRemovedMessage(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantRemovedPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.ParticipantRemovedPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.ParticipantRemovedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant removed message: %v", err)
 	}
@@ -143,7 +149,7 @@ func validateParticipantRemovedMessage(t *testing.T, msg *message.Message, expec
 func validateParticipantRemovalError(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.ParticipantRemovalErrorPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.ParticipantRemovalErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant removal error message: %v", err)
 	}
@@ -161,43 +167,87 @@ func validateParticipantRemovalError(t *testing.T, msg *message.Message, expecte
 	}
 }
 
-func publishAndExpectParticipantRemoved(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantRemovalRequestPayload) {
+func publishAndExpectParticipantRemoved(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantRemovalRequestPayloadV1) {
 	publishParticipantRemovalRequest(t, deps, &payload)
 
-	if !waitForParticipantRemoved(capture, 1) {
-		t.Fatalf("Expected participant removed message")
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantRemovedMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.ParticipantRemovedPayloadV1](msg)
+			if err == nil && parsed.RoundID == payload.RoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantRemovedMessages(capture)
-	validateParticipantRemovedMessage(t, msgs[0], payload.RoundID, payload.UserID)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant removed message for round %s", payload.RoundID)
+	}
+
+	validateParticipantRemovedMessage(t, foundMsg, payload.RoundID, payload.UserID)
 }
 
-func publishAndExpectRemovalError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantRemovalRequestPayload, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
+func publishAndExpectRemovalError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantRemovalRequestPayloadV1, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	publishParticipantRemovalRequest(t, deps, &payload)
 
-	if !waitForParticipantRemovalError(capture, 1) {
-		t.Fatalf("Expected participant removal error message")
+	// Wait up to 1 second for the specific message for THIS round
+	deadline := time.Now().Add(1 * time.Second)
+	var foundMsg *message.Message
+	for time.Now().Before(deadline) {
+		msgs := getParticipantRemovalErrorMessages(capture)
+		// Find the message matching THIS test's round ID
+		for _, msg := range msgs {
+			parsed, err := testutils.ParsePayload[roundevents.ParticipantRemovalErrorPayloadV1](msg)
+			if err == nil && parsed.RoundID == expectedRoundID {
+				foundMsg = msg
+				break
+			}
+		}
+		if foundMsg != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	msgs := getParticipantRemovalErrorMessages(capture)
-	validateParticipantRemovalError(t, msgs[0], expectedRoundID, expectedUserID)
+	if foundMsg == nil {
+		t.Fatalf("Expected participant removal error message for round %s", expectedRoundID)
+	}
+
+	validateParticipantRemovalError(t, foundMsg, expectedRoundID, expectedUserID)
 }
 
 func publishInvalidJSONAndExpectNoRemovalMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
+	// Count messages BEFORE
+	removedMsgsBefore := len(getParticipantRemovedMessages(capture))
+	errorMsgsBefore := len(getParticipantRemovalErrorMessages(capture))
+
 	msg := message.NewMessage(uuid.New().String(), []byte("not valid json"))
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantRemovalRequest, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantRemovalRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 
-	removedMsgs := getParticipantRemovedMessages(capture)
-	errorMsgs := getParticipantRemovalErrorMessages(capture)
+	// Count messages AFTER
+	removedMsgsAfter := len(getParticipantRemovedMessages(capture))
+	errorMsgsAfter := len(getParticipantRemovalErrorMessages(capture))
 
-	if len(removedMsgs) > 0 || len(errorMsgs) > 0 {
-		t.Errorf("Expected no messages for invalid JSON, got %d removed msgs and %d error msgs",
-			len(removedMsgs), len(errorMsgs))
+	newRemovedMsgs := removedMsgsAfter - removedMsgsBefore
+	newErrorMsgs := errorMsgsAfter - errorMsgsBefore
+
+	if newRemovedMsgs > 0 || newErrorMsgs > 0 {
+		t.Errorf("Expected no NEW messages for invalid JSON, got %d new removed msgs and %d new error msgs",
+			newRemovedMsgs, newErrorMsgs)
 	}
 }

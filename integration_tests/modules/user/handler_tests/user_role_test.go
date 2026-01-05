@@ -42,11 +42,11 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create the payload for the role update request
-				payload := userevents.UserRoleUpdateRequestPayload{
-					GuildID:     "test-guild",
-					UserID:      "user-to-update-role",
+				payload := userevents.UserRoleUpdateRequestedPayloadV1{
+					GuildID:     sharedtypes.GuildID("test-guild"),
+					UserID:      sharedtypes.DiscordID("user-to-update-role"),
 					Role:        sharedtypes.UserRoleAdmin,
-					RequesterID: "requester-123",
+					RequesterID: sharedtypes.DiscordID("requester-123"),
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -57,20 +57,20 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// Validate the received messages on the success topic
-				msgs := receivedMsgs[userevents.DiscordUserRoleUpdated]
+				msgs := receivedMsgs[userevents.UserRoleUpdatedV1]
 				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.DiscordUserRoleUpdated, len(msgs))
+					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.UserRoleUpdatedV1, len(msgs))
 				}
 
 				resultMsg := msgs[0]
-				var payload userevents.UserRoleUpdateResultPayload
+				var payload userevents.UserRoleUpdateResultPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(resultMsg, &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -85,8 +85,8 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				if !payload.Success {
 					t.Errorf("Expected Success to be true, got false")
 				}
-				if payload.Error != "" {
-					t.Errorf("Expected Error to be empty, got %q", payload.Error)
+				if payload.Reason != "" {
+					t.Errorf("Expected Reason to be empty, got %q", payload.Reason)
 				}
 
 				// Assert Correlation ID
@@ -94,7 +94,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Errorf("Correlation ID mismatch")
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdated},
+			expectedOutgoingTopics: []string{userevents.UserRoleUpdatedV1},
 			timeout:                5 * time.Second,
 		},
 		{
@@ -105,11 +105,11 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create payload with an invalid role string
-				payload := userevents.UserRoleUpdateRequestPayload{
-					GuildID:     "test-guild",
-					UserID:      "any-user-id",
+				payload := userevents.UserRoleUpdateRequestedPayloadV1{
+					GuildID:     sharedtypes.GuildID("test-guild"),
+					UserID:      sharedtypes.DiscordID("any-user-id"),
 					Role:        "invalid-role", // This will cause the failure
-					RequesterID: "requester-456",
+					RequesterID: sharedtypes.DiscordID("requester-456"),
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -120,20 +120,20 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// Validate the received messages on the failure topic
-				msgs := receivedMsgs[userevents.DiscordUserRoleUpdateFailed]
+				msgs := receivedMsgs[userevents.UserRoleUpdateFailedV1]
 				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.DiscordUserRoleUpdateFailed, len(msgs))
+					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.UserRoleUpdateFailedV1, len(msgs))
 				}
 
 				resultMsg := msgs[0]
-				var payload userevents.UserRoleUpdateResultPayload
+				var payload userevents.UserRoleUpdateResultPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(resultMsg, &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -148,8 +148,8 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				if payload.Success {
 					t.Errorf("Expected Success to be false, got true")
 				}
-				if payload.Error != "invalid role" { // Assuming this is the expected error message from the handler
-					t.Errorf("Expected Error 'invalid role', got %q", payload.Error)
+				if payload.Reason != "invalid role" { // Assuming this is the expected reason message from the handler
+					t.Errorf("Expected Reason 'invalid role', got %q", payload.Reason)
 				}
 
 				// Assert Correlation ID
@@ -157,7 +157,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Errorf("Correlation ID mismatch")
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdateFailed},
+			expectedOutgoingTopics: []string{userevents.UserRoleUpdateFailedV1},
 			timeout:                5 * time.Second,
 		},
 		{
@@ -169,11 +169,11 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create payload for a non-existent user
-				payload := userevents.UserRoleUpdateRequestPayload{
-					GuildID:     "test-guild",
-					UserID:      "non-existent-user-for-role-update",
+				payload := userevents.UserRoleUpdateRequestedPayloadV1{
+					GuildID:     sharedtypes.GuildID("test-guild"),
+					UserID:      sharedtypes.DiscordID("non-existent-user-for-role-update"),
 					Role:        sharedtypes.UserRoleAdmin,
-					RequesterID: "requester-789",
+					RequesterID: sharedtypes.DiscordID("requester-789"),
 				}
 				data, err := json.Marshal(payload)
 				if err != nil {
@@ -184,20 +184,20 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserRoleUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// Validate the received messages on the failure topic
-				msgs := receivedMsgs[userevents.DiscordUserRoleUpdateFailed]
+				msgs := receivedMsgs[userevents.UserRoleUpdateFailedV1]
 				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.DiscordUserRoleUpdateFailed, len(msgs))
+					t.Fatalf("Expected 1 message on topic %s, got %d", userevents.UserRoleUpdateFailedV1, len(msgs))
 				}
 
 				resultMsg := msgs[0]
-				var payload userevents.UserRoleUpdateResultPayload
+				var payload userevents.UserRoleUpdateResultPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(resultMsg, &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -212,8 +212,8 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 				if payload.Success {
 					t.Errorf("Expected Success to be false, got true")
 				}
-				if payload.Error != "user not found" { // Assuming this is the expected error message from the handler
-					t.Errorf("Expected Error 'user not found', got %q", payload.Error)
+				if payload.Reason != "user not found" { // Assuming this is the expected reason message from the handler
+					t.Errorf("Expected Reason 'user not found', got %q", payload.Reason)
 				}
 
 				// Assert Correlation ID
@@ -221,7 +221,7 @@ func TestHandleUserRoleUpdateRequest(t *testing.T) {
 					t.Errorf("Correlation ID mismatch")
 				}
 			},
-			expectedOutgoingTopics: []string{userevents.DiscordUserRoleUpdateFailed},
+			expectedOutgoingTopics: []string{userevents.UserRoleUpdateFailedV1},
 			timeout:                5 * time.Second,
 		},
 	}

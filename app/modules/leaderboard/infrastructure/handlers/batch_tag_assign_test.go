@@ -33,10 +33,10 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 	testTagNumber1 := sharedtypes.TagNumber(1)
 	testTagNumber2 := sharedtypes.TagNumber(2)
 
-	testPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
+	testPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
 		RequestingUserID: testRequestingUserID,
 		BatchID:          testBatchID,
-		Assignments: []sharedevents.TagAssignmentInfo{
+		Assignments: []sharedevents.TagAssignmentInfoV1{
 			{
 				UserID:    testUserID1,
 				TagNumber: testTagNumber1,
@@ -74,7 +74,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						// Set metadata to trigger scheduled rounds update path
 						if msg.Metadata == nil {
 							msg.Metadata = make(message.Metadata)
@@ -107,11 +107,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					batchID,                 // batchID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.BatchTagAssignedPayload{
+						Success: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
 							AssignmentCount:  2,
-							Assignments: []leaderboardevents.TagAssignmentInfo{
+							Assignments: []leaderboardevents.TagAssignmentInfoV1{
 								{UserID: testUserID1, TagNumber: testTagNumber1},
 								{UserID: testUserID2, TagNumber: testTagNumber2},
 							},
@@ -120,11 +120,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					nil,
 				)
 
-				successResultPayload := &leaderboardevents.BatchTagAssignedPayload{
+				successResultPayload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
 					AssignmentCount:  2,
-					Assignments: []leaderboardevents.TagAssignmentInfo{
+					Assignments: []leaderboardevents.TagAssignmentInfoV1{
 						{UserID: testUserID1, TagNumber: testTagNumber1},
 						{UserID: testUserID2, TagNumber: testTagNumber2},
 					},
@@ -133,14 +133,14 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					leaderboardevents.LeaderboardBatchTagAssigned, // Fixed: Use correct event constant
+					leaderboardevents.LeaderboardBatchTagAssignedV1, // Fixed: Use correct event constant
 				).Return(testMsg, nil)
 
 				// Expect the tag update message for scheduled rounds
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // The tag update payload (map[string]interface{})
-					sharedevents.TagUpdateForScheduledRounds,
+					sharedevents.TagUpdateForScheduledRoundsV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -160,10 +160,10 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Invalid batch ID format",
 			mockSetup: func() {
-				invalidPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
+				invalidPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          "invalid-uuid",
-					Assignments: []sharedevents.TagAssignmentInfo{
+					Assignments: []sharedevents.TagAssignmentInfoV1{
 						{
 							UserID:    testUserID1,
 							TagNumber: testTagNumber1,
@@ -173,7 +173,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *invalidPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *invalidPayload
 						return nil
 					},
 				)
@@ -188,7 +188,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -228,7 +228,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -255,11 +255,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					batchID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.BatchTagAssignedPayload{
+						Success: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
 							AssignmentCount:  2,
-							Assignments: []leaderboardevents.TagAssignmentInfo{
+							Assignments: []leaderboardevents.TagAssignmentInfoV1{
 								{UserID: testUserID1, TagNumber: testTagNumber1},
 								{UserID: testUserID2, TagNumber: testTagNumber2},
 							},
@@ -268,11 +268,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					nil,
 				)
 
-				successResultPayload := &leaderboardevents.BatchTagAssignedPayload{
+				successResultPayload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
 					AssignmentCount:  2,
-					Assignments: []leaderboardevents.TagAssignmentInfo{
+					Assignments: []leaderboardevents.TagAssignmentInfoV1{
 						{UserID: testUserID1, TagNumber: testTagNumber1},
 						{UserID: testUserID2, TagNumber: testTagNumber2},
 					},
@@ -281,7 +281,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					leaderboardevents.LeaderboardBatchTagAssigned,
+					leaderboardevents.LeaderboardBatchTagAssignedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -294,7 +294,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -321,7 +321,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					batchID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.BatchTagAssignmentFailedPayload{
+						Failure: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
 							Reason:           "custom service error",
@@ -330,7 +330,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					nil,
 				)
 
-				failurePayload := &leaderboardevents.BatchTagAssignmentFailedPayload{
+				failurePayload := &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
 					Reason:           "custom service error",
@@ -339,7 +339,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+					leaderboardevents.LeaderboardBatchTagAssignmentFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -351,7 +351,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -378,7 +378,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					batchID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.BatchTagAssignmentFailedPayload{
+						Failure: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
 							Reason:           "internal service error",
@@ -387,7 +387,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					nil,
 				)
 
-				failurePayload := &leaderboardevents.BatchTagAssignmentFailedPayload{
+				failurePayload := &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
 					Reason:           "internal service error",
@@ -396,7 +396,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+					leaderboardevents.LeaderboardBatchTagAssignmentFailedV1,
 				).Return(nil, fmt.Errorf("failed to create failure message"))
 			},
 			msg:            testMsg,
@@ -409,7 +409,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *testPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -447,15 +447,15 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Empty assignments batch",
 			mockSetup: func() {
-				emptyPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
+				emptyPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
-					Assignments:      []sharedevents.TagAssignmentInfo{},
+					Assignments:      []sharedevents.TagAssignmentInfoV1{},
 				}
 
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*sharedevents.BatchTagAssignmentRequestedPayload) = *emptyPayload
+						*out.(*sharedevents.BatchTagAssignmentRequestedPayloadV1) = *emptyPayload
 						if msg.Metadata == nil {
 							msg.Metadata = make(message.Metadata)
 						}
@@ -478,34 +478,34 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					batchID,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.BatchTagAssignedPayload{
+						Success: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 							RequestingUserID: testRequestingUserID,
 							BatchID:          testBatchID,
 							AssignmentCount:  0,
-							Assignments:      []leaderboardevents.TagAssignmentInfo{},
+							Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
 						},
 					},
 					nil,
 				)
 
-				successResultPayload := &leaderboardevents.BatchTagAssignedPayload{
+				successResultPayload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 					RequestingUserID: testRequestingUserID,
 					BatchID:          testBatchID,
 					AssignmentCount:  0,
-					Assignments:      []leaderboardevents.TagAssignmentInfo{},
+					Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successResultPayload,
-					leaderboardevents.LeaderboardBatchTagAssigned,
+					leaderboardevents.LeaderboardBatchTagAssignedV1,
 				).Return(testMsg, nil)
 
 				// Expect the tag update message for scheduled rounds
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // The tag update payload (map[string]interface{})
-					sharedevents.TagUpdateForScheduledRounds,
+					sharedevents.TagUpdateForScheduledRoundsV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

@@ -16,29 +16,30 @@ import (
 func TestFinalizeRound(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful finalization of an existing round",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_finalize_1"),
 					Title:     "Round to be finalized",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				roundForDBInsertion.GuildID = "test-guild"
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDBInsertion.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
+				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayloadV1{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
-					GuildID:   "test-guild",
+					GuildID:   guildID,
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
@@ -46,14 +47,14 @@ func TestFinalizeRound(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
-				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
+				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizedPayload, got %T. Value: %#v", returnedResult.Success, returnedResult.Success)
 					return
 				}
 
 				// Verify the round's state is FINALIZED in the DB
-				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", finalizedPayload.RoundID)
+				persistedRound, err := deps.DB.GetRound(ctx, sharedtypes.GuildID("test-guild"), finalizedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after finalization: %v", err)
 				}
@@ -72,7 +73,7 @@ func TestFinalizeRound(t *testing.T) {
 		},
 		{
 			name: "Attempt to finalize a non-existent round",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1) {
 				nonExistentID := sharedtypes.RoundID(uuid.New())
 				generator := testutils.NewTestDataGenerator()
 				dummyRound := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -80,7 +81,8 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Dummy Round",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				return nonExistentID, &roundevents.AllScoresSubmittedPayload{
+				return nonExistentID, &roundevents.AllScoresSubmittedPayloadV1{
+					GuildID:   sharedtypes.GuildID("test-guild"),
 					RoundID:   nonExistentID,
 					RoundData: dummyRound,
 				}
@@ -95,7 +97,7 @@ func TestFinalizeRound(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -107,14 +109,15 @@ func TestFinalizeRound(t *testing.T) {
 		},
 		{
 			name: "Finalization with nil UUID payload",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				dummyRound := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("dummy_user"),
 					Title:     "Dummy Round",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				return sharedtypes.RoundID(uuid.Nil), &roundevents.AllScoresSubmittedPayload{
+				return sharedtypes.RoundID(uuid.Nil), &roundevents.AllScoresSubmittedPayloadV1{
+					GuildID:   sharedtypes.GuildID("test-guild"),
 					RoundID:   sharedtypes.RoundID(uuid.Nil),
 					RoundData: dummyRound,
 				}
@@ -129,7 +132,7 @@ func TestFinalizeRound(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -141,25 +144,26 @@ func TestFinalizeRound(t *testing.T) {
 		},
 		{
 			name: "Round finalization with database update success but fetch failure",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_finalize_fetch_fail"),
 					Title:     "Round for fetch failure test",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				roundForDBInsertion.GuildID = "test-guild"
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDBInsertion.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
 				// In integration tests, we cannot simulate a fetch failure after update without a mock.
 				// This test expects normal operation and a successful result.
-				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayload{
+				return roundForDBInsertion.ID, &roundevents.AllScoresSubmittedPayloadV1{
 					RoundID:   roundForDBInsertion.ID,
 					RoundData: roundForDBInsertion,
-					GuildID:   "test-guild",
+					GuildID:   guildID,
 				}
 			},
 			expectedFailure: false,
@@ -167,14 +171,14 @@ func TestFinalizeRound(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayload)
+				finalizedPayload, ok := returnedResult.Success.(*roundevents.RoundFinalizedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizedPayload, got %T", returnedResult.Success)
 					return
 				}
 
 				// Verify the round's state is FINALIZED in the DB
-				persistedRound, err := deps.DB.GetRound(ctx, "test-guild", finalizedPayload.RoundID)
+				persistedRound, err := deps.DB.GetRound(ctx, sharedtypes.GuildID("test-guild"), finalizedPayload.RoundID)
 				if err != nil {
 					t.Fatalf("Failed to fetch round from DB after finalization: %v", err)
 				}
@@ -189,7 +193,7 @@ func TestFinalizeRound(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload *roundevents.AllScoresSubmittedPayload
+			var payload *roundevents.AllScoresSubmittedPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
@@ -199,7 +203,8 @@ func TestFinalizeRound(t *testing.T) {
 					Title:     "Default Round",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				payload = &roundevents.AllScoresSubmittedPayload{
+				payload = &roundevents.AllScoresSubmittedPayloadV1{
+					GuildID:   sharedtypes.GuildID("test-guild"),
 					RoundID:   sharedtypes.RoundID(uuid.New()),
 					RoundData: dummyRound,
 				}
@@ -217,7 +222,7 @@ func TestFinalizeRound(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
@@ -240,14 +245,14 @@ func TestFinalizeRound(t *testing.T) {
 func TestNotifyScoreModule(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1)
 		expectedFailure          bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful notification with participants having scores and tag numbers",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
 				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -255,7 +260,9 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round for score notification",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDB.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -278,7 +285,8 @@ func TestNotifyScoreModule(t *testing.T) {
 				roundForDB.AddParticipant(participant1)
 				roundForDB.AddParticipant(participant2)
 
-				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+				return roundForDB.ID, &roundevents.RoundFinalizedPayloadV1{
+					GuildID:   guildID,
 					RoundID:   roundForDB.ID,
 					RoundData: roundForDB,
 				}
@@ -288,7 +296,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
@@ -331,7 +339,7 @@ func TestNotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "Failure notification with participants having nil scores",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
 				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -339,7 +347,9 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with nil scores",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDB.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -362,7 +372,8 @@ func TestNotifyScoreModule(t *testing.T) {
 				roundForDB.AddParticipant(participant1)
 				roundForDB.AddParticipant(participant2)
 
-				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+				return roundForDB.ID, &roundevents.RoundFinalizedPayloadV1{
+					GuildID:   guildID,
 					RoundID:   roundForDB.ID,
 					RoundData: roundForDB,
 				}
@@ -373,7 +384,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -386,7 +397,7 @@ func TestNotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "Failure notification with empty participants list",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
 				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -394,12 +405,15 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with no participants",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDB.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
 
-				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+				return roundForDB.ID, &roundevents.RoundFinalizedPayloadV1{
+					GuildID:   guildID,
 					RoundID:   roundForDB.ID,
 					RoundData: roundForDB, // Empty participants from generator
 				}
@@ -410,7 +424,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -423,7 +437,7 @@ func TestNotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "Notification with mixed participant data - only includes participants with scores",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1) {
 				// Create a round in the database first
 				generator := testutils.NewTestDataGenerator()
 				roundForDB := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -431,7 +445,9 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Round with mixed participant data",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDB)
+				guildID := sharedtypes.GuildID("test-guild")
+				roundForDB.GuildID = guildID
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDB)
 				if err != nil {
 					t.Fatalf("Failed to create round for test: %v", err)
 				}
@@ -461,7 +477,8 @@ func TestNotifyScoreModule(t *testing.T) {
 				roundForDB.AddParticipant(participant2)
 				roundForDB.AddParticipant(participant3)
 
-				return roundForDB.ID, &roundevents.RoundFinalizedPayload{
+				return roundForDB.ID, &roundevents.RoundFinalizedPayloadV1{
+					GuildID:   guildID,
 					RoundID:   roundForDB.ID,
 					RoundData: roundForDB,
 				}
@@ -471,7 +488,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayload)
+				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
@@ -483,7 +500,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				}
 
 				// Create a map to verify specific user data
-				scoresByUser := make(map[sharedtypes.DiscordID]roundevents.ParticipantScore)
+				scoresByUser := make(map[sharedtypes.DiscordID]roundevents.ParticipantScoreV1)
 				for _, score := range processScoresPayload.Scores {
 					scoresByUser[score.UserID] = score
 				}
@@ -524,7 +541,7 @@ func TestNotifyScoreModule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload *roundevents.RoundFinalizedPayload
+			var payload *roundevents.RoundFinalizedPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
@@ -534,7 +551,8 @@ func TestNotifyScoreModule(t *testing.T) {
 					Title:     "Default Round",
 					State:     roundtypes.RoundStateFinalized,
 				})
-				payload = &roundevents.RoundFinalizedPayload{
+				payload = &roundevents.RoundFinalizedPayloadV1{
+					GuildID:   sharedtypes.GuildID("test-guild"),
 					RoundID:   sharedtypes.RoundID(uuid.New()),
 					RoundData: defaultRound,
 				}
@@ -552,7 +570,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundFinalizationErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {

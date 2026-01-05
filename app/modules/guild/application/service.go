@@ -58,7 +58,12 @@ func serviceWrapper(ctx context.Context, operationName string, guildID sharedtyp
 	}
 
 	if serviceFunc == nil {
-		return GuildOperationResult{}, errors.New("service function is nil")
+		err := errors.New("service function is nil")
+		return GuildOperationResult{
+			Success: nil,
+			Failure: nil,
+			Error:   err,
+		}, err
 	}
 
 	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
