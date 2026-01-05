@@ -11,7 +11,7 @@ import (
 
 // ProcessRoundReminder handles the reminder event when it's triggered from the delayed queue
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (RoundOperationResult, error) {
+func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ProcessRoundReminder", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round reminder",
 			attr.RoundID("round_id", payload.RoundID),
@@ -31,7 +31,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetParticipants")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -61,7 +61,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 		}
 
 		// Create the Discord notification payload with filtered participants
-		discordPayload := &roundevents.DiscordReminderPayload{
+		discordPayload := &roundevents.DiscordReminderPayloadV1{
 			GuildID:          payload.GuildID,
 			RoundID:          payload.RoundID,
 			RoundTitle:       payload.RoundTitle,

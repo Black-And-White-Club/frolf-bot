@@ -66,11 +66,11 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 				)
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
-						Success: &userevents.UDiscMatchConfirmationRequiredPayload{
+						Success: &userevents.UDiscMatchConfirmationRequiredPayloadV1{
 							ImportID: testImportID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserUDiscMatchConfirmationRequired).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscMatchConfirmationRequiredV1).
 					Return(message.NewMessage("out-id", []byte{}), nil)
 			},
 			want:    []*message.Message{message.NewMessage("out-id", []byte{})},
@@ -92,11 +92,11 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 				)
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
-						Success: &userevents.UDiscMatchConfirmedPayload{
+						Success: &userevents.UDiscMatchConfirmedPayloadV1{
 							ImportID: testImportID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserUDiscMatchConfirmed).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscMatchConfirmedV1).
 					Return(message.NewMessage("out-id", []byte{}), nil)
 			},
 			want:    []*message.Message{message.NewMessage("out-id", []byte{})},
@@ -179,11 +179,11 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 				)
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
-						Success: &userevents.UDiscMatchConfirmationRequiredPayload{
+						Success: &userevents.UDiscMatchConfirmationRequiredPayloadV1{
 							ImportID: testImportID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserUDiscMatchConfirmationRequired).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscMatchConfirmationRequiredV1).
 					Return(nil, errors.New("create message error"))
 			},
 			wantErr: true,
@@ -204,11 +204,11 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 				)
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
 					Return(userservice.UserOperationResult{
-						Success: &userevents.UDiscMatchConfirmedPayload{
+						Success: &userevents.UDiscMatchConfirmedPayloadV1{
 							ImportID: testImportID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UserUDiscMatchConfirmed).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscMatchConfirmedV1).
 					Return(nil, errors.New("create message error"))
 			},
 			wantErr: true,

@@ -76,7 +76,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(ctx context.Co
 }
 
 // UpdateScheduledRoundsWithNewTags updates ALL upcoming rounds that have affected participants
-func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (RoundOperationResult, error) {
+func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (RoundOperationResult, error) {
 	// Use RoundID(uuid.Nil) for serviceWrapper, but propagate GuildID everywhere else
 	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
 		if payload.GuildID == "" {
@@ -85,10 +85,10 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		if len(payload.ChangedTags) == 0 {
 			s.logger.InfoContext(ctx, "No tag changes received - operation completed")
 			return RoundOperationResult{
-				Success: &roundevents.TagsUpdatedForScheduledRoundsPayload{
+				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 					GuildID:       payload.GuildID,
-					UpdatedRounds: []roundevents.RoundUpdateInfo{},
-					Summary: roundevents.UpdateSummary{
+					UpdatedRounds: []roundevents.RoundUpdateInfoV1{},
+					Summary: roundevents.UpdateSummaryV1{
 						TotalRoundsProcessed: 0,
 						RoundsUpdated:        0,
 						ParticipantsUpdated:  0,
@@ -101,7 +101,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		allUpcomingRounds, err := s.RoundDB.GetUpcomingRounds(ctx, payload.GuildID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: payload.GuildID,
 					Error:   fmt.Sprintf("failed to get upcoming rounds: %v", err),
 				},
@@ -118,10 +118,10 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 				attr.Int("changed_tags_count", len(payload.ChangedTags)),
 			)
 			return RoundOperationResult{
-				Success: &roundevents.TagsUpdatedForScheduledRoundsPayload{
+				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 					GuildID:       payload.GuildID,
-					UpdatedRounds: []roundevents.RoundUpdateInfo{},
-					Summary: roundevents.UpdateSummary{
+					UpdatedRounds: []roundevents.RoundUpdateInfoV1{},
+					Summary: roundevents.UpdateSummaryV1{
 						TotalRoundsProcessed: totalUpcomingRounds,
 						RoundsUpdated:        0,
 						ParticipantsUpdated:  0,
@@ -134,7 +134,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update rounds in database", attr.Error(err))
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: payload.GuildID,
 					Error:   fmt.Sprintf("database update failed: %v", err),
 				},
@@ -142,7 +142,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 		}
 
 		// Build response payload with detailed information for Discord
-		updatedRounds := make([]roundevents.RoundUpdateInfo, len(updates))
+		updatedRounds := make([]roundevents.RoundUpdateInfoV1, len(updates))
 		totalParticipantsUpdated := 0
 
 		for i, update := range updates {
@@ -155,7 +155,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			}
 			totalParticipantsUpdated += participantsWithChanges
 
-			updatedRounds[i] = roundevents.RoundUpdateInfo{
+			updatedRounds[i] = roundevents.RoundUpdateInfoV1{
 				// BUGFIX: GuildID was previously omitted, causing downstream Discord tag update logic
 				// to fail resolving guild configuration (empty guild ID) and silently skip updates.
 				GuildID:             payload.GuildID,
@@ -169,10 +169,10 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			}
 		}
 
-		successPayload := &roundevents.TagsUpdatedForScheduledRoundsPayload{
+		successPayload := &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 			GuildID:       payload.GuildID,
 			UpdatedRounds: updatedRounds,
-			Summary: roundevents.UpdateSummary{
+			Summary: roundevents.UpdateSummaryV1{
 				TotalRoundsProcessed: totalUpcomingRounds,
 				RoundsUpdated:        len(updates),
 				ParticipantsUpdated:  totalParticipantsUpdated,

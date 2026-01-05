@@ -101,7 +101,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
 			// Return UserOperationResult with standardized failure
 			return UserOperationResult{
-				Failure: &userevents.UserCreationFailedPayload{
+				Failure: &userevents.UserCreationFailedPayloadV1{
 					GuildID:   guildID,
 					UserID:    userID,
 					TagNumber: tag,
@@ -115,7 +115,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
 
 		return UserOperationResult{
-			Success: &userevents.UserCreatedPayload{
+			Success: &userevents.UserCreatedPayloadV1{
 				GuildID:   guildID,
 				UserID:    userID,
 				TagNumber: tag,
@@ -152,7 +152,7 @@ func translateDBError(err error) error {
 func createFailureResult(guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) UserOperationResult {
 	return UserOperationResult{
 		Success: nil,
-		Failure: &userevents.UserCreationFailedPayload{
+		Failure: &userevents.UserCreationFailedPayloadV1{
 			GuildID:   guildID,
 			UserID:    userID,
 			TagNumber: tag,

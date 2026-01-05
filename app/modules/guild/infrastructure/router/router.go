@@ -68,14 +68,23 @@ func (r *GuildRouter) Configure(routerCtx context.Context, guildService guildser
 	return nil
 }
 
-// RegisterHandlers registers event handlers.
+// RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandlers.Handlers) error {
 	eventsToHandlers := map[string]message.HandlerFunc{
-		guildevents.GuildConfigCreationRequested:  handlers.HandleCreateGuildConfig,
-		guildevents.GuildConfigRetrievalRequested: handlers.HandleRetrieveGuildConfig,
-		guildevents.GuildConfigUpdateRequested:    handlers.HandleUpdateGuildConfig,
-		guildevents.GuildConfigDeletionRequested:  handlers.HandleDeleteGuildConfig,
-		"guild.setup":                             handlers.HandleGuildSetup,
+		// Guild Config Creation Flow (from config.go)
+		guildevents.GuildConfigCreationRequestedV1: handlers.HandleCreateGuildConfig,
+
+		// Guild Config Retrieval Flow (from config.go)
+		guildevents.GuildConfigRetrievalRequestedV1: handlers.HandleRetrieveGuildConfig,
+
+		// Guild Config Update Flow (from config.go)
+		guildevents.GuildConfigUpdateRequestedV1: handlers.HandleUpdateGuildConfig,
+
+		// Guild Config Deletion Flow (from config.go)
+		guildevents.GuildConfigDeletionRequestedV1: handlers.HandleDeleteGuildConfig,
+
+		// Guild Setup Flow (from config.go)
+		guildevents.GuildSetupRequestedV1: handlers.HandleGuildSetup,
 	}
 
 	for topic, handlerFunc := range eventsToHandlers {

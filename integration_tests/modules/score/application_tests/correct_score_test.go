@@ -120,14 +120,14 @@ func TestCorrectScore(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
 				} else {
-					failurePayload, ok := result.Failure.(*scoreevents.ScoreUpdateFailurePayload)
+					failurePayload, ok := result.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
 					if !ok {
 						t.Errorf("Expected *ScoreUpdateFailurePayload, got %T", result.Failure)
 					} else {
 						// Get the expected error string by calling the function
 						expectedErrStr := tc.expectedFailureError(roundID)
-						if failurePayload.Error != expectedErrStr {
-							t.Errorf("Mismatched failure error message, got: %q, expected: %q", failurePayload.Error, expectedErrStr)
+						if failurePayload.Reason != expectedErrStr {
+							t.Errorf("Mismatched failure reason message, got: %q, expected: %q", failurePayload.Reason, expectedErrStr)
 						}
 					}
 				}
@@ -139,7 +139,7 @@ func TestCorrectScore(t *testing.T) {
 				t.Fatalf("CorrectScore returned unexpected error: %v", err)
 			}
 
-			successPayload, ok := result.Success.(*scoreevents.ScoreUpdateSuccessPayload)
+			successPayload, ok := result.Success.(*scoreevents.ScoreUpdatedPayloadV1)
 			if !ok {
 				t.Fatalf("Expected *ScoreUpdateSuccessPayload, got %T", result.Success)
 			}

@@ -113,7 +113,7 @@ func TestUDiscIntegration(t *testing.T) {
 			t.Fatalf("MatchParsedScorecard failed: %v", err)
 		}
 
-		matchPayload, ok := result.Success.(*userevents.UDiscMatchConfirmedPayload)
+		matchPayload, ok := result.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
 		if !ok {
 			t.Fatalf("Expected UDiscMatchConfirmedPayload, got %T", result.Success)
 		}

@@ -23,5 +23,4 @@ type LeaderboardDB interface {
 	AssignTag(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber, source string, requestUpdateID sharedtypes.RoundID, requestingUserID sharedtypes.DiscordID) (sharedtypes.RoundID, error)
 	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error)
 	CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (TagAvailabilityResult, error)
-	BatchAssignTags(ctx context.Context, guildID sharedtypes.GuildID, assignments []TagAssignment, source sharedtypes.ServiceUpdateSource, updateID sharedtypes.RoundID, userID sharedtypes.DiscordID) error
 }

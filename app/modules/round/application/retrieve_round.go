@@ -27,7 +27,7 @@ func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Error:   err.Error(),

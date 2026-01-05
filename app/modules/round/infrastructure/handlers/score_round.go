@@ -13,9 +13,9 @@ import (
 func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleScoreUpdateRequest",
-		&roundevents.ScoreUpdateRequestPayload{},
+		&roundevents.ScoreUpdateRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scoreUpdateRequestPayload := payload.(*roundevents.ScoreUpdateRequestPayload)
+			scoreUpdateRequestPayload := payload.(*roundevents.ScoreUpdateRequestPayloadV1)
 
 			// Safely log the score - handle nil case
 			scoreValue := "nil"
@@ -59,7 +59,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundScoreUpdateError,
+					roundevents.RoundScoreUpdateErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -72,11 +72,11 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(msg *message.Message) ([]*messa
 				h.logger.InfoContext(ctx, "Score update request validated", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish
-				validatedPayload := result.Success.(*roundevents.ScoreUpdateValidatedPayload)
+				validatedPayload := result.Success.(*roundevents.ScoreUpdateValidatedPayloadV1)
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					validatedPayload,
-					roundevents.RoundScoreUpdateValidated,
+					roundevents.RoundScoreUpdateValidatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -101,10 +101,10 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 	// Use the handlerWrapper for tracing, logging, and error handling
 	wrappedHandler := h.handlerWrapper( // Assuming h.handlerWrapper is defined
 		"HandleScoreUpdateValidated",
-		&roundevents.ScoreUpdateValidatedPayload{}, // Expecting this payload type
+		&roundevents.ScoreUpdateValidatedPayloadV1{}, // Expecting this payload type
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			// Assert the payload to the expected type
-			scoreUpdateValidatedPayload, ok := payload.(*roundevents.ScoreUpdateValidatedPayload)
+			scoreUpdateValidatedPayload, ok := payload.(*roundevents.ScoreUpdateValidatedPayloadV1)
 			if !ok {
 				// Log an error if the payload type is unexpected
 				h.logger.ErrorContext(ctx, "Invalid payload type for HandleScoreUpdateValidated",
@@ -150,9 +150,9 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 
 				// Create and return a failure message to be published
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,                               // Original message for context/metadata
-					result.Failure,                    // The failure payload from the service
-					roundevents.RoundScoreUpdateError, // The topic for score update failures
+					msg,                                  // Original message for context/metadata
+					result.Failure,                       // The failure payload from the service
+					roundevents.RoundScoreUpdateErrorV1, // The topic for score update failures
 				)
 				if errMsg != nil {
 					// Log and return error if message creation fails
@@ -172,12 +172,12 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 
 				// Create a success message to publish RoundParticipantScoreUpdated
 				// The Success field is expected to contain the payload for the next event
-				// Assuming Success is roundevents.ParticipantScoreUpdatedPayload (struct or pointer)
-				var updatedPayload roundevents.ParticipantScoreUpdatedPayload
+				// Assuming Success is roundevents.ParticipantScoreUpdatedPayloadV1 (struct or pointer)
+				var updatedPayload roundevents.ParticipantScoreUpdatedPayloadV1
 
-				if updatedPayloadPtr, isPtr := result.Success.(*roundevents.ParticipantScoreUpdatedPayload); isPtr && updatedPayloadPtr != nil {
+				if updatedPayloadPtr, isPtr := result.Success.(*roundevents.ParticipantScoreUpdatedPayloadV1); isPtr && updatedPayloadPtr != nil {
 					updatedPayload = *updatedPayloadPtr // Dereference if it's a non-nil pointer
-				} else if updatedPayloadVal, isVal := result.Success.(roundevents.ParticipantScoreUpdatedPayload); isVal {
+				} else if updatedPayloadVal, isVal := result.Success.(roundevents.ParticipantScoreUpdatedPayloadV1); isVal {
 					updatedPayload = updatedPayloadVal // Use the value directly
 				} else {
 					// Handle unexpected success payload type from UpdateParticipantScore
@@ -193,7 +193,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 				discordMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					&updatedPayload,
-					roundevents.RoundParticipantScoreUpdated, // Discord updates embed
+					roundevents.RoundParticipantScoreUpdatedV1, // Discord updates embed
 				)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to create discord message for participant score updated",
@@ -207,7 +207,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 				backendMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					&updatedPayload,
-					roundevents.RoundParticipantScoreUpdated, // Backend checks all scores
+					roundevents.RoundParticipantScoreUpdatedV1, // Backend checks all scores
 				)
 				if err != nil {
 					h.logger.ErrorContext(ctx, "Failed to create backend message for participant score updated",
@@ -219,8 +219,8 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 
 				h.logger.InfoContext(ctx, "Publishing parallel messages for score update",
 					attr.CorrelationIDFromMsg(msg),
-					attr.String("discord_topic", roundevents.RoundParticipantScoreUpdated),
-					attr.String("backend_topic", roundevents.RoundParticipantScoreUpdated),
+					attr.String("discord_topic", roundevents.RoundParticipantScoreUpdatedV1),
+					attr.String("backend_topic", roundevents.RoundParticipantScoreUpdatedV1),
 				)
 
 				// Return BOTH messages to be published simultaneously
@@ -243,9 +243,9 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(msg *message.Message) ([]*mes
 func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParticipantScoreUpdated",
-		&roundevents.ParticipantScoreUpdatedPayload{},
+		&roundevents.ParticipantScoreUpdatedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			participantScoreUpdatedPayload := payload.(*roundevents.ParticipantScoreUpdatedPayload)
+			participantScoreUpdatedPayload := payload.(*roundevents.ParticipantScoreUpdatedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParticipantScoreUpdated event",
 				attr.CorrelationIDFromMsg(msg),
@@ -275,7 +275,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError, // Or a more specific failure topic for check
+					roundevents.RoundErrorV1, // Or a more specific failure topic for check
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -285,7 +285,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 
 			// Based on the check result (Success payload), decide which event to publish
 			if result.Success != nil {
-				if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayload); ok {
+				if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayloadV1); ok {
 					// --- All scores submitted ---
 					h.logger.InfoContext(ctx, "All scores submitted, publishing RoundAllScoresSubmitted", attr.CorrelationIDFromMsg(msg))
 
@@ -294,7 +294,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 					allScoresSubmittedMsg, err := h.helpers.CreateResultMessage(
 						msg,
 						allScoresData,
-						roundevents.RoundAllScoresSubmitted,
+						roundevents.RoundAllScoresSubmittedV1,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create all scores submitted message: %w", err)
@@ -310,7 +310,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(msg *message.Message) ([]*
 					notAllScoresSubmittedMsg, err := h.helpers.CreateResultMessage(
 						msg,
 						notAllScoresData,
-						roundevents.RoundNotAllScoresSubmitted,
+						roundevents.RoundScoresPartiallySubmittedV1,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create not all scores submitted message: %w", err)

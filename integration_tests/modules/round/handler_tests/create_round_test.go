@@ -15,6 +15,8 @@ import (
 func createValidRequest(userID sharedtypes.DiscordID) testutils.RoundRequest {
 	return testutils.RoundRequest{
 		UserID:      userID,
+		GuildID:     "test-guild",
+		ChannelID:   "test-channel",
 		Title:       "Weekly Frolf Championship",
 		Description: "Join us for our weekly championship round!",
 		Location:    "Central Park Course",
@@ -27,6 +29,8 @@ func createValidRequest(userID sharedtypes.DiscordID) testutils.RoundRequest {
 func createMinimalRequest(userID sharedtypes.DiscordID) testutils.RoundRequest {
 	return testutils.RoundRequest{
 		UserID:      userID,
+		GuildID:     "test-guild",
+		ChannelID:   "test-channel",
 		Title:       "Quick Round",
 		Description: "Quick round for today",
 		Location:    "Local Course",
@@ -111,27 +115,11 @@ func expectValidationFailure(t *testing.T, helper *testutils.RoundTestHelper, or
 	}
 }
 
-// expectNoMessages validates that no messages were published (for JSON errors)
-// func expectNoMessages(t *testing.T, helper *testutils.RoundTestHelper, timeout time.Duration) {
-// 	t.Helper()
-// 	time.Sleep(timeout)
-
-// 	createdMsgs := helper.GetRoundCreatedMessages()
-// 	if len(createdMsgs) > 0 {
-// 		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreated, len(createdMsgs))
-// 	}
-
-// 	creationFailedMsgs := helper.GetRoundCreationFailedMessages()
-// 	if len(creationFailedMsgs) > 0 {
-// 		t.Errorf("Expected no '%s' messages, got %d", roundevents.RoundCreationFailed, len(creationFailedMsgs))
-// 	}
-// }
-
 // TestHandleCreateRoundRequest runs integration tests for the create round handler
 func TestHandleCreateRoundRequest(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -141,87 +129,124 @@ func TestHandleCreateRoundRequest(t *testing.T) {
 		{
 			name: "Success - Create Valid Round",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createValidRequest(userID)
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createValidRequest(data.UserID)
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectSuccess(t, helper, req, 3*time.Second)
+				expectSuccess(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Success - Create Round with Minimal Information",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createMinimalRequest(userID)
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createMinimalRequest(data.UserID)
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectSuccess(t, helper, req, 3*time.Second)
+				expectSuccess(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Failure - Empty Description",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "empty_description")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "empty_description")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Failure - Invalid Time Format",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "invalid_time")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "invalid_time")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Failure - Past Start Time",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "past_time")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "past_time")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Failure - Empty Title",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "empty_title")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "empty_title")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name: "Failure - Empty Location",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "empty_location")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "empty_location")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 		{
 			name:        "Failure - Invalid JSON Message",
 			expectError: true,
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundCreateRequest)
-				expectNoMessages(t, helper, 1*time.Second)
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				// Count messages before
+				createdMsgsBefore := len(helper.GetRoundEntityCreatedMessages())
+				failedMsgsBefore := len(helper.GetRoundValidationFailedMessages())
+
+				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundCreationRequestedV1)
+
+				// Wait a bit to ensure no messages are published
+				time.Sleep(300 * time.Millisecond)
+
+				createdMsgsAfter := len(helper.GetRoundEntityCreatedMessages())
+				failedMsgsAfter := len(helper.GetRoundValidationFailedMessages())
+
+				newCreatedMsgs := createdMsgsAfter - createdMsgsBefore
+				newFailedMsgs := failedMsgsAfter - failedMsgsBefore
+
+				if newCreatedMsgs > 0 {
+					t.Errorf("Expected no NEW round.entity.created messages, got %d new", newCreatedMsgs)
+				}
+
+				if newFailedMsgs > 0 {
+					t.Errorf("Expected no NEW validation failure messages, got %d new", newFailedMsgs)
+				}
 			},
 		},
 		{
 			name: "Failure - Missing Required Fields",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				req := createInvalidRequest(userID, "missing_fields")
+				PrepareSubTest(deps) // Clear message capture for test isolation
+				data := NewTestData()
+				req := createInvalidRequest(data.UserID, "missing_fields")
 				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 3*time.Second)
+				expectValidationFailure(t, helper, req, 500*time.Millisecond)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup - no need to clear messages between tests!
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
+			// Create helper for each subtest
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
 
-			// Clear any existing captured messages
-			helper.ClearMessages()
-
-			// Run the test
+			// Run the test - no cleanup needed!
 			tc.setupAndRun(t, helper)
 		})
 	}

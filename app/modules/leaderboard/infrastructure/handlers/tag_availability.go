@@ -19,7 +19,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagAvailabilityCheckRequested",
-		&leaderboardevents.TagAvailabilityCheckRequestedPayload{},
+		&leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			// DEBUG: Handler wrapper entry
 			fmt.Println("DEBUG: Inside handlerWrapper for TagAvailabilityCheckRequested")
@@ -30,7 +30,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				}
 			}()
 
-			tagAvailabilityCheckRequestedPayload := payload.(*leaderboardevents.TagAvailabilityCheckRequestedPayload)
+			tagAvailabilityCheckRequestedPayload := payload.(*leaderboardevents.TagAvailabilityCheckRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received TagAvailabilityCheckRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -75,7 +75,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					failure,
-					leaderboardevents.TagAvailableCheckFailure,
+					leaderboardevents.TagAvailabilityCheckFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -88,7 +88,6 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 			// Create success message to publish
 			if result.Available {
-				result.GuildID = tagAvailabilityCheckRequestedPayload.GuildID // Patch: propagate guild_id
 				h.logger.InfoContext(ctx, "Tag is available",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(result.UserID)),
@@ -99,10 +98,17 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				fmt.Println("DEBUG: Before CreateResultMessage for User", result)
 				h.logger.InfoContext(ctx, "DEBUG: Before CreateResultMessage for User", attr.Any("result", result))
 
+				availablePayload := &leaderboardevents.LeaderboardTagAvailablePayloadV1{
+					GuildID:      result.GuildID,
+					UserID:       result.UserID,
+					TagNumber:    result.TagNumber,
+					AssignmentID: uuid.New().String(),
+				}
+
 				createUser, err := h.Helpers.CreateResultMessage(
 					msg,
-					result,
-					leaderboardevents.TagAvailable,
+					availablePayload,
+					leaderboardevents.LeaderboardTagAvailableV1,
 				)
 
 				// DEBUG: After CreateResultMessage for User
@@ -120,19 +126,18 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 				assignTag, err := h.Helpers.CreateResultMessage(
 					msg,
-					&sharedevents.BatchTagAssignmentRequestedPayload{
-						// Ensure GuildID is propagated for downstream leaderboard processing
+					&sharedevents.BatchTagAssignmentRequestedPayloadV1{
 						ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: tagAvailabilityCheckRequestedPayload.GuildID},
-						RequestingUserID: "system", // User creation is system-initiated
+						RequestingUserID: "system",
 						BatchID:          uuid.New().String(),
-						Assignments: []sharedevents.TagAssignmentInfo{
+						Assignments: []sharedevents.TagAssignmentInfoV1{
 							{
 								UserID:    result.UserID,
 								TagNumber: *result.TagNumber,
 							},
 						},
 					},
-					sharedevents.LeaderboardBatchTagAssignmentRequested,
+					sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
 				)
 
 				// DEBUG: After CreateResultMessage for AssignTag
@@ -146,12 +151,11 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 				return []*message.Message{createUser, assignTag}, nil
 			} else {
-				// Patch: propagate guild_id in TagUnavailablePayload
-				tagUnavailable := &leaderboardevents.TagUnavailablePayload{
+				tagUnavailable := &leaderboardevents.LeaderboardTagUnavailablePayloadV1{
+					GuildID:   result.GuildID,
 					UserID:    result.UserID,
 					TagNumber: result.TagNumber,
 					Reason:    result.Reason,
-					GuildID:   tagAvailabilityCheckRequestedPayload.GuildID,
 				}
 				h.logger.InfoContext(ctx, "Tag is not available",
 					attr.CorrelationIDFromMsg(msg),
@@ -163,7 +167,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				tagNotAvailableMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					tagUnavailable,
-					leaderboardevents.TagUnavailable,
+					leaderboardevents.LeaderboardTagUnavailableV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create tag not available message: %w", err)

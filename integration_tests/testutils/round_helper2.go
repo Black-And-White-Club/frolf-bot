@@ -19,7 +19,7 @@ import (
 // Add these methods to your existing RoundTestHelper:
 
 // PublishParticipantJoinRequest publishes a ParticipantJoinRequest event and returns the message
-func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) *message.Message {
+func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -30,7 +30,7 @@ func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx contex
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -39,24 +39,24 @@ func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx contex
 
 // GetParticipantRemovalRequestMessages returns captured participant removal request messages
 func (h *RoundTestHelper) GetParticipantRemovalRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantRemovalRequest)
+	return h.capture.GetMessages(roundevents.RoundParticipantRemovalRequestedV1)
 }
 
 // GetParticipantJoinValidationRequestMessages returns captured participant join validation request messages
 func (h *RoundTestHelper) GetParticipantJoinValidationRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinValidationRequest)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinValidationRequestedV1)
 }
 
 // GetParticipantStatusCheckErrorMessages returns captured participant status check error messages
 func (h *RoundTestHelper) GetParticipantStatusCheckErrorMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantStatusCheckError)
+	return h.capture.GetMessages(roundevents.RoundParticipantStatusCheckErrorV1)
 }
 
 // ValidateParticipantRemovalRequest parses and validates a participant removal request message
-func (h *RoundTestHelper) ValidateParticipantRemovalRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantRemovalRequestPayload {
+func (h *RoundTestHelper) ValidateParticipantRemovalRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantRemovalRequestPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantRemovalRequestPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantRemovalRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant removal request message: %v", err)
 	}
@@ -73,10 +73,10 @@ func (h *RoundTestHelper) ValidateParticipantRemovalRequest(t *testing.T, msg *m
 }
 
 // ValidateParticipantJoinValidationRequest parses and validates a participant join validation request message
-func (h *RoundTestHelper) ValidateParticipantJoinValidationRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantJoinValidationRequestPayload {
+func (h *RoundTestHelper) ValidateParticipantJoinValidationRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantJoinValidationRequestPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantJoinValidationRequestPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantJoinValidationRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join validation request message: %v", err)
 	}
@@ -93,10 +93,10 @@ func (h *RoundTestHelper) ValidateParticipantJoinValidationRequest(t *testing.T,
 }
 
 // ValidateParticipantStatusCheckError parses and validates a participant status check error message
-func (h *RoundTestHelper) ValidateParticipantStatusCheckError(t *testing.T, msg *message.Message) *roundevents.ParticipantStatusCheckErrorPayload {
+func (h *RoundTestHelper) ValidateParticipantStatusCheckError(t *testing.T, msg *message.Message) *roundevents.ParticipantStatusCheckErrorPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantStatusCheckErrorPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantStatusCheckErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant status check error message: %v", err)
 	}
@@ -178,6 +178,7 @@ func (h *RoundTestHelper) CreateRoundWithParticipantInDB(t *testing.T, db bun.ID
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
@@ -216,6 +217,7 @@ func (h *RoundTestHelper) CreateRoundWithParticipantAndTagInDB(t *testing.T, db 
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
@@ -245,6 +247,7 @@ func (h *RoundTestHelper) CreateRoundInDB(t *testing.T, db bun.IDB, userID share
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
@@ -280,6 +283,7 @@ func (h *RoundTestHelper) CreateRoundInDBWithState(t *testing.T, db bun.IDB, use
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
@@ -373,29 +377,29 @@ func (h *RoundTestHelper) WaitForParticipantJoinValidationRequest(expectedCount 
 
 // WaitForParticipantStatusUpdateRequest waits for participant status update request messages
 func (h *RoundTestHelper) WaitForParticipantStatusUpdateRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantStatusUpdateRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantStatusUpdateRequestedV1, expectedCount, timeout)
 }
 
 // WaitForParticipantJoinValidationError waits for participant join validation error messages
 func (h *RoundTestHelper) WaitForParticipantJoinValidationError(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinError, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinErrorV1, expectedCount, timeout)
 }
 
 // GetParticipantStatusUpdateRequestMessages returns captured participant status update request messages
 func (h *RoundTestHelper) GetParticipantStatusUpdateRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantStatusUpdateRequest)
+	return h.capture.GetMessages(roundevents.RoundParticipantStatusUpdateRequestedV1)
 }
 
 // GetParticipantJoinValidationErrorMessages returns captured participant join validation error messages
 func (h *RoundTestHelper) GetParticipantJoinValidationErrorMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinError)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinErrorV1)
 }
 
 // ValidateParticipantJoinValidationError parses and validates a participant join validation error message
-func (h *RoundTestHelper) ValidateParticipantJoinValidationError(t *testing.T, msg *message.Message) *roundevents.RoundParticipantJoinErrorPayload {
+func (h *RoundTestHelper) ValidateParticipantJoinValidationError(t *testing.T, msg *message.Message) *roundevents.RoundParticipantJoinErrorPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundParticipantJoinErrorPayload](msg)
+	result, err := ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join validation error message: %v", err)
 	}
@@ -409,19 +413,19 @@ func (h *RoundTestHelper) ValidateParticipantJoinValidationError(t *testing.T, m
 
 // WaitForParticipantJoined waits for participant joined messages
 func (h *RoundTestHelper) WaitForParticipantJoined(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoined, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinedV1, expectedCount, timeout)
 }
 
 // GetParticipantJoinedMessages returns captured participant joined messages
 func (h *RoundTestHelper) GetParticipantJoinedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoined)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinedV1)
 }
 
 // ValidateParticipantJoined parses and validates a participant joined message
-func (h *RoundTestHelper) ValidateParticipantJoined(t *testing.T, msg *message.Message) *roundevents.ParticipantJoinedPayload {
+func (h *RoundTestHelper) ValidateParticipantJoined(t *testing.T, msg *message.Message) *roundevents.ParticipantJoinedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantJoinedPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant joined message: %v", err)
 	}
@@ -550,17 +554,17 @@ func (h *RoundTestHelper) ValidateParticipantStatusUpdateRequest(t *testing.T, m
 }
 
 func (h *RoundTestHelper) WaitForParticipantJoinError(count int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinError, count, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinErrorV1, count, timeout)
 }
 
 func (h *RoundTestHelper) GetParticipantJoinErrorMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinError)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinErrorV1)
 }
 
 func (h *RoundTestHelper) ValidateParticipantJoinError(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundParticipantJoinErrorPayload](msg)
+	result, err := ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join error message: %v", err)
 	}
@@ -619,6 +623,7 @@ func (h *RoundTestHelper) CreateUpcomingRoundWithParticipantAndTagInDB(t *testin
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundtypes.RoundStateUpcoming, // Ensure it's upcoming
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())
@@ -664,6 +669,7 @@ func (h *RoundTestHelper) CreateRoundInDBWithTime(t *testing.T, db bun.IDB, user
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background())

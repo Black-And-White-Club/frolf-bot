@@ -61,9 +61,9 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload, got: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayload)
+				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserRoleUpdateResultPayload")
+					t.Fatalf("Success payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1")
 				}
 
 				if successPayload.UserID != userID {
@@ -79,8 +79,8 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if getUserErr != nil {
 					t.Fatalf("Failed to retrieve user after update: %v", getUserErr)
 				}
-				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User.Role != newRole {
-					t.Errorf("Database user role mismatch after update: expected %q, got %q", newRole, getUserResult.Success.(*userevents.GetUserResponsePayload).User.Role)
+				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User.Role != newRole {
+					t.Errorf("Database user role mismatch after update: expected %q, got %q", newRole, getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User.Role)
 				}
 			},
 			expectedSuccess: true,
@@ -106,9 +106,9 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayload, got %T", result.Failure)
+					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1, got %T", result.Failure)
 				}
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
@@ -120,8 +120,8 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
 				}
 				expectedFailureReasonString := "invalid role"
-				if failurePayload.Error != expectedFailureReasonString {
-					t.Errorf("Failure payload Error string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Error)
+				if failurePayload.Reason != expectedFailureReasonString {
+					t.Errorf("Failure payload Reason string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Reason)
 				}
 				expectedResultErrorString := "invalid role" // String comparison for result.Error
 				if result.Error.Error() != expectedResultErrorString {
@@ -154,9 +154,9 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayload) // Service returns this type for failures
+				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayloadV1) // Service returns this type for failures
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayload, got %T", result.Failure)
+					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1, got %T", result.Failure)
 				}
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
@@ -167,9 +167,9 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if failurePayload.Success != false {
 					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
 				}
-				expectedFailureReasonString := "user not found" // Service puts reason in string Error field
-				if failurePayload.Error != expectedFailureReasonString {
-					t.Errorf("Failure payload Error string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Error)
+				expectedFailureReasonString := "user not found" // Service puts reason in string Reason field
+				if failurePayload.Reason != expectedFailureReasonString {
+					t.Errorf("Failure payload Reason string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Reason)
 				}
 				expectedWrappedErrMsg := "HandleUpdateUserRole operation failed: failed to update user role: user not found"
 				if err.Error() != expectedWrappedErrMsg {

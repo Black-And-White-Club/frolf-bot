@@ -19,7 +19,7 @@ import (
 )
 
 // CreateImportJob creates a new import job for a scorecard upload.
-func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayload) (RoundOperationResult, error) {
+func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "CreateImportJob", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Creating import job",
 			attr.String("import_id", payload.ImportID),
@@ -30,7 +30,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -45,7 +45,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 
 		if round == nil {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -119,7 +119,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 					attr.String("incoming_import_id", payload.ImportID),
 				)
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -138,7 +138,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 		if round.ImportID == payload.ImportID && string(round.ImportStatus) == string(rounddb.ImportStatusCompleted) {
 			s.logger.InfoContext(ctx, "Import already completed; acknowledging idempotently", attr.String("import_id", payload.ImportID))
 			return RoundOperationResult{
-				Success: &roundevents.ScorecardUploadedPayload{
+				Success: &roundevents.ScorecardUploadedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -187,7 +187,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 				attr.Error(wrapped),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -206,7 +206,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.ScorecardUploadedPayload{
+			Success: &roundevents.ScorecardUploadedPayloadV1{
 				GuildID:   payload.GuildID,
 				RoundID:   payload.RoundID,
 				ImportID:  payload.ImportID,
@@ -225,7 +225,7 @@ func (s *RoundService) CreateImportJob(ctx context.Context, payload roundevents.
 }
 
 // HandleScorecardURLRequested handles scorecard URL requested events.
-func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (RoundOperationResult, error) {
+func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "HandleScorecardURLRequested", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Handling scorecard URL request",
 			attr.String("import_id", payload.ImportID),
@@ -237,7 +237,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -252,7 +252,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 
 		if round == nil {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -282,7 +282,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 			// and older user inputs. Only fail when the host is not udisc.com.
 			if !strings.Contains(strings.ToLower(payload.UDiscURL), "udisc.com") {
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -312,7 +312,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 			wrapped := fmt.Errorf("failed to persist UDisc URL: %w", err)
 			s.logger.ErrorContext(ctx, "Failed to update round with UDisc URL", attr.Error(wrapped))
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -331,7 +331,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 		return RoundOperationResult{
 			// Success here is intended to be used as a parse request payload.
 			// The parse handler expects ScorecardUploadedPayload.
-			Success: &roundevents.ScorecardUploadedPayload{
+			Success: &roundevents.ScorecardUploadedPayloadV1{
 				GuildID:   payload.GuildID,
 				RoundID:   payload.RoundID,
 				ImportID:  payload.ImportID,
@@ -349,7 +349,7 @@ func (s *RoundService) HandleScorecardURLRequested(ctx context.Context, payload 
 }
 
 // ParseScorecard parses a scorecard file and returns the parsed data
-func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (RoundOperationResult, error) {
+func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1, fileData []byte) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ParseScorecard", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Parsing scorecard",
 			attr.String("import_id", payload.ImportID),
@@ -370,7 +370,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 				wrapped := fmt.Errorf("failed to build download request: %w", err)
 				s.logger.ErrorContext(ctx, "download request build failed", attr.Error(wrapped))
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -388,7 +388,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 				wrapped := fmt.Errorf("failed to download file: %w", err)
 				s.logger.ErrorContext(ctx, "download failed", attr.Error(wrapped))
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -406,7 +406,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 				wrapped := fmt.Errorf("download failed with status %d", resp.StatusCode)
 				s.logger.ErrorContext(ctx, "download returned non-2xx", attr.Error(wrapped))
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -426,7 +426,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 				wrapped := fmt.Errorf("failed to read download body: %w", err)
 				s.logger.ErrorContext(ctx, "read download body failed", attr.Error(wrapped))
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -442,7 +442,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 			if len(buf) > maxFileSize {
 				s.logger.ErrorContext(ctx, "downloaded file exceeds max size", attr.Int("size", len(buf)), attr.Int("max", maxFileSize))
 				return RoundOperationResult{
-					Failure: &roundevents.ImportFailedPayload{
+					Failure: &roundevents.ImportFailedPayloadV1{
 						GuildID:   payload.GuildID,
 						RoundID:   payload.RoundID,
 						ImportID:  payload.ImportID,
@@ -468,7 +468,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 			wrapped := fmt.Errorf("unsupported file format: %w", err)
 			s.logger.ErrorContext(ctx, "parser selection failed", attr.Error(wrapped))
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -488,7 +488,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", wrapped.Error(), errCodeParseError)
 			s.logger.ErrorContext(ctx, "scorecard parse failed", attr.Error(wrapped))
 			return RoundOperationResult{
-				Failure: &roundevents.ScorecardParseFailedPayload{
+				Failure: &roundevents.ScorecardParseFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -513,7 +513,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "parsed", "", "")
 		return RoundOperationResult{
-			Success: &roundevents.ParsedScorecardPayload{
+			Success: &roundevents.ParsedScorecardPayloadV1{
 				ImportID:       payload.ImportID,
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
@@ -528,7 +528,7 @@ func (s *RoundService) ParseScorecard(ctx context.Context, payload roundevents.S
 }
 
 // IngestParsedScorecard matches parsed player rows to users and emits score processing requests.
-func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (RoundOperationResult, error) {
+func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "IngestParsedScorecard", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Ingesting parsed scorecard",
 			attr.String("import_id", payload.ImportID),
@@ -539,7 +539,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 
 		if payload.ParsedData == nil {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -557,7 +557,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 			msg := "failed to fetch round"
 			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", msg, errCodeRoundNotFound)
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -699,7 +699,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 			msg := fmt.Sprintf("no players matched (%d total in scorecard)", len(payload.ParsedData.PlayerScores))
 			_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "failed", msg, "NO_MATCHES")
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -723,7 +723,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 		_ = s.RoundDB.UpdateImportStatus(ctx, payload.GuildID, payload.RoundID, payload.ImportID, "processing", "", "")
 
 		return RoundOperationResult{
-			Success: &roundevents.ImportCompletedPayload{
+			Success: &roundevents.ImportCompletedPayloadV1{
 				ImportID:           payload.ImportID,
 				GuildID:            payload.GuildID,
 				RoundID:            payload.RoundID,
@@ -751,7 +751,7 @@ func normalizeName(name string) string {
 // ApplyImportedScores applies imported scores one-by-one using the same path as manual updates.
 // It calls UpdateParticipantScore for each score and publishes ParticipantScoreUpdated events
 // so downstream logic (CheckAllScoresSubmitted -> FinalizeRound) runs unchanged.
-func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (RoundOperationResult, error) {
+func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ApplyImportedScores", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		if len(payload.Scores) == 0 {
 			s.logger.InfoContext(ctx, "No scores to apply in import",
@@ -766,7 +766,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 		participants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -791,7 +791,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 					wrapped := fmt.Errorf("context cancelled during import apply: %w", err)
 					s.logger.ErrorContext(ctx, "import apply cancelled", attr.Error(wrapped))
 					return RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayload{
+						Failure: &roundevents.ImportFailedPayloadV1{
 							GuildID:   payload.GuildID,
 							RoundID:   payload.RoundID,
 							ImportID:  payload.ImportID,
@@ -831,7 +831,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 		finalParticipants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -852,7 +852,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 
 		if successCount == 0 {
 			return RoundOperationResult{
-				Failure: &roundevents.ImportFailedPayload{
+				Failure: &roundevents.ImportFailedPayloadV1{
 					GuildID:   payload.GuildID,
 					RoundID:   payload.RoundID,
 					ImportID:  payload.ImportID,
@@ -866,7 +866,7 @@ func (s *RoundService) ApplyImportedScores(ctx context.Context, payload roundeve
 		}
 
 		return RoundOperationResult{
-			Success: &roundevents.ImportScoresAppliedPayload{
+			Success: &roundevents.ImportScoresAppliedPayloadV1{
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				ImportID:       payload.ImportID,

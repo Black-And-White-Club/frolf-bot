@@ -19,14 +19,14 @@ func TestProcessRoundReminder(t *testing.T) {
 	nonexistentRoundID := sharedtypes.RoundID(uuid.New())
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayload
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayloadV1
 		expectedError            bool
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Successful processing with accepted and tentative participants",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -61,7 +61,8 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 
-				return roundevents.DiscordReminderPayload{
+				return roundevents.DiscordReminderPayloadV1{
+					GuildID:        "test-guild",
 					RoundID:        round.ID,
 					RoundTitle:     round.Title,
 					StartTime:      round.StartTime,
@@ -76,10 +77,9 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				// Fix: Expect pointer type instead of value type
-				discordPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
+				discordPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayloadV1)
 				if !ok {
-					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *roundevents.DiscordReminderPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -123,7 +123,7 @@ func TestProcessRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Successful processing with no participants to notify",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayloadV1 {
 				generator := testutils.NewTestDataGenerator()
 
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -146,7 +146,8 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Failed to create round in DB for test setup: %v", err)
 				}
 
-				return roundevents.DiscordReminderPayload{
+				return roundevents.DiscordReminderPayloadV1{
+					GuildID:        "test-guild",
 					RoundID:        round.ID,
 					RoundTitle:     round.Title,
 					StartTime:      round.StartTime,
@@ -161,10 +162,9 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				// Fix: Service always returns DiscordReminderPayload, not RoundReminderProcessedPayload
-				processedPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayload)
+				processedPayload, ok := returnedResult.Success.(*roundevents.DiscordReminderPayloadV1)
 				if !ok {
-					t.Errorf("Expected result to be of type *DiscordReminderPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected result to be of type *roundevents.DiscordReminderPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -180,9 +180,10 @@ func TestProcessRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Error: Round not found in DB",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayload {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) roundevents.DiscordReminderPayloadV1 {
 				// No round created, so GetParticipants will fail
-				return roundevents.DiscordReminderPayload{
+				return roundevents.DiscordReminderPayloadV1{
+					GuildID:        "test-guild",
 					RoundID:        nonexistentRoundID,
 					RoundTitle:     "Non Existent Round",
 					StartTime:      testutils.StartTimePtr(time.Now().Add(24 * time.Hour)),
@@ -199,10 +200,9 @@ func TestProcessRoundReminder(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayload, got %T", returnedResult.Failure)
+					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayloadV1, got %T", returnedResult.Failure)
 				}
 
 				if failurePayload.RoundID != nonexistentRoundID {

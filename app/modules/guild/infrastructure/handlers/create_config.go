@@ -14,9 +14,9 @@ import (
 func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleCreateGuildConfig",
-		&guildevents.GuildConfigRequestedPayload{},
+		&guildevents.GuildConfigCreationRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			createPayload := payload.(*guildevents.GuildConfigRequestedPayload)
+			createPayload := payload.(*guildevents.GuildConfigCreationRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received CreateGuildConfigRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -64,7 +64,7 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					guildevents.GuildConfigCreationFailed,
+					guildevents.GuildConfigCreationFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -87,7 +87,7 @@ func (h *GuildHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*messag
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					guildevents.GuildConfigCreated,
+					guildevents.GuildConfigCreatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

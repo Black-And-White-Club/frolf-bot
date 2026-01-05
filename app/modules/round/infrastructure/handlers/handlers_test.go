@@ -215,7 +215,7 @@ func TestHandlerWrapper(t *testing.T) {
 
 				return args{
 					handlerName: "testHandler",
-					unmarshalTo: &roundevents.RoundCreatedPayload{},
+					unmarshalTo: &roundevents.RoundCreatedPayloadV1{},
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},
@@ -249,7 +249,7 @@ func TestHandlerWrapper(t *testing.T) {
 
 				return args{
 					handlerName: "testHandler",
-					unmarshalTo: &roundevents.RoundCreatedPayload{},
+					unmarshalTo: &roundevents.RoundCreatedPayloadV1{},
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},

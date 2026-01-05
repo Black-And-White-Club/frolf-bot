@@ -25,7 +25,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 	testParticipant := sharedtypes.DiscordID("1234567890")
 	testScore := sharedtypes.Score(42)
 
-	testPayload := &roundevents.ScoreUpdateRequestPayload{
+	testPayload := &roundevents.ScoreUpdateRequestPayloadV1{
 		RoundID:     testRoundID,
 		Participant: testParticipant,
 		Score:       &testScore,
@@ -53,22 +53,22 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
 					gomock.Any(),
-					roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateRequestPayloadV1{
 						RoundID:     testRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ScoreUpdateValidatedPayload{
-							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+						Success: &roundevents.ScoreUpdateValidatedPayloadV1{
+							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 								RoundID:     testRoundID,
 								Participant: testParticipant,
 								Score:       &testScore,
@@ -81,7 +81,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundScoreUpdateValidated,
+					roundevents.RoundScoreUpdateValidatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -103,14 +103,14 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
 					gomock.Any(),
-					roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateRequestPayloadV1{
 						RoundID:     testRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
@@ -130,22 +130,22 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
 					gomock.Any(),
-					roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateRequestPayloadV1{
 						RoundID:     testRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ScoreUpdateValidatedPayload{
-							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+						Success: &roundevents.ScoreUpdateValidatedPayloadV1{
+							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 								RoundID:     testRoundID,
 								Participant: testParticipant,
 								Score:       &testScore,
@@ -158,7 +158,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundScoreUpdateValidated,
+					roundevents.RoundScoreUpdateValidatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -171,14 +171,14 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
 					gomock.Any(),
-					roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateRequestPayloadV1{
 						RoundID:     testRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
@@ -198,14 +198,14 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
 					gomock.Any(),
-					roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateRequestPayloadV1{
 						RoundID:     testRoundID,
 						Participant: testParticipant,
 						Score:       &testScore,
@@ -222,7 +222,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundScoreUpdateError,
+					roundevents.RoundScoreUpdateErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -273,8 +273,8 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 	testParticipant := sharedtypes.DiscordID("1234567890")
 	testScore := sharedtypes.Score(42)
 
-	testPayload := &roundevents.ScoreUpdateValidatedPayload{
-		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+	testPayload := &roundevents.ScoreUpdateValidatedPayloadV1{
+		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 			RoundID:     testRoundID,
 			Participant: testParticipant,
 			Score:       &testScore,
@@ -303,15 +303,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -319,7 +319,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantScoreUpdatedPayload{
+						Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       testScore,
@@ -335,13 +335,13 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdatedV1,
 				).Return(discordMsg, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdatedV1,
 				).Return(backendMsg, nil)
 
 				// Return the same message instances that the mocks will return
@@ -365,15 +365,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -394,15 +394,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -410,7 +410,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantScoreUpdatedPayload{
+						Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       testScore,
@@ -423,7 +423,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 				return nil
 			},
@@ -436,15 +436,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -452,7 +452,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantScoreUpdatedPayload{
+						Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       testScore,
@@ -466,13 +466,13 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdatedV1,
 				).Return(discordMsg, nil)
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundParticipantScoreUpdated,
+					roundevents.RoundParticipantScoreUpdatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 				return nil
 			},
@@ -485,15 +485,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -514,15 +514,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) []*message.Message {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScoreUpdateValidatedPayload) = *testPayload
+						*out.(*roundevents.ScoreUpdateValidatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().UpdateParticipantScore(
 					gomock.Any(),
-					roundevents.ScoreUpdateValidatedPayload{
-						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+					roundevents.ScoreUpdateValidatedPayloadV1{
+						ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 							RoundID:     testRoundID,
 							Participant: testParticipant,
 							Score:       &testScore,
@@ -541,7 +541,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundScoreUpdateError,
+					roundevents.RoundScoreUpdateErrorV1,
 				).Return(errorMsg, nil)
 
 				return []*message.Message{errorMsg}
@@ -595,7 +595,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 	testScore := sharedtypes.Score(42)
 	testEventMessageID := "12345"
 
-	testPayload := &roundevents.ParticipantScoreUpdatedPayload{
+	testPayload := &roundevents.ParticipantScoreUpdatedPayloadV1{
 		RoundID:        testRoundID,
 		Participant:    testParticipant,
 		Score:          testScore,
@@ -624,14 +624,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantScoreUpdatedPayload) = *testPayload
+						*out.(*roundevents.ParticipantScoreUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().CheckAllScoresSubmitted(
 					gomock.Any(),
-					roundevents.ParticipantScoreUpdatedPayload{
+					roundevents.ParticipantScoreUpdatedPayloadV1{
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
@@ -639,7 +639,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.AllScoresSubmittedPayload{ // Return a pointer
+						Success: &roundevents.AllScoresSubmittedPayloadV1{ // Return a pointer
 							RoundID: testRoundID,
 						},
 					},
@@ -649,7 +649,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // This will be a pointer to AllScoresSubmittedPayload
-					roundevents.RoundAllScoresSubmitted,
+					roundevents.RoundAllScoresSubmittedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -671,14 +671,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantScoreUpdatedPayload) = *testPayload
+						*out.(*roundevents.ParticipantScoreUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().CheckAllScoresSubmitted(
 					gomock.Any(),
-					roundevents.ParticipantScoreUpdatedPayload{
+					roundevents.ParticipantScoreUpdatedPayloadV1{
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
@@ -700,14 +700,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantScoreUpdatedPayload) = *testPayload
+						*out.(*roundevents.ParticipantScoreUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().CheckAllScoresSubmitted(
 					gomock.Any(),
-					roundevents.ParticipantScoreUpdatedPayload{
+					roundevents.ParticipantScoreUpdatedPayloadV1{
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
@@ -715,7 +715,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.AllScoresSubmittedPayload{ // Return a pointer
+						Success: &roundevents.AllScoresSubmittedPayloadV1{ // Return a pointer
 							RoundID: testRoundID,
 						},
 					},
@@ -725,7 +725,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // This will be a pointer to AllScoresSubmittedPayload
-					roundevents.RoundAllScoresSubmitted,
+					roundevents.RoundAllScoresSubmittedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -738,14 +738,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantScoreUpdatedPayload) = *testPayload
+						*out.(*roundevents.ParticipantScoreUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().CheckAllScoresSubmitted(
 					gomock.Any(),
-					roundevents.ParticipantScoreUpdatedPayload{
+					roundevents.ParticipantScoreUpdatedPayloadV1{
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
@@ -767,14 +767,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantScoreUpdatedPayload) = *testPayload
+						*out.(*roundevents.ParticipantScoreUpdatedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().CheckAllScoresSubmitted(
 					gomock.Any(),
-					roundevents.ParticipantScoreUpdatedPayload{
+					roundevents.ParticipantScoreUpdatedPayloadV1{
 						RoundID:        testRoundID,
 						Participant:    testParticipant,
 						Score:          testScore,
@@ -792,7 +792,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

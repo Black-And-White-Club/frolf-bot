@@ -20,10 +20,10 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 	)
 	wrappedHandler := h.handlerWrapper(
 		"HandleUserSignupRequest",
-		&userevents.UserSignupRequestPayload{},
+		&userevents.UserSignupRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			fmt.Printf("DEBUG: Inside handler wrapper for UserSignupRequest\n")
-			userSignupPayload := payload.(*userevents.UserSignupRequestPayload)
+			userSignupPayload := payload.(*userevents.UserSignupRequestedPayloadV1)
 
 			userID := userSignupPayload.UserID
 			guildID := userSignupPayload.GuildID
@@ -45,7 +45,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				ctx, span := h.tracer.Start(ctx, "TagAvailabilityCheck")
 				defer span.End()
 
-				eventPayload := &userevents.TagAvailabilityCheckRequestedPayload{
+				eventPayload := &userevents.TagAvailabilityCheckRequestedPayloadV1{
 					GuildID:   guildID,
 					TagNumber: tagNumber,
 					UserID:    userID,
@@ -54,7 +54,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				tagAvailabilityMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					eventPayload,
-					userevents.TagAvailabilityCheckRequested,
+					userevents.TagAvailabilityCheckRequestedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -73,7 +73,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			fmt.Printf("DEBUG: CreateUser returned: result=%#v, err=%v\n", result, err)
 
 			if result.Failure != nil {
-				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
 					span.RecordError(errors.New("unexpected type for failure payload"))
 					return nil, errors.New("unexpected type for failure payload")
@@ -88,7 +88,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				failureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					failedPayload,
-					userevents.UserCreationFailed,
+					userevents.UserCreationFailedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -97,13 +97,14 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				fmt.Printf("DEBUG: Created failureMsg for user_id: %s, guild_id: %s, reason: %s\n", userID, guildID, failedPayload.Reason)
 
 				// Create Discord-specific failure message
-				discordFailurePayload := &userevents.UserSignupFailedPayload{
-					Reason: failedPayload.Reason,
+				discordFailurePayload := &userevents.UserSignupFailedPayloadV1{
+					GuildID: guildID,
+					Reason:  failedPayload.Reason,
 				}
 				discordFailureMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					discordFailurePayload,
-					userevents.UserSignupFailed,
+					userevents.UserSignupFailedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -128,7 +129,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 			}
 
 			if result.Success != nil {
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
 					span.RecordError(errors.New("unexpected type for success payload"))
 					return nil, errors.New("unexpected type for success payload")
@@ -143,7 +144,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.UserCreated,
+					userevents.UserCreatedV1,
 				)
 				if err != nil {
 					span.RecordError(err)
@@ -155,7 +156,7 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				discordSuccessMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					userevents.UserSignupSuccess,
+					userevents.UserSignupSucceededV1,
 				)
 				if err != nil {
 					span.RecordError(err)

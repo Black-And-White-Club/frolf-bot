@@ -53,7 +53,7 @@ func TestHandleGetUserRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("test-get-user")
-				payload := userevents.GetUserRequestPayload{
+				payload := userevents.GetUserRequestedPayloadV1{
 					GuildID: "test-guild",
 					UserID:  userID,
 				}
@@ -65,19 +65,19 @@ func TestHandleGetUserRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.GetUserResponse},
+			expectedOutgoingTopics: []string{userevents.GetUserResponseV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("test-get-user")
-				msgs := receivedMsgs[userevents.GetUserResponse]
+				msgs := receivedMsgs[userevents.GetUserResponseV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 GetUserResponse message, got %d", len(msgs))
 				}
-				var payload userevents.GetUserResponsePayload
+				var payload userevents.GetUserResponsePayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -102,7 +102,7 @@ func TestHandleGetUserRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("non-existent-user")
-				payload := userevents.GetUserRequestPayload{
+				payload := userevents.GetUserRequestedPayloadV1{
 					GuildID: "test-guild",
 					UserID:  userID,
 				}
@@ -114,19 +114,19 @@ func TestHandleGetUserRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.GetUserFailed},
+			expectedOutgoingTopics: []string{userevents.GetUserFailedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("non-existent-user")
-				msgs := receivedMsgs[userevents.GetUserFailed]
+				msgs := receivedMsgs[userevents.GetUserFailedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 GetUserFailed message, got %d", len(msgs))
 				}
-				var payload userevents.GetUserFailedPayload
+				var payload userevents.GetUserFailedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -211,7 +211,7 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("test-role-user")
-				payload := userevents.GetUserRoleRequestPayload{
+				payload := userevents.GetUserRoleRequestedPayloadV1{
 					GuildID: "test-guild",
 					UserID:  userID,
 				}
@@ -223,19 +223,19 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRoleRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRoleRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.GetUserRoleResponse},
+			expectedOutgoingTopics: []string{userevents.GetUserRoleResponseV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("test-role-user")
-				msgs := receivedMsgs[userevents.GetUserRoleResponse]
+				msgs := receivedMsgs[userevents.GetUserRoleResponseV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 GetUserRoleResponse message, got %d", len(msgs))
 				}
-				var payload userevents.GetUserRoleResponsePayload
+				var payload userevents.GetUserRoleResponsePayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}
@@ -260,7 +260,7 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("non-existent-role-user")
-				payload := userevents.GetUserRoleRequestPayload{
+				payload := userevents.GetUserRoleRequestedPayloadV1{
 					GuildID: "test-guild",
 					UserID:  userID,
 				}
@@ -272,19 +272,19 @@ func TestHandleGetUserRoleRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRoleRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.GetUserRoleRequestedV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.GetUserRoleFailed},
+			expectedOutgoingTopics: []string{userevents.GetUserRoleFailedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("non-existent-role-user")
-				msgs := receivedMsgs[userevents.GetUserRoleFailed]
+				msgs := receivedMsgs[userevents.GetUserRoleFailedV1]
 				if len(msgs) != 1 {
 					t.Fatalf("Expected 1 GetUserRoleFailed message, got %d", len(msgs))
 				}
-				var payload userevents.GetUserRoleFailedPayload
+				var payload userevents.GetUserRoleFailedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
 				}

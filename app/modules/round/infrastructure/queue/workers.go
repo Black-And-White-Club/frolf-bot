@@ -47,7 +47,7 @@ func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJo
 	}
 
 	// Create Watermill message using helpers (same as your handlers)
-	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundStarted)
+	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundStartedV1)
 	if err != nil {
 		ctxLogger.Error("Failed to create round started message", attr.Error(err))
 		return fmt.Errorf("failed to create round started message: %w", err)
@@ -59,7 +59,7 @@ func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJo
 	}
 
 	// Publish using your eventbus interface - it expects topic and messages
-	if err := w.eventBus.Publish(roundevents.RoundStarted, msg); err != nil {
+	if err := w.eventBus.Publish(roundevents.RoundStartedV1, msg); err != nil {
 		ctxLogger.Error("Failed to publish round started event", attr.Error(err))
 		return fmt.Errorf("failed to publish round started event: %w", err)
 	}
@@ -106,7 +106,7 @@ func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundRemi
 	}
 
 	// Create Watermill message using helpers (same as your handlers)
-	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundReminder)
+	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundReminderScheduledV1)
 	if err != nil {
 		ctxLogger.Error("Failed to create round reminder message", attr.Error(err))
 		return fmt.Errorf("failed to create round reminder message: %w", err)
@@ -125,7 +125,7 @@ func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundRemi
 	}
 
 	// Publish using your eventbus interface - it expects topic and messages
-	if err := w.eventBus.Publish(roundevents.RoundReminder, msg); err != nil {
+	if err := w.eventBus.Publish(roundevents.RoundReminderScheduledV1, msg); err != nil {
 		ctxLogger.Error("Failed to publish round reminder event", attr.Error(err))
 		return fmt.Errorf("failed to publish round reminder event: %w", err)
 	}

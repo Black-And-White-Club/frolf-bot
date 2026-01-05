@@ -39,14 +39,14 @@ func (h *UserHandlers) HandleScorecardParsed(msg *message.Message) ([]*message.M
 			}
 
 			switch v := result.Success.(type) {
-			case *userevents.UDiscMatchConfirmationRequiredPayload:
-				msgOut, err := h.helpers.CreateResultMessage(msg, v, userevents.UserUDiscMatchConfirmationRequired)
+			case *userevents.UDiscMatchConfirmationRequiredPayloadV1:
+				msgOut, err := h.helpers.CreateResultMessage(msg, v, userevents.UDiscMatchConfirmationRequiredV1)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create confirmation required message: %w", err)
 				}
 				return []*message.Message{msgOut}, nil
-			case *userevents.UDiscMatchConfirmedPayload:
-				msgOut, err := h.helpers.CreateResultMessage(msg, v, userevents.UserUDiscMatchConfirmed)
+			case *userevents.UDiscMatchConfirmedPayloadV1:
+				msgOut, err := h.helpers.CreateResultMessage(msg, v, userevents.UDiscMatchConfirmedV1)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create match confirmed message: %w", err)
 				}

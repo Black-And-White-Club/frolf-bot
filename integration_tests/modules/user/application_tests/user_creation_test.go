@@ -46,9 +46,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayload")
+					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
 				}
 
 				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
@@ -101,9 +101,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayload")
+					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
 				}
 
 				if failurePayload.UserID != userID {
@@ -147,9 +147,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayload")
+					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
 				}
 
 				if failurePayload.UserID != userID {
@@ -193,9 +193,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayload")
+					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
 				}
 
 				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
@@ -273,9 +273,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayload)
+				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayload")
+					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
 				}
 
 				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
@@ -335,9 +335,9 @@ func TestCreateUser(t *testing.T) {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayload")
+					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
 				}
 
 				if failurePayload.UserID != userID {

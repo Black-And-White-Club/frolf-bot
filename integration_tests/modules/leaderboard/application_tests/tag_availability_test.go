@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,10 +27,10 @@ func TestCheckTagAvailability(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error)
-		payload         leaderboardevents.TagAvailabilityCheckRequestedPayload
+		payload         leaderboardevents.TagAvailabilityCheckRequestedPayloadV1
 		expectedError   bool
 		expectedSuccess bool
-		validateResult  func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayload, failure *leaderboardevents.TagAvailabilityCheckFailedPayload, err error)
+		validateResult  func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayloadV1, failure *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, err error)
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
 		{
@@ -48,45 +47,40 @@ func TestCheckTagAvailability(t *testing.T) {
 				}
 				return nil, nil // No initial active leaderboard
 			},
-			payload: leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			payload: leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   "test_guild",
 				UserID:    "user_1",
 				TagNumber: tagPtr(10),
 			},
-			expectedError:   true,  // Corrected expectation: Service returns error when no active leaderboard
-			expectedSuccess: false, // Corrected expectation: Service returns failure payload
-			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayload, failure *leaderboardevents.TagAvailabilityCheckFailedPayload, err error) {
-				if failure == nil {
-					t.Errorf("Expected failure payload, but got nil")
+			expectedError:   false, // Expect no error as a new leaderboard is created
+			expectedSuccess: true,  // Expect success payload
+			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayloadV1, failure *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, err error) {
+				if err != nil {
+					t.Errorf("Expected no error, but got: %v", err)
+				}
+				if success == nil {
+					t.Errorf("Expected success payload, but got nil")
 					return
 				}
-				if failure.UserID != "user_1" {
-					t.Errorf("Expected UserID 'user_1', got '%s'", failure.UserID)
+				if !success.Available {
+					t.Errorf("Expected tag to be available")
 				}
-				if failure.TagNumber == nil || *failure.TagNumber != 10 {
-					t.Errorf("Expected TagNumber 10 in failure payload, got %v", failure.TagNumber)
-				}
-				if !strings.Contains(strings.ToLower(failure.Reason), "failed to check tag availability") {
-					t.Errorf("Expected failure reason to contain 'failed to check tag availability', got '%s'", failure.Reason)
-				}
-				if success != nil {
-					t.Errorf("Expected no success payload, but got %+v", success)
-				}
-				if err == nil {
-					t.Error("Expected an error, but got none")
+				if failure != nil {
+					t.Errorf("Expected no failure payload, but got %+v", failure)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
-				// DB state should be unchanged from setupData
+				// DB state should now have an active leaderboard
 				var activeLeaderboards []leaderboarddb.Leaderboard
 				err := deps.BunDB.NewSelect().
 					Model(&activeLeaderboards).
 					Where("is_active = ?", true).
 					Scan(context.Background())
-				if err != nil && err != sql.ErrNoRows {
+				if err != nil {
 					t.Fatalf("Failed to query active leaderboards: %v", err)
 				}
-				if len(activeLeaderboards) != 0 {
-					t.Errorf("Expected no active leaderboards, got %d", len(activeLeaderboards))
+				if len(activeLeaderboards) != 1 {
+					t.Errorf("Expected 1 active leaderboard, got %d", len(activeLeaderboards))
 				}
 			},
 		},
@@ -109,13 +103,14 @@ func TestCheckTagAvailability(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			payload: leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   "test_guild",
 				UserID:    "user_2",
 				TagNumber: tagPtr(3), // Tag 3 is not in the initial leaderboard
 			},
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayload, failure *leaderboardevents.TagAvailabilityCheckFailedPayload, err error) {
+			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayloadV1, failure *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, err error) {
 				if success == nil {
 					t.Errorf("Expected success payload, but got nil")
 					return
@@ -171,13 +166,14 @@ func TestCheckTagAvailability(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			payload: leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   "test_guild",
 				UserID:    "user_3",
 				TagNumber: tagPtr(50), // Tag 50 is assigned to user_X
 			},
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayload, failure *leaderboardevents.TagAvailabilityCheckFailedPayload, err error) {
+			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayloadV1, failure *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, err error) {
 				if success == nil {
 					t.Errorf("Expected success payload, but got nil")
 					return
@@ -230,13 +226,14 @@ func TestCheckTagAvailability(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			payload: leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   "test_guild",
 				UserID:    "user_4",
 				TagNumber: tagPtr(-10), // Invalid tag number
 			},
 			expectedError:   false, // Corrected expectation: Service returns success for negative tag if leaderboard exists
 			expectedSuccess: true,  // Corrected expectation: Service returns success payload
-			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayload, failure *leaderboardevents.TagAvailabilityCheckFailedPayload, err error) {
+			validateResult: func(t *testing.T, deps TestDeps, success *leaderboardevents.TagAvailabilityCheckResultPayloadV1, failure *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, err error) {
 				if success == nil {
 					t.Errorf("Expected success payload, but got nil")
 					return

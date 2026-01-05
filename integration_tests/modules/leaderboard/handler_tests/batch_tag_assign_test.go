@@ -19,9 +19,12 @@ import (
 )
 
 // Helper for creating and publishing a batch tag assignment request message
-func createBatchAssignmentRequestMessage(t *testing.T, requestingUserID sharedtypes.DiscordID, assignments []sharedevents.TagAssignmentInfo) (*message.Message, error) {
+func createBatchAssignmentRequestMessage(t *testing.T, guildID sharedtypes.GuildID, requestingUserID sharedtypes.DiscordID, assignments []sharedevents.TagAssignmentInfoV1) (*message.Message, error) {
 	t.Helper() // Mark this as a helper function
-	payload := sharedevents.BatchTagAssignmentRequestedPayload{
+	payload := sharedevents.BatchTagAssignmentRequestedPayloadV1{
+		ScopedGuildID: sharedevents.ScopedGuildID{
+			GuildID: guildID,
+		},
 		RequestingUserID: requestingUserID,
 		BatchID:          uuid.New().String(),
 		Assignments:      assignments,
@@ -37,7 +40,7 @@ func createBatchAssignmentRequestMessage(t *testing.T, requestingUserID sharedty
 }
 
 // Helper to validate basic success response properties
-func validateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTagAssignmentRequestedPayload, responsePayload *leaderboardevents.BatchTagAssignedPayload) {
+func validateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTagAssignmentRequestedPayloadV1, responsePayload *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1) {
 	t.Helper() // Mark this as a helper function
 	if responsePayload.RequestingUserID != requestPayload.RequestingUserID {
 		t.Errorf("Success payload RequestingUserID mismatch: expected %q, got %q",
@@ -80,23 +83,23 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				newUsers := generator.GenerateUsers(2)
 				requestingUser := generator.GenerateUsers(1)[0]
 
-				assignments := []sharedevents.TagAssignmentInfo{
+				assignments := []sharedevents.TagAssignmentInfoV1{
 					{UserID: sharedtypes.DiscordID(newUsers[0].UserID), TagNumber: 10},
 					{UserID: sharedtypes.DiscordID(newUsers[1].UserID), TagNumber: 20},
 				}
 
-				msg, err := createBatchAssignmentRequestMessage(t, sharedtypes.DiscordID(requestingUser.UserID), assignments)
+				msg, err := createBatchAssignmentRequestMessage(t, "test_guild", sharedtypes.DiscordID(requestingUser.UserID), assignments)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := leaderboardevents.LeaderboardBatchTagAssigned
+				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -105,12 +108,12 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
 				}
 
-				requestPayload, err := testutils.ParsePayload[sharedevents.BatchTagAssignmentRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[sharedevents.BatchTagAssignmentRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.BatchTagAssignedPayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.LeaderboardBatchTagAssignedPayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -197,12 +200,12 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Check for error messages
-				unexpectedTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailed
+				unexpectedTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssigned},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -217,21 +220,21 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
-				assignments := []sharedevents.TagAssignmentInfo{
+				assignments := []sharedevents.TagAssignmentInfoV1{
 					{UserID: newUserID, TagNumber: 30},
 					{UserID: existingUserID, TagNumber: 10}, // User came in with tag and leaving with same tag.
 				}
-				msg, err := createBatchAssignmentRequestMessage(t, existingUserID, assignments)
+				msg, err := createBatchAssignmentRequestMessage(t, "test_guild", existingUserID, assignments)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := leaderboardevents.LeaderboardBatchTagAssigned
+				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -247,7 +250,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					t.Fatalf("Expected 2 leaderboard records (old inactive, new active), got %d", len(leaderboards))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssigned},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -263,18 +266,18 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for unexpected messages
-				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssigned
+				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailed
+				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}
@@ -311,27 +314,27 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				requestingUser := generator.GenerateUsers(1)[0]
 				userX := generator.GenerateUsers(1)[0]
 
-				assignments := []sharedevents.TagAssignmentInfo{
+				assignments := []sharedevents.TagAssignmentInfoV1{
 					{UserID: sharedtypes.DiscordID(userX.UserID), TagNumber: 9999},
 				}
 
-				msg, err := createBatchAssignmentRequestMessage(t, sharedtypes.DiscordID(requestingUser.UserID), assignments)
+				msg, err := createBatchAssignmentRequestMessage(t, "test_guild", sharedtypes.DiscordID(requestingUser.UserID), assignments)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for unexpected messages
-				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssigned
+				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailed
+				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}

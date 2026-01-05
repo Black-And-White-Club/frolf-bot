@@ -170,7 +170,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			testDescription := roundtypes.Description("Test Description")
 
 			// Create payload with the dynamic start time relative to current time
-			payload := roundevents.RoundScheduledPayload{
+			payload := roundevents.RoundScheduledPayloadV1{
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     testRoundID,
 					Title:       testRoundTitle,
@@ -220,8 +220,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 			// Basic validation for success payloads
 			if result.Success != nil {
-				if successPayload, ok := result.Success.(*roundevents.RoundScheduledPayload); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundScheduledPayload, got %T", result.Success)
+				if successPayload, ok := result.Success.(*roundevents.RoundScheduledPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *roundevents.RoundScheduledPayloadV1, got %T", result.Success)
 				} else {
 					if successPayload.RoundID != testRoundID {
 						t.Errorf("expected success RoundID %s, got %s", testRoundID, successPayload.RoundID)
@@ -237,8 +237,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 			// Basic validation for failure payloads
 			if result.Failure != nil {
-				if failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayload); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundErrorPayload, got %T", result.Failure)
+				if failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1); !ok {
+					t.Errorf("expected result.Failure to be of type *roundevents.RoundErrorPayloadV1, got %T", result.Failure)
 				} else {
 					if failurePayload.RoundID != testRoundID {
 						t.Errorf("expected failure RoundID %s, got %s", testRoundID, failurePayload.RoundID)

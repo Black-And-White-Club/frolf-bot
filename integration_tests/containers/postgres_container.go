@@ -55,10 +55,21 @@ func SetupPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, s
 				"POSTGRES_MAINTENANCE_WORK_MEM=16MB",
 			)
 		}),
+		// Use command args to set max_connections for integration tests
+		testcontainers.WithConfigModifier(func(config *container.Config) {
+			config.Cmd = []string{
+				"postgres",
+				"-c", "max_connections=300",  // Increased from default 100 to handle many test connections
+			}
+		}),
 		testcontainers.WithHostConfigModifier(func(hostConfig *container.HostConfig) {
 			hostConfig.Resources = container.Resources{
 				Memory:   512 * 1024 * 1024, // 512MB limit
 				NanoCPUs: 1000000000,        // 1.0 CPU (100% of one core)
+			}
+			// Use tmpfs for data directory to speed up I/O
+			hostConfig.Tmpfs = map[string]string{
+				"/var/lib/postgresql/data": "rw",
 			}
 		}),
 	)
@@ -99,6 +110,10 @@ func SetupPostgresContainerWithoutInitScript(ctx context.Context) (*postgres.Pos
 			hostConfig.Resources = container.Resources{
 				Memory:   512 * 1024 * 1024, // 512MB limit
 				NanoCPUs: 1000000000,        // 1.0 CPU (100% of one core)
+			}
+			// Use tmpfs for data directory to speed up I/O
+			hostConfig.Tmpfs = map[string]string{
+				"/var/lib/postgresql/data": "rw",
 			}
 		}),
 	)

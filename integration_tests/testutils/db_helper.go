@@ -12,6 +12,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/migrate"
 
+	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
@@ -40,10 +41,11 @@ func runMigrationsWithConnStr(db *bun.DB, pgConnStr string) error {
 
 	// Run all module migrations
 	for name, m := range map[string]*migrate.Migrations{
+		"leaderboard": leaderboardmigrations.Migrations,
 		"user":        usermigrations.Migrations,
 		"round":       roundmigrations.Migrations,
 		"score":       scoremigrations.Migrations,
-		"leaderboard": leaderboardmigrations.Migrations,
+		"guild":       guildmigrations.Migrations,
 	} {
 		if err := runModuleMigrations(ctx, db, m, name); err != nil {
 			return err
@@ -103,6 +105,24 @@ func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Mi
 	return nil
 }
 
+// Known application tables (cached to avoid querying information_schema every time)
+var appTables = []string{"users", "scores", "leaderboards", "rounds", "guild_configs"}
+
+// CleanupDatabase truncates all tables in the database to ensure a clean state
+func CleanupDatabase(ctx context.Context, db *bun.DB) error {
+	if len(appTables) == 0 {
+		return nil
+	}
+
+	// Truncate all application tables (skip migrations tables)
+	// Using CASCADE to handle foreign key constraints automatically
+	query := fmt.Sprintf("TRUNCATE TABLE %s CASCADE", strings.Join(appTables, ", "))
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("failed to truncate tables: %w", err)
+	}
+
+	return nil
+}
 // TruncateTables truncates the specified tables
 func TruncateTables(ctx context.Context, db *bun.DB, tables ...string) error {
 	if len(tables) == 0 {

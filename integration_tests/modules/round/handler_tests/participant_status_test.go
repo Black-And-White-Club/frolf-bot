@@ -9,16 +9,18 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
 // createValidParticipantJoinRequestPayload creates a valid ParticipantJoinRequestPayload for testing
-func createValidParticipantJoinRequestPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, response roundtypes.Response) roundevents.ParticipantJoinRequestPayload {
-	return roundevents.ParticipantJoinRequestPayload{
+func createValidParticipantJoinRequestPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, response roundtypes.Response) roundevents.ParticipantJoinRequestPayloadV1 {
+	return roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:  roundID,
 		UserID:   userID,
 		Response: response,
+		GuildID:  "test-guild",
 		// TagNumber and JoinedLate will be determined by the service
 	}
 }
@@ -39,197 +41,196 @@ func createExistingRoundForTesting(t *testing.T, userID sharedtypes.DiscordID, d
 
 // TestHandleParticipantJoinRequest tests the participant join request handler integration
 func TestHandleParticipantJoinRequest(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	user := generator.GenerateUsers(1)[0]
-	userID := sharedtypes.DiscordID(user.UserID)
-	anotherUser := generator.GenerateUsers(1)[0]
-	anotherUserID := sharedtypes.DiscordID(anotherUser.UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
-		name                        string
-		setupAndRun                 func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectJoinValidationRequest bool // Expect join validation request for Accept/Tentative
-		expectRemovalRequest        bool // Expect removal request for toggle scenarios
-		expectStatusUpdateRequest   bool // Expect status update request for Decline responses
-		expectStatusCheckError      bool
+		name        string
+		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
 	}{
 		{
-			name:                        "Success - New Join Request (Accept)",
-			expectJoinValidationRequest: true, // Expect join validation request for Accept
+			name: "Success - New Join Request (Accept)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundForTesting(t, userID, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, anotherUserID, roundtypes.ResponseAccept)
+				data := NewTestData()
+				roundID := createExistingRoundForTesting(t, data.UserID, deps.DB)
+				// Use a different user for the join request
+				joinerID := sharedtypes.DiscordID(uuid.New().String())
+				payload := createValidParticipantJoinRequestPayload(roundID, joinerID, roundtypes.ResponseAccept)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, roundID, true, false, false, false)
 			},
 		},
 		{
-			name:                        "Success - New Join Request (Tentative)",
-			expectJoinValidationRequest: true, // Expect join validation request for Tentative
+			name: "Success - New Join Request (Tentative)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundForTesting(t, userID, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, anotherUserID, roundtypes.ResponseTentative)
+				data := NewTestData()
+				roundID := createExistingRoundForTesting(t, data.UserID, deps.DB)
+				joinerID := sharedtypes.DiscordID(uuid.New().String())
+				payload := createValidParticipantJoinRequestPayload(roundID, joinerID, roundtypes.ResponseTentative)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, roundID, true, false, false, false)
 			},
 		},
 		{
-			name:                        "Success - New Join Request (Decline)",
-			expectJoinValidationRequest: true, // All new joins go through validation first
-			expectStatusUpdateRequest:   true, // Decline responses also trigger status update
+			name: "Success - New Join Request (Decline)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundForTesting(t, userID, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, anotherUserID, roundtypes.ResponseDecline)
+				data := NewTestData()
+				roundID := createExistingRoundForTesting(t, data.UserID, deps.DB)
+				joinerID := sharedtypes.DiscordID(uuid.New().String())
+				payload := createValidParticipantJoinRequestPayload(roundID, joinerID, roundtypes.ResponseDecline)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				// Expect join validation AND status update
+				validateJoinRequestMessages(t, helper, roundID, true, false, true, false)
 			},
 		},
 		{
-			name:                 "Success - Toggle Removal (Accept to Accept)",
-			expectRemovalRequest: true, // Expect removal request for toggle
+			name: "Success - Toggle Removal (Accept to Accept)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundWithParticipant(t, userID, roundtypes.ResponseAccept, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, userID, roundtypes.ResponseAccept)
+				data := NewTestData()
+				roundID := createExistingRoundWithParticipant(t, data.UserID, roundtypes.ResponseAccept, deps.DB)
+				payload := createValidParticipantJoinRequestPayload(roundID, data.UserID, roundtypes.ResponseAccept)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, roundID, false, true, false, false)
 			},
 		},
 		{
-			name:                 "Success - Toggle Removal (Decline to Decline)",
-			expectRemovalRequest: true, // Expect removal request for toggle
+			name: "Success - Toggle Removal (Decline to Decline)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundWithParticipant(t, userID, roundtypes.ResponseDecline, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, userID, roundtypes.ResponseDecline)
+				data := NewTestData()
+				roundID := createExistingRoundWithParticipant(t, data.UserID, roundtypes.ResponseDecline, deps.DB)
+				payload := createValidParticipantJoinRequestPayload(roundID, data.UserID, roundtypes.ResponseDecline)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, roundID, false, true, false, false)
 			},
 		},
 		{
-			name:                        "Success - Status Change (Accept to Decline)",
-			expectJoinValidationRequest: true, // Status change from Accept to Decline produces validation request
-			expectStatusUpdateRequest:   true, // Decline responses also trigger status update
+			name: "Success - Status Change (Accept to Decline)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundWithParticipant(t, userID, roundtypes.ResponseAccept, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, userID, roundtypes.ResponseDecline)
+				data := NewTestData()
+				roundID := createExistingRoundWithParticipant(t, data.UserID, roundtypes.ResponseAccept, deps.DB)
+				payload := createValidParticipantJoinRequestPayload(roundID, data.UserID, roundtypes.ResponseDecline)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				// Status change produces validation request, and Decline triggers status update
+				validateJoinRequestMessages(t, helper, roundID, true, false, true, false)
 			},
 		},
 		{
-			name:                        "Success - Status Change (Decline to Accept)",
-			expectJoinValidationRequest: true, // Status change from Decline to Accept produces validation request
+			name: "Success - Status Change (Decline to Accept)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				roundID := createExistingRoundWithParticipant(t, userID, roundtypes.ResponseDecline, deps.DB)
-				payload := createValidParticipantJoinRequestPayload(roundID, userID, roundtypes.ResponseAccept)
+				data := NewTestData()
+				roundID := createExistingRoundWithParticipant(t, data.UserID, roundtypes.ResponseDecline, deps.DB)
+				payload := createValidParticipantJoinRequestPayload(roundID, data.UserID, roundtypes.ResponseAccept)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, roundID, true, false, false, false)
 			},
 		},
 		{
-			name:                   "Failure - Non-Existent Round ID",
-			expectStatusCheckError: true, // Service still returns error for non-existent rounds
+			name: "Failure - Non-Existent Round ID",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				data := NewTestData()
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createValidParticipantJoinRequestPayload(nonExistentRoundID, userID, roundtypes.ResponseAccept)
+				payload := createValidParticipantJoinRequestPayload(nonExistentRoundID, data.UserID, roundtypes.ResponseAccept)
 				helper.PublishParticipantJoinRequest(t, context.Background(), payload)
+
+				validateJoinRequestMessages(t, helper, nonExistentRoundID, false, false, false, true)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
+			// Clear message capture before each subtest
+			deps.MessageCapture.Clear()
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			// Clear messages at the start and end of each test for isolation
-			helper.ClearMessages()
-			t.Cleanup(func() {
-				helper.ClearMessages()
-			})
-
-			// Run the test scenario
 			tc.setupAndRun(t, helper, &deps)
+		})
+	}
+}
 
-			// Wait for message processing with longer timeout for chained events
-			time.Sleep(2 * time.Second)
+func validateJoinRequestMessages(t *testing.T, helper *testutils.RoundTestHelper, roundID sharedtypes.RoundID, expectJoinValidation, expectRemoval, expectStatusUpdate, expectError bool) {
+	t.Helper()
+	deadline := time.Now().Add(1 * time.Second)
 
-			// Get messages for verification
-			joinValidationMsgs := helper.GetParticipantJoinValidationRequestMessages()
-			removalRequestMsgs := helper.GetParticipantRemovalRequestMessages()
-			statusUpdateMsgs := helper.GetParticipantStatusUpdateRequestMessages()
-			errorMsgs := helper.GetParticipantStatusCheckErrorMessages()
+	var foundJoinValidation *message.Message
+	var foundRemoval *message.Message
+	var foundStatusUpdate *message.Message
+	var foundError *message.Message
 
-			t.Logf("Message counts - JoinValidation: %d, RemovalRequest: %d, StatusUpdate: %d, Error: %d",
-				len(joinValidationMsgs), len(removalRequestMsgs), len(statusUpdateMsgs), len(errorMsgs))
-
-			// Check what messages were produced by the handler
-			// HandleParticipantJoinRequest currently produces:
-			// - RoundParticipantJoinValidationRequest for Accept/Tentative new joins and status changes
-			// - RoundParticipantRemovalRequest for toggle removals
-			// - RoundParticipantStatusUpdateRequest for Decline responses (via validation handler)
-			// - RoundParticipantStatusCheckError for failures
-
-			if tc.expectJoinValidationRequest && tc.expectStatusUpdateRequest {
-				// Both join validation and status update are expected (e.g., Decline responses)
-				if len(joinValidationMsgs) == 0 {
-					t.Error("Expected participant join validation request message, got none")
-				}
-				if len(statusUpdateMsgs) == 0 {
-					t.Error("Expected participant status update request message, got none")
-				}
-				if len(removalRequestMsgs) > 0 {
-					t.Errorf("Expected no removal request messages, got %d", len(removalRequestMsgs))
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			} else if tc.expectJoinValidationRequest {
-				if len(joinValidationMsgs) == 0 {
-					t.Error("Expected participant join validation request message, got none")
-				}
-				if len(removalRequestMsgs) > 0 {
-					t.Errorf("Expected no removal request messages, got %d", len(removalRequestMsgs))
-				}
-				if len(statusUpdateMsgs) > 0 {
-					t.Errorf("Expected no status update messages, got %d", len(statusUpdateMsgs))
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			} else if tc.expectRemovalRequest {
-				if len(removalRequestMsgs) == 0 {
-					t.Error("Expected participant removal request message, got none")
-				}
-				if len(joinValidationMsgs) > 0 {
-					t.Errorf("Expected no join validation messages, got %d", len(joinValidationMsgs))
-				}
-				if len(statusUpdateMsgs) > 0 {
-					t.Errorf("Expected no status update messages, got %d", len(statusUpdateMsgs))
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			} else if tc.expectStatusUpdateRequest {
-				if len(statusUpdateMsgs) == 0 {
-					t.Error("Expected participant status update request message, got none")
-				}
-				if len(joinValidationMsgs) > 0 {
-					t.Errorf("Expected no join validation messages, got %d", len(joinValidationMsgs))
-				}
-				if len(removalRequestMsgs) > 0 {
-					t.Errorf("Expected no removal request messages, got %d", len(removalRequestMsgs))
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			} else if tc.expectStatusCheckError {
-				if len(errorMsgs) == 0 {
-					t.Error("Expected participant status check error message, got none")
-				}
-				if len(joinValidationMsgs) > 0 {
-					t.Errorf("Expected no join validation messages, got %d", len(joinValidationMsgs))
-				}
-				if len(removalRequestMsgs) > 0 {
-					t.Errorf("Expected no removal request messages, got %d", len(removalRequestMsgs))
-				}
-				if len(statusUpdateMsgs) > 0 {
-					t.Errorf("Expected no status update messages, got %d", len(statusUpdateMsgs))
+	for time.Now().Before(deadline) {
+		if expectJoinValidation && foundJoinValidation == nil {
+			msgs := helper.GetParticipantJoinValidationRequestMessages()
+			for _, msg := range msgs {
+				parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinValidationRequestPayloadV1](msg)
+				if err == nil && parsed.RoundID == roundID {
+					foundJoinValidation = msg
+					break
 				}
 			}
-		})
+		}
+
+		if expectRemoval && foundRemoval == nil {
+			msgs := helper.GetParticipantRemovalRequestMessages()
+			for _, msg := range msgs {
+				parsed, err := testutils.ParsePayload[roundevents.ParticipantRemovalRequestPayloadV1](msg)
+				if err == nil && parsed.RoundID == roundID {
+					foundRemoval = msg
+					break
+				}
+			}
+		}
+
+		if expectStatusUpdate && foundStatusUpdate == nil {
+			msgs := helper.GetParticipantStatusUpdateRequestMessages()
+			for _, msg := range msgs {
+				parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinRequestPayloadV1](msg)
+				if err == nil && parsed.RoundID == roundID {
+					foundStatusUpdate = msg
+					break
+				}
+			}
+		}
+
+		if expectError && foundError == nil {
+			msgs := helper.GetParticipantStatusCheckErrorMessages()
+			for _, msg := range msgs {
+				parsed, err := testutils.ParsePayload[roundevents.ParticipantStatusCheckErrorPayloadV1](msg)
+				if err == nil && parsed.RoundID == roundID {
+					foundError = msg
+					break
+				}
+			}
+		}
+
+		if (!expectJoinValidation || foundJoinValidation != nil) &&
+			(!expectRemoval || foundRemoval != nil) &&
+			(!expectStatusUpdate || foundStatusUpdate != nil) &&
+			(!expectError || foundError != nil) {
+			break
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if expectJoinValidation && foundJoinValidation == nil {
+		t.Error("Expected participant join validation request message, got none")
+	}
+	if expectRemoval && foundRemoval == nil {
+		t.Error("Expected participant removal request message, got none")
+	}
+	if expectStatusUpdate && foundStatusUpdate == nil {
+		t.Error("Expected participant status update request message, got none")
+	}
+	if expectError && foundError == nil {
+		t.Error("Expected participant status check error message, got none")
 	}
 }

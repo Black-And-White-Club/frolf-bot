@@ -16,7 +16,7 @@ import (
 )
 
 // publishScoreUpdateRequest helper to publish a ScoreUpdateRequest message.
-func publishScoreUpdateRequest(t *testing.T, deps ScoreHandlerTestDeps, payload scoreevents.ScoreUpdateRequestPayload) *message.Message {
+func publishScoreUpdateRequest(t *testing.T, deps ScoreHandlerTestDeps, payload scoreevents.ScoreUpdateRequestedPayloadV1) *message.Message {
 	t.Helper()
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -25,9 +25,9 @@ func publishScoreUpdateRequest(t *testing.T, deps ScoreHandlerTestDeps, payload 
 	msg := message.NewMessage(uuid.New().String(), data)
 	correlationID := uuid.New().String()
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-	msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequest)
+	msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequestedV1)
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequest, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequestedV1, msg); err != nil {
 		t.Fatalf("Failed to publish ScoreUpdateRequest: %v", err)
 	}
 	return msg
@@ -36,12 +36,12 @@ func publishScoreUpdateRequest(t *testing.T, deps ScoreHandlerTestDeps, payload 
 // validateScoreUpdateSuccess helper to validate a ScoreUpdateSuccess message.
 func validateScoreUpdateSuccess(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, responseMsg *message.Message) {
 	t.Helper()
-	var successPayload scoreevents.ScoreUpdateSuccessPayload
+	var successPayload scoreevents.ScoreUpdatedPayloadV1
 	if err := deps.ScoreModule.Helper.UnmarshalPayload(responseMsg, &successPayload); err != nil {
 		t.Fatalf("Unmarshal error for ScoreUpdateSuccessPayload: %v", err)
 	}
 
-	var incomingPayload scoreevents.ScoreUpdateRequestPayload
+	var incomingPayload scoreevents.ScoreUpdateRequestedPayloadV1
 	if err := json.Unmarshal(incomingMsg.Payload, &incomingPayload); err != nil {
 		t.Fatalf("Failed to unmarshal incoming payload: %v", err)
 	}
@@ -63,12 +63,12 @@ func validateScoreUpdateSuccess(t *testing.T, deps ScoreHandlerTestDeps, incomin
 // validateScoreUpdateFailure helper to validate a ScoreUpdateFailure message.
 func validateScoreUpdateFailure(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, responseMsg *message.Message) {
 	t.Helper()
-	var failurePayload scoreevents.ScoreUpdateFailurePayload
+	var failurePayload scoreevents.ScoreUpdateFailedPayloadV1
 	if err := deps.ScoreModule.Helper.UnmarshalPayload(responseMsg, &failurePayload); err != nil {
 		t.Fatalf("Unmarshal error for ScoreUpdateFailurePayload: %v", err)
 	}
 
-	var incomingPayload scoreevents.ScoreUpdateRequestPayload
+	var incomingPayload scoreevents.ScoreUpdateRequestedPayloadV1
 	if err := json.Unmarshal(incomingMsg.Payload, &incomingPayload); err != nil {
 		t.Fatalf("Failed to unmarshal incoming payload: %v", err)
 	}
@@ -79,8 +79,8 @@ func validateScoreUpdateFailure(t *testing.T, deps ScoreHandlerTestDeps, incomin
 	if failurePayload.UserID != incomingPayload.UserID {
 		t.Errorf("ScoreUpdateFailurePayload UserID mismatch: expected %q, got %q", incomingPayload.UserID, failurePayload.UserID)
 	}
-	if failurePayload.Error == "" {
-		t.Error("Expected non-empty error message in failure payload")
+	if failurePayload.Reason == "" {
+		t.Error("Expected non-empty reason message in failure payload")
 	}
 	if responseMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
 		t.Error("Correlation ID mismatch in failure message")
@@ -121,7 +121,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				return roundID
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
-				payload := scoreevents.ScoreUpdateRequestPayload{
+				payload := scoreevents.ScoreUpdateRequestedPayloadV1{
 					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID,
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
@@ -130,24 +130,24 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				return publishScoreUpdateRequest(t, deps, payload)
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
-				expectedSuccessTopic := scoreevents.ScoreUpdateSuccess
+				expectedSuccessTopic := scoreevents.ScoreUpdatedV1
 				successMsgs := received[expectedSuccessTopic]
 				if len(successMsgs) != 1 {
 					t.Fatalf("Expected 1 success message on topic %q, got %d", expectedSuccessTopic, len(successMsgs))
 				}
 				validateScoreUpdateSuccess(t, deps, incomingMsg, successMsgs[0])
 
-				unexpectedFailureTopic := scoreevents.ScoreUpdateFailure
+				unexpectedFailureTopic := scoreevents.ScoreUpdateFailedV1
 				if len(received[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(received[unexpectedFailureTopic]))
 				}
-				unexpectedBatchTopic := sharedevents.LeaderboardBatchTagAssignmentRequested
+				unexpectedBatchTopic := sharedevents.LeaderboardBatchTagAssignmentRequestedV1
 				if len(received[unexpectedBatchTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedBatchTopic, len(received[unexpectedBatchTopic]))
 				}
 			},
 			// Update to use the actual event topics defined in scoreevents package
-			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateSuccess},
+			expectedOutgoingTopics: []string{scoreevents.ScoreUpdatedV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -158,7 +158,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				return sharedtypes.RoundID(uuid.New()) // Return a RoundID that doesn't exist in the DB
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
-				payload := scoreevents.ScoreUpdateRequestPayload{
+				payload := scoreevents.ScoreUpdateRequestedPayloadV1{
 					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID, // This RoundID does not have a score record
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
@@ -168,7 +168,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
 				// Based on the handler, we should expect a failure message
-				failureTopic := scoreevents.ScoreUpdateFailure
+				failureTopic := scoreevents.ScoreUpdateFailedV1
 				failureMsgs := received[failureTopic]
 				if len(failureMsgs) != 1 {
 					t.Fatalf("Expected 1 failure message on topic %q, got %d", failureTopic, len(failureMsgs))
@@ -176,13 +176,13 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				validateScoreUpdateFailure(t, deps, incomingMsg, failureMsgs[0])
 
 				// Verify no success message was sent
-				successTopic := scoreevents.ScoreUpdateSuccess
+				successTopic := scoreevents.ScoreUpdatedV1
 				if len(received[successTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", successTopic, len(received[successTopic]))
 				}
 			},
 			// Update to use the actual event topics defined in scoreevents package
-			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailure},
+			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailedV1},
 			expectHandlerError:     false, // The handler should handle this gracefully with a failure message
 			timeout:                5 * time.Second,
 		},
@@ -205,7 +205,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				return roundID
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, users []testutils.User, roundID sharedtypes.RoundID) *message.Message {
-				payload := scoreevents.ScoreUpdateRequestPayload{
+				payload := scoreevents.ScoreUpdateRequestedPayloadV1{
 					GuildID: sharedtypes.GuildID("test-guild"),
 					RoundID: roundID,
 					UserID:  sharedtypes.DiscordID(users[0].UserID),
@@ -215,7 +215,7 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, received map[string][]*message.Message, initialRoundID sharedtypes.RoundID) {
 				// Based on the handler, we should expect a failure message for invalid score
-				failureTopic := scoreevents.ScoreUpdateFailure
+				failureTopic := scoreevents.ScoreUpdateFailedV1
 				failureMsgs := received[failureTopic]
 				if len(failureMsgs) != 1 {
 					t.Fatalf("Expected 1 failure message on topic %q, got %d", failureTopic, len(failureMsgs))
@@ -223,13 +223,13 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				validateScoreUpdateFailure(t, deps, incomingMsg, failureMsgs[0])
 
 				// Verify no success message was sent
-				successTopic := scoreevents.ScoreUpdateSuccess
+				successTopic := scoreevents.ScoreUpdatedV1
 				if len(received[successTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", successTopic, len(received[successTopic]))
 				}
 			},
 			// Update to use the actual event topics defined in scoreevents package
-			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailure},
+			expectedOutgoingTopics: []string{scoreevents.ScoreUpdateFailedV1},
 			expectHandlerError:     false, // The handler should handle this gracefully with a failure message
 			timeout:                5 * time.Second,
 		},
@@ -244,9 +244,9 @@ func TestHandleCorrectScoreRequest(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid JSON"))
 				correlationID := uuid.New().String()
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, correlationID)
-				msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequest)
+				msg.Metadata.Set("topic", scoreevents.ScoreUpdateRequestedV1)
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), scoreevents.ScoreUpdateRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish invalid message: %v", err)
 				}
 				return msg

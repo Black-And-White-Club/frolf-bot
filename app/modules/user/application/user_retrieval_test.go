@@ -49,7 +49,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 					}, nil)
 			},
 			expectedOpResult: UserOperationResult{
-				Success: &userevents.GetUserResponsePayload{
+				Success: &userevents.GetUserResponsePayloadV1{
 					User: &usertypes.UserData{
 						ID:     1,
 						UserID: testUserID,
@@ -70,7 +70,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			},
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.GetUserFailedPayload{
+				Failure: &userevents.GetUserFailedPayloadV1{
 					UserID: testUserID,
 					Reason: "user not found", // Reason set in the service code
 				},
@@ -88,7 +88,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			},
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.GetUserFailedPayload{
+				Failure: &userevents.GetUserFailedPayloadV1{
 					UserID: testUserID,
 					Reason: "failed to retrieve user from database", // Reason set in the service code
 				},
@@ -120,10 +120,10 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
-				expectedSuccess := tt.expectedOpResult.Success.(*userevents.GetUserResponsePayload)
-				gotSuccess, ok := gotResult.Success.(*userevents.GetUserResponsePayload)
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.GetUserResponsePayloadV1)
+				gotSuccess, ok := gotResult.Success.(*userevents.GetUserResponsePayloadV1)
 				if !ok {
-					t.Errorf("Expected success payload of type *userevents.GetUserResponsePayload, got %T", gotResult.Success)
+					t.Errorf("Expected success payload of type *userevents.GetUserResponsePayloadV1, got %T", gotResult.Success)
 				} else if gotSuccess == nil || gotSuccess.User == nil {
 					t.Errorf("Expected non-nil success payload and user, got nil")
 				} else if gotSuccess.User.UserID != expectedSuccess.User.UserID {
@@ -136,10 +136,10 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 			}
 
 			if tt.expectedOpResult.Failure != nil {
-				expectedFailure := tt.expectedOpResult.Failure.(*userevents.GetUserFailedPayload)
-				gotFailure, ok := gotResult.Failure.(*userevents.GetUserFailedPayload)
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.GetUserFailedPayloadV1)
+				gotFailure, ok := gotResult.Failure.(*userevents.GetUserFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure payload of type *userevents.GetUserFailedPayload, got %T", gotResult.Failure)
+					t.Errorf("Expected failure payload of type *userevents.GetUserFailedPayloadV1, got %T", gotResult.Failure)
 				} else if gotFailure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
 				} else if gotFailure.Reason != expectedFailure.Reason {
@@ -205,7 +205,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 					Return(sharedtypes.UserRoleAdmin, nil)
 			},
 			expectedOpResult: UserOperationResult{
-				Success: &userevents.GetUserRoleResponsePayload{
+				Success: &userevents.GetUserRoleResponsePayloadV1{
 					UserID: testUserID,
 					Role:   sharedtypes.UserRoleAdmin,
 				},
@@ -224,7 +224,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			},
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.GetUserRoleFailedPayload{
+				Failure: &userevents.GetUserRoleFailedPayloadV1{
 					UserID: testUserID,
 					Reason: "failed to retrieve user role from database", // Reason set in the service code
 				},
@@ -241,7 +241,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			},
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.GetUserRoleFailedPayload{
+				Failure: &userevents.GetUserRoleFailedPayloadV1{
 					UserID: testUserID,
 					Reason: "user found but has invalid role", // Reason set in the service code
 				},
@@ -273,10 +273,10 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
-				expectedSuccess := tt.expectedOpResult.Success.(*userevents.GetUserRoleResponsePayload)
-				gotSuccess, ok := gotResult.Success.(*userevents.GetUserRoleResponsePayload)
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.GetUserRoleResponsePayloadV1)
+				gotSuccess, ok := gotResult.Success.(*userevents.GetUserRoleResponsePayloadV1)
 				if !ok {
-					t.Errorf("Expected success payload of type *userevents.GetUserRoleResponsePayload, got %T", gotResult.Success)
+					t.Errorf("Expected success payload of type *userevents.GetUserRoleResponsePayloadV1, got %T", gotResult.Success)
 				} else if gotSuccess == nil {
 					t.Errorf("Expected non-nil success payload, got nil")
 				} else if gotSuccess.UserID != expectedSuccess.UserID {
@@ -289,10 +289,10 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 			}
 
 			if tt.expectedOpResult.Failure != nil {
-				expectedFailure := tt.expectedOpResult.Failure.(*userevents.GetUserRoleFailedPayload)
-				gotFailure, ok := gotResult.Failure.(*userevents.GetUserRoleFailedPayload)
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.GetUserRoleFailedPayloadV1)
+				gotFailure, ok := gotResult.Failure.(*userevents.GetUserRoleFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure payload of type *userevents.GetUserRoleFailedPayload, got %T", gotResult.Failure)
+					t.Errorf("Expected failure payload of type *userevents.GetUserRoleFailedPayloadV1, got %T", gotResult.Failure)
 				} else if gotFailure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
 				} else if gotFailure.Reason != expectedFailure.Reason {

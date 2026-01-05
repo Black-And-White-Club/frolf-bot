@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
@@ -31,7 +32,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		"2:12345678901234568", // 2nd place
 	}
 
-	testPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
+	testPayload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 		RoundID:               testRoundID,
 		SortedParticipantTags: testSortedParticipantTags,
 		Source:                "round",
@@ -64,7 +65,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -91,28 +92,28 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					gomock.Any(),                  // batchID - generated UUID
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.LeaderboardUpdatedPayload{
+						Success: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
+				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayloadV1{
 					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					leaderboardevents.LeaderboardUpdated,
+					leaderboardevents.LeaderboardUpdatedV1,
 				).Return(testMsg, nil)
 
 				// Expect the tag update message for scheduled rounds
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // The tag update payload (map[string]interface{})
-					leaderboardevents.TagUpdateForScheduledRounds,
+					sharedevents.TagUpdateForScheduledRoundsV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -132,7 +133,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Invalid tag format - missing colon",
 			mockSetup: func() {
-				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
+				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 					RoundID:               testRoundID,
 					SortedParticipantTags: []string{"12345678901234567"}, // Missing "tag:" prefix
 					Source:                "round",
@@ -141,7 +142,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *invalidPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *invalidPayload
 						return nil
 					},
 				)
@@ -154,7 +155,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Invalid tag number format",
 			mockSetup: func() {
-				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayload{
+				invalidPayload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 					RoundID:               testRoundID,
 					SortedParticipantTags: []string{"invalid:12345678901234567"}, // Invalid tag number
 					Source:                "round",
@@ -163,7 +164,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *invalidPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *invalidPayload
 						return nil
 					},
 				)
@@ -178,7 +179,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -217,7 +218,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -243,21 +244,21 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.LeaderboardUpdatedPayload{
+						Success: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 							RoundID: testRoundID,
 						},
 					},
 					nil,
 				)
 
-				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayload{
+				updateResultPayload := &leaderboardevents.LeaderboardUpdatedPayloadV1{
 					RoundID: testRoundID,
 				}
 
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					updateResultPayload,
-					leaderboardevents.LeaderboardUpdated,
+					leaderboardevents.LeaderboardUpdatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -270,7 +271,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -296,7 +297,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.LeaderboardUpdateFailedPayload{
+						Failure: &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
 							RoundID: testRoundID,
 							Reason:  "custom service error",
 						},
@@ -304,7 +305,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					nil,
 				)
 
-				failurePayload := &leaderboardevents.LeaderboardUpdateFailedPayload{
+				failurePayload := &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
 					RoundID: testRoundID,
 					Reason:  "custom service error",
 				}
@@ -312,7 +313,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					leaderboardevents.LeaderboardUpdateFailed,
+					leaderboardevents.LeaderboardUpdateFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -324,7 +325,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -365,7 +366,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayload) = *testPayload
+						*out.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)

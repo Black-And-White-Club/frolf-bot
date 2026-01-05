@@ -13,9 +13,9 @@ import (
 func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetRoundRequest",
-		&roundevents.GetRoundRequestPayload{},
+		&roundevents.GetRoundRequestPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			getRoundRequestPayload := payload.(*roundevents.GetRoundRequestPayload)
+			getRoundRequestPayload := payload.(*roundevents.GetRoundRequestPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received GetRoundRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -42,7 +42,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -59,7 +59,7 @@ func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					round,
-					roundevents.RoundRetrieved,
+					roundevents.RoundRetrievedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

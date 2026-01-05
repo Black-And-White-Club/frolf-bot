@@ -57,7 +57,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
-		payload        roundevents.RoundStartedPayload
+		payload        roundevents.RoundStartedPayloadV1
 		expectedResult RoundOperationResult
 		expectedError  error
 	}{
@@ -80,7 +80,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
 				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(nil)
 			},
-			payload: roundevents.RoundStartedPayload{
+			payload: roundevents.RoundStartedPayloadV1{
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testStartRoundID,
 				Title:     testRoundTitle,
@@ -119,7 +119,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetRound(ctx, guildID, testStartRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
-			payload: roundevents.RoundStartedPayload{
+			payload: roundevents.RoundStartedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testStartRoundID,
 			},
@@ -150,7 +150,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
 				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
 			},
-			payload: roundevents.RoundStartedPayload{
+			payload: roundevents.RoundStartedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testStartRoundID,
 			},
@@ -199,8 +199,8 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
 				} else {
-					if expectedPayload, ok := tt.expectedResult.Success.(*roundevents.DiscordRoundStartPayload); ok {
-						if actualPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayload); ok {
+					if expectedPayload, ok := tt.expectedResult.Success.(*roundevents.DiscordRoundStartPayloadV1); ok {
+						if actualPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayloadV1); ok {
 							if actualPayload.RoundID != expectedPayload.RoundID {
 								t.Errorf("expected RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
 							}
@@ -224,7 +224,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 								t.Errorf("expected Participants %v, got %v", expectedPayload.Participants, actualPayload.Participants)
 							}
 						} else {
-							t.Errorf("expected result.Success to be *roundevents.DiscordRoundStartPayload, got %T", result.Success)
+							t.Errorf("expected result.Success to be *roundevents.DiscordRoundStartPayloadV1, got %T", result.Success)
 						}
 					}
 				}
@@ -234,8 +234,8 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got success")
 				} else {
-					if expectedPayload, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayload); ok {
-						if actualPayload, ok := result.Failure.(*roundevents.RoundErrorPayload); ok {
+					if expectedPayload, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayloadV1); ok {
+						if actualPayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1); ok {
 							if actualPayload.RoundID != expectedPayload.RoundID {
 								t.Errorf("expected Failure RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
 							}
@@ -243,7 +243,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 								t.Errorf("expected Failure Error %v, got %v", expectedPayload.Error, actualPayload.Error)
 							}
 						} else {
-							t.Errorf("expected result.Failure to be *roundevents.RoundErrorPayload, got %T", result.Failure)
+							t.Errorf("expected result.Failure to be *roundevents.RoundErrorPayloadV1, got %T", result.Failure)
 						}
 					}
 				}

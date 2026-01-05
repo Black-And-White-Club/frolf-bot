@@ -24,6 +24,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
+var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+
 // Global variables for the test environment, initialized once.
 var (
 	testEnv     *testutils.TestEnvironment
@@ -76,33 +78,16 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	// Get the shared test environment
 	env := GetTestEnv(t)
 
-	// Check if containers should be recreated for stability
-	if err := env.MaybeRecreateContainers(context.Background()); err != nil {
-		t.Fatalf("Failed to handle container recreation: %v", err)
-	}
-
-	// Perform deep cleanup between tests for better isolation
-	if err := env.DeepCleanup(); err != nil {
-		t.Fatalf("Failed to perform deep cleanup: %v", err)
+	// Reset environment for clean state
+	resetCtx, resetCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer resetCancel()
+	if err := env.Reset(resetCtx); err != nil {
+		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
 	// Set the APP_ENV to "test" for the duration of the test run
 	oldEnv := os.Getenv("APP_ENV")
 	os.Setenv("APP_ENV", "test")
-
-	// Use standard stream names that the EventBus recognizes
-	standardStreamNames := []string{"user", "discord", "leaderboard", "round", "score"}
-
-	// Clean up NATS consumers for all streams before starting the test
-	if err := env.ResetJetStreamState(env.Ctx, standardStreamNames...); err != nil {
-		t.Fatalf("Failed to clean NATS JetStream state: %v", err)
-	}
-	log.Println("Cleaned up NATS JetStream state for score handler streams before test")
-
-	// Truncate relevant DB tables for a clean state per test
-	if err := testutils.TruncateTables(env.Ctx, env.DB, "scores", "users", "rounds", "leaderboards"); err != nil {
-		t.Fatalf("Failed to truncate DB tables: %v", err)
-	}
 	log.Println("Truncated relevant tables before test")
 
 	scoreDB := &scoredb.ScoreDBImpl{DB: env.DB}
@@ -137,7 +122,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	}
 
 	// Create router with test-appropriate configuration (longer close timeout for graceful shutdown)
-	routerConfig := message.RouterConfig{CloseTimeout: 3 * time.Second}
+	routerConfig := message.RouterConfig{CloseTimeout: 2 * time.Second}
 
 	watermillRouter, err := message.NewRouter(routerConfig, watermillLogger)
 	if err != nil {
@@ -195,26 +180,31 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	// Add comprehensive cleanup function to test context
 	cleanup := func() {
 		log.Println("Running score handler test cleanup...")
-		// Cancel the router and event bus contexts first
-		routerRunCancel()
-		eventBusCancel()
 
-		// Close the score module
+		// Close the score module first to allow graceful router shutdown
+		// while dependencies (EventBus, NATS) are still active.
 		if scoreModule != nil {
 			if err := scoreModule.Close(); err != nil {
 				log.Printf("Error closing Score module in test cleanup: %v", err)
 			}
 		} else {
 			// If module creation failed, ensure event bus and router are closed directly
-			if eventBusImpl != nil {
-				if err := eventBusImpl.Close(); err != nil {
-					log.Printf("Error closing EventBus in test cleanup: %v", err)
-				}
-			}
 			if watermillRouter != nil {
 				if err := watermillRouter.Close(); err != nil {
 					log.Printf("Error closing Watermill router in test cleanup: %v", err)
 				}
+			}
+		}
+
+		// Cancel the router and event bus contexts after module closure
+		routerRunCancel()
+		eventBusCancel()
+
+		// Ensure event bus is closed directly if not already closed by router
+		if eventBusImpl != nil {
+			if err := eventBusImpl.Close(); err != nil {
+				// Ignore errors if it's already closed
+				log.Printf("Note: Error closing EventBus in test cleanup (might be already closed): %v", err)
 			}
 		}
 
@@ -240,8 +230,13 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 
 	t.Cleanup(cleanup)
 
+	// Create a shallow copy of the environment to avoid modifying the global one
+	// and inject the local EventBus so RunTest uses the correct connection
+	localEnv := *env
+	localEnv.EventBus = eventBusImpl
+
 	return ScoreHandlerTestDeps{
-		TestEnvironment:   env,
+		TestEnvironment:   &localEnv,
 		ScoreModule:       scoreModule,
 		Router:            watermillRouter,
 		EventBus:          eventBusImpl,

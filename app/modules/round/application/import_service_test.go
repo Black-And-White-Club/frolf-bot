@@ -71,7 +71,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 
 	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 	ctx := context.Background()
-	basePayload := roundevents.ScorecardUploadedPayload{
+	basePayload := roundevents.ScorecardUploadedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
 		RoundID:   sharedtypes.RoundID(uuid.New()),
 		ImportID:  "import-1",
@@ -89,7 +89,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "failed to fetch round")
+		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayloadV1).Error, "failed to fetch round")
 	})
 
 	t.Run("import conflict", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "another import is already in progress")
+		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayloadV1).Error, "another import is already in progress")
 	})
 
 	t.Run("overwrite when existing import missing metadata", func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayloadV1)
 		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 
@@ -151,7 +151,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayloadV1)
 		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 
@@ -180,7 +180,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayloadV1)
 		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 
@@ -204,7 +204,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		result, err := service.CreateImportJob(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayloadV1)
 		require.Equal(t, payload.ImportID, success.ImportID)
 	})
 }
@@ -215,7 +215,7 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 
 	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 	ctx := context.Background()
-	payload := roundevents.ScorecardURLRequestedPayload{
+	payload := roundevents.ScorecardURLRequestedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
 		RoundID:   sharedtypes.RoundID(uuid.New()),
 		ImportID:  "import-url",
@@ -233,7 +233,7 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 		result, err := service.HandleScorecardURLRequested(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "round not found")
+		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayloadV1).Error, "round not found")
 	})
 
 	t.Run("db update error", func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 		result, err := service.HandleScorecardURLRequested(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayload).Error, "failed to persist UDisc URL")
+		require.Contains(t, result.Failure.(*roundevents.ImportFailedPayloadV1).Error, "failed to persist UDisc URL")
 	})
 
 	t.Run("success updates round", func(t *testing.T) {
@@ -264,7 +264,7 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 		result, err := service.HandleScorecardURLRequested(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ScorecardUploadedPayload)
+		success := result.Success.(*roundevents.ScorecardUploadedPayloadV1)
 		require.Equal(t, payload.UDiscURL, success.UDiscURL)
 		require.NotEmpty(t, success.FileName)
 		require.NotEmpty(t, success.FileURL)
@@ -277,7 +277,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 
 	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 	ctx := context.Background()
-	basePayload := roundevents.ScorecardUploadedPayload{
+	basePayload := roundevents.ScorecardUploadedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
 		RoundID:   sharedtypes.RoundID(uuid.New()),
 		ImportID:  "import-1",
@@ -294,7 +294,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		result, err := service.ParseScorecard(ctx, payload, []byte{})
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		failure := result.Failure.(*roundevents.ImportFailedPayload)
+		failure := result.Failure.(*roundevents.ImportFailedPayloadV1)
 		require.Contains(t, failure.Error, "unsupported file format")
 	})
 
@@ -311,7 +311,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		result, err := service.ParseScorecard(ctx, payload, []byte(sample))
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		parsedPayload := result.Success.(*roundevents.ParsedScorecardPayload)
+		parsedPayload := result.Success.(*roundevents.ParsedScorecardPayloadV1)
 		require.Equal(t, payload.ImportID, parsedPayload.ImportID)
 		require.NotNil(t, parsedPayload.ParsedData)
 		require.Len(t, parsedPayload.ParsedData.PlayerScores, 1)
@@ -336,7 +336,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		result, err := service.ParseScorecard(ctx, payload, xlsxData)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		parsedPayload := result.Success.(*roundevents.ParsedScorecardPayload)
+		parsedPayload := result.Success.(*roundevents.ParsedScorecardPayloadV1)
 		require.Equal(t, payload.ImportID, parsedPayload.ImportID)
 		require.NotNil(t, parsedPayload.ParsedData)
 		require.Len(t, parsedPayload.ParsedData.PlayerScores, 1)
@@ -355,7 +355,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 		result, err := service.ParseScorecard(ctx, payload, []byte("not-a-real-xlsx"))
 		require.NoError(t, err)
 		require.NotNil(t, result.Failure)
-		failure := result.Failure.(*roundevents.ScorecardParseFailedPayload)
+		failure := result.Failure.(*roundevents.ScorecardParseFailedPayloadV1)
 		require.Contains(t, failure.Error, "failed to parse scorecard")
 	})
 }
@@ -367,7 +367,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "import-1",
@@ -386,7 +386,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "import-2",
@@ -410,7 +410,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "import-3",
@@ -436,7 +436,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
 		player := roundtypes.PlayerScoreRow{PlayerName: "Matched One", HoleScores: []int{3, 3}, Total: 0}
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:   sharedtypes.GuildID("guild-1"),
 			RoundID:   sharedtypes.RoundID(uuid.New()),
 			ImportID:  "import-4",
@@ -464,7 +464,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		result, err := service.IngestParsedScorecard(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ImportCompletedPayload)
+		success := result.Success.(*roundevents.ImportCompletedPayloadV1)
 		require.Equal(t, 1, success.MatchedPlayers)
 		require.Equal(t, 0, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
@@ -480,7 +480,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
 		player := roundtypes.PlayerScoreRow{PlayerName: "Auto Add", HoleScores: []int{2, 2}, Total: -2}
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:   sharedtypes.GuildID("guild-1"),
 			RoundID:   sharedtypes.RoundID(uuid.New()),
 			ImportID:  "import-5",
@@ -513,7 +513,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		result, err := service.IngestParsedScorecard(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result.Success)
-		success := result.Success.(*roundevents.ImportCompletedPayload)
+		success := result.Success.(*roundevents.ImportCompletedPayloadV1)
 		require.Equal(t, 1, success.MatchedPlayers)
 		require.Equal(t, 1, success.PlayersAutoAdded)
 		require.Len(t, success.Scores, 1)
@@ -549,7 +549,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ImportCompletedPayload{
+		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "imp-none",
@@ -571,7 +571,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ImportCompletedPayload{
+		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "imp-err",
@@ -585,7 +585,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Failure)
 		// Expect RoundErrorPayload
-		_, ok := res.Failure.(*roundevents.RoundErrorPayload)
+		_, ok := res.Failure.(*roundevents.RoundErrorPayloadV1)
 		require.True(t, ok)
 	})
 
@@ -596,7 +596,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
 		roundID := sharedtypes.RoundID(uuid.New())
-		payload := roundevents.ImportCompletedPayload{
+		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
 			RoundID:  roundID,
 			ImportID: "imp-partial",
@@ -625,7 +625,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		res, err := service.ApplyImportedScores(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, res.Success)
-		success, ok := res.Success.(*roundevents.ImportScoresAppliedPayload)
+		success, ok := res.Success.(*roundevents.ImportScoresAppliedPayloadV1)
 		require.True(t, ok)
 		require.Len(t, success.Participants, 1)
 		require.Equal(t, sharedtypes.DiscordID("u1"), success.Participants[0].UserID)
@@ -637,7 +637,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 
 		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
 		ctx := context.Background()
-		payload := roundevents.ImportCompletedPayload{
+		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
 			RoundID:  sharedtypes.RoundID(uuid.New()),
 			ImportID: "imp-allfail",
@@ -654,7 +654,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		res, err := service.ApplyImportedScores(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, res.Failure)
-		_, ok := res.Failure.(*roundevents.ImportFailedPayload)
+		_, ok := res.Failure.(*roundevents.ImportFailedPayloadV1)
 		require.True(t, ok)
 	})
 }

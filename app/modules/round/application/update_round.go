@@ -16,7 +16,7 @@ import (
 )
 
 // ValidateAndProcessRoundUpdate validates and processes round update with time parsing (like create round)
-func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
+func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "ValidateAndProcessRoundUpdate", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Validating and processing round update request",
 			attr.ExtractCorrelationID(ctx),
@@ -101,7 +101,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 			s.metrics.RecordValidationError(ctx)
 
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              fmt.Sprintf("validation failed: %s", strings.Join(errs, "; ")),
 				},
@@ -115,7 +115,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 		)
 
 		// Build the validated payload for the next step
-		validatedPayload := roundevents.RoundUpdateRequestPayload{
+		validatedPayload := roundevents.RoundUpdateRequestPayloadV1{
 			GuildID:   payload.GuildID, // Copy GuildID for multi-tenant correctness
 			RoundID:   payload.RoundID,
 			UserID:    payload.UserID,
@@ -136,7 +136,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 
 		// Return validation success payload (like create round pattern)
 		return RoundOperationResult{
-			Success: &roundevents.RoundUpdateValidatedPayload{
+			Success: &roundevents.RoundUpdateValidatedPayloadV1{
 				RoundUpdateRequestPayload: validatedPayload,
 			},
 		}, nil
@@ -144,12 +144,12 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 }
 
 // Backwards-compatible wrapper using the real clock.
-func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
 	return s.ValidateAndProcessRoundUpdateWithClock(ctx, payload, timeParser, roundutil.RealClock{})
 }
 
 // UpdateRoundEntity updates the round entity with the validated and parsed values
-func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateRoundEntity", payload.RoundUpdateRequestPayload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Updating round entity",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
@@ -190,7 +190,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              "no valid fields to update",
 				},
@@ -212,7 +212,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              fmt.Sprintf("failed to update round in database: %v", err),
 				},
@@ -226,7 +226,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 		)
 
 		return RoundOperationResult{
-			Success: &roundevents.RoundEntityUpdatedPayload{
+			Success: &roundevents.RoundEntityUpdatedPayloadV1{
 				Round: *updatedRound,
 			},
 		}, nil
@@ -234,14 +234,14 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 }
 
 // UpdateScheduledRoundEvents updates the scheduled events for a round.
-func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (RoundOperationResult, error) {
+func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateScheduledRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		if payload.GuildID == "" {
 			s.logger.ErrorContext(ctx, "GuildID missing in RoundScheduleUpdatePayload; aborting reschedule to prevent orphaned jobs",
 				attr.RoundID("round_id", payload.RoundID),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "guild id missing for scheduled round update",
 				},
@@ -264,7 +264,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              fmt.Sprintf("failed to cancel existing scheduled jobs: %v", err),
 				},
@@ -283,7 +283,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              fmt.Sprintf("failed to get EventMessageID: %v", err),
 				},
@@ -298,7 +298,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              fmt.Sprintf("failed to get current round data: %v", err),
 				},
@@ -322,7 +322,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		// Check if StartTime is provided
 		if payload.StartTime == nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "start time is required for rescheduling events",
 				},
@@ -345,7 +345,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Time("current_time", now),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "Round start time must be in the future",
 				},
@@ -362,7 +362,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Time("reminder_time", reminderTimeUTC),
 			)
 
-			reminderPayload := roundevents.DiscordReminderPayload{
+			reminderPayload := roundevents.DiscordReminderPayloadV1{
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				ReminderType:   "1h",
@@ -385,7 +385,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 					attr.Error(err),
 				)
 				return RoundOperationResult{
-					Failure: &roundevents.RoundUpdateErrorPayload{
+					Failure: &roundevents.RoundUpdateErrorPayloadV1{
 						RoundUpdateRequest: nil,
 						Error:              err.Error(),
 					},
@@ -411,7 +411,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 			attr.Time("start_time", startTimeUTC),
 		)
 
-		startPayload := roundevents.RoundStartedPayload{
+		startPayload := roundevents.RoundStartedPayloadV1{
 			GuildID:   payload.GuildID,
 			RoundID:   payload.RoundID,
 			Title:     finalTitle,
@@ -430,7 +430,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 				attr.Error(err),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              err.Error(),
 				},
@@ -445,7 +445,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 
 		// Return success with the update payload
 		return RoundOperationResult{
-			Success: &roundevents.RoundScheduleUpdatePayload{
+			Success: &roundevents.RoundScheduleUpdatePayloadV1{
 				GuildID:   payload.GuildID,
 				RoundID:   payload.RoundID,
 				Title:     finalTitle,

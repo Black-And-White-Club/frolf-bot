@@ -16,11 +16,9 @@ import (
 )
 
 func TestHandleRoundScheduleUpdate(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	users := generator.GenerateUsers(3)
-	user1ID := sharedtypes.DiscordID(users[0].UserID)
-	user2ID := sharedtypes.DiscordID(users[1].UserID)
-	user3ID := sharedtypes.DiscordID(users[2].UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -29,8 +27,10 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Success - Update Schedule for Round with No Participants",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
 				// Create a round with no participants
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
 				// Get original round for verification - use the correct DB reference
 				originalRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", roundID)
@@ -63,8 +63,9 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				updatedRound.StartTime = &startTime
 				updatedRound.Location = &location
 
-				payload := roundevents.RoundEntityUpdatedPayload{
-					Round: *updatedRound,
+				payload := roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: "test-guild",
+					Round:   *updatedRound,
 				}
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
@@ -76,11 +77,15 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Success - Update Schedule for Round with Participants",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
+				data3 := NewTestData()
 				// Create a round with multiple participants
 				score1 := sharedtypes.Score(2)
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: &score1},
-					{UserID: user3ID, Response: roundtypes.ResponseTentative, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
+					{UserID: data3.UserID, Response: roundtypes.ResponseTentative, Score: nil},
 				})
 
 				// Create schedule update payload for round with participants
@@ -97,8 +102,9 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				updatedRound.StartTime = &startTime
 				updatedRound.Location = &location
 
-				payload := roundevents.RoundEntityUpdatedPayload{
-					Round: *updatedRound,
+				payload := roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: "test-guild",
+					Round:   *updatedRound,
 				}
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
@@ -110,9 +116,12 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Success - Update Schedule with Minimal Payload Data",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
 				// Create a round
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
 				// Create schedule update payload with minimal data
@@ -122,8 +131,9 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				}
 				updatedRound.Title = roundtypes.Title("Minimal Update")
 
-				payload := roundevents.RoundEntityUpdatedPayload{
-					Round: *updatedRound,
+				payload := roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: "test-guild",
+					Round:   *updatedRound,
 				}
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
@@ -135,12 +145,16 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Success - Update Schedule for Round with All Field Types",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
+				data3 := NewTestData()
 				// Create a round with comprehensive data
 				score1 := sharedtypes.Score(5)
 				score2 := sharedtypes.Score(-2)
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: &score1},
-					{UserID: user3ID, Response: roundtypes.ResponseDecline, Score: &score2},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
+					{UserID: data3.UserID, Response: roundtypes.ResponseDecline, Score: &score2},
 				})
 
 				// Get original round to have additional data for verification
@@ -163,8 +177,9 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				comprehensiveRound.StartTime = &startTime
 				comprehensiveRound.Location = &location
 
-				payload := roundevents.RoundEntityUpdatedPayload{
-					Round: *comprehensiveRound,
+				payload := roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: "test-guild",
+					Round:   *comprehensiveRound,
 				}
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
@@ -194,12 +209,12 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				}
 
 				// Check both participants have their scores preserved
-				if p, exists := participantMap[user2ID]; exists {
+				if p, exists := participantMap[data2.UserID]; exists {
 					if p.Score == nil || *p.Score != score1 {
 						t.Errorf("Expected user2 score %d, got %v", score1, p.Score)
 					}
 				}
-				if p, exists := participantMap[user3ID]; exists {
+				if p, exists := participantMap[data3.UserID]; exists {
 					if p.Score == nil || *p.Score != score2 {
 						t.Errorf("Expected user3 score %d, got %v", score2, p.Score)
 					}
@@ -209,8 +224,10 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Success - Schedule Update with Invalid Future Time (No Error Expected)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
 				// Create a real round first
-				existingRoundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{})
+				existingRoundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 				existingRound, err := deps.DBService.RoundDB.GetRound(context.Background(), "test-guild", existingRoundID)
 				if err != nil {
 					t.Fatalf("Failed to get existing round: %v", err)
@@ -223,8 +240,9 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				existingRound.Title = roundtypes.Title("Updated Schedule Title")
 
 				// Create RoundEntityUpdatedPayload (which is what the handler expects)
-				payload := roundevents.RoundEntityUpdatedPayload{
-					Round: *existingRound,
+				payload := roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: "test-guild",
+					Round:   *existingRound,
 				}
 
 				publishRoundEntityUpdatedForScheduleUpdate(t, deps, deps.MessageCapture, payload)
@@ -236,21 +254,18 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 		{
 			name: "Failure - Invalid JSON Message",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
 				publishInvalidJSONAndExpectNoRoundScheduleUpdateMessages(t, deps, deps.MessageCapture)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			helper.ClearMessages()
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
@@ -263,7 +278,7 @@ func publishInvalidJSONAndExpectNoRoundScheduleUpdateMessages(t *testing.T, deps
 	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 	// FIX: Use the correct input topic that the handler listens to
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdated, invalidMsg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdatedV1, invalidMsg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -284,15 +299,15 @@ func publishInvalidJSONAndExpectNoRoundScheduleUpdateMessages(t *testing.T, deps
 
 // Message retrieval functions - UNIQUE TO ROUND SCHEDULE UPDATE TESTS
 func getRoundScheduleUpdatedFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundScheduleUpdate)
+	return capture.GetMessages(roundevents.RoundScheduleUpdatedV1)
 }
 
 func getRoundScheduleUpdateErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundUpdateError)
+	return capture.GetMessages(roundevents.RoundUpdateErrorV1)
 }
 
 // Test expectation functions - UNIQUE TO ROUND SCHEDULE UPDATE TESTS
-func publishRoundEntityUpdatedForScheduleUpdate(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundEntityUpdatedPayload) {
+func publishRoundEntityUpdatedForScheduleUpdate(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundEntityUpdatedPayloadV1) {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -303,7 +318,7 @@ func publishRoundEntityUpdatedForScheduleUpdate(t *testing.T, deps *RoundHandler
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdated, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundUpdatedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -312,7 +327,7 @@ func publishRoundEntityUpdatedForScheduleUpdate(t *testing.T, deps *RoundHandler
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify no error messages were published
-	errorMsgs := capture.GetMessages(roundevents.RoundUpdateError)
+	errorMsgs := capture.GetMessages(roundevents.RoundUpdateErrorV1)
 	if len(errorMsgs) > 0 {
 		t.Fatalf("Expected no error messages but got %d error messages", len(errorMsgs))
 	}

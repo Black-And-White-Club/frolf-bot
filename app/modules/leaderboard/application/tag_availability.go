@@ -9,7 +9,7 @@ import (
 )
 
 // CheckTagAvailability checks the availability of a tag in the database.
-func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayload) (*leaderboardevents.TagAvailabilityCheckResultPayload, *leaderboardevents.TagAvailabilityCheckFailedPayload, error) {
+func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayloadV1) (*leaderboardevents.TagAvailabilityCheckResultPayloadV1, *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, error) {
 	result, err := s.serviceWrapper(ctx, "CheckTagAvailability", func(ctx context.Context) (LeaderboardOperationResult, error) {
 		s.logger.InfoContext(ctx, "Checking tag availability",
 			attr.ExtractCorrelationID(ctx),
@@ -29,11 +29,11 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 			s.metrics.RecordTagAvailabilityCheck(ctx, false, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
 
 			return LeaderboardOperationResult{
-				Failure: &leaderboardevents.TagAvailabilityCheckFailedPayload{
+				Failure: &leaderboardevents.TagAvailabilityCheckFailedPayloadV1{
+					GuildID:   guildID,
 					UserID:    payload.UserID,
 					TagNumber: payload.TagNumber,
 					Reason:    "failed to check tag availability",
-					GuildID:   guildID, // Patch: propagate guild_id
 				},
 			}, err
 		}
@@ -49,19 +49,20 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 		s.metrics.RecordTagAvailabilityCheck(ctx, availabilityResult.Available, *payload.TagNumber, leaderboardevents.LeaderboardStreamName)
 
 		return LeaderboardOperationResult{
-			Success: &leaderboardevents.TagAvailabilityCheckResultPayload{
+			Success: &leaderboardevents.TagAvailabilityCheckResultPayloadV1{
+				GuildID:   guildID,
 				UserID:    payload.UserID,
 				TagNumber: payload.TagNumber,
 				Available: availabilityResult.Available,
 				Reason:    availabilityResult.Reason,
-				GuildID:   guildID, // Patch: propagate guild_id
 			},
 		}, nil
 	})
 	if err != nil {
-		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayload)
+		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayloadV1)
 		if !ok {
-			failurePayload = &leaderboardevents.TagAvailabilityCheckFailedPayload{
+			failurePayload = &leaderboardevents.TagAvailabilityCheckFailedPayloadV1{
+				GuildID:   guildID,
 				UserID:    payload.UserID,
 				TagNumber: payload.TagNumber,
 				Reason:    "unexpected error format",
@@ -70,9 +71,10 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 		return nil, failurePayload, err
 	}
 
-	successPayload, ok := result.Success.(*leaderboardevents.TagAvailabilityCheckResultPayload)
+	successPayload, ok := result.Success.(*leaderboardevents.TagAvailabilityCheckResultPayloadV1)
 	if !ok {
-		successPayload = &leaderboardevents.TagAvailabilityCheckResultPayload{
+		successPayload = &leaderboardevents.TagAvailabilityCheckResultPayloadV1{
+			GuildID:   guildID,
 			UserID:    payload.UserID,
 			TagNumber: payload.TagNumber,
 			Available: false,

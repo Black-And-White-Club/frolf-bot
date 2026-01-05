@@ -15,9 +15,9 @@ import (
 func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundUpdateRequest",
-		&roundevents.UpdateRoundRequestedPayload{},
+		&roundevents.UpdateRoundRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			updateRequestPayload := payload.(*roundevents.UpdateRoundRequestedPayload)
+			updateRequestPayload := payload.(*roundevents.UpdateRoundRequestedPayloadV1)
 
 			// If the Discord side omitted StartTime (we now only send raw_start_time in metadata),
 			// populate the payload's StartTime & Timezone fields from metadata so the existing
@@ -73,7 +73,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -94,7 +94,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.RoundUpdateValidated,
+					roundevents.RoundUpdateValidatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -126,9 +126,9 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(msg *message.Message) ([]*messa
 func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundUpdateValidated",
-		&roundevents.RoundUpdateValidatedPayload{},
+		&roundevents.RoundUpdateValidatedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundUpdateValidatedPayload := payload.(*roundevents.RoundUpdateValidatedPayload)
+			roundUpdateValidatedPayload := payload.(*roundevents.RoundUpdateValidatedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundUpdateValidated event",
 				attr.CorrelationIDFromMsg(msg),
@@ -153,7 +153,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -167,7 +167,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 			}
 
 			if result.Success != nil {
-				updatedPayload := result.Success.(*roundevents.RoundEntityUpdatedPayload)
+				updatedPayload := result.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
 
 				var messagesToReturn []*message.Message
 
@@ -175,7 +175,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					updatedPayload,
-					roundevents.RoundUpdated,
+					roundevents.RoundUpdatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -206,7 +206,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 					scheduleMsg, err := h.helpers.CreateResultMessage(
 						msg,
 						updatedPayload, // Send the RoundEntityUpdatedPayload
-						roundevents.RoundScheduleUpdate,
+						roundevents.RoundScheduleUpdatedV1,
 					)
 					if err != nil {
 						h.logger.WarnContext(ctx, "Failed to create schedule message, continuing without rescheduling",
@@ -238,7 +238,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(msg *message.Message) ([]*mes
 }
 
 // Helper method to determine if rescheduling is needed
-func (h *RoundHandlers) shouldRescheduleEvents(payload roundevents.RoundUpdateRequestPayload) bool {
+func (h *RoundHandlers) shouldRescheduleEvents(payload roundevents.RoundUpdateRequestPayloadV1) bool {
 	// Only reschedule if the START TIME changed
 	return payload.StartTime != nil
 }
@@ -246,9 +246,9 @@ func (h *RoundHandlers) shouldRescheduleEvents(payload roundevents.RoundUpdateRe
 func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundScheduleUpdate",
-		&roundevents.RoundEntityUpdatedPayload{}, // Receives RoundEntityUpdatedPayload
+		&roundevents.RoundEntityUpdatedPayloadV1{}, // Receives RoundEntityUpdatedPayload
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			updatedPayload := payload.(*roundevents.RoundEntityUpdatedPayload)
+			updatedPayload := payload.(*roundevents.RoundEntityUpdatedPayloadV1)
 
 			roundID := updatedPayload.Round.ID
 
@@ -272,7 +272,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 					)
 				}
 			}
-			schedulePayload := roundevents.RoundScheduleUpdatePayload{
+			schedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
 				GuildID:   guildID,
 				RoundID:   updatedPayload.Round.ID,
 				Title:     updatedPayload.Round.Title,
@@ -304,7 +304,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundUpdateError,
+					roundevents.RoundUpdateErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -320,7 +320,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(msg *message.Message) ([]*mess
 			if result.Success != nil {
 				h.logger.InfoContext(ctx, "Scheduled round update successful", attr.CorrelationIDFromMsg(msg))
 
-				scheduleUpdatedPayload := result.Success.(*roundevents.RoundScheduleUpdatePayload)
+				scheduleUpdatedPayload := result.Success.(*roundevents.RoundScheduleUpdatePayloadV1)
 
 				h.logger.InfoContext(ctx, "Round events successfully rescheduled",
 					attr.RoundID("round_id", scheduleUpdatedPayload.RoundID),

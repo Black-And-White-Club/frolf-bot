@@ -17,12 +17,9 @@ import (
 )
 
 func TestHandleScoreUpdateValidated(t *testing.T) {
-	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
-	users := generator.GenerateUsers(4)
-	user1ID := sharedtypes.DiscordID(users[0].UserID)
-	user2ID := sharedtypes.DiscordID(users[1].UserID)
-	user3ID := sharedtypes.DiscordID(users[2].UserID)
-	user4ID := sharedtypes.DiscordID(users[3].UserID)
+	// Setup ONCE for all subtests
+	deps := SetupTestRoundHandler(t)
+
 
 	testCases := []struct {
 		name        string
@@ -31,14 +28,17 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Participant Score (Single Participant)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
 				// Create a round with one participant
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
 				// Create score update validated payload
 				score := sharedtypes.Score(-1) // 1 under par
-				payload := createScoreUpdateValidatedPayload(roundID, user2ID, &score)
+				payload := createScoreUpdateValidatedPayload(roundID, data2.UserID, &score)
 
 				result := publishAndExpectScoreUpdateSuccess2(t, deps, deps.MessageCapture, payload)
 
@@ -46,8 +46,8 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if result.RoundID != roundID {
 					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
 				}
-				if result.Participant != user2ID {
-					t.Errorf("Expected Participant %s, got %s", user2ID, result.Participant)
+				if result.Participant != data2.UserID {
+					t.Errorf("Expected Participant %s, got %s", data2.UserID, result.Participant)
 				}
 				if result.Score != score {
 					t.Errorf("Expected Score %d, got %d", score, result.Score)
@@ -55,8 +55,8 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if len(result.Participants) != 1 {
 					t.Errorf("Expected 1 participant, got %d", len(result.Participants))
 				}
-				if result.Participants[0].UserID != user2ID {
-					t.Errorf("Expected participant %s, got %s", user2ID, result.Participants[0].UserID)
+				if result.Participants[0].UserID != data2.UserID {
+					t.Errorf("Expected participant %s, got %s", data2.UserID, result.Participants[0].UserID)
 				}
 				if result.Participants[0].Score == nil || *result.Participants[0].Score != score {
 					t.Errorf("Expected participant score %d, got %v", score, result.Participants[0].Score)
@@ -66,16 +66,21 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Participant Score (Multiple Participants)",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
+				data3 := NewTestData()
+				data4 := NewTestData()
 				// Create a round with multiple participants
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: nil},
-					{UserID: user3ID, Response: roundtypes.ResponseAccept, Score: scorePtr(2)}, // Already has a score
-					{UserID: user4ID, Response: roundtypes.ResponseTentative, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
+					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: scorePtr(2)}, // Already has a score
+					{UserID: data4.UserID, Response: roundtypes.ResponseTentative, Score: nil},
 				})
 
 				// Update user2's score
 				score := sharedtypes.Score(3) // 3 over par
-				payload := createScoreUpdateValidatedPayload(roundID, user2ID, &score)
+				payload := createScoreUpdateValidatedPayload(roundID, data2.UserID, &score)
 
 				result := publishAndExpectScoreUpdateSuccess2(t, deps, deps.MessageCapture, payload)
 
@@ -83,8 +88,8 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if result.RoundID != roundID {
 					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
 				}
-				if result.Participant != user2ID {
-					t.Errorf("Expected Participant %s, got %s", user2ID, result.Participant)
+				if result.Participant != data2.UserID {
+					t.Errorf("Expected Participant %s, got %s", data2.UserID, result.Participant)
 				}
 				if result.Score != score {
 					t.Errorf("Expected Score %d, got %d", score, result.Score)
@@ -96,7 +101,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				// Find and validate user2's updated score
 				found := false
 				for _, p := range result.Participants {
-					if p.UserID == user2ID {
+					if p.UserID == data2.UserID {
 						found = true
 						if p.Score == nil || *p.Score != score {
 							t.Errorf("Expected user2 score %d, got %v", score, p.Score)
@@ -112,15 +117,18 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Success - Update Score for Participant with Existing Score",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
 				// Create a round with a participant who already has a score
 				existingScore := sharedtypes.Score(1)
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: &existingScore},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &existingScore},
 				})
 
 				// Update to a new score
 				newScore := sharedtypes.Score(-2) // Changed from +1 to -2
-				payload := createScoreUpdateValidatedPayload(roundID, user2ID, &newScore)
+				payload := createScoreUpdateValidatedPayload(roundID, data2.UserID, &newScore)
 
 				result := publishAndExpectScoreUpdateSuccess2(t, deps, deps.MessageCapture, payload)
 
@@ -139,10 +147,12 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Failure - Round Not Found",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
 				// Use a non-existent round ID
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				score := sharedtypes.Score(0)
-				payload := createScoreUpdateValidatedPayload(nonExistentRoundID, user1ID, &score)
+				payload := createScoreUpdateValidatedPayload(nonExistentRoundID, data.UserID, &score)
 
 				publishAndExpectScoreUpdateError2(t, deps, deps.MessageCapture, payload)
 			},
@@ -150,14 +160,18 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Failure - Participant Not Found in Round",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
+				data := NewTestData()
+				data2 := NewTestData()
+				data3 := NewTestData()
 				// Create a round without the participant we're trying to update
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, user1ID, []testutils.ParticipantData{
-					{UserID: user2ID, Response: roundtypes.ResponseAccept, Score: nil},
+				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
 				// Try to update score for a user not in the round
 				score := sharedtypes.Score(1)
-				payload := createScoreUpdateValidatedPayload(roundID, user3ID, &score) // user3ID not in round
+				payload := createScoreUpdateValidatedPayload(roundID, data3.UserID, &score) // data3.UserID not in round
 
 				publishAndExpectScoreUpdateError2(t, deps, deps.MessageCapture, payload)
 			},
@@ -165,39 +179,37 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		{
 			name: "Failure - Invalid JSON Message",
 			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+				deps.MessageCapture.Clear()
 				publishInvalidJSONAndExpectNoScoreValidatedMessages(t, deps, deps.MessageCapture)
 			},
 		},
 	}
 
+	// Run all subtests with SHARED setup
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			deps := SetupTestRoundHandler(t)
 			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			helper.ClearMessages()
 			tc.setupAndRun(t, helper, &deps)
-
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
 
 // Helper functions for creating payloads - UNIQUE TO SCORE UPDATE VALIDATED TESTS
-func createScoreUpdateValidatedPayload(roundID sharedtypes.RoundID, participant sharedtypes.DiscordID, score *sharedtypes.Score) roundevents.ScoreUpdateValidatedPayload {
-	return roundevents.ScoreUpdateValidatedPayload{
-		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayload{
+func createScoreUpdateValidatedPayload(roundID sharedtypes.RoundID, participant sharedtypes.DiscordID, score *sharedtypes.Score) roundevents.ScoreUpdateValidatedPayloadV1 {
+	return roundevents.ScoreUpdateValidatedPayloadV1{
+		GuildID: "test-guild",
+		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
+			GuildID:     "test-guild",
 			RoundID:     roundID,
 			Participant: participant,
 			Score:       score,
-			GuildID:     "test-guild",
 		},
 	}
 }
 
 // Publishing functions - UNIQUE TO SCORE UPDATE VALIDATED TESTS
-func publishScoreUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ScoreUpdateValidatedPayload) *message.Message {
+func publishScoreUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ScoreUpdateValidatedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -208,7 +220,7 @@ func publishScoreUpdateValidatedMessage(t *testing.T, deps *RoundHandlerTestDeps
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundScoreUpdateValidated, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundScoreUpdateValidatedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -222,7 +234,7 @@ func publishInvalidJSONAndExpectNoScoreValidatedMessages(t *testing.T, deps *Rou
 	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundScoreUpdateValidated, invalidMsg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundScoreUpdateValidatedV1, invalidMsg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -242,28 +254,68 @@ func publishInvalidJSONAndExpectNoScoreValidatedMessages(t *testing.T, deps *Rou
 }
 
 // Wait functions - UNIQUE TO SCORE UPDATE VALIDATED TESTS
-func waitForScoreValidatedSuccessFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantScoreUpdated, count, defaultTimeout)
+func waitForScoreValidatedSuccessFromHandlerMatchingRound(t *testing.T, capture *testutils.MessageCapture, roundID sharedtypes.RoundID) *roundevents.ParticipantScoreUpdatedPayloadV1 {
+	timeout := time.After(defaultTimeout)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return nil
+		case <-ticker.C:
+			msgs := capture.GetMessages(roundevents.RoundParticipantScoreUpdatedV1)
+			for _, msg := range msgs {
+				payload, err := testutils.ParsePayload[roundevents.ParticipantScoreUpdatedPayloadV1](msg)
+				if err != nil {
+					continue
+				}
+				if payload.RoundID == roundID {
+					return payload
+				}
+			}
+		}
+	}
 }
 
-func waitForScoreValidatedErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundScoreUpdateError, count, defaultTimeout)
+func waitForScoreValidatedErrorFromHandlerMatchingRound(t *testing.T, capture *testutils.MessageCapture, roundID sharedtypes.RoundID) *roundevents.RoundScoreUpdateErrorPayloadV1 {
+	timeout := time.After(defaultTimeout)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return nil
+		case <-ticker.C:
+			msgs := capture.GetMessages(roundevents.RoundScoreUpdateErrorV1)
+			for _, msg := range msgs {
+				payload, err := testutils.ParsePayload[roundevents.RoundScoreUpdateErrorPayloadV1](msg)
+				if err != nil {
+					continue
+				}
+				if payload.ScoreUpdateRequest != nil && payload.ScoreUpdateRequest.RoundID == roundID {
+					return payload
+				}
+			}
+		}
+	}
 }
 
 // Message retrieval functions - UNIQUE TO SCORE UPDATE VALIDATED TESTS
 func getScoreValidatedSuccessFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantScoreUpdated)
+	return capture.GetMessages(roundevents.RoundParticipantScoreUpdatedV1)
 }
 
 func getScoreValidatedErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundScoreUpdateError)
+	return capture.GetMessages(roundevents.RoundScoreUpdateErrorV1)
 }
 
 // Validation functions - UNIQUE TO SCORE UPDATE VALIDATED TESTS
-func validateScoreValidatedSuccessFromHandler(t *testing.T, msg *message.Message) *roundevents.ParticipantScoreUpdatedPayload {
+func validateScoreValidatedSuccessFromHandler(t *testing.T, msg *message.Message) *roundevents.ParticipantScoreUpdatedPayloadV1 {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.ParticipantScoreUpdatedPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.ParticipantScoreUpdatedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant score updated message: %v", err)
 	}
@@ -302,7 +354,7 @@ func validateScoreValidatedSuccessFromHandler(t *testing.T, msg *message.Message
 func validateScoreValidatedErrorFromHandler(t *testing.T, msg *message.Message) {
 	t.Helper()
 
-	result, err := testutils.ParsePayload[roundevents.RoundScoreUpdateErrorPayload](msg)
+	result, err := testutils.ParsePayload[roundevents.RoundScoreUpdateErrorPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse score update error message: %v", err)
 	}
@@ -320,28 +372,39 @@ func validateScoreValidatedErrorFromHandler(t *testing.T, msg *message.Message) 
 }
 
 // Test expectation functions - UNIQUE TO SCORE UPDATE VALIDATED TESTS
-func publishAndExpectScoreUpdateSuccess2(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScoreUpdateValidatedPayload) *roundevents.ParticipantScoreUpdatedPayload {
+func publishAndExpectScoreUpdateSuccess2(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScoreUpdateValidatedPayloadV1) *roundevents.ParticipantScoreUpdatedPayloadV1 {
 	publishScoreUpdateValidatedMessage(t, deps, &payload)
 
-	if !waitForScoreValidatedSuccessFromHandler(capture, 1) {
-		t.Fatalf("Expected participant score updated message from %s", roundevents.RoundParticipantScoreUpdated)
+	result := waitForScoreValidatedSuccessFromHandlerMatchingRound(t, capture, payload.ScoreUpdateRequestPayload.RoundID)
+	if result == nil {
+		t.Fatalf("Timed out waiting for participant score updated message for round %s", payload.ScoreUpdateRequestPayload.RoundID)
 	}
 
-	msgs := getScoreValidatedSuccessFromHandlerMessages(capture)
-	result := validateScoreValidatedSuccessFromHandler(t, msgs[0])
+	// Log what we got for debugging
+	scoreText := "even"
+	if result.Score > 0 {
+		scoreText = fmt.Sprintf("+%d over", result.Score)
+	} else if result.Score < 0 {
+		scoreText = fmt.Sprintf("%d under", result.Score)
+	}
+
+	t.Logf("Participant score updated successfully for round: %s, participant: %s, score: %s par, participants: %d",
+		result.RoundID, result.Participant, scoreText, len(result.Participants))
 
 	return result
 }
 
-func publishAndExpectScoreUpdateError2(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScoreUpdateValidatedPayload) {
+func publishAndExpectScoreUpdateError2(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ScoreUpdateValidatedPayloadV1) {
 	publishScoreUpdateValidatedMessage(t, deps, &payload)
 
-	if !waitForScoreValidatedErrorFromHandler(capture, 1) {
-		t.Fatalf("Expected score update error message from %s", roundevents.RoundScoreUpdateError)
+	result := waitForScoreValidatedErrorFromHandlerMatchingRound(t, capture, payload.ScoreUpdateRequestPayload.RoundID)
+	if result == nil {
+		t.Fatalf("Timed out waiting for score update error message for round %s", payload.ScoreUpdateRequestPayload.RoundID)
 	}
 
-	msgs := getScoreValidatedErrorFromHandlerMessages(capture)
-	validateScoreValidatedErrorFromHandler(t, msgs[0])
+	if result.Error == "" {
+		t.Error("Expected error message to be populated")
+	}
 }
 
 // Helper utility functions

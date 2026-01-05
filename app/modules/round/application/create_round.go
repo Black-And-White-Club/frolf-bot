@@ -18,7 +18,7 @@ import (
 
 // ValidateAndProcessRound transforms validated round data to an entity
 // ValidateAndProcessRoundWithClock is the internal implementation allowing a custom clock (e.g. anchored).
-func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
+func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ValidateAndProcessRound", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate the round
 		input := roundtypes.CreateRoundInput{
@@ -33,9 +33,9 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		if len(errs) > 0 {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundValidationFailedPayload{
-					UserID:       payload.UserID,
-					ErrorMessage: errs,
+				Failure: &roundevents.RoundValidationFailedPayloadV1{
+					UserID:        payload.UserID,
+					ErrorMessages: errs,
 				},
 			}, nil // ← Changed from fmt.Errorf to nil
 		} else {
@@ -51,9 +51,9 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		if err != nil {
 			s.metrics.RecordTimeParsingError(ctx)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundValidationFailedPayload{
-					UserID:       payload.UserID,
-					ErrorMessage: []string{err.Error()},
+				Failure: &roundevents.RoundValidationFailedPayloadV1{
+					UserID:        payload.UserID,
+					ErrorMessages: []string{err.Error()},
 				},
 			}, nil // ← Changed from fmt.Errorf to nil
 		} else {
@@ -65,9 +65,9 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		if parsedTime.Before(time.Now().UTC()) {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundValidationFailedPayload{
-					UserID:       payload.UserID,
-					ErrorMessage: []string{"start time is in the past"},
+				Failure: &roundevents.RoundValidationFailedPayloadV1{
+					UserID:        payload.UserID,
+					ErrorMessages: []string{"start time is in the past"},
 				},
 			}, nil // ← Changed from fmt.Errorf to nil
 		}
@@ -85,7 +85,7 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		}
 
 		// Create event payload, propagate GuildID from payload
-		createdPayload := roundevents.RoundEntityCreatedPayload{
+		createdPayload := roundevents.RoundEntityCreatedPayloadV1{
 			GuildID:          payload.GuildID,
 			Round:            roundObject,
 			DiscordChannelID: payload.ChannelID,
@@ -113,18 +113,18 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 }
 
 // ValidateAndProcessRound keeps backward compatibility using the real clock.
-func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
+func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (RoundOperationResult, error) {
 	return s.ValidateAndProcessRoundWithClock(ctx, payload, timeParser, roundutil.RealClock{})
 }
 
 // StoreRound stores a round in the database
-func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayload) (RoundOperationResult, error) {
+func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "StoreRound", payload.Round.ID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Validate round data
 		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
 			s.metrics.RecordValidationError(ctx)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       payload.Round.CreatedBy,
 					ErrorMessage: "invalid round data",
 				},
@@ -157,7 +157,7 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 
 		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {
 			return RoundOperationResult{
-				Failure: &roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       roundDB.CreatedBy,
 					ErrorMessage: "one or more required fields are nil",
 				},
@@ -192,7 +192,7 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 		if err := s.RoundDB.CreateRound(ctx, guildID, &roundDB); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "create_round")
 			return RoundOperationResult{
-				Failure: &roundevents.RoundCreationFailedPayload{
+				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       roundTypes.CreatedBy,
 					ErrorMessage: fmt.Sprintf("failed to store round: %v", err),
 				},
@@ -214,7 +214,8 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)
 
-		created := &roundevents.RoundCreatedPayload{
+		created := &roundevents.RoundCreatedPayloadV1{
+			GuildID: guildID,
 			BaseRoundPayload: roundtypes.BaseRoundPayload{
 				RoundID:     roundDB.ID,
 				Title:       roundDB.Title,
@@ -273,7 +274,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 				attr.Error(dbErr),
 			)
 			return RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					RoundID: roundID,
 					Error:   fmt.Sprintf("database update failed: %v", dbErr),
 				},
@@ -312,7 +313,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 		return nil, errors.New("internal service error: no result received")
 	}
 
-	failurePayload, ok := result.Failure.(roundevents.RoundErrorPayload)
+	failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 	if ok {
 		return nil, fmt.Errorf("operation failed: %s", failurePayload.Error)
 	}

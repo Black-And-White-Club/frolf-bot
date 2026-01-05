@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
@@ -30,7 +29,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	testScore := sharedtypes.Score(10)
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testPayload := &scoreevents.ScoreUpdateRequestPayload{
+	testPayload := &scoreevents.ScoreUpdateRequestedPayloadV1{
 		GuildID:   testGuildID,
 		RoundID:   testRoundID,
 		UserID:    testUserID,
@@ -63,12 +62,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -91,14 +90,32 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					nil,
 				)
 
+				successMsg := message.NewMessage("success-msg-id", []byte("success"))
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successPayload,
-					scoreevents.ScoreUpdateSuccess,
-				).Return(testMsg, nil)
+					scoreevents.ScoreUpdatedV1,
+				).Return(successMsg, nil)
+
+				// Expect GetScoresForRound to be called for reprocessing
+				mockScoreService.EXPECT().GetScoresForRound(
+					gomock.Any(),
+					testGuildID,
+					testRoundID,
+				).Return([]sharedtypes.ScoreInfo{
+					{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
+				}, nil)
+
+				// Expect CreateResultMessage for the reprocess request
+				reprocessMsg := message.NewMessage("reprocess-msg-id", []byte("reprocess"))
+				mockHelpers.EXPECT().CreateResultMessage(
+					gomock.Any(),
+					gomock.Any(), // The ProcessRoundScoresRequestedPayloadV1
+					scoreevents.ProcessRoundScoresRequestedV1,
+				).Return(reprocessMsg, nil)
 			},
 			msg:     testMsg,
-			want:    []*message.Message{testMsg},
+			want:    []*message.Message{message.NewMessage("success-msg-id", []byte("success")), message.NewMessage("reprocess-msg-id", []byte("reprocess"))},
 			wantErr: false,
 		},
 		{
@@ -116,16 +133,16 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+				failurePayload := &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
-					Error:   "internal service error",
+					Reason:  "internal service error",
 				}
 
 				mockScoreService.EXPECT().CorrectScore(
@@ -148,7 +165,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					scoreevents.ScoreUpdateFailure,
+					scoreevents.ScoreUpdateFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -160,7 +177,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -187,12 +204,12 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				successPayload := &scoreevents.ScoreUpdateSuccessPayload{
+				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -218,7 +235,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					successPayload,
-					scoreevents.ScoreUpdateSuccess,
+					scoreevents.ScoreUpdatedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -231,16 +248,16 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
-				failurePayload := &scoreevents.ScoreUpdateFailurePayload{
+				failurePayload := &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
-					Error:   "internal service error",
+					Reason:  "internal service error",
 				}
 
 				mockScoreService.EXPECT().CorrectScore(
@@ -262,7 +279,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					failurePayload,
-					scoreevents.ScoreUpdateFailure,
+					scoreevents.ScoreUpdateFailedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -275,7 +292,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestPayload) = *testPayload
+						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -323,8 +340,14 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				t.Errorf("HandleCorrectScoreRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleCorrectScoreRequest() = %v, want %v", got, tt.want)
+			// Compare message count and UUIDs instead of deep equality on pointers
+			if len(got) != len(tt.want) {
+				t.Errorf("HandleCorrectScoreRequest() returned %d messages, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if i < len(tt.want) && got[i].UUID != tt.want[i].UUID {
+					t.Errorf("HandleCorrectScoreRequest() message[%d].UUID = %v, want %v", i, got[i].UUID, tt.want[i].UUID)
+				}
 			}
 		})
 	}

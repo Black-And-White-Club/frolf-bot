@@ -16,14 +16,16 @@ import (
 func TestUpdateParticipantStatus(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Internal update: Participant status and tag number set after lookup", // Renamed test case
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_upd_1"),
@@ -41,14 +43,15 @@ func TestUpdateParticipantStatus(t *testing.T) {
 						Score:     &scoreZero,
 					},
 				}
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
 				tag := sharedtypes.TagNumber(123)
 				joinedLate := false
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    roundForDBInsertion.ID,
 					UserID:     sharedtypes.DiscordID("existing_participant"),
 					Response:   roundtypes.ResponseAccept,
@@ -62,9 +65,9 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayload)
+				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -83,7 +86,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state (accept both round not found and round present)
-				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.GuildID, joinedPayload.RoundID)
 				if err != nil {
 					if strings.Contains(strings.ToLower(err.Error()), "not found") {
 						// Acceptable: round was deleted or cleaned up
@@ -111,20 +114,23 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Participant accepts without TagNumber (adds participant with nil tag)",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_upd_3"),
 					Title:     "Round for nil tag participant",
 					State:     roundtypes.RoundStateInProgress,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
 				joinedLate := false
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    roundForDBInsertion.ID,
 					UserID:     sharedtypes.DiscordID("participant_needs_tag"),
 					Response:   roundtypes.ResponseAccept,
@@ -138,9 +144,9 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: the implementation actually returns ParticipantJoinedPayload, not TagLookupRequestPayload
-				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayload)
+				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -165,7 +171,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state - participant should be in DB with nil tag (accept round not found)
-				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.GuildID, joinedPayload.RoundID)
 				if err != nil {
 					if strings.Contains(strings.ToLower(err.Error()), "not found") {
 						// Acceptable: round was deleted or cleaned up
@@ -194,7 +200,9 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Participant declines (direct update)",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_upd_4"),
@@ -212,13 +220,14 @@ func TestUpdateParticipantStatus(t *testing.T) {
 						Score:     &scoreZero,
 					},
 				}
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
 				joinedLate := false
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    roundForDBInsertion.ID,
 					UserID:     sharedtypes.DiscordID("participant_to_decline"),
 					Response:   roundtypes.ResponseDecline,
@@ -232,9 +241,9 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayload)
+				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinedPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 
@@ -256,7 +265,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 
 				// Verify DB state (accept both round not found and round present)
-				roundInDB, err := deps.DB.GetRound(ctx, "test-guild", joinedPayload.RoundID)
+				roundInDB, err := deps.DB.GetRound(ctx, joinedPayload.GuildID, joinedPayload.RoundID)
 				if err != nil {
 					if strings.Contains(strings.ToLower(err.Error()), "not found") {
 						// Acceptable: round was deleted or cleaned up
@@ -284,11 +293,14 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Attempt to update participant in non-existent round (with tag) - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				nonExistentID := sharedtypes.RoundID(uuid.New())
 				tag := sharedtypes.TagNumber(789)
 				joinedLate := false
-				return nonExistentID, roundevents.ParticipantJoinRequestPayload{
+				return nonExistentID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    nonExistentID,
 					UserID:     sharedtypes.DiscordID("some_user"),
 					Response:   roundtypes.ResponseAccept,
@@ -306,7 +318,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -318,10 +330,13 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Attempt to update participant in non-existent round (decline) - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				nonExistentID := sharedtypes.RoundID(uuid.New())
 				joinedLate := false
-				return nonExistentID, roundevents.ParticipantJoinRequestPayload{
+				return nonExistentID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    nonExistentID,
 					UserID:     sharedtypes.DiscordID("some_user"),
 					Response:   roundtypes.ResponseDecline,
@@ -339,7 +354,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -351,20 +366,23 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Unknown response type - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				guildID := sharedtypes.GuildID("test-guild")
+
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_upd_7"),
 					Title:     "Round for unknown response",
 					State:     roundtypes.RoundStateUpcoming,
 				})
-				err := deps.DB.CreateRound(ctx, "test-guild", &roundForDBInsertion)
+				err := deps.DB.CreateRound(ctx, guildID, &roundForDBInsertion)
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
 
 				joinedLate := false
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:    guildID,
 					RoundID:    roundForDBInsertion.ID,
 					UserID:     sharedtypes.DiscordID("unknown_resp_user"),
 					Response:   roundtypes.Response("INVALID_RESPONSE"), // Invalid response
@@ -382,7 +400,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -398,7 +416,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload roundevents.ParticipantJoinRequestPayload
+			var payload roundevents.ParticipantJoinRequestPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
@@ -418,7 +436,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {

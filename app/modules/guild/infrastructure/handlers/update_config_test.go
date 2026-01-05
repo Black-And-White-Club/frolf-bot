@@ -24,7 +24,7 @@ func TestGuildHandlers_HandleUpdateGuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	validPayload := &guildevents.GuildConfigUpdateRequestedPayload{
+	validPayload := &guildevents.GuildConfigUpdateRequestedPayloadV1{
 		GuildID:              "guild-1",
 		SignupChannelID:      "signup-chan",
 		SignupMessageID:      "msg-1",
@@ -71,23 +71,23 @@ func TestGuildHandlers_HandleUpdateGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigUpdateRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigUpdateRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().UpdateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigUpdatedPayload{
+					Success: &guildevents.GuildConfigUpdatedPayloadV1{
 						GuildID: "guild-1",
 						Config:  *validConfig,
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigUpdatedPayload{
+					&guildevents.GuildConfigUpdatedPayloadV1{
 						GuildID: "guild-1",
 						Config:  *validConfig,
 					},
-					guildevents.GuildConfigUpdated,
+					guildevents.GuildConfigUpdatedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -109,7 +109,7 @@ func TestGuildHandlers_HandleUpdateGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigUpdateRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigUpdateRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
@@ -125,23 +125,23 @@ func TestGuildHandlers_HandleUpdateGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigUpdateRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigUpdateRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)
 				mockService.EXPECT().UpdateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigUpdateFailedPayload{
+					Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 						GuildID: "guild-1",
 						Reason:  "some failure",
 					},
 				}, nil)
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
-					&guildevents.GuildConfigUpdateFailedPayload{
+					&guildevents.GuildConfigUpdateFailedPayloadV1{
 						GuildID: "guild-1",
 						Reason:  "some failure",
 					},
-					guildevents.GuildConfigUpdateFailed,
+					guildevents.GuildConfigUpdateFailedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -153,7 +153,7 @@ func TestGuildHandlers_HandleUpdateGuildConfig(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigUpdateRequestedPayload) = *validPayload
+						*out.(*guildevents.GuildConfigUpdateRequestedPayloadV1) = *validPayload
 						return nil
 					},
 				)

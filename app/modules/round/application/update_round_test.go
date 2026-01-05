@@ -47,21 +47,21 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	tests := []struct {
 		name    string
-		payload roundevents.UpdateRoundRequestedPayload // ← Changed to Discord payload type
+		payload roundevents.UpdateRoundRequestedPayloadV1 // ← Changed to Discord payload type
 		want    RoundOperationResult
 		wantErr bool
 	}{
 		{
 			name: "valid request",
-			payload: roundevents.UpdateRoundRequestedPayload{ // ← Updated payload structure
+			payload: roundevents.UpdateRoundRequestedPayloadV1{ // ← Updated payload structure
 				RoundID:  testRoundID,
 				UserID:   sharedtypes.DiscordID("user123"),
 				Title:    titlePtr("New Title"), // ← Pointer types
 				Timezone: timezonePtr("America/Chicago"),
 			},
 			want: RoundOperationResult{
-				Success: &roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+				Success: &roundevents.RoundUpdateValidatedPayloadV1{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -72,7 +72,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 		},
 		{
 			name: "valid request with time parsing",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
 				RoundID:   testRoundID,
 				UserID:    sharedtypes.DiscordID("user123"),
 				Title:     titlePtr("New Title"),
@@ -80,8 +80,8 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				Timezone:  timezonePtr("America/Chicago"),
 			},
 			want: RoundOperationResult{
-				Success: &roundevents.RoundUpdateValidatedPayload{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+				Success: &roundevents.RoundUpdateValidatedPayloadV1{
+					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -93,11 +93,11 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 		},
 		{
 			name: "invalid request - zero round ID",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
 				RoundID: sharedtypes.RoundID(uuid.Nil),
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: round ID cannot be zero; at least one field to update must be provided",
 				},
@@ -106,12 +106,12 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 		},
 		{
 			name: "invalid request - no fields to update",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
 				RoundID: testRoundID,
 				UserID:  sharedtypes.DiscordID("user123"),
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: at least one field to update must be provided",
 				},
@@ -120,7 +120,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 		},
 		{
 			name: "invalid request - time parsing failed",
-			payload: roundevents.UpdateRoundRequestedPayload{
+			payload: roundevents.UpdateRoundRequestedPayloadV1{
 				RoundID:   testRoundID,
 				UserID:    sharedtypes.DiscordID("user123"),
 				Title:     titlePtr("New Title"),
@@ -128,7 +128,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				Timezone:  timezonePtr("America/Chicago"),
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: time parsing failed: invalid time format",
 				},
@@ -148,7 +148,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(expectedParsedTime, nil)
 
 				// Update the expected result with the actual parsed time
-				if successPayload, ok := tt.want.Success.(*roundevents.RoundUpdateValidatedPayload); ok {
+				if successPayload, ok := tt.want.Success.(*roundevents.RoundUpdateValidatedPayloadV1); ok {
 					expectedStartTime := sharedtypes.StartTime(time.Unix(expectedParsedTime, 0).UTC())
 					successPayload.RoundUpdateRequestPayload.StartTime = &expectedStartTime
 				}
@@ -212,15 +212,15 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		payload roundevents.RoundUpdateValidatedPayload
+		payload roundevents.RoundUpdateValidatedPayloadV1
 		want    RoundOperationResult
 		wantErr bool
 	}{
 		{
 			name: "valid update",
-			payload: roundevents.RoundUpdateValidatedPayload{
+			payload: roundevents.RoundUpdateValidatedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
@@ -228,7 +228,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				},
 			},
 			want: RoundOperationResult{
-				Success: &roundevents.RoundEntityUpdatedPayload{
+				Success: &roundevents.RoundEntityUpdatedPayloadV1{
 					Round: roundtypes.Round{
 						ID:    testRoundID,
 						Title: roundtypes.Title("New Title"),
@@ -239,9 +239,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		},
 		{
 			name: "invalid update - round not found",
-			payload: roundevents.RoundUpdateValidatedPayload{
+			payload: roundevents.RoundUpdateValidatedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
@@ -249,8 +249,8 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				},
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
-					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
@@ -263,9 +263,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		},
 		{
 			name: "invalid update - update failed",
-			payload: roundevents.RoundUpdateValidatedPayload{
+			payload: roundevents.RoundUpdateValidatedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayload{
+				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
@@ -273,8 +273,8 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				},
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
-					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
 						GuildID: sharedtypes.GuildID("guild-123"),
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
@@ -325,14 +325,14 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 	testStartUpdateTime := sharedtypes.StartTime(time.Now().UTC().Add(2 * time.Hour))
 	tests := []struct {
 		name      string
-		payload   roundevents.RoundScheduleUpdatePayload
+		payload   roundevents.RoundScheduleUpdatePayloadV1
 		mockSetup func(*rounddb.MockRoundDB, *queuemocks.MockQueueService)
 		want      RoundOperationResult
 		wantErr   bool
 	}{
 		{
 			name: "valid update",
-			payload: roundevents.RoundScheduleUpdatePayload{
+			payload: roundevents.RoundScheduleUpdatePayloadV1{
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
@@ -360,7 +360,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: RoundOperationResult{
-				Success: &roundevents.RoundScheduleUpdatePayload{
+				Success: &roundevents.RoundScheduleUpdatePayloadV1{
 					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testRoundID,
 					Title:     roundtypes.Title("New Title"),
@@ -372,7 +372,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 		},
 		{
 			name: "error cancelling jobs",
-			payload: roundevents.RoundScheduleUpdatePayload{
+			payload: roundevents.RoundScheduleUpdatePayloadV1{
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
@@ -384,7 +384,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(errors.New("cancel jobs failed"))
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "failed to cancel existing scheduled jobs: cancel jobs failed",
 				},
@@ -393,7 +393,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 		},
 		{
 			name: "error getting event message ID",
-			payload: roundevents.RoundScheduleUpdatePayload{
+			payload: roundevents.RoundScheduleUpdatePayloadV1{
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testRoundID,
 				Title:     roundtypes.Title("New Title"),
@@ -409,7 +409,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("", errors.New("event message ID not found"))
 			},
 			want: RoundOperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayload{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "failed to get EventMessageID: event message ID not found",
 				},

@@ -47,7 +47,7 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // ApplyImportedScores mocks base method.
-func (m *MockService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyImportedScores", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -62,7 +62,7 @@ func (mr *MockServiceMockRecorder) ApplyImportedScores(ctx, payload any) *gomock
 }
 
 // CheckAllScoresSubmitted mocks base method.
-func (m *MockService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckAllScoresSubmitted", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -77,7 +77,7 @@ func (mr *MockServiceMockRecorder) CheckAllScoresSubmitted(ctx, payload any) *go
 }
 
 // CheckParticipantStatus mocks base method.
-func (m *MockService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckParticipantStatus", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -92,7 +92,7 @@ func (mr *MockServiceMockRecorder) CheckParticipantStatus(ctx, payload any) *gom
 }
 
 // CreateImportJob mocks base method.
-func (m *MockService) CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateImportJob", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -107,7 +107,7 @@ func (mr *MockServiceMockRecorder) CreateImportJob(ctx, payload any) *gomock.Cal
 }
 
 // DeleteRound mocks base method.
-func (m *MockService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteRound", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -122,7 +122,7 @@ func (mr *MockServiceMockRecorder) DeleteRound(ctx, payload any) *gomock.Call {
 }
 
 // FinalizeRound mocks base method.
-func (m *MockService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) FinalizeRound(ctx context.Context, payload roundevents.AllScoresSubmittedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FinalizeRound", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -152,7 +152,7 @@ func (mr *MockServiceMockRecorder) GetRound(ctx, guildID, roundID any) *gomock.C
 }
 
 // HandleScorecardURLRequested mocks base method.
-func (m *MockService) HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleScorecardURLRequested", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -167,7 +167,7 @@ func (mr *MockServiceMockRecorder) HandleScorecardURLRequested(ctx, payload any)
 }
 
 // IngestParsedScorecard mocks base method.
-func (m *MockService) IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IngestParsedScorecard", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -182,7 +182,7 @@ func (mr *MockServiceMockRecorder) IngestParsedScorecard(ctx, payload any) *gomo
 }
 
 // NotifyScoreModule mocks base method.
-func (m *MockService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NotifyScoreModule", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -197,7 +197,7 @@ func (mr *MockServiceMockRecorder) NotifyScoreModule(ctx, payload any) *gomock.C
 }
 
 // ParseScorecard mocks base method.
-func (m *MockService) ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayload, fileData []byte) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1, fileData []byte) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParseScorecard", ctx, payload, fileData)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -212,7 +212,7 @@ func (mr *MockServiceMockRecorder) ParseScorecard(ctx, payload, fileData any) *g
 }
 
 // ParticipantRemoval mocks base method.
-func (m *MockService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipantRemoval", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -227,7 +227,7 @@ func (mr *MockServiceMockRecorder) ParticipantRemoval(ctx, payload any) *gomock.
 }
 
 // ProcessRoundReminder mocks base method.
-func (m *MockService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessRoundReminder", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -242,7 +242,7 @@ func (mr *MockServiceMockRecorder) ProcessRoundReminder(ctx, payload any) *gomoc
 }
 
 // ProcessRoundStart mocks base method.
-func (m *MockService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessRoundStart", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -257,7 +257,7 @@ func (mr *MockServiceMockRecorder) ProcessRoundStart(ctx, payload any) *gomock.C
 }
 
 // ScheduleRoundEvents mocks base method.
-func (m *MockService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayload, discordMessageID string) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScheduleRoundEvents", ctx, guildID, payload, discordMessageID)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -272,7 +272,7 @@ func (mr *MockServiceMockRecorder) ScheduleRoundEvents(ctx, guildID, payload, di
 }
 
 // StoreRound mocks base method.
-func (m *MockService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StoreRound", ctx, guildID, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -287,7 +287,7 @@ func (mr *MockServiceMockRecorder) StoreRound(ctx, guildID, payload any) *gomock
 }
 
 // UpdateParticipantScore mocks base method.
-func (m *MockService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateParticipantScore", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -302,7 +302,7 @@ func (mr *MockServiceMockRecorder) UpdateParticipantScore(ctx, payload any) *gom
 }
 
 // UpdateParticipantStatus mocks base method.
-func (m *MockService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateParticipantStatus", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -317,7 +317,7 @@ func (mr *MockServiceMockRecorder) UpdateParticipantStatus(ctx, payload any) *go
 }
 
 // UpdateRoundEntity mocks base method.
-func (m *MockService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRoundEntity", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -347,7 +347,7 @@ func (mr *MockServiceMockRecorder) UpdateRoundMessageID(ctx, guildID, roundID, d
 }
 
 // UpdateScheduledRoundEvents mocks base method.
-func (m *MockService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateScheduledRoundEvents(ctx context.Context, payload roundevents.RoundScheduleUpdatePayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateScheduledRoundEvents", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -362,7 +362,7 @@ func (mr *MockServiceMockRecorder) UpdateScheduledRoundEvents(ctx, payload any) 
 }
 
 // UpdateScheduledRoundsWithNewTags mocks base method.
-func (m *MockService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateScheduledRoundsWithNewTags", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -377,7 +377,7 @@ func (mr *MockServiceMockRecorder) UpdateScheduledRoundsWithNewTags(ctx, payload
 }
 
 // ValidateAndProcessRound mocks base method.
-func (m *MockService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateAndProcessRound", ctx, payload, timeParser)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -392,7 +392,7 @@ func (mr *MockServiceMockRecorder) ValidateAndProcessRound(ctx, payload, timePar
 }
 
 // ValidateAndProcessRoundUpdate mocks base method.
-func (m *MockService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateAndProcessRoundUpdate(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateAndProcessRoundUpdate", ctx, payload, timeParser)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -407,7 +407,7 @@ func (mr *MockServiceMockRecorder) ValidateAndProcessRoundUpdate(ctx, payload, t
 }
 
 // ValidateAndProcessRoundUpdateWithClock mocks base method.
-func (m *MockService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateAndProcessRoundUpdateWithClock", ctx, payload, timeParser, clock)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -422,7 +422,7 @@ func (mr *MockServiceMockRecorder) ValidateAndProcessRoundUpdateWithClock(ctx, p
 }
 
 // ValidateAndProcessRoundWithClock mocks base method.
-func (m *MockService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayload, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateAndProcessRoundWithClock", ctx, payload, timeParser, clock)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -437,7 +437,7 @@ func (mr *MockServiceMockRecorder) ValidateAndProcessRoundWithClock(ctx, payload
 }
 
 // ValidateParticipantJoinRequest mocks base method.
-func (m *MockService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateParticipantJoinRequest", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -452,7 +452,7 @@ func (mr *MockServiceMockRecorder) ValidateParticipantJoinRequest(ctx, payload a
 }
 
 // ValidateRoundDeleteRequest mocks base method.
-func (m *MockService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateRoundDeleteRequest", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
@@ -467,7 +467,7 @@ func (mr *MockServiceMockRecorder) ValidateRoundDeleteRequest(ctx, payload any) 
 }
 
 // ValidateScoreUpdateRequest mocks base method.
-func (m *MockService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayload) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateScoreUpdateRequest", ctx, payload)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)

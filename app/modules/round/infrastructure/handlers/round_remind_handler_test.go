@@ -25,7 +25,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 	testReminderType := "test-reminder-type"
 	testUserIDs := []sharedtypes.DiscordID{"user1", "user2"}
 
-	testPayload := &roundevents.DiscordReminderPayload{
+	testPayload := &roundevents.DiscordReminderPayloadV1{
 		RoundID:      testRoundID,
 		ReminderType: testReminderType,
 	}
@@ -52,20 +52,20 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+						Success: &roundevents.DiscordReminderPayloadV1{ // Changed to DiscordReminderPayload
 							RoundID:      testRoundID,
 							ReminderType: testReminderType,
 							UserIDs:      testUserIDs, // Added UserIDs so len > 0
@@ -76,7 +76,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateNewMessage(
 					gomock.Any(),
-					roundevents.RoundReminder,
+					roundevents.RoundReminderSentV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -88,20 +88,20 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+						Success: &roundevents.DiscordReminderPayloadV1{ // Changed to DiscordReminderPayload
 							RoundID:      testRoundID,
 							ReminderType: testReminderType,
 							UserIDs:      []sharedtypes.DiscordID{}, // Empty UserIDs
@@ -131,14 +131,14 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
@@ -157,20 +157,20 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.DiscordReminderPayload{ // Changed to DiscordReminderPayload
+						Success: &roundevents.DiscordReminderPayloadV1{ // Changed to DiscordReminderPayload
 							RoundID:      testRoundID,
 							ReminderType: testReminderType,
 							UserIDs:      testUserIDs, // Added UserIDs so len > 0
@@ -181,7 +181,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 				mockHelpers.EXPECT().CreateNewMessage(
 					gomock.Any(),
-					roundevents.RoundReminder,
+					roundevents.RoundReminderSentV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -194,14 +194,14 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
@@ -220,14 +220,14 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.DiscordReminderPayload) = *testPayload
+						*out.(*roundevents.DiscordReminderPayloadV1) = *testPayload
 						return nil
 					},
 				)
 
 				mockRoundService.EXPECT().ProcessRoundReminder(
 					gomock.Any(),
-					roundevents.DiscordReminderPayload{
+					roundevents.DiscordReminderPayloadV1{
 						RoundID:      testRoundID,
 						ReminderType: testReminderType,
 					},
@@ -243,7 +243,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

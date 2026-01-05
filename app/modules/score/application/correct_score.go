@@ -26,11 +26,11 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 				attr.Error(validationError),
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailurePayload{
+				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
-					Error:   validationError.Error(),
+					Reason:  validationError.Error(),
 				},
 			}, nil // Return nil error as this is a handled business validation failure
 		}
@@ -69,11 +69,11 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			// This signals that the business logic handled the error,
 			// and it's not a system error to be propagated further as an 'error'.
 			return ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailurePayload{
+				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
-					Error:   err.Error(),
+					Reason:  err.Error(),
 				},
 			}, nil
 		}
@@ -84,7 +84,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			attr.String("user_id", string(userID)),
 		)
 		return ScoreOperationResult{
-			Success: &scoreevents.ScoreUpdateSuccessPayload{
+			Success: &scoreevents.ScoreUpdatedPayloadV1{
 				GuildID: guildID,
 				RoundID: roundID,
 				UserID:  userID,

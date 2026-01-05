@@ -18,7 +18,7 @@ func TestValidateAndProcessRound(t *testing.T) {
 		// setupTestEnv is a no-op for time control due to service's direct time.Now().UTC() usage.
 		setupTestEnv func()
 		// payload is the incoming event payload to be processed by the service.
-		payload roundevents.CreateRoundRequestedPayload
+		payload roundevents.CreateRoundRequestedPayloadV1
 		// expectedError indicates if the service call is expected to return a Go error.
 		expectedError bool
 		// expectedSuccess indicates if the service call is expected to return a success payload.
@@ -32,12 +32,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 				// No specific time setup possible here for the service's internal time.Now().UTC()
 				// The RealTimeParser will use roundutil.RealClock{} as invoked by the service.
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "Test Round 1",
-				Description: "A test description",
-				Location:    "Test Location",
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title("Test Round 1"),
+				Description: roundtypes.Description("A test description"),
+				Location:    roundtypes.Location("Test Location"),
 				StartTime:   "tomorrow at 10 AM", // Will be parsed relative to actual system time
-				Timezone:    "America/Chicago",
+				Timezone:    roundtypes.Timezone("America/Chicago"),
 				UserID:      "user_123",
 				ChannelID:   "channel_abc",
 			},
@@ -48,9 +49,9 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
+				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -76,8 +77,8 @@ func TestValidateAndProcessRound(t *testing.T) {
 				if successPayload.DiscordChannelID != "channel_abc" {
 					t.Errorf("Expected DiscordChannelID 'channel_abc', got '%s'", successPayload.DiscordChannelID)
 				}
-				if successPayload.DiscordGuildID != "" {
-					t.Errorf("Expected empty DiscordGuildID, got '%s'", successPayload.DiscordGuildID)
+				if successPayload.DiscordGuildID != "test-guild" {
+					t.Errorf("Expected DiscordGuildID 'test-guild', got '%s'", successPayload.DiscordGuildID)
 				}
 				// Verify StartTime is in the future relative to the test execution time.
 				// Due to time.Now().UTC() in service, this test can be flaky if run at specific times.
@@ -91,12 +92,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 			setupTestEnv: func() {
 				// No specific time setup
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "", // Empty title
-				Description: "A test description",
-				Location:    "Test Location",
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title(""), // Empty title
+				Description: roundtypes.Description("A test description"),
+				Location:    roundtypes.Location("Test Location"),
 				StartTime:   "tomorrow at 10 AM",
-				Timezone:    "America/Chicago",
+				Timezone:    roundtypes.Timezone("America/Chicago"),
 				UserID:      "user_123",
 				ChannelID:   "channel_abc",
 			},
@@ -107,15 +109,15 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 				// Updated expected error message to match actual output
 				expectedErrMsg := "title cannot be empty"
-				if len(failurePayload.ErrorMessage) != 1 || failurePayload.ErrorMessage[0] != expectedErrMsg {
-					t.Errorf("Expected error message '%s', got '%v'", expectedErrMsg, failurePayload.ErrorMessage)
+				if len(failurePayload.ErrorMessages) != 1 || failurePayload.ErrorMessages[0] != expectedErrMsg {
+					t.Errorf("Expected error message '%s', got '%v'", expectedErrMsg, failurePayload.ErrorMessages)
 				}
 				if failurePayload.UserID != "user_123" {
 					t.Errorf("Expected UserID 'user_123', got '%s'", failurePayload.UserID)
@@ -130,12 +132,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 				// or using runtime patching (which is like a mock).
 				// For this test to pass reliably, it must be run when "yesterday at 5 PM" is indeed in the past.
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "Past Round",
-				Description: "Should fail",
-				Location:    "Anywhere",
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title("Past Round"),
+				Description: roundtypes.Description("Should fail"),
+				Location:    roundtypes.Location("Anywhere"),
 				StartTime:   "yesterday at 5 PM", // Will be parsed relative to actual system time
-				Timezone:    "America/New_York",
+				Timezone:    roundtypes.Timezone("America/New_York"),
 				UserID:      "user_456",
 				ChannelID:   "channel_def",
 			},
@@ -146,15 +149,15 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 				// Updated to check for substring due to dynamic timestamps in the actual error message
 				expectedContains := "start time must be in the future"
-				if len(failurePayload.ErrorMessage) != 1 || !strings.Contains(failurePayload.ErrorMessage[0], expectedContains) {
-					t.Errorf("Expected error message to contain '%s', got '%v'", expectedContains, failurePayload.ErrorMessage)
+				if len(failurePayload.ErrorMessages) != 1 || !strings.Contains(failurePayload.ErrorMessages[0], expectedContains) {
+					t.Errorf("Expected error message to contain '%s', got '%v'", expectedContains, failurePayload.ErrorMessages)
 				}
 				if failurePayload.UserID != "user_456" {
 					t.Errorf("Expected UserID 'user_456', got '%s'", failurePayload.UserID)
@@ -166,12 +169,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 			setupTestEnv: func() {
 				// No specific time setup
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "Bad Time Round",
-				Description: "Invalid time",
-				Location:    "Here",
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title("Bad Time Round"),
+				Description: roundtypes.Description("Invalid time"),
+				Location:    roundtypes.Location("Here"),
 				StartTime:   "not a real time string", // Invalid time input
-				Timezone:    "America/Los_Angeles",
+				Timezone:    roundtypes.Timezone("America/Los_Angeles"),
 				UserID:      "user_789",
 				ChannelID:   "channel_ghi",
 			},
@@ -182,15 +186,15 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 				// Updated expected error message to match actual output
 				expectedErrMsg := "could not recognize time format: not a real time string"
-				if len(failurePayload.ErrorMessage) != 1 || failurePayload.ErrorMessage[0] != expectedErrMsg {
-					t.Errorf("Expected error message '%s', got '%v'", expectedErrMsg, failurePayload.ErrorMessage)
+				if len(failurePayload.ErrorMessages) != 1 || failurePayload.ErrorMessages[0] != expectedErrMsg {
+					t.Errorf("Expected error message '%s', got '%v'", expectedErrMsg, failurePayload.ErrorMessages)
 				}
 				if failurePayload.UserID != "user_789" {
 					t.Errorf("Expected UserID 'user_789', got '%s'", failurePayload.UserID)
@@ -202,12 +206,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 			setupTestEnv: func() {
 				// No specific time setup
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "Round with Empty Optional Fields",
-				Description: "",                  // Empty description - will be rejected by validator
-				Location:    "",                  // Empty location - will be rejected by validator
-				StartTime:   "in 2 days at 3 PM", // Changed to be more reliably in the future
-				Timezone:    "UTC",
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title("Round with Empty Optional Fields"),
+				Description: roundtypes.Description(""), // Empty description - will be rejected by validator
+				Location:    roundtypes.Location(""),    // Empty location - will be rejected by validator
+				StartTime:   "in 2 days at 3 PM",        // Changed to be more reliably in the future
+				Timezone:    roundtypes.Timezone("UTC"),
 				UserID:      "user_empty",
 				ChannelID:   "channel_xyz",
 			},
@@ -223,20 +228,20 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 
-				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayload)
+				failurePayload, ok := result.Failure.(*roundevents.RoundValidationFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 
 				// Check that validation failed for both empty description and location
-				if len(failurePayload.ErrorMessage) != 2 {
-					t.Errorf("Expected 2 validation errors, got %d: %v", len(failurePayload.ErrorMessage), failurePayload.ErrorMessage)
+				if len(failurePayload.ErrorMessages) != 2 {
+					t.Errorf("Expected 2 validation errors, got %d: %v", len(failurePayload.ErrorMessages), failurePayload.ErrorMessages)
 					return
 				}
 
 				// Check for both expected error messages
-				errorMessages := failurePayload.ErrorMessage
+				errorMessages := failurePayload.ErrorMessages
 				hasLocationError := false
 				hasDescriptionError := false
 
@@ -266,12 +271,13 @@ func TestValidateAndProcessRound(t *testing.T) {
 			setupTestEnv: func() {
 				// No specific time setup
 			},
-			payload: roundevents.CreateRoundRequestedPayload{
-				Title:       "Round with Optional Fields",
-				Description: "A valid description", // Non-empty description
-				Location:    "A valid location",    // Non-empty location
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "test-guild",
+				Title:       roundtypes.Title("Round with Optional Fields"),
+				Description: roundtypes.Description("A valid description"), // Non-empty description
+				Location:    roundtypes.Location("A valid location"),       // Non-empty location
 				StartTime:   "in 2 days at 3 PM",
-				Timezone:    "UTC",
+				Timezone:    roundtypes.Timezone("UTC"),
 				UserID:      "user_valid",
 				ChannelID:   "channel_xyz",
 			},
@@ -282,9 +288,9 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 
-				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayload)
+				successPayload, ok := result.Success.(*roundevents.RoundEntityCreatedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *roundevents.RoundEntityCreatedPayloadV1, but got %T", result.Success)
 					return
 				}
 

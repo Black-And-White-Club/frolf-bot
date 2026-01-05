@@ -49,7 +49,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			userID: testUserID,
 			tag:    &testTag,
 			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserCreatedPayload{
+				Success: &userevents.UserCreatedPayloadV1{
 					UserID:    testUserID,
 					TagNumber: &testTag,
 				},
@@ -70,7 +70,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:    &testTag,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserCreationFailedPayload{
+				Failure: &userevents.UserCreationFailedPayloadV1{
 					UserID:    testUserID,
 					TagNumber: &testTag,
 					Reason:    ErrUserAlreadyExists.Error(), // Expected reason from translateDBError
@@ -89,7 +89,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			userID: testUserID,
 			tag:    nil,
 			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserCreatedPayload{
+				Success: &userevents.UserCreatedPayloadV1{
 					UserID:    testUserID,
 					TagNumber: nil,
 				},
@@ -110,7 +110,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:    &testTag,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserCreationFailedPayload{
+				Failure: &userevents.UserCreationFailedPayloadV1{
 					UserID:    testUserID,
 					TagNumber: &testTag,
 					Reason:    "database connection lost", // translateDBError returns original error
@@ -128,7 +128,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:    &testTag,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserCreationFailedPayload{
+				Failure: &userevents.UserCreationFailedPayloadV1{
 					UserID:    "",
 					TagNumber: &testTag,
 					Reason:    ErrInvalidDiscordID.Error(),
@@ -146,7 +146,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:    &negativeTag,
 			expectedOpResult: UserOperationResult{
 				Success: nil,
-				Failure: &userevents.UserCreationFailedPayload{
+				Failure: &userevents.UserCreationFailedPayloadV1{
 					UserID:    testUserID,
 					TagNumber: &negativeTag,
 					Reason:    ErrNegativeTagNumber.Error(),
@@ -199,10 +199,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 
 			// Validate the returned UserOperationResult
 			if tt.expectedOpResult.Success != nil {
-				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserCreatedPayload)
-				gotSuccess, ok := gotResult.Success.(*userevents.UserCreatedPayload)
+				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserCreatedPayloadV1)
+				gotSuccess, ok := gotResult.Success.(*userevents.UserCreatedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success payload of type *userevents.UserCreatedPayload, got %T", gotResult.Success)
+					t.Errorf("Expected success payload of type *userevents.UserCreatedPayloadV1, got %T", gotResult.Success)
 				} else if gotSuccess.UserID != expectedSuccess.UserID {
 					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, expectedSuccess.UserID)
 				}
@@ -217,10 +217,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			}
 
 			if tt.expectedOpResult.Failure != nil {
-				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserCreationFailedPayload)
-				gotFailure, ok := gotResult.Failure.(*userevents.UserCreationFailedPayload)
+				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserCreationFailedPayloadV1)
+				gotFailure, ok := gotResult.Failure.(*userevents.UserCreationFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure payload of type *userevents.UserCreationFailedPayload, got %T", gotResult.Failure)
+					t.Errorf("Expected failure payload of type *userevents.UserCreationFailedPayloadV1, got %T", gotResult.Failure)
 				} else if gotFailure.Reason != expectedFailure.Reason {
 					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, expectedFailure.Reason)
 				}

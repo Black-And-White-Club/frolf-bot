@@ -22,7 +22,7 @@ type RoundDBImpl struct {
 // UpdateImportStatus updates import fields on a round with minimal surface area.
 func (db *RoundDBImpl) UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error {
 	update := db.DB.NewUpdate().
-		Model((*roundtypes.Round)(nil)).
+		Model((*Round)(nil)).
 		Set("import_status = ?", status).
 		Set("updated_at = now()")
 
@@ -47,8 +47,16 @@ func (db *RoundDBImpl) UpdateImportStatus(ctx context.Context, guildID sharedtyp
 
 // CreateRound creates a new round in the database and retrieves the generated ID.
 func (db *RoundDBImpl) CreateRound(ctx context.Context, guildID sharedtypes.GuildID, round *roundtypes.Round) error {
+	// Ensure GuildID is set on the round object before insertion
+	if round.GuildID == "" {
+		round.GuildID = guildID
+	}
+
+	// Convert to local model to ensure Bun tags are respected
+	localRound := toLocalRound(round)
+
 	_, err := db.DB.NewInsert().
-		Model(round).
+		Model(localRound).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create round: %w", err)
@@ -58,9 +66,9 @@ func (db *RoundDBImpl) CreateRound(ctx context.Context, guildID sharedtypes.Guil
 
 // GetRound retrieves a specific round by ID.
 func (db *RoundDBImpl) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
-	round := new(roundtypes.Round)
+	localRound := new(Round)
 	err := db.DB.NewSelect().
-		Model(round).
+		Model(localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -70,14 +78,14 @@ func (db *RoundDBImpl) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 		}
 		return nil, fmt.Errorf("failed to fetch round: %w", err)
 	}
-	return round, nil
+	return toSharedRound(localRound), nil
 }
 
 // GetParticipant retrieves a participant's information for a specific round
 func (db *RoundDBImpl) GetParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error) {
-	var round roundtypes.Round
+	var localRound Round
 	err := db.DB.NewSelect().
-		Model(&round).
+		Model(&localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -85,7 +93,7 @@ func (db *RoundDBImpl) GetParticipant(ctx context.Context, guildID sharedtypes.G
 	}
 
 	// Look for the participant in the round's participants
-	for _, p := range round.Participants {
+	for _, p := range localRound.Participants {
 		if p.UserID == userID {
 			return &p, nil
 		}
@@ -95,12 +103,80 @@ func (db *RoundDBImpl) GetParticipant(ctx context.Context, guildID sharedtypes.G
 	return nil, nil
 }
 
+// Helper functions to convert between local and shared models
+func toLocalRound(r *roundtypes.Round) *Round {
+	local := &Round{
+		ID:              r.ID,
+		Title:           r.Title,
+		EventType:       r.EventType,
+		Finalized:       r.Finalized,
+		CreatedBy:       r.CreatedBy,
+		State:           r.State,
+		Participants:    r.Participants,
+		EventMessageID:  r.EventMessageID,
+		GuildID:         r.GuildID,
+		ImportID:        r.ImportID,
+		ImportStatus:    ImportStatus(r.ImportStatus),
+		ImportType:      ImportType(r.ImportType),
+		FileData:        r.FileData,
+		FileName:        r.FileName,
+		UDiscURL:        r.UDiscURL,
+		ImportNotes:     r.ImportNotes,
+		ImportError:     r.ImportError,
+		ImportErrorCode: r.ImportErrorCode,
+		ImportedAt:      r.ImportedAt,
+		ImportUserID:    r.ImportUserID,
+		ImportChannelID: r.ImportChannelID,
+	}
+
+	if r.Description != nil {
+		local.Description = *r.Description
+	}
+	if r.Location != nil {
+		local.Location = *r.Location
+	}
+	if r.StartTime != nil {
+		local.StartTime = *r.StartTime
+	}
+
+	return local
+}
+
+func toSharedRound(r *Round) *roundtypes.Round {
+	return &roundtypes.Round{
+		ID:              r.ID,
+		Title:           r.Title,
+		Description:     &r.Description,
+		Location:        &r.Location,
+		EventType:       r.EventType,
+		StartTime:       &r.StartTime,
+		Finalized:       r.Finalized,
+		CreatedBy:       r.CreatedBy,
+		State:           r.State,
+		Participants:    r.Participants,
+		EventMessageID:  r.EventMessageID,
+		GuildID:         r.GuildID,
+		ImportID:        r.ImportID,
+		ImportStatus:    string(r.ImportStatus),
+		ImportType:      string(r.ImportType),
+		FileData:        r.FileData,
+		FileName:        r.FileName,
+		UDiscURL:        r.UDiscURL,
+		ImportNotes:     r.ImportNotes,
+		ImportError:     r.ImportError,
+		ImportErrorCode: r.ImportErrorCode,
+		ImportedAt:      r.ImportedAt,
+		ImportUserID:    r.ImportUserID,
+		ImportChannelID: r.ImportChannelID,
+	}
+}
+
 // RemoveParticipant removes a participant from a round and returns updated participants
 func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error) {
 	// First, fetch the round
-	var round roundtypes.Round
+	var localRound Round
 	err := db.DB.NewSelect().
-		Model(&round).
+		Model(&localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -112,8 +188,8 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, guildID sharedtype
 
 	// Find and remove the participant
 	found := false
-	updatedParticipants := make([]roundtypes.Participant, 0, len(round.Participants))
-	for _, p := range round.Participants {
+	updatedParticipants := make([]roundtypes.Participant, 0, len(localRound.Participants))
+	for _, p := range localRound.Participants {
 		if p.UserID != userID {
 			updatedParticipants = append(updatedParticipants, p)
 		} else {
@@ -123,12 +199,12 @@ func (db *RoundDBImpl) RemoveParticipant(ctx context.Context, guildID sharedtype
 
 	if !found {
 		// Participant wasn't in the round - return current participants (graceful handling)
-		return round.Participants, nil
+		return localRound.Participants, nil
 	}
 
 	// Update the round with the modified participants list
 	_, err = db.DB.NewUpdate().
-		Model(&round).
+		Model(&localRound).
 		Set("participants = ?", updatedParticipants).
 		Where("id = ?", roundID).
 		Exec(ctx)
@@ -258,7 +334,7 @@ func (db *RoundDBImpl) DeleteRound(ctx context.Context, guildID sharedtypes.Guil
 
 	// Check if the round exists first
 	exists, err := db.DB.NewSelect().
-		Model(&roundtypes.Round{}).
+		Model(&Round{}).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exists(ctx)
 	if err != nil {
@@ -273,7 +349,7 @@ func (db *RoundDBImpl) DeleteRound(ctx context.Context, guildID sharedtypes.Guil
 
 	// Update the round state
 	res, err := db.DB.NewUpdate().
-		Model(&roundtypes.Round{}).
+		Model(&Round{}).
 		Set("state = ?", roundtypes.RoundState(roundtypes.RoundStateDeleted)).
 		Set("updated_at = ?", time.Now()).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
@@ -453,7 +529,7 @@ func (db *RoundDBImpl) UpdateParticipant(ctx context.Context, guildID sharedtype
 // UpdateRoundState updates the state of a round.
 func (db *RoundDBImpl) UpdateRoundState(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, state roundtypes.RoundState) error {
 	_, err := db.DB.NewUpdate().
-		Model(&roundtypes.Round{}).
+		Model(&Round{}).
 		Set("state = ?", state).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exec(ctx)
@@ -465,22 +541,27 @@ func (db *RoundDBImpl) UpdateRoundState(ctx context.Context, guildID sharedtypes
 
 // GetUpcomingRounds retrieves rounds that are upcoming
 func (db *RoundDBImpl) GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
-	var rounds []*roundtypes.Round
+	var localRounds []*Round
 	err := db.DB.NewSelect().
-		Model(&rounds).
+		Model(&localRounds).
 		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upcoming rounds: %w", err)
+	}
+
+	rounds := make([]*roundtypes.Round, len(localRounds))
+	for i, r := range localRounds {
+		rounds[i] = toSharedRound(r)
 	}
 	return rounds, nil
 }
 
 // UpdateParticipantScore updates the score for a participant in a round.
 func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, participantID sharedtypes.DiscordID, score sharedtypes.Score) error {
-	var round roundtypes.Round
+	var localRound Round
 	err := db.DB.NewSelect().
-		Model(&round).
+		Model(&localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -489,9 +570,9 @@ func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, guildID share
 
 	// Find the participant and update their score
 	found := false
-	for i, p := range round.Participants {
+	for i, p := range localRound.Participants {
 		if p.UserID == participantID {
-			round.Participants[i].Score = &score
+			localRound.Participants[i].Score = &score
 			found = true
 			break
 		}
@@ -502,8 +583,8 @@ func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, guildID share
 
 	// Update the round in the database
 	_, err = db.DB.NewUpdate().
-		Model(&round).
-		Set("participants = ?", round.Participants).
+		Model(&localRound).
+		Set("participants = ?", localRound.Participants).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exec(ctx)
 	if err != nil {
@@ -515,9 +596,9 @@ func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, guildID share
 
 // GetParticipantsWithResponses retrieves participants with the specified responses from a round.
 func (db *RoundDBImpl) GetParticipantsWithResponses(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, responses ...string) ([]roundtypes.Participant, error) {
-	var round roundtypes.Round
+	var localRound Round
 	err := db.DB.NewSelect().
-		Model(&round).
+		Model(&localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -525,7 +606,7 @@ func (db *RoundDBImpl) GetParticipantsWithResponses(ctx context.Context, guildID
 	}
 
 	var participants []roundtypes.Participant
-	for _, p := range round.Participants {
+	for _, p := range localRound.Participants {
 		for _, response := range responses {
 			if string(p.Response) == response {
 				participants = append(participants, p)
@@ -551,17 +632,6 @@ func (db *RoundDBImpl) GetRoundState(ctx context.Context, guildID sharedtypes.Gu
 	return round.State, nil
 }
 
-// LogRound logs the round data by updating the existing round entry.
-func (db *RoundDBImpl) LogRound(ctx context.Context, guildID sharedtypes.GuildID, round *roundtypes.Round) error {
-	_, err := db.DB.NewUpdate().
-		Model(round).
-		Where("id = ? AND guild_id = ?", round.ID, guildID).
-		Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to log round: %w", err)
-	}
-	return nil
-}
 
 // GetParticipants retrieves all participants from a round.
 func (db *RoundDBImpl) GetParticipants(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
@@ -666,13 +736,3 @@ func (db *RoundDBImpl) UpdateRoundsAndParticipants(ctx context.Context, guildID 
 	})
 }
 
-// TagUpdates can be removed since it's no longer needed, or simplified if used elsewhere
-func (db *RoundDBImpl) TagUpdates(ctx context.Context, guildID sharedtypes.GuildID, bun bun.IDB, round *roundtypes.Round) error {
-	// This method should specify which columns to update to avoid the NULL constraint issue
-	_, err := bun.NewUpdate().
-		Model(round).
-		Column("participants"). // Only update participants column
-		Where("id = ? AND guild_id = ?", round.ID, guildID).
-		Exec(ctx)
-	return err
-}

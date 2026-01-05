@@ -26,7 +26,8 @@ func createTagAvailabilityCheckRequestMessage(
 	t.Helper() // Mark this as a helper function
 
 	tagPtr := tagPtr(tagNumber)
-	payload := leaderboardevents.TagAvailabilityCheckRequestedPayload{
+	payload := leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+		GuildID:   sharedtypes.GuildID("test_guild"),
 		UserID:    userID,
 		TagNumber: tagPtr,
 	}
@@ -44,10 +45,15 @@ func createTagAvailabilityCheckRequestMessage(
 // Helper to validate response properties for tag available
 func validateTagAvailableResponse(
 	t *testing.T,
-	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayload,
-	availablePayload *leaderboardevents.TagAvailablePayload,
+	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayloadV1,
+	availablePayload *leaderboardevents.LeaderboardTagAvailablePayloadV1,
 ) {
 	t.Helper() // Mark this as a helper function
+
+	if availablePayload.GuildID != requestPayload.GuildID {
+		t.Errorf("GuildID mismatch in available payload: expected %q, got %q",
+			requestPayload.GuildID, availablePayload.GuildID)
+	}
 
 	if availablePayload.UserID != requestPayload.UserID {
 		t.Errorf("UserID mismatch in available payload: expected %q, got %q",
@@ -63,10 +69,15 @@ func validateTagAvailableResponse(
 // Helper to validate response properties for tag unavailable
 func validateTagUnavailableResponse(
 	t *testing.T,
-	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayload,
-	unavailablePayload *leaderboardevents.TagUnavailablePayload,
+	requestPayload *leaderboardevents.TagAvailabilityCheckRequestedPayloadV1,
+	unavailablePayload *leaderboardevents.LeaderboardTagUnavailablePayloadV1,
 ) {
 	t.Helper() // Mark this as a helper function
+
+	if unavailablePayload.GuildID != requestPayload.GuildID {
+		t.Errorf("GuildID mismatch in unavailable payload: expected %q, got %q",
+			requestPayload.GuildID, unavailablePayload.GuildID)
+	}
 
 	if unavailablePayload.UserID != requestPayload.UserID {
 		t.Errorf("UserID mismatch in unavailable payload: expected %q, got %q",
@@ -114,14 +125,14 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check TagAvailable response
-				availableTopic := leaderboardevents.TagAvailable
+				availableTopic := leaderboardevents.LeaderboardTagAvailableV1
 				msgs := receivedMsgs[availableTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", availableTopic)
@@ -131,12 +142,12 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 				}
 
 				// Parse payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				availablePayload, err := testutils.ParsePayload[leaderboardevents.TagAvailablePayload](msgs[0])
+				availablePayload, err := testutils.ParsePayload[leaderboardevents.LeaderboardTagAvailablePayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -152,17 +163,17 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 				}
 
 				// Check for unexpected messages
-				unexpectedTopic := leaderboardevents.TagUnavailable
+				unexpectedTopic := leaderboardevents.LeaderboardTagUnavailableV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.TagAvailableCheckFailure
+				unexpectedFailureTopic := leaderboardevents.TagAvailabilityCheckFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}
 			},
 			expectedOutgoingTopics: []string{
-				leaderboardevents.TagAvailable,
+				leaderboardevents.LeaderboardTagAvailableV1,
 			},
 			expectHandlerError: false,
 		},
@@ -188,13 +199,13 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				unavailableTopic := leaderboardevents.TagUnavailable
+				unavailableTopic := leaderboardevents.LeaderboardTagUnavailableV1
 				msgs := receivedMsgs[unavailableTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", unavailableTopic)
@@ -204,12 +215,12 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 				}
 
 				// Parse payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagAvailabilityCheckRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				unavailablePayload, err := testutils.ParsePayload[leaderboardevents.TagUnavailablePayload](msgs[0])
+				unavailablePayload, err := testutils.ParsePayload[leaderboardevents.LeaderboardTagUnavailablePayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -225,9 +236,9 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 				}
 
 				// Check for unexpected messages
-				availableTopic := leaderboardevents.TagAvailable
-				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
-				failureTopic := leaderboardevents.TagAvailableCheckFailure
+				availableTopic := leaderboardevents.LeaderboardTagAvailableV1
+				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequestedV1
+				failureTopic := leaderboardevents.TagAvailabilityCheckFailedV1
 
 				if len(receivedMsgs[availableTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d",
@@ -242,7 +253,7 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 						failureTopic, len(receivedMsgs[failureTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagUnavailable},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardTagUnavailableV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -257,17 +268,17 @@ func TestHandleTagAvailabilityCheckRequested(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagAvailabilityCheckRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for unexpected messages
-				availableTopic := leaderboardevents.TagAvailable
-				unavailableTopic := leaderboardevents.TagUnavailable
-				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequested
-				failureTopic := leaderboardevents.TagAvailableCheckFailure
+				availableTopic := leaderboardevents.LeaderboardTagAvailableV1
+				unavailableTopic := leaderboardevents.LeaderboardTagUnavailableV1
+				assignTopic := leaderboardevents.LeaderboardTagAssignmentRequestedV1
+				failureTopic := leaderboardevents.TagAvailabilityCheckFailedV1
 
 				if len(receivedMsgs[availableTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d",

@@ -15,9 +15,9 @@ import (
 func (h *GuildHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRetrieveGuildConfig",
-		&guildevents.GuildConfigRetrievalRequestedPayload{},
+		&guildevents.GuildConfigRetrievalRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			retrievePayload := payload.(*guildevents.GuildConfigRetrievalRequestedPayload)
+			retrievePayload := payload.(*guildevents.GuildConfigRetrievalRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received GuildConfigRetrievalRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -35,7 +35,7 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*mess
 					)
 					failurePayload := result.Failure
 					if failurePayload == nil { // safety net
-						failurePayload = &guildevents.GuildConfigRetrievalFailedPayload{ //nolint:exhaustruct
+						failurePayload = &guildevents.GuildConfigRetrievalFailedPayloadV1{ //nolint:exhaustruct
 							GuildID: retrievePayload.GuildID,
 							Reason:  guildservice.ErrGuildConfigNotFound.Error(),
 						}
@@ -43,7 +43,7 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*mess
 					failureMsg, errMsg := h.helpers.CreateResultMessage(
 						msg,
 						failurePayload,
-						guildevents.GuildConfigRetrievalFailed,
+						guildevents.GuildConfigRetrievalFailedV1,
 					)
 					if errMsg != nil {
 						return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -72,7 +72,7 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*mess
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					guildevents.GuildConfigRetrievalFailed,
+					guildevents.GuildConfigRetrievalFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -95,7 +95,7 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*mess
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					guildevents.GuildConfigRetrieved,
+					guildevents.GuildConfigRetrievedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

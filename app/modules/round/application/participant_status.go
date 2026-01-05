@@ -12,7 +12,7 @@ import (
 )
 
 // CheckParticipantStatus checks if a join request is a toggle or requires validation.
-func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "CheckParticipantStatus", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Checking participant status",
 			attr.RoundID("round_id", payload.RoundID),
@@ -29,7 +29,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 				attr.Error(err),
 			)
 			// Use a specific error payload
-			failurePayload := &roundevents.ParticipantStatusCheckErrorPayload{
+			failurePayload := &roundevents.ParticipantStatusCheckErrorPayloadV1{
 				RoundID: payload.RoundID,
 				UserID:  payload.UserID,
 				Error:   fmt.Sprintf("failed to get participant status: %v", err),
@@ -55,7 +55,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 				attr.String("status", currentStatus),
 			)
 			// Prepare a removal request payload for the caller
-			removalPayload := &roundevents.ParticipantRemovalRequestPayload{
+			removalPayload := &roundevents.ParticipantRemovalRequestPayloadV1{
 				RoundID: payload.RoundID,
 				UserID:  payload.UserID,
 			}
@@ -68,7 +68,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 			attr.String("user_id", string(payload.UserID)),
 		)
 		// Pass the original payload forward, wrapped in a type indicating validation is next
-		validationPayload := &roundevents.ParticipantJoinValidationRequestPayload{
+		validationPayload := &roundevents.ParticipantJoinValidationRequestPayloadV1{
 			RoundID:  payload.RoundID,
 			UserID:   payload.UserID,
 			Response: payload.Response,
@@ -80,7 +80,7 @@ func (s *RoundService) CheckParticipantStatus(ctx context.Context, payload round
 }
 
 // ValidateParticipantJoinRequest validates the basic details of a join request and determines if the join is late.
-func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ValidateParticipantJoinRequest", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Validating participant join request",
 			attr.ExtractCorrelationID(ctx),
@@ -107,7 +107,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 				attr.String("user_id", string(payload.UserID)),
 				attr.Any("errors", errorMessages),
 			)
-			failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+			failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 				ParticipantJoinRequest: &payload,
 				Error:                  fmt.Sprintf("validation failed: %v", errorMessages),
 				EventMessageID:         "",
@@ -141,7 +141,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
 			)
-			failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+			failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 				ParticipantJoinRequest: &payload,
 				Error:                  fmt.Sprintf("failed to fetch round details: %v", err),
 				EventMessageID:         "",
@@ -168,7 +168,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 
 		switch payload.Response {
 		case roundtypes.ResponseAccept, roundtypes.ResponseTentative:
-			tagLookupPayload := &roundevents.TagLookupRequestPayload{
+			tagLookupPayload := &roundevents.TagLookupRequestPayloadV1{
 				RoundID:          payload.RoundID,
 				UserID:           payload.UserID,
 				Response:         payload.Response,
@@ -196,7 +196,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 				attr.String("user_id", string(payload.UserID)),
 				attr.String("response", string(payload.Response)),
 			)
-			failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+			failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 				ParticipantJoinRequest: &payload,
 				Error:                  fmt.Sprintf("unexpected response type: %s", payload.Response),
 				EventMessageID:         "",
@@ -214,7 +214,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 }
 
 // ParticipantRemoval handles removing a participant from a round if they select the same RSVP response
-func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayloadV1) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "ParticipantRemoval", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing participant removal",
 			attr.RoundID("round_id", payload.RoundID),
@@ -229,7 +229,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
 			)
-			failurePayload := &roundevents.ParticipantRemovalErrorPayload{
+			failurePayload := &roundevents.ParticipantRemovalErrorPayloadV1{
 				RoundID: payload.RoundID,
 				UserID:  payload.UserID,
 				Error:   fmt.Sprintf("failed to fetch round details: %v", err),
@@ -245,7 +245,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 				attr.String("user_id", string(payload.UserID)),
 				attr.Error(err),
 			)
-			failurePayload := &roundevents.ParticipantRemovalErrorPayload{
+			failurePayload := &roundevents.ParticipantRemovalErrorPayloadV1{
 				RoundID: payload.RoundID,
 				UserID:  payload.UserID,
 				Error:   fmt.Sprintf("failed to remove participant: %v", err),
@@ -257,7 +257,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 		accepted, declined, tentative := categorizeParticipants(updatedParticipants)
 
 		// Prepare success payload
-		removedPayload := &roundevents.ParticipantRemovedPayload{
+		removedPayload := &roundevents.ParticipantRemovedPayloadV1{
 			RoundID:               payload.RoundID,
 			UserID:                payload.UserID,
 			AcceptedParticipants:  accepted,
@@ -281,7 +281,7 @@ func (s *RoundService) ParticipantRemoval(ctx context.Context, payload roundeven
 }
 
 // UpdateParticipantStatus is the main entry point - delegates to specific handlers
-func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	result, err := s.serviceWrapper(ctx, "UpdateParticipantStatus", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing participant status update",
 			attr.RoundID("round_id", payload.RoundID),
@@ -308,7 +308,7 @@ func (s *RoundService) UpdateParticipantStatus(ctx context.Context, payload roun
 }
 
 // updateParticipantWithTag handles Accept/Tentative with tag (from tag lookup "found")
-func (s *RoundService) updateParticipantWithTag(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) updateParticipantWithTag(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	s.logger.InfoContext(ctx, "Updating participant with tag",
 		attr.RoundID("round_id", payload.RoundID),
 		attr.String("user_id", string(payload.UserID)),
@@ -326,7 +326,7 @@ func (s *RoundService) updateParticipantWithTag(ctx context.Context, payload rou
 }
 
 // updateParticipantWithoutTag handles Accept/Tentative without tag (from tag lookup "not found")
-func (s *RoundService) updateParticipantWithoutTag(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) updateParticipantWithoutTag(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	s.logger.InfoContext(ctx, "Updating participant without tag (tag not found)",
 		attr.RoundID("round_id", payload.RoundID),
 		attr.String("user_id", string(payload.UserID)),
@@ -343,7 +343,7 @@ func (s *RoundService) updateParticipantWithoutTag(ctx context.Context, payload 
 }
 
 // updateParticipantDecline handles decline responses
-func (s *RoundService) updateParticipantDecline(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) updateParticipantDecline(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	s.logger.InfoContext(ctx, "Updating participant with decline",
 		attr.RoundID("round_id", payload.RoundID),
 		attr.String("user_id", string(payload.UserID)),
@@ -360,14 +360,14 @@ func (s *RoundService) updateParticipantDecline(ctx context.Context, payload rou
 }
 
 // handleUnknownResponse handles unexpected response types
-func (s *RoundService) handleUnknownResponse(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) (RoundOperationResult, error) {
+func (s *RoundService) handleUnknownResponse(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error) {
 	s.logger.ErrorContext(ctx, "Unknown response type",
 		attr.RoundID("round_id", payload.RoundID),
 		attr.String("user_id", string(payload.UserID)),
 		attr.String("response", string(payload.Response)),
 	)
 
-	failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+	failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 		ParticipantJoinRequest: &payload,
 		Error:                  fmt.Sprintf("unknown response type: %s", payload.Response),
 		EventMessageID:         "",
@@ -376,7 +376,7 @@ func (s *RoundService) handleUnknownResponse(ctx context.Context, payload rounde
 }
 
 // updateParticipantInDB handles the common DB operations and response construction
-func (s *RoundService) updateParticipantInDB(ctx context.Context, payload roundevents.ParticipantJoinRequestPayload, participant roundtypes.Participant) (RoundOperationResult, error) {
+func (s *RoundService) updateParticipantInDB(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1, participant roundtypes.Participant) (RoundOperationResult, error) {
 	// Get round details for EventMessageID
 	round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
@@ -385,7 +385,7 @@ func (s *RoundService) updateParticipantInDB(ctx context.Context, payload rounde
 			attr.String("user_id", string(payload.UserID)),
 			attr.Error(err),
 		)
-		failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+		failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 			ParticipantJoinRequest: &payload,
 			Error:                  fmt.Sprintf("failed to fetch round details: %v", err),
 			EventMessageID:         "",
@@ -401,7 +401,7 @@ func (s *RoundService) updateParticipantInDB(ctx context.Context, payload rounde
 			attr.String("user_id", string(payload.UserID)),
 			attr.Error(err),
 		)
-		failurePayload := &roundevents.RoundParticipantJoinErrorPayload{
+		failurePayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
 			ParticipantJoinRequest: &payload,
 			Error:                  fmt.Sprintf("failed to update participant in DB: %v", err),
 			EventMessageID:         round.EventMessageID,
@@ -417,7 +417,7 @@ func (s *RoundService) updateParticipantInDB(ctx context.Context, payload rounde
 		isLateJoin = *payload.JoinedLate
 	}
 
-	joinedPayload := &roundevents.ParticipantJoinedPayload{
+	joinedPayload := &roundevents.ParticipantJoinedPayloadV1{
 		GuildID:               payload.GuildID, // Ensure GuildID populated for downstream consumers
 		RoundID:               payload.RoundID,
 		AcceptedParticipants:  accepted,

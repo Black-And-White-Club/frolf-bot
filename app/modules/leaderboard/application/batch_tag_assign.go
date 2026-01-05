@@ -39,7 +39,16 @@ func (s *LeaderboardService) ProcessTagAssignments(
 		}
 	case sharedtypes.ServiceUpdateSource:
 		sourceType = src
-	case *sharedevents.BatchTagAssignmentRequestedPayload:
+	case *sharedevents.BatchTagAssignmentRequestedPayloadV1:
+		// Intelligent source determination based on payload context
+		if len(src.Assignments) == 1 && src.RequestingUserID == "system" {
+			// Single assignment from system is likely user creation
+			sourceType = sharedtypes.ServiceUpdateSourceCreateUser
+		} else {
+			// Multiple assignments or non-system requests are admin batch operations
+			sourceType = sharedtypes.ServiceUpdateSourceAdminBatch
+		}
+	case *leaderboardevents.LeaderboardBatchTagAssignmentRequestedPayloadV1:
 		// Intelligent source determination based on payload context
 		if len(src.Assignments) == 1 && src.RequestingUserID == "system" {
 			// Single assignment from system is likely user creation
@@ -446,6 +455,7 @@ func (s *LeaderboardService) buildSuccessResponse(
 		// Score processing updates return leaderboard updated event
 		return LeaderboardOperationResult{
 			Success: &leaderboardevents.LeaderboardUpdatedPayload{
+				GuildID: guildID,
 				RoundID: sharedtypes.RoundID(operationID),
 			},
 		}
@@ -491,7 +501,7 @@ func (s *LeaderboardService) buildFailureResponse(
 	default:
 		// All other failures return batch assignment failed event
 		return LeaderboardOperationResult{
-			Failure: &leaderboardevents.BatchTagAssignmentFailedPayload{
+			Failure: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
 				RequestingUserID: resolveRequestingUser(requestingUserID),
 				BatchID:          batchID.String(),
 				Reason:           errorReason,
@@ -506,14 +516,14 @@ func (s *LeaderboardService) createBatchAssignedPayload(
 	requestingUser sharedtypes.DiscordID,
 	batchID uuid.UUID,
 	guildID sharedtypes.GuildID,
-) *leaderboardevents.BatchTagAssignedPayload {
+) *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1 {
 	if len(requests) == 0 {
-		payload := &leaderboardevents.BatchTagAssignedPayload{
+		payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 			GuildID:          guildID,
 			RequestingUserID: requestingUser,
 			BatchID:          batchID.String(),
 			AssignmentCount:  0,
-			Assignments:      []leaderboardevents.TagAssignmentInfo{},
+			Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
 		}
 		if cfg := s.getGuildConfigForEnrichment(context.Background(), guildID); cfg != nil {
 			payload.Config = sharedevents.NewGuildConfigFragment(cfg)
@@ -521,15 +531,15 @@ func (s *LeaderboardService) createBatchAssignedPayload(
 		return payload
 	}
 
-	assignments := make([]leaderboardevents.TagAssignmentInfo, len(requests))
+	assignments := make([]leaderboardevents.TagAssignmentInfoV1, len(requests))
 	for i, request := range requests {
-		assignments[i] = leaderboardevents.TagAssignmentInfo{
+		assignments[i] = leaderboardevents.TagAssignmentInfoV1{
 			UserID:    request.UserID,
 			TagNumber: request.TagNumber,
 		}
 	}
 
-	payload := &leaderboardevents.BatchTagAssignedPayload{
+	payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 		GuildID:          guildID,
 		RequestingUserID: requestingUser,
 		BatchID:          batchID.String(),

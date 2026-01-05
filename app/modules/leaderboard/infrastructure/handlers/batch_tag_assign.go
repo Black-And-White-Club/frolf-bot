@@ -21,9 +21,9 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 	}
 	wrappedHandler := h.handlerWrapper(
 		"HandleBatchTagAssignmentRequested",
-		&sharedevents.BatchTagAssignmentRequestedPayload{},
+		&sharedevents.BatchTagAssignmentRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			batchPayload := payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
+			batchPayload := payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
 
 			// Resolve guild ID from payload or fallback to message metadata (defensive for legacy events)
 			resolvedGuildID := batchPayload.GuildID
@@ -77,7 +77,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 				failureMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					leaderboardevents.LeaderboardBatchTagAssignmentFailed,
+					leaderboardevents.LeaderboardBatchTagAssignmentFailedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
@@ -111,7 +111,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					leaderboardevents.LeaderboardBatchTagAssigned,
+					leaderboardevents.LeaderboardBatchTagAssignedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -132,7 +132,8 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 					if err != nil {
 						h.logger.WarnContext(ctx, "Failed to parse batch ID for individual response", attr.Error(err))
 					} else {
-						individualPayload := &leaderboardevents.TagAssignedPayload{
+						individualPayload := &leaderboardevents.LeaderboardTagAssignedPayloadV1{
+							GuildID:      resolvedGuildID,
 							UserID:       assignment.UserID,
 							TagNumber:    &assignment.TagNumber,
 							AssignmentID: sharedtypes.RoundID(roundID), // Convert properly
@@ -143,7 +144,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 						individualMsg, err := h.Helpers.CreateResultMessage(
 							msg,
 							individualPayload,
-							leaderboardevents.LeaderboardTagAssignmentSuccess, // This exists in your events
+							leaderboardevents.LeaderboardTagAssignedV1, // This exists in your events
 						)
 						if err != nil {
 							h.logger.WarnContext(ctx, "Failed to create individual response message", attr.Error(err))
@@ -194,7 +195,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(msg *message.Mes
 					fmt.Println("DEBUG: Before CreateResultMessage for TagUpdateForScheduledRounds", tagUpdatePayload)
 					h.logger.InfoContext(ctx, "DEBUG: Before CreateResultMessage for TagUpdateForScheduledRounds", attr.Any("tagUpdatePayload", tagUpdatePayload))
 
-					tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, sharedevents.TagUpdateForScheduledRounds)
+					tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, sharedevents.TagUpdateForScheduledRoundsV1)
 
 					// DEBUG: After CreateResultMessage for TagUpdateForScheduledRounds
 					fmt.Println("DEBUG: After CreateResultMessage for TagUpdateForScheduledRounds", tagUpdateMsg, err)

@@ -12,9 +12,9 @@ import (
 func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundReminder",
-		&roundevents.DiscordReminderPayload{},
+		&roundevents.DiscordReminderPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			discordReminderPayload := payload.(*roundevents.DiscordReminderPayload)
+			discordReminderPayload := payload.(*roundevents.DiscordReminderPayloadV1)
 
 			// Additional instrumentation to ensure guild_id propagation for reminder flow
 			h.logger.DebugContext(ctx, "Reminder handler payload debug",
@@ -64,7 +64,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -74,7 +74,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 			}
 
 			if result.Success != nil {
-				discordPayload := result.Success.(*roundevents.DiscordReminderPayload)
+				discordPayload := result.Success.(*roundevents.DiscordReminderPayloadV1)
 
 				h.logger.InfoContext(ctx, "Round reminder processed successfully",
 					attr.CorrelationIDFromMsg(msg),
@@ -87,7 +87,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 				if len(discordPayload.UserIDs) > 0 {
 					successMsg, err := h.helpers.CreateNewMessage(
 						discordPayload,
-						roundevents.RoundReminder,
+						roundevents.RoundReminderSentV1,
 					)
 					if err != nil {
 						return nil, fmt.Errorf("failed to create Discord reminder message: %w", err)
@@ -97,7 +97,7 @@ func (h *RoundHandlers) HandleRoundReminder(msg *message.Message) ([]*message.Me
 					h.logger.InfoContext(ctx, "Publishing Discord reminder message",
 						attr.String("original_message_id", msg.UUID),
 						attr.String("new_message_id", successMsg.UUID),
-						attr.String("topic", roundevents.RoundReminder),
+						attr.String("topic", roundevents.RoundReminderSentV1),
 						attr.RoundID("round_id", discordPayload.RoundID),
 						attr.Int("participants", len(discordPayload.UserIDs)),
 					)

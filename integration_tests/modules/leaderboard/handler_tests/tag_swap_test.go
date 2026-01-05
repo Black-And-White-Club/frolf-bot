@@ -20,7 +20,8 @@ import (
 // Helper for creating and publishing a tag swap request message
 func createTagSwapRequestMessage(t *testing.T, requestorID, targetID sharedtypes.DiscordID) (*message.Message, error) {
 	t.Helper() // Mark this as a helper function
-	payload := leaderboardevents.TagSwapRequestedPayload{
+	payload := leaderboardevents.TagSwapRequestedPayloadV1{
+		GuildID:     sharedtypes.GuildID("test_guild"),
 		RequestorID: requestorID,
 		TargetID:    targetID,
 	}
@@ -35,8 +36,12 @@ func createTagSwapRequestMessage(t *testing.T, requestorID, targetID sharedtypes
 }
 
 // Helper to validate success response properties
-func validateTagSwapSuccessResponse(t *testing.T, requestPayload *leaderboardevents.TagSwapRequestedPayload, responsePayload *leaderboardevents.TagSwapProcessedPayload) {
+func validateTagSwapSuccessResponse(t *testing.T, requestPayload *leaderboardevents.TagSwapRequestedPayloadV1, responsePayload *leaderboardevents.TagSwapProcessedPayloadV1) {
 	t.Helper() // Mark this as a helper function
+	if responsePayload.GuildID != requestPayload.GuildID {
+		t.Errorf("Success payload GuildID mismatch: expected %q, got %q",
+			requestPayload.GuildID, responsePayload.GuildID)
+	}
 	if responsePayload.RequestorID != requestPayload.RequestorID {
 		t.Errorf("Success payload RequestorID mismatch: expected %q, got %q",
 			requestPayload.RequestorID, responsePayload.RequestorID)
@@ -48,8 +53,12 @@ func validateTagSwapSuccessResponse(t *testing.T, requestPayload *leaderboardeve
 }
 
 // Helper to validate failure response properties
-func validateTagSwapFailureResponse(t *testing.T, requestPayload *leaderboardevents.TagSwapRequestedPayload, responsePayload *leaderboardevents.TagSwapFailedPayload) {
+func validateTagSwapFailureResponse(t *testing.T, requestPayload *leaderboardevents.TagSwapRequestedPayloadV1, responsePayload *leaderboardevents.TagSwapFailedPayloadV1) {
 	t.Helper() // Mark this as a helper function
+	if responsePayload.GuildID != requestPayload.GuildID {
+		t.Errorf("Failure payload GuildID mismatch: expected %q, got %q",
+			requestPayload.GuildID, responsePayload.GuildID)
+	}
 	if responsePayload.RequestorID != requestPayload.RequestorID {
 		t.Errorf("Failure payload RequestorID mismatch: expected %q, got %q",
 			requestPayload.RequestorID, responsePayload.RequestorID)
@@ -97,14 +106,14 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for success message
-				expectedTopic := leaderboardevents.TagSwapProcessed
+				expectedTopic := leaderboardevents.TagSwapProcessedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -114,12 +123,12 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				}
 
 				// Parse and validate payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapProcessedPayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapProcessedPayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -186,12 +195,12 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				}
 
 				// Check for error messages
-				unexpectedTopic := leaderboardevents.TagSwapFailed
+				unexpectedTopic := leaderboardevents.TagSwapFailedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagSwapProcessed},
+			expectedOutgoingTopics: []string{leaderboardevents.TagSwapProcessedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -214,14 +223,14 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for failure message
-				expectedTopic := leaderboardevents.TagSwapFailed
+				expectedTopic := leaderboardevents.TagSwapFailedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -231,12 +240,12 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				}
 
 				// Parse and validate payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -279,7 +288,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 						initialData[user1ID], actualData[user1ID])
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailed},
+			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -295,18 +304,18 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for unexpected messages
-				unexpectedSuccessTopic := leaderboardevents.TagSwapProcessed
+				unexpectedSuccessTopic := leaderboardevents.TagSwapProcessedV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.TagSwapFailed
+				unexpectedFailureTopic := leaderboardevents.TagSwapFailedV1
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}
@@ -353,14 +362,14 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
 				// Check for failure message
-				expectedTopic := leaderboardevents.TagSwapFailed
+				expectedTopic := leaderboardevents.TagSwapFailedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -370,12 +379,12 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				}
 
 				// Parse and validate payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -405,7 +414,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Error("Expected leaderboard to remain inactive")
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailed},
+			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailedV1},
 			expectHandlerError:     false,
 		},
 		{
@@ -427,7 +436,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequested, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -437,7 +446,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				// It should result in a failure message since swapping with self is not allowed
 
 				// Check for failure message
-				expectedTopic := leaderboardevents.TagSwapFailed
+				expectedTopic := leaderboardevents.TagSwapFailedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -447,12 +456,12 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				}
 
 				// Parse and validate payloads
-				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayload](incomingMsg)
+				requestPayload, err := testutils.ParsePayload[leaderboardevents.TagSwapRequestedPayloadV1](incomingMsg)
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayload](msgs[0])
+				responsePayload, err := testutils.ParsePayload[leaderboardevents.TagSwapFailedPayloadV1](msgs[0])
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
@@ -477,7 +486,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Error("Expected leaderboard to remain active")
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailed},
+			expectedOutgoingTopics: []string{leaderboardevents.TagSwapFailedV1},
 			expectHandlerError:     false,
 		},
 	}

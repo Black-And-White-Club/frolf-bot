@@ -16,9 +16,9 @@ import (
 func (h *GuildHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGuildSetup",
-		&guildevents.GuildConfigRequestedPayload{}, // Using the same payload structure as create config
+		&guildevents.GuildConfigCreationRequestedPayloadV1{}, // Using the same payload structure as create config
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			setupPayload := payload.(*guildevents.GuildConfigRequestedPayload)
+			setupPayload := payload.(*guildevents.GuildConfigCreationRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received guild.setup event",
 				attr.CorrelationIDFromMsg(msg),
@@ -42,11 +42,18 @@ func (h *GuildHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Messa
 
 			result, err := h.guildService.CreateGuildConfig(ctx, config)
 			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle guild.setup event",
+				if result.Failure == nil {
+					h.logger.ErrorContext(ctx, "Failed to handle guild.setup event",
+						attr.CorrelationIDFromMsg(msg),
+						attr.Any("error", err),
+					)
+					return nil, fmt.Errorf("failed to handle guild.setup event: %w", err)
+				}
+				// If we have a failure payload, we log the error as info/warn and proceed to publish the failure event
+				h.logger.InfoContext(ctx, "Service returned error with failure payload",
 					attr.CorrelationIDFromMsg(msg),
 					attr.Any("error", err),
 				)
-				return nil, fmt.Errorf("failed to handle guild.setup event: %w", err)
 			}
 
 			if result.Failure != nil {
@@ -57,7 +64,7 @@ func (h *GuildHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					guildevents.GuildConfigCreationFailed,
+					guildevents.GuildConfigCreationFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -80,7 +87,7 @@ func (h *GuildHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Messa
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					guildevents.GuildConfigCreated,
+					guildevents.GuildConfigCreatedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

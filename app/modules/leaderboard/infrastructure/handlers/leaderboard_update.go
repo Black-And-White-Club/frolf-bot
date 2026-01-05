@@ -26,9 +26,9 @@ func extractChangedTagsMap(assignments []sharedtypes.TagAssignmentRequest) map[s
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
 // This is for score processing after round completion - updates leaderboard with new participant tags.
 func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
-	return h.handlerWrapper("HandleLeaderboardUpdateRequested", &leaderboardevents.LeaderboardUpdateRequestedPayload{},
+	return h.handlerWrapper("HandleLeaderboardUpdateRequested", &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			requestPayload := payload.(*leaderboardevents.LeaderboardUpdateRequestedPayload)
+			requestPayload := payload.(*leaderboardevents.LeaderboardUpdateRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received LeaderboardUpdateRequested event from score processing",
 				attr.CorrelationIDFromMsg(msg),
@@ -85,7 +85,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 
 			// Handle failure response
 			if result.Failure != nil {
-				failureMsg, err := h.Helpers.CreateResultMessage(msg, result.Failure, leaderboardevents.LeaderboardUpdateFailed)
+				failureMsg, err := h.Helpers.CreateResultMessage(msg, result.Failure, leaderboardevents.LeaderboardUpdateFailedV1)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", err)
 				}
@@ -95,7 +95,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 			// Handle success response
 			if result.Success != nil {
 				// Existing LeaderboardUpdated publication
-				successMsg, err := h.Helpers.CreateResultMessage(msg, result.Success, leaderboardevents.LeaderboardUpdated)
+				successMsg, err := h.Helpers.CreateResultMessage(msg, result.Success, leaderboardevents.LeaderboardUpdatedV1)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
 				}
@@ -109,7 +109,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(msg *message.Mess
 					"guild_id":     requestPayload.GuildID, // NEW: propagate guild_id
 				}
 
-				tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, leaderboardevents.TagUpdateForScheduledRounds)
+				tagUpdateMsg, err := h.Helpers.CreateResultMessage(msg, tagUpdatePayload, leaderboardevents.TagUpdateForScheduledRoundsV1)
 				if err != nil {
 					h.logger.WarnContext(ctx, "Failed to create tag update message for scheduled rounds", attr.Error(err))
 					// Still return the leaderboard success even if this fails

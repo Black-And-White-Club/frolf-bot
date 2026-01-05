@@ -23,8 +23,8 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB)
 		userID         sharedtypes.DiscordID
 		tagNumber      sharedtypes.TagNumber
-		expectedResult *leaderboardevents.TagAvailabilityCheckResultPayload
-		expectedFail   *leaderboardevents.TagAvailabilityCheckFailedPayload
+		expectedResult *leaderboardevents.TagAvailabilityCheckResultPayloadV1
+		expectedFail   *leaderboardevents.TagAvailabilityCheckFailedPayloadV1
 		expectedError  error
 	}{
 		{
@@ -36,7 +36,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
-			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayloadV1{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
 				Available: true,
@@ -54,7 +54,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
-			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayloadV1{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
 				Available: false,
@@ -73,7 +73,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			userID:         sharedtypes.DiscordID("test_user_id"),
 			tagNumber:      tagNumber,
 			expectedResult: nil,
-			expectedFail: &leaderboardevents.TagAvailabilityCheckFailedPayload{
+			expectedFail: &leaderboardevents.TagAvailabilityCheckFailedPayloadV1{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
 				Reason:    "failed to check tag availability",
@@ -91,7 +91,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			},
 			userID:    sharedtypes.DiscordID("test_user_id"),
 			tagNumber: tagNumber,
-			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayload{
+			expectedResult: &leaderboardevents.TagAvailabilityCheckResultPayloadV1{
 				UserID:    sharedtypes.DiscordID("test_user_id"),
 				TagNumber: &tagNumber,
 				Available: false,
@@ -128,7 +128,7 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 			ctx := context.Background()
 
 			guildID := sharedtypes.GuildID("test-guild")
-			got, got1, err := s.CheckTagAvailability(ctx, guildID, leaderboardevents.TagAvailabilityCheckRequestedPayload{
+			got, got1, err := s.CheckTagAvailability(ctx, guildID, leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
 				UserID:    tt.userID,
 				TagNumber: &tt.tagNumber,
 			})

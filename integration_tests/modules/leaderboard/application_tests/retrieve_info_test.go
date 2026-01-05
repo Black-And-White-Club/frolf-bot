@@ -81,9 +81,9 @@ func TestGetLeaderboard(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.GetLeaderboardResponsePayload)
+				successPayload, ok := result.Success.(*leaderboardevents.GetLeaderboardResponsePayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.GetLeaderboardResponsePayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.GetLeaderboardResponsePayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -189,9 +189,9 @@ func TestGetLeaderboard(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.GetLeaderboardFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.GetLeaderboardFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.GetLeaderboardFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.GetLeaderboardFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 				expectedReason := leaderboarddb.ErrNoActiveLeaderboard.Error()
@@ -246,9 +246,9 @@ func TestGetLeaderboard(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.GetLeaderboardResponsePayload)
+				successPayload, ok := result.Success.(*leaderboardevents.GetLeaderboardResponsePayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.GetLeaderboardResponsePayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.GetLeaderboardResponsePayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -344,7 +344,7 @@ func TestRoundGetTagByUserID(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error)
-		payload         sharedevents.RoundTagLookupRequestPayload
+		payload         sharedevents.RoundTagLookupRequestedPayloadV1
 		expectedError   bool
 		expectedSuccess bool
 		expectedFailure bool
@@ -370,11 +370,12 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: sharedevents.RoundTagLookupRequestPayload{
-				UserID:     "user_123",
-				RoundID:    sharedtypes.RoundID(uuid.New()),
-				Response:   "Test Response",
-				JoinedLate: boolPtr(false),
+			payload: sharedevents.RoundTagLookupRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test_guild")},
+				UserID:        "user_123",
+				RoundID:       sharedtypes.RoundID(uuid.New()),
+				Response:      "Test Response",
+				JoinedLate:    boolPtr(false),
 			},
 			expectedError:   false,
 			expectedSuccess: true,
@@ -384,9 +385,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -451,11 +452,12 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: sharedevents.RoundTagLookupRequestPayload{
-				UserID:     "user_no_tag",
-				RoundID:    sharedtypes.RoundID(uuid.New()),
-				Response:   "Another Response",
-				JoinedLate: boolPtr(true),
+			payload: sharedevents.RoundTagLookupRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test_guild")},
+				UserID:        "user_no_tag",
+				RoundID:       sharedtypes.RoundID(uuid.New()),
+				Response:      "Another Response",
+				JoinedLate:    boolPtr(true),
 			},
 			expectedError:   false,
 			expectedSuccess: true,
@@ -465,9 +467,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -529,11 +531,12 @@ func TestRoundGetTagByUserID(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: sharedevents.RoundTagLookupRequestPayload{
-				UserID:     "non_existent_user",
-				RoundID:    sharedtypes.RoundID(uuid.New()),
-				Response:   "Yet Another Response",
-				JoinedLate: boolPtr(false),
+			payload: sharedevents.RoundTagLookupRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: sharedtypes.GuildID("test_guild")},
+				UserID:        "non_existent_user",
+				RoundID:       sharedtypes.RoundID(uuid.New()),
+				Response:      "Yet Another Response",
+				JoinedLate:    boolPtr(false),
 			},
 			expectedError:   false,
 			expectedSuccess: true,
@@ -543,9 +546,9 @@ func TestRoundGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.RoundTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -682,9 +685,9 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -748,9 +751,9 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -809,9 +812,9 @@ func TestGetTagByUserID(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *sharedevents.DiscordTagLookupResultPayloadV1, but got %T", result.Success)
 					return
 				}
 

@@ -25,7 +25,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 	guildID := sharedtypes.GuildID("guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
-	testPayload := &roundevents.GetRoundRequestPayload{
+	testPayload := &roundevents.GetRoundRequestPayloadV1{
 		GuildID: guildID,
 		RoundID: testRoundID,
 	}
@@ -52,7 +52,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayload) = *testPayload
+						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -73,7 +73,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundRetrieved,
+					roundevents.RoundRetrievedV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,
@@ -95,7 +95,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayload) = *testPayload
+						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -119,7 +119,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayload) = *testPayload
+						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -140,7 +140,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundRetrieved,
+					roundevents.RoundRetrievedV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -153,7 +153,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayload) = *testPayload
+						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -177,7 +177,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayload) = *testPayload
+						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
 						return nil
 					},
 				)
@@ -198,7 +198,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(),
-					roundevents.RoundError,
+					roundevents.RoundErrorV1,
 				).Return(testMsg, nil)
 			},
 			msg:     testMsg,

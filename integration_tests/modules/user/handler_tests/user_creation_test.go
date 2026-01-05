@@ -38,7 +38,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-notag-123")
-				payload := userevents.UserSignupRequestPayload{
+				payload := userevents.UserSignupRequestedPayloadV1{
 					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number
@@ -51,12 +51,12 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage to publish the message.
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreated},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// 1. Verify user was created in the database (via service call, as per your strategy)
 				userID := sharedtypes.DiscordID("testuser-notag-123")
@@ -68,10 +68,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					if getUserErr != nil {
 						return fmt.Errorf("service returned error: %w", getUserErr)
 					}
-					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User == nil {
+					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
 						return errors.New("user not found in DB yet or success payload is nil")
 					}
-					createdUser = getUserResult.Success.(*userevents.GetUserResponsePayload).User
+					createdUser = getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User
 					return nil
 				})
 				if err != nil {
@@ -84,7 +84,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				// Removed createdUser.TagNumber check as usertypes.UserData does not contain it.
 
 				// 2. Verify the UserCreated event was published
-				expectedTopic := userevents.UserCreated
+				expectedTopic := userevents.UserCreatedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -94,7 +94,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var successPayload userevents.UserCreatedPayload
+				var successPayload userevents.UserCreatedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal UserCreatedPayload: %v", err)
 				}
@@ -124,7 +124,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
-				payload := userevents.UserSignupRequestPayload{
+				payload := userevents.UserSignupRequestedPayloadV1{
 					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: &tagNumber,
@@ -137,12 +137,12 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.TagAvailabilityCheckRequested},
+			expectedOutgoingTopics: []string{userevents.TagAvailabilityCheckRequestedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
@@ -153,13 +153,13 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				// Expecting an error or a failure payload indicating "not found"
 				if getUserErr == nil { // No technical error, now check business result
 					if getUserResult.Success != nil {
-						foundUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
+						foundUser := getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User
 						t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, foundUser)
 					}
 					if getUserResult.Failure == nil {
 						t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got nil results")
 					} else {
-						failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayload)
+						failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayloadV1)
 						if !ok || failurePayload.Reason != "user not found" { // Assuming service returns this specific reason
 							t.Errorf("Expected GetUser to return 'user not found' failure, but got unexpected failure payload: %+v", getUserResult.Failure)
 						}
@@ -169,7 +169,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				// Verify the TagAvailabilityCheckRequested event was published
-				expectedTopic := userevents.TagAvailabilityCheckRequested
+				expectedTopic := userevents.TagAvailabilityCheckRequestedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -179,7 +179,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var checkPayload userevents.TagAvailabilityCheckRequestedPayload
+				var checkPayload userevents.TagAvailabilityCheckRequestedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &checkPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal TagAvailabilityCheckRequestedPayload: %v", err)
 				}
@@ -195,7 +195,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					t.Errorf("Correlation ID mismatch: expected %q, got %q", incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey), receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 				}
 
-				unexpectedTopic := userevents.UserCreated
+				unexpectedTopic := userevents.UserCreatedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
@@ -220,7 +220,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				userID := sharedtypes.DiscordID("testuser-exists-789") // Same user ID as pre-created
-				payload := userevents.UserSignupRequestPayload{
+				payload := userevents.UserSignupRequestedPayloadV1{
 					GuildID:   "test-guild",
 					UserID:    userID,
 					TagNumber: nil, // No tag number, will attempt creation
@@ -233,12 +233,12 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
 				// Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequest, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailed},
+			expectedOutgoingTopics: []string{userevents.UserCreationFailedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				// 1. Verify user still exists (no change expected from signup attempt)
 				userID := sharedtypes.DiscordID("testuser-exists-789")
@@ -248,17 +248,17 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				if getUserErr != nil {
 					t.Fatalf("Expected GetUser to succeed for existing user, but got error: %v", getUserErr)
 				}
-				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayload).User == nil {
+				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
 					t.Fatalf("Expected GetUser to return success payload for existing user, but got nil. Failure: %+v", getUserResult.Failure)
 				}
-				existingUser := getUserResult.Success.(*userevents.GetUserResponsePayload).User
+				existingUser := getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User
 				if existingUser.UserID != userID {
 					t.Errorf("Existing user ID mismatch: expected %q, got %q", userID, existingUser.UserID)
 				}
 				// Removed existingUser.TagNumber check as usertypes.UserData does not contain it.
 
 				// 2. Verify the UserCreationFailed event was published
-				expectedTopic := userevents.UserCreationFailed
+				expectedTopic := userevents.UserCreationFailedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -268,7 +268,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var failedPayload userevents.UserCreationFailedPayload
+				var failedPayload userevents.UserCreationFailedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &failedPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal UserCreationFailedPayload: %v", err)
 				}
@@ -291,7 +291,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				// 3. Verify no UserCreated event was published
-				unexpectedTopic := userevents.UserCreated
+				unexpectedTopic := userevents.UserCreatedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}

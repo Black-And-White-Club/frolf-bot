@@ -205,7 +205,7 @@ func Test_handlerWrapper(t *testing.T) {
 
 				return args{
 					handlerName: "testHandler",
-					unmarshalTo: &leaderboardevents.TagNumberRequestPayload{},
+					unmarshalTo: &leaderboardevents.TagNumberRequestPayloadV1{},
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},
@@ -237,7 +237,7 @@ func Test_handlerWrapper(t *testing.T) {
 
 				return args{
 					handlerName: "testHandler",
-					unmarshalTo: &leaderboardevents.TagNumberRequestPayload{},
+					unmarshalTo: &leaderboardevents.TagNumberRequestPayloadV1{},
 					handlerFunc: func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 						return []*message.Message{msg}, nil
 					},

@@ -8,9 +8,9 @@ import (
 // RoundStartJob represents a scheduled round start event
 // This job will publish a round.started event at the scheduled time
 type RoundStartJob struct {
-	GuildID   sharedtypes.GuildID             `json:"guild_id"`
-	RoundID   string                          `json:"round_id"`
-	RoundData roundevents.RoundStartedPayload `json:"round_data"` // ✅ Correct payload type
+	GuildID   sharedtypes.GuildID               `json:"guild_id"`
+	RoundID   string                            `json:"round_id"`
+	RoundData roundevents.RoundStartedPayloadV1 `json:"round_data"` // ✅ Correct payload type
 }
 
 // Kind returns the job type identifier for River
@@ -19,9 +19,9 @@ func (j RoundStartJob) Kind() string { return "round_start" }
 // RoundReminderJob represents a scheduled round reminder event
 // This job will publish a round.reminder event at the scheduled time
 type RoundReminderJob struct {
-	GuildID   sharedtypes.GuildID                `json:"guild_id"`
-	RoundID   string                             `json:"round_id"`
-	RoundData roundevents.DiscordReminderPayload `json:"round_data"` // ✅ Correct payload type
+	GuildID   sharedtypes.GuildID                  `json:"guild_id"`
+	RoundID   string                               `json:"round_id"`
+	RoundData roundevents.DiscordReminderPayloadV1 `json:"round_data"` // ✅ Correct payload type
 }
 
 // Kind returns the job type identifier for River

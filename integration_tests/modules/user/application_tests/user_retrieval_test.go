@@ -57,9 +57,9 @@ func TestGetUser(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*userevents.GetUserResponsePayload)
+				successPayload, ok := result.Success.(*userevents.GetUserResponsePayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.GetUserResponsePayload")
+					t.Fatalf("Success payload was not of expected type *userevents.GetUserResponsePayloadV1")
 				}
 
 				if successPayload.User == nil {
@@ -100,9 +100,9 @@ func TestGetUser(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload for non-existent user, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.GetUserFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.GetUserFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.GetUserFailedPayload, got %T", result.Failure)
+					t.Fatalf("Failure payload was not of expected type *userevents.GetUserFailedPayloadV1, got %T", result.Failure)
 				}
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
@@ -215,9 +215,9 @@ func TestGetUserRole(t *testing.T) {
 				if result.Failure != nil {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
-				successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayload)
+				successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.GetUserRoleResponsePayload")
+					t.Fatalf("Success payload was not of expected type *userevents.GetUserRoleResponsePayloadV1")
 				}
 				if successPayload.UserID != userID {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
@@ -253,9 +253,9 @@ func TestGetUserRole(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatal("Result contained nil Failure payload for non-existent user, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.GetUserRoleFailedPayload)
+				failurePayload, ok := result.Failure.(*userevents.GetUserRoleFailedPayloadV1)
 				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.GetUserRoleFailedPayload, got %T", result.Failure)
+					t.Fatalf("Failure payload was not of expected type *userevents.GetUserRoleFailedPayloadV1, got %T", result.Failure)
 				}
 				if failurePayload.UserID != userID {
 					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)

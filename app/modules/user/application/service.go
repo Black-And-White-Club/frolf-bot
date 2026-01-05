@@ -154,7 +154,7 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 			return UserOperationResult{Failure: fmt.Errorf("too many players in payload: %d > %d", len(payload.ParsedData.PlayerScores), maxPlayers)}, nil
 		}
 
-		var mappings []userevents.UDiscConfirmedMapping
+		var mappings []userevents.UDiscConfirmedMappingV1
 		var unmatched []string
 
 		for _, player := range payload.ParsedData.PlayerScores {
@@ -191,7 +191,7 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 				}
 			}
 
-			mappings = append(mappings, userevents.UDiscConfirmedMapping{
+			mappings = append(mappings, userevents.UDiscConfirmedMappingV1{
 				PlayerName:    player.PlayerName,
 				DiscordUserID: user.UserID,
 			})
@@ -206,7 +206,7 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 			)
 		}
 
-		return UserOperationResult{Success: &userevents.UDiscMatchConfirmedPayload{
+		return UserOperationResult{Success: &userevents.UDiscMatchConfirmedPayloadV1{
 			ImportID:     payload.ImportID,
 			GuildID:      payload.GuildID,
 			RoundID:      payload.RoundID,

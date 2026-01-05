@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
@@ -148,7 +149,9 @@ func (m *Module) Close() error {
 
 	// Stop the queue service
 	if m.QueueService != nil {
-		if err := m.QueueService.Stop(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := m.QueueService.Stop(ctx); err != nil {
 			logger.Error("Error stopping queue service", "error", err)
 		}
 	}

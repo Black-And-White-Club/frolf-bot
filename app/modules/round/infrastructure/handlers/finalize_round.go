@@ -13,9 +13,9 @@ import (
 func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleAllScoresSubmitted",
-		&roundevents.AllScoresSubmittedPayload{},
+		&roundevents.AllScoresSubmittedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			allScoresSubmittedPayload, ok := payload.(*roundevents.AllScoresSubmittedPayload)
+			allScoresSubmittedPayload, ok := payload.(*roundevents.AllScoresSubmittedPayloadV1)
 			if !ok {
 				h.logger.ErrorContext(ctx, "Invalid payload type for HandleAllScoresSubmitted",
 					attr.Any("payload", payload),
@@ -47,7 +47,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					finalizeResult.Failure,
-					roundevents.RoundFinalizationError,
+					roundevents.RoundFinalizationErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -65,7 +65,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			// separate topic so Discord consumers receive a type-safe payload. Creating
 			// the Discord message first ensures mocks expecting the Discord publication
 			// order are satisfied (Discord then backend).
-			discordFinalizationPayload := roundevents.RoundFinalizedDiscordPayload{
+			discordFinalizationPayload := roundevents.RoundFinalizedDiscordPayloadV1{
 				GuildID:        allScoresSubmittedPayload.GuildID,
 				RoundID:        allScoresSubmittedPayload.RoundID,
 				Title:          fetchedRound.Title,
@@ -78,7 +78,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			discordFinalizedMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				&discordFinalizationPayload,
-				roundevents.RoundFinalizedDiscord,
+				roundevents.RoundFinalizedDiscordV1,
 			)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to create Discord RoundFinalized message",
@@ -94,7 +94,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			}
 
 			// Create BACKEND finalization message with authoritative participants from payload
-			backendFinalizationPayload := roundevents.RoundFinalizedPayload{
+			backendFinalizationPayload := roundevents.RoundFinalizedPayloadV1{
 				GuildID: allScoresSubmittedPayload.GuildID,
 				RoundID: allScoresSubmittedPayload.RoundID,
 				RoundData: roundtypes.Round{
@@ -114,7 +114,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 			backendFinalizedMsg, err := h.helpers.CreateResultMessage(
 				msg,
 				&backendFinalizationPayload,
-				roundevents.RoundFinalized, // Backend consumers subscribe to this domain topic
+				roundevents.RoundFinalizedV1, // Backend consumers subscribe to this domain topic
 			)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to create backend RoundFinalized message",
@@ -126,8 +126,8 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 
 			h.logger.InfoContext(ctx, "Publishing parallel messages for round finalization",
 				attr.CorrelationIDFromMsg(msg),
-				attr.String("discord_topic", roundevents.RoundFinalizedDiscord),
-				attr.String("backend_topic", roundevents.RoundFinalized),
+				attr.String("discord_topic", roundevents.RoundFinalizedDiscordV1),
+				attr.String("backend_topic", roundevents.RoundFinalizedV1),
 				attr.Int("participants_with_scores", len(allScoresSubmittedPayload.Participants)),
 			)
 
@@ -141,9 +141,9 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*messa
 func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundFinalized",
-		&roundevents.RoundFinalizedPayload{},
+		&roundevents.RoundFinalizedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundFinalizedPayload := payload.(*roundevents.RoundFinalizedPayload)
+			roundFinalizedPayload := payload.(*roundevents.RoundFinalizedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundFinalized event",
 				attr.CorrelationIDFromMsg(msg),
@@ -170,7 +170,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.RoundFinalizationError,
+					roundevents.RoundFinalizationErrorV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -183,7 +183,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 				h.logger.InfoContext(ctx, "Notify Score Module successful", attr.CorrelationIDFromMsg(msg))
 
 				// Create success message to publish - this should contain the ProcessRoundScoresRequestPayload
-				successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayload)
+				successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
 				if !ok {
 					h.logger.ErrorContext(ctx, "Unexpected success payload type from NotifyScoreModule",
 						attr.CorrelationIDFromMsg(msg),
@@ -202,7 +202,7 @@ func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.M
 				successMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					successPayload,
-					roundevents.ProcessRoundScoresRequest,
+					roundevents.ProcessRoundScoresRequestedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

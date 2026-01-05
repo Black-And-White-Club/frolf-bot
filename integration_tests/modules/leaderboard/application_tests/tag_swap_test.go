@@ -28,7 +28,7 @@ func TestTagSwapRequested(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupData       func(db *bun.DB, generator *testutils.TestDataGenerator) (*leaderboarddb.Leaderboard, error)
-		payload         leaderboardevents.TagSwapRequestedPayload
+		payload         leaderboardevents.TagSwapRequestedPayloadV1
 		expectedError   bool
 		expectedSuccess bool
 		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult)
@@ -54,7 +54,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
+				GuildID:     "test_guild",
 				RequestorID: "user_swap_A",
 				TargetID:    "user_swap_B",
 			},
@@ -65,9 +66,9 @@ func TestTagSwapRequested(t *testing.T) {
 					t.Errorf("Expected success result, but got nil")
 					return
 				}
-				successPayload, ok := result.Success.(*leaderboardevents.TagSwapProcessedPayload)
+				successPayload, ok := result.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
 				if !ok {
-					t.Errorf("Expected success result of type *leaderboardevents.TagSwapProcessedPayload, but got %T", result.Success)
+					t.Errorf("Expected success result of type *leaderboardevents.TagSwapProcessedPayloadV1, but got %T", result.Success)
 					return
 				}
 
@@ -152,7 +153,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
+				GuildID:     "test_guild",
 				RequestorID: "user_swap_A", // Does not exist or has no tag
 				TargetID:    "user_swap_B",
 			},
@@ -163,9 +165,9 @@ func TestTagSwapRequested(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 
@@ -222,7 +224,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
+				GuildID:     "test_guild",
 				RequestorID: "user_swap_A",
 				TargetID:    "user_swap_B", // Does not exist or has no tag
 			},
@@ -233,9 +236,9 @@ func TestTagSwapRequested(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 
@@ -291,7 +294,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 				return initialLeaderboard, nil
 			},
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
+				GuildID:     "test_guild",
 				RequestorID: "user_swap_A", // Does not exist or has no tag
 				TargetID:    "user_swap_B", // Does not exist or has no tag
 			},
@@ -302,9 +306,9 @@ func TestTagSwapRequested(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 
@@ -356,7 +360,8 @@ func TestTagSwapRequested(t *testing.T) {
 				}
 				return nil, nil // No initial active leaderboard
 			},
-			payload: leaderboardevents.TagSwapRequestedPayload{
+			payload: leaderboardevents.TagSwapRequestedPayloadV1{
+				GuildID:     "test_guild",
 				RequestorID: "user_swap_A",
 				TargetID:    "user_swap_B",
 			},
@@ -367,9 +372,9 @@ func TestTagSwapRequested(t *testing.T) {
 					t.Errorf("Expected failure result, but got nil")
 					return
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayload)
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
 				if !ok {
-					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayload, but got %T", result.Failure)
+					t.Errorf("Expected failure result of type *leaderboardevents.TagSwapFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
 

@@ -15,14 +15,14 @@ import (
 func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleGetLeaderboardRequest",
-		&leaderboardevents.GetLeaderboardRequestPayload{},
+		&leaderboardevents.GetLeaderboardRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			h.logger.InfoContext(ctx, "Received GetLeaderboardRequest event",
 				attr.CorrelationIDFromMsg(msg),
 			)
 
 			// Call the service function to get the leaderboard, propagate guildID
-			payloadTyped := payload.(*leaderboardevents.GetLeaderboardRequestPayload)
+			payloadTyped := payload.(*leaderboardevents.GetLeaderboardRequestedPayloadV1)
 			result, err := h.leaderboardService.GetLeaderboard(ctx, payloadTyped.GuildID)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to get leaderboard",
@@ -42,7 +42,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					leaderboardevents.GetLeaderboardFailed,
+					leaderboardevents.GetLeaderboardFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -60,7 +60,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					leaderboardevents.GetLeaderboardResponse,
+					leaderboardevents.GetLeaderboardResponseV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)
@@ -85,9 +85,9 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(msg *message.Message) 
 func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleRoundGetTagRequest",
-		&sharedevents.RoundTagLookupRequestPayload{},
+		&sharedevents.RoundTagLookupRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagLookupRequestPayload := payload.(*sharedevents.RoundTagLookupRequestPayload)
+			tagLookupRequestPayload := payload.(*sharedevents.RoundTagLookupRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received RoundTagLookupRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -110,9 +110,9 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 
 			// Handle business outcomes based on the result.
 			if result.Success != nil {
-				responsePayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayload)
+				responsePayload, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
 				if !ok {
-					err := fmt.Errorf("unexpected success payload type from RoundGetTagByUserID: expected *sharedevents.RoundTagLookupResultPayload, got %T", result.Success)
+					err := fmt.Errorf("unexpected success payload type from RoundGetTagByUserID: expected *sharedevents.RoundTagLookupResultPayloadV1, got %T", result.Success)
 					h.logger.ErrorContext(ctx, "Unexpected success payload type from service",
 						attr.CorrelationIDFromMsg(msg),
 						attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
@@ -120,12 +120,12 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 					return nil, err
 				}
 
-				eventType := sharedevents.RoundTagLookupNotFound // Default to not found
-				eventName := "RoundTagLookupNotFound"
+				eventType := sharedevents.RoundTagLookupNotFoundV1 // Default to not found
+				eventName := "RoundTagLookupNotFoundV1"
 
 				if responsePayload.Found {
-					eventType = sharedevents.RoundTagLookupFound
-					eventName = "RoundTagLookupFound"
+					eventType = sharedevents.RoundTagLookupFoundV1
+					eventName = "RoundTagLookupFoundV1"
 					h.logger.InfoContext(ctx, "Tag lookup successful: Tag found",
 						attr.CorrelationIDFromMsg(msg),
 						attr.String("user_id", string(responsePayload.UserID)),
@@ -160,9 +160,9 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 
 			} else if result.Failure != nil {
 				// Handle business failure (e.g., No active leaderboard)
-				failurePayload, ok := result.Failure.(*sharedevents.RoundTagLookupFailedPayload)
+				failurePayload, ok := result.Failure.(*sharedevents.RoundTagLookupFailedPayloadV1)
 				if !ok {
-					err := fmt.Errorf("unexpected failure payload type from RoundGetTagByUserID: expected *sharedevents.RoundTagLookupFailedPayload, got %T", result.Failure)
+					err := fmt.Errorf("unexpected failure payload type from RoundGetTagByUserID: expected *sharedevents.RoundTagLookupFailedPayloadV1, got %T", result.Failure)
 					h.logger.ErrorContext(ctx, "Unexpected failure payload type from service",
 						attr.CorrelationIDFromMsg(msg),
 						attr.Any("payload_type", fmt.Sprintf("%T", result.Failure)),
@@ -178,7 +178,7 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					failurePayload,
-					leaderboardevents.GetTagNumberFailed,
+					leaderboardevents.GetTagNumberFailedV1,
 				)
 				if errMsg != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after business failure",
@@ -187,10 +187,10 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 					)
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
-				h.logger.InfoContext(ctx, "Publishing GetTagNumberFailed message due to business failure",
+				h.logger.InfoContext(ctx, "Publishing GetTagNumberFailedV1 message due to business failure",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("message_id", failureMsg.UUID),
-					attr.String("topic", leaderboardevents.GetTagNumberFailed),
+					attr.String("topic", leaderboardevents.GetTagNumberFailedV1),
 				)
 				return []*message.Message{failureMsg}, nil
 
@@ -201,7 +201,7 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 					attr.Error(result.Error),
 				)
 
-				failurePayload := sharedevents.RoundTagLookupFailedPayload{
+				failurePayload := sharedevents.RoundTagLookupFailedPayloadV1{
 					UserID:  tagLookupRequestPayload.UserID,
 					RoundID: tagLookupRequestPayload.RoundID,
 					Reason:  result.Error.Error(),
@@ -210,7 +210,7 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					failurePayload,
-					leaderboardevents.GetTagNumberFailed,
+					leaderboardevents.GetTagNumberFailedV1,
 				)
 				if errMsg != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after service system error",
@@ -220,10 +220,10 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
 
-				h.logger.InfoContext(ctx, "Publishing GetTagNumberFailed message due to system error",
+				h.logger.InfoContext(ctx, "Publishing GetTagNumberFailedV1 message due to system error",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("message_id", failureMsg.UUID),
-					attr.String("topic", leaderboardevents.GetTagNumberFailed),
+					attr.String("topic", leaderboardevents.GetTagNumberFailedV1),
 				)
 				return []*message.Message{failureMsg}, nil
 
@@ -245,10 +245,10 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]
 func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
 	// Updated expected input payload type
 	wrappedHandler := h.handlerWrapper("HandleGetTagByUserIDRequest",
-		&sharedevents.DiscordTagLookupRequestPayload{},
+		&sharedevents.DiscordTagLookupRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
 			// Cast the payload to the expected input type
-			tagNumberRequestPayload, ok := payload.(*sharedevents.DiscordTagLookupRequestPayload)
+			tagNumberRequestPayload, ok := payload.(*sharedevents.DiscordTagLookupRequestedPayloadV1)
 			if !ok {
 				err := fmt.Errorf("unexpected payload type for HandleGetTagByUserIDRequest: expected *sharedevents.DiscordTagLookupRequestPayload, got %T", payload)
 				h.logger.ErrorContext(ctx, "Unexpected payload type in handler",
@@ -279,9 +279,9 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			// If no system error from the service call, handle business outcomes based on the result struct.
 			if result.Success != nil {
 				// Cast to the success type returned by the service
-				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayload)
+				successPayload, ok := result.Success.(*sharedevents.DiscordTagLookupResultPayloadV1)
 				if !ok {
-					err := fmt.Errorf("unexpected success payload type from GetTagByUserID service: expected *sharedevents.DiscordTagLookupResultPayload, got %T", result.Success)
+					err := fmt.Errorf("unexpected success payload type from GetTagByUserID service: expected *sharedevents.DiscordTagLookupResultPayloadV1, got %T", result.Success)
 					h.logger.ErrorContext(ctx, "Unexpected success payload type from service",
 						attr.CorrelationIDFromMsg(msg),
 						attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
@@ -291,13 +291,13 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				}
 
 				// Determine which event type to use based on whether the tag was found
-				eventType := sharedevents.DiscordTagLookupByUserIDNotFound
+				eventType := sharedevents.DiscordTagLookupNotFoundV1
 
 				// The responsePayload is the same as the successPayload from the service in this case
 				responsePayload := successPayload
 
 				if responsePayload.Found && responsePayload.TagNumber != nil {
-					eventType = sharedevents.DiscordTagLookupByUserIDSuccess
+					eventType = sharedevents.DiscordTagLookupSucceededV1
 
 					h.logger.InfoContext(ctx, "Tag lookup successful: Tag found",
 						attr.CorrelationIDFromMsg(msg),
@@ -338,9 +338,9 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 			} else if result.Failure != nil {
 				// Handle business failure (e.g., No active leaderboard)
 				// Cast to the actual failure type returned by the service
-				failurePayload, ok := result.Failure.(*sharedevents.DiscordTagLookupByUserIDFailedPayload)
+				failurePayload, ok := result.Failure.(*sharedevents.DiscordTagLookupFailedPayloadV1)
 				if !ok {
-					err := fmt.Errorf("unexpected failure payload type from GetTagByUserID service: expected *sharedevents.DiscordTagLookupByUserIDFailedPayload, got %T", result.Failure)
+					err := fmt.Errorf("unexpected failure payload type from GetTagByUserID service: expected *sharedevents.DiscordTagLookupFailedPayloadV1, got %T", result.Failure)
 					h.logger.ErrorContext(ctx, "Unexpected failure payload type from service",
 						attr.CorrelationIDFromMsg(msg),
 						attr.Any("payload_type", fmt.Sprintf("%T", result.Failure)),
@@ -358,7 +358,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					failurePayload,
-					sharedevents.DiscordTagLookupByUserIDFailed,
+					sharedevents.DiscordTagLookupFailedV1,
 				)
 				if errMsg != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after business failure",
@@ -369,10 +369,10 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
 
-				h.logger.InfoContext(ctx, "Publishing DiscordTagLookupByUserIDFailed message due to business failure",
+				h.logger.InfoContext(ctx, "Publishing DiscordTagLookupFailedV1 message due to business failure",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("message_id", failureMsg.UUID),
-					attr.String("topic", sharedevents.DiscordTagLookupByUserIDFailed),
+					attr.String("topic", sharedevents.DiscordTagLookupFailedV1),
 				)
 				// Return the message slice and nil error, indicating successful handler processing
 				return []*message.Message{failureMsg}, nil
@@ -385,7 +385,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				)
 
 				// Create the handler's failure payload for a system error
-				handlerFailurePayload := sharedevents.DiscordTagLookupByUserIDFailedPayload{
+				handlerFailurePayload := sharedevents.DiscordTagLookupFailedPayloadV1{
 					UserID: tagNumberRequestPayload.UserID,
 					Reason: result.Error.Error(),
 				}
@@ -393,7 +393,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					handlerFailurePayload,
-					sharedevents.DiscordTagLookupByUserIDFailed,
+					sharedevents.DiscordTagLookupFailedV1,
 				)
 				if errMsg != nil {
 					h.logger.ErrorContext(ctx, "Failed to create failure message after service system error",
@@ -404,10 +404,10 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(msg *message.Message) 
 					return nil, fmt.Errorf("failed to create failure message after system error: %w", errMsg)
 				}
 
-				h.logger.InfoContext(ctx, "Publishing DiscordTagLookupByUserIDFailed message due to system error",
+				h.logger.InfoContext(ctx, "Publishing DiscordTagLookupFailedV1 message due to system error",
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("message_id", failureMsg.UUID),
-					attr.String("topic", sharedevents.DiscordTagLookupByUserIDFailed),
+					attr.String("topic", sharedevents.DiscordTagLookupFailedV1),
 				)
 				// Return the message slice and nil error, indicating successful handler processing
 				return []*message.Message{failureMsg}, nil

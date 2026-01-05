@@ -27,7 +27,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 	testName := "Test User"
 
 	createUpdateRequestMessage := func() *message.Message {
-		payload := &userevents.UpdateUDiscIdentityRequestPayload{
+		payload := &userevents.UpdateUDiscIdentityRequestedPayloadV1{
 			GuildID:  testGuildID,
 			UserID:   testUserID,
 			Username: &testUsername,
@@ -56,7 +56,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -71,7 +71,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 							UserID: testUserID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdated).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdatedV1).
 					Return(message.NewMessage("out-id", []byte{}), nil)
 			},
 			want:    []*message.Message{message.NewMessage("out-id", []byte{})},
@@ -83,7 +83,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -100,7 +100,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 							Reason:  "some error",
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdateFailed).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdateFailedV1).
 					Return(message.NewMessage("out-id", []byte{}), nil)
 			},
 			want:    []*message.Message{message.NewMessage("out-id", []byte{})},
@@ -112,7 +112,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -132,7 +132,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -152,7 +152,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -169,7 +169,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 							Reason:  "some error",
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdateFailed).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdateFailedV1).
 					Return(nil, errors.New("create message error"))
 			},
 			wantErr: true,
@@ -180,7 +180,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UpdateUDiscIdentityRequestPayload) = userevents.UpdateUDiscIdentityRequestPayload{
+						*out.(*userevents.UpdateUDiscIdentityRequestedPayloadV1) = userevents.UpdateUDiscIdentityRequestedPayloadV1{
 							GuildID:  testGuildID,
 							UserID:   testUserID,
 							Username: &testUsername,
@@ -195,7 +195,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 							UserID: testUserID,
 						},
 					}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdated).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.UDiscIdentityUpdatedV1).
 					Return(nil, errors.New("create message error"))
 			},
 			wantErr: true,

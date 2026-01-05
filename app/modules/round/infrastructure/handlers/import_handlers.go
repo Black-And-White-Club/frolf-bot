@@ -16,9 +16,9 @@ import (
 func (h *RoundHandlers) HandleScorecardUploaded(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleScorecardUploaded",
-		&roundevents.ScorecardUploadedPayload{},
+		&roundevents.ScorecardUploadedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayload)
+			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ScorecardUploaded event",
 				attr.CorrelationIDFromMsg(msg),
@@ -47,7 +47,7 @@ func (h *RoundHandlers) HandleScorecardUploaded(msg *message.Message) ([]*messag
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.ImportFailedTopic,
+					roundevents.ImportFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -65,7 +65,7 @@ func (h *RoundHandlers) HandleScorecardUploaded(msg *message.Message) ([]*messag
 				parseMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.ScorecardParseRequestTopic,
+					roundevents.ScorecardParseRequestedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create parse request message: %w", err)
@@ -90,9 +90,9 @@ func (h *RoundHandlers) HandleScorecardUploaded(msg *message.Message) ([]*messag
 func (h *RoundHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleScorecardURLRequested",
-		&roundevents.ScorecardURLRequestedPayload{},
+		&roundevents.ScorecardURLRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scoreboardURLRequestedPayload := payload.(*roundevents.ScorecardURLRequestedPayload)
+			scoreboardURLRequestedPayload := payload.(*roundevents.ScorecardURLRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ScorecardURLRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -121,7 +121,7 @@ func (h *RoundHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*me
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.ImportFailedTopic,
+					roundevents.ImportFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -139,7 +139,7 @@ func (h *RoundHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*me
 				parseMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.ScorecardParseRequestTopic,
+					roundevents.ScorecardParseRequestedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create parse request message: %w", err)
@@ -164,9 +164,9 @@ func (h *RoundHandlers) HandleScorecardURLRequested(msg *message.Message) ([]*me
 func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleParseScorecardRequest",
-		&roundevents.ScorecardUploadedPayload{},
+		&roundevents.ScorecardUploadedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayload)
+			scoreboardUploadedPayload := payload.(*roundevents.ScorecardUploadedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received ParseScorecardRequest event",
 				attr.CorrelationIDFromMsg(msg),
@@ -204,9 +204,9 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 				)
 
 				// Determine the topic based on the failure payload type
-				topic := roundevents.ImportFailedTopic
+				topic := roundevents.ImportFailedV1
 				if _, ok := result.Failure.(roundevents.ScorecardParseFailedPayload); ok {
-					topic = roundevents.ScorecardParseFailedTopic
+					topic = roundevents.ScorecardParseFailedV1
 				}
 
 				// Publish failure event
@@ -232,7 +232,7 @@ func (h *RoundHandlers) HandleParseScorecardRequest(msg *message.Message) ([]*me
 				userMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.ScorecardParsedForUserTopic,
+					roundevents.ScorecardParsedForUserV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create parsed scorecard user message: %w", err)
@@ -282,7 +282,7 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) 
 			// Convert interface{} to ParsedScorecardPayload
 			// When JSON unmarshals into interface{}, it creates a map[string]interface{}
 			// We need to re-marshal and unmarshal to get the typed struct
-			parsedPayload := &roundevents.ParsedScorecardPayload{}
+			parsedPayload := &roundevents.ParsedScorecardPayloadV1{}
 			parsedBytes, err := json.Marshal(parsedScorecardRaw)
 			if err != nil {
 				h.logger.ErrorContext(ctx, "Failed to marshal parsed scorecard data",
@@ -320,7 +320,7 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) 
 				failureMsg, errMsg := h.helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					roundevents.ImportFailedTopic,
+					roundevents.ImportFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -338,7 +338,7 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) 
 				importCompletedMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					roundevents.ImportCompletedTopic,
+					roundevents.ImportCompletedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create ImportCompleted message: %w", err)
@@ -360,9 +360,9 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(msg *message.Message) 
 func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleImportCompleted",
-		&roundevents.ImportCompletedPayload{},
+		&roundevents.ImportCompletedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			completed := payload.(*roundevents.ImportCompletedPayload)
+			completed := payload.(*roundevents.ImportCompletedPayloadV1)
 			h.logger.InfoContext(ctx, "Received ImportCompleted event",
 				attr.CorrelationIDFromMsg(msg),
 				attr.String("import_id", completed.ImportID),
@@ -394,7 +394,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 
 			if res.Failure != nil {
 				// Create and return an ImportFailed event to be published by the router
-				failureMsg, errMsg := h.helpers.CreateResultMessage(msg, res.Failure, roundevents.ImportFailedTopic)
+				failureMsg, errMsg := h.helpers.CreateResultMessage(msg, res.Failure, roundevents.ImportFailedV1)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
 				}
@@ -404,12 +404,12 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 			// Service returned the authoritative final participants snapshot.
 			// Emit a single AllScoresSubmitted event using the authoritative snapshot
 			// so downstream finalization runs exactly as in manual flow.
-			appliedPayload, ok := res.Success.(*roundevents.ImportScoresAppliedPayload)
+			appliedPayload, ok := res.Success.(*roundevents.ImportScoresAppliedPayloadV1)
 			if !ok {
 				return nil, fmt.Errorf("unexpected success payload type from ApplyImportedScores: %T", res.Success)
 			}
 
-			allSubmitted := roundevents.AllScoresSubmittedPayload{
+			allSubmitted := roundevents.AllScoresSubmittedPayloadV1{
 				GuildID:        appliedPayload.GuildID,
 				RoundID:        appliedPayload.RoundID,
 				EventMessageID: appliedPayload.EventMessageID,
@@ -421,7 +421,7 @@ func (h *RoundHandlers) HandleImportCompleted(msg *message.Message) ([]*message.
 				Participants: appliedPayload.Participants,
 			}
 
-			allMsg, err := h.helpers.CreateResultMessage(msg, &allSubmitted, roundevents.RoundAllScoresSubmitted)
+			allMsg, err := h.helpers.CreateResultMessage(msg, &allSubmitted, roundevents.RoundAllScoresSubmittedV1)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create RoundAllScoresSubmitted message: %w", err)
 			}

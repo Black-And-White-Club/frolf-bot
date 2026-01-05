@@ -23,6 +23,7 @@ func InsertLeaderboard(t *testing.T, db *bun.DB, data leaderboardtypes.Leaderboa
 		IsActive:        isActive,
 		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 		UpdateID:        updateID,
+		GuildID:         sharedtypes.GuildID("test_guild"),
 	}
 	_, err := db.NewInsert().Model(leaderboard).Exec(context.Background())
 	if err != nil {
@@ -164,7 +165,7 @@ func ExtractLeaderboardDataMap(leaderboardData leaderboardtypes.LeaderboardData)
 }
 
 // MergeLeaderboardWithAssignments combines initial leaderboard data with new assignments
-func MergeLeaderboardWithAssignments(initialLeaderboard *leaderboarddb.Leaderboard, assignments []sharedevents.TagAssignmentInfo) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
+func MergeLeaderboardWithAssignments(initialLeaderboard *leaderboarddb.Leaderboard, assignments []sharedevents.TagAssignmentInfoV1) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
 	result := ExtractLeaderboardDataMap(initialLeaderboard.LeaderboardData)
 
 	for _, assignment := range assignments {

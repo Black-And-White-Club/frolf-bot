@@ -13,9 +13,9 @@ import (
 func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error) {
 	wrappedHandler := h.handlerWrapper(
 		"HandleTagSwapRequested",
-		&leaderboardevents.TagSwapRequestedPayload{},
+		&leaderboardevents.TagSwapRequestedPayloadV1{},
 		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagSwapRequestedPayload := payload.(*leaderboardevents.TagSwapRequestedPayload)
+			tagSwapRequestedPayload := payload.(*leaderboardevents.TagSwapRequestedPayloadV1)
 
 			h.logger.InfoContext(ctx, "Received TagSwapRequested event",
 				attr.CorrelationIDFromMsg(msg),
@@ -43,7 +43,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*m
 				failureMsg, errMsg := h.Helpers.CreateResultMessage(
 					msg,
 					result.Failure,
-					leaderboardevents.TagSwapFailed,
+					leaderboardevents.TagSwapFailedV1,
 				)
 				if errMsg != nil {
 					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
@@ -57,7 +57,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(msg *message.Message) ([]*m
 				successMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					result.Success,
-					leaderboardevents.TagSwapProcessed,
+					leaderboardevents.TagSwapProcessedV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create success message: %w", err)

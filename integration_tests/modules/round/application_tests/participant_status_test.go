@@ -16,14 +16,14 @@ import (
 func TestCheckParticipantStatus(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "User not a participant, requesting Accept - Expecting Validation Request",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_check_status_1"),
@@ -34,7 +34,8 @@ func TestCheckParticipantStatus(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("new_participant_1"),
 					Response: roundtypes.ResponseAccept,
@@ -46,9 +47,9 @@ func TestCheckParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayload)
+				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if validationPayload.UserID != sharedtypes.DiscordID("new_participant_1") {
@@ -61,7 +62,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "User is participant with Accept, requesting Accept (toggle off) - Expecting Removal Request",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				// Define the participant directly and include it in the round's Participants slice
 				participant := roundtypes.Participant{
@@ -78,7 +79,8 @@ func TestCheckParticipantStatus(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("existing_participant_2"),
 					Response: roundtypes.ResponseAccept, // Same response as existing
@@ -90,9 +92,9 @@ func TestCheckParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				removalPayload, ok := returnedResult.Success.(*roundevents.ParticipantRemovalRequestPayload)
+				removalPayload, ok := returnedResult.Success.(*roundevents.ParticipantRemovalRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantRemovalRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantRemovalRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if removalPayload.UserID != sharedtypes.DiscordID("existing_participant_2") {
@@ -102,7 +104,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "User is participant with Tentative, requesting Accept (change status) - Expecting Validation Request",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				// Define the participant directly and include it in the round's Participants slice
 				participant := roundtypes.Participant{
@@ -119,7 +121,8 @@ func TestCheckParticipantStatus(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("existing_participant_3"),
 					Response: roundtypes.ResponseAccept, // Different response
@@ -131,9 +134,9 @@ func TestCheckParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayload)
+				validationPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinValidationRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinValidationRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if validationPayload.UserID != sharedtypes.DiscordID("existing_participant_3") {
@@ -146,8 +149,9 @@ func TestCheckParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Round ID is nil - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
-				return sharedtypes.RoundID(uuid.Nil), roundevents.ParticipantJoinRequestPayload{
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				return sharedtypes.RoundID(uuid.Nil), roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  sharedtypes.RoundID(uuid.Nil),
 					UserID:   sharedtypes.DiscordID("some_user"),
 					Response: roundtypes.ResponseAccept,
@@ -163,7 +167,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -175,9 +179,10 @@ func TestCheckParticipantStatus(t *testing.T) {
 		},
 		{
 			name: "Attempt to check status for a non-existent round - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				nonExistentID := sharedtypes.RoundID(uuid.New())
-				return nonExistentID, roundevents.ParticipantJoinRequestPayload{
+				return nonExistentID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  nonExistentID,
 					UserID:   sharedtypes.DiscordID("some_user"),
 					Response: roundtypes.ResponseAccept,
@@ -193,7 +198,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.ParticipantStatusCheckErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -209,12 +214,12 @@ func TestCheckParticipantStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload roundevents.ParticipantJoinRequestPayload
+			var payload roundevents.ParticipantJoinRequestPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
 				// Default payload if setupTestEnv is nil
-				payload = roundevents.ParticipantJoinRequestPayload{
+				payload = roundevents.ParticipantJoinRequestPayloadV1{
 					RoundID:  sharedtypes.RoundID(uuid.New()),
 					UserID:   sharedtypes.DiscordID("default_user"),
 					Response: roundtypes.ResponseAccept,
@@ -233,7 +238,7 @@ func TestCheckParticipantStatus(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.ParticipantStatusCheckErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.ParticipantStatusCheckErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *ParticipantStatusCheckErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
@@ -256,14 +261,14 @@ func TestCheckParticipantStatus(t *testing.T) {
 func TestValidateParticipantJoinRequest(t *testing.T) {
 	tests := []struct {
 		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload)
+		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
 			name: "Valid Accept request, round Created (not late join) - Expecting TagLookupRequestPayload",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_validate_1"),
@@ -274,7 +279,8 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("new_participant_1"),
 					Response: roundtypes.ResponseAccept,
@@ -286,9 +292,9 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// ValidateParticipantJoinRequest returns TagLookupRequestPayload for Accept/Tentative
-				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayload)
+				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.TagLookupRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.TagLookupRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if tagLookupPayloadPtr == nil {
@@ -308,7 +314,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Valid Tentative request, round InProgress (late join) - Expecting TagLookupRequestPayload",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_validate_2"),
@@ -319,7 +325,8 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("new_participant_2"),
 					Response: roundtypes.ResponseTentative,
@@ -331,9 +338,9 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// ValidateParticipantJoinRequest returns TagLookupRequestPayload for Accept/Tentative
-				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayload)
+				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.TagLookupRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.TagLookupRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if tagLookupPayloadPtr == nil {
@@ -353,7 +360,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Valid Decline request, round Finalized (late join) - Expecting ParticipantJoinRequestPayload",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_validate_3"),
@@ -364,7 +371,8 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("new_participant_3"),
 					Response: roundtypes.ResponseDecline,
@@ -376,9 +384,9 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected success result, but got nil")
 				}
 				// ValidateParticipantJoinRequest returns ParticipantJoinRequestPayload for Decline
-				joinRequestPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantJoinRequestPayload)
+				joinRequestPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantJoinRequestPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.ParticipantJoinRequestPayload, got %T", returnedResult.Success)
+					t.Errorf("Expected *roundevents.ParticipantJoinRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if joinRequestPayloadPtr == nil {
@@ -398,8 +406,9 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid: Nil Round ID - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
-				return sharedtypes.RoundID(uuid.Nil), roundevents.ParticipantJoinRequestPayload{
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
+				return sharedtypes.RoundID(uuid.Nil), roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  sharedtypes.RoundID(uuid.Nil),
 					UserID:   sharedtypes.DiscordID("some_user"),
 					Response: roundtypes.ResponseAccept,
@@ -415,7 +424,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -427,7 +436,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid: Empty User ID - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_validate_empty_user"),
@@ -438,7 +447,8 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   "", // Empty user ID
 					Response: roundtypes.ResponseAccept,
@@ -454,7 +464,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -466,9 +476,10 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Attempt to validate join for a non-existent round - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				nonExistentID := sharedtypes.RoundID(uuid.New())
-				return nonExistentID, roundevents.ParticipantJoinRequestPayload{
+				return nonExistentID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  nonExistentID,
 					UserID:   sharedtypes.DiscordID("some_user"),
 					Response: roundtypes.ResponseAccept,
@@ -484,7 +495,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -496,7 +507,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		},
 		{
 			name: "Invalid: Unexpected response type - Expecting Error",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayload) {
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
 					CreatedBy: testutils.DiscordID("test_user_validate_invalid_response"),
@@ -507,7 +518,8 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create initial round in DB for test setup: %v", err)
 				}
-				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayload{
+				return roundForDBInsertion.ID, roundevents.ParticipantJoinRequestPayloadV1{
+					GuildID:  "test-guild",
 					RoundID:  roundForDBInsertion.ID,
 					UserID:   sharedtypes.DiscordID("some_user"),
 					Response: "INVALID_RESPONSE_TYPE", // Invalid response
@@ -523,7 +535,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("Expected failure result, but got nil")
 				}
 				// Fixed: expecting pointer type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 				if !ok {
 					t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", returnedResult.Failure)
 					return
@@ -539,7 +551,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
 
-			var payload roundevents.ParticipantJoinRequestPayload
+			var payload roundevents.ParticipantJoinRequestPayloadV1
 			if tt.setupTestEnv != nil {
 				_, payload = tt.setupTestEnv(deps.Ctx, deps)
 			} else {
@@ -554,7 +566,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create default round for test setup: %v", err)
 				}
-				payload = roundevents.ParticipantJoinRequestPayload{
+				payload = roundevents.ParticipantJoinRequestPayloadV1{
 					RoundID:  dummyRound.ID,
 					UserID:   sharedtypes.DiscordID("default_user_payload"),
 					Response: roundtypes.ResponseAccept,
@@ -573,7 +585,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got none")
 				} else if tt.expectedErrorMessagePart != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundParticipantJoinErrorPayload)
+					failurePayload, ok := result.Failure.(*roundevents.RoundParticipantJoinErrorPayloadV1)
 					if !ok {
 						t.Errorf("Expected *RoundParticipantJoinErrorPayload, got %T", result.Failure)
 					} else if !strings.Contains(failurePayload.Error, tt.expectedErrorMessagePart) {
