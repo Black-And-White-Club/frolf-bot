@@ -110,12 +110,12 @@ func (h *RoundTestHelper) ValidateParticipantStatusCheckError(t *testing.T, msg 
 
 // WaitForParticipantJoinRequest waits for participant join request messages
 func (h *RoundTestHelper) WaitForParticipantJoinRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinRequestedV1, expectedCount, timeout)
 }
 
 // GetParticipantJoinRequestMessages returns captured participant join request messages
 func (h *RoundTestHelper) GetParticipantJoinRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinRequest)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinRequestedV1)
 }
 
 // ValidateParticipantJoinRequest parses and validates a participant join request message
@@ -140,11 +140,11 @@ func (h *RoundTestHelper) ValidateParticipantJoinRequest(t *testing.T, msg *mess
 
 // WaitForParticipantRemovalRequest waits for participant removal request messages
 func (h *RoundTestHelper) WaitForParticipantRemovalRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantRemovalRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantRemovalRequestedV1, expectedCount, timeout)
 }
 
 func (h *RoundTestHelper) WaitForParticipantStatusCheckError(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantStatusCheckError, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantStatusCheckErrorV1, expectedCount, timeout)
 }
 
 // CreateRoundWithParticipantInDB creates a round with an existing participant directly in the database
