@@ -48,8 +48,9 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 			}, errors.New("guild config not found")
 		}
 
-		// Build updates map from config
-		updates := map[string]interface{}{
+		// Build updates map from config.
+		// Keys are Go-style field names and are validated/translated by the repository layer.
+		updates := map[string]any{
 			"SignupChannelID":      config.SignupChannelID,
 			"SignupMessageID":      config.SignupMessageID,
 			"EventChannelID":       config.EventChannelID,

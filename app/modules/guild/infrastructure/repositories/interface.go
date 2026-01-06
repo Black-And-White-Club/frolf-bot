@@ -10,5 +10,5 @@ import (
 type GuildDB interface {
 	GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 	SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) error
-	UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates map[string]interface{}) error
+	UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates map[string]any) error
 }

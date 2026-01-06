@@ -15,7 +15,6 @@ import (
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	bun "github.com/uptrace/bun"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -181,20 +180,6 @@ func (mr *MockRoundDBMockRecorder) GetUpcomingRounds(ctx, guildID any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpcomingRounds", reflect.TypeOf((*MockRoundDB)(nil).GetUpcomingRounds), ctx, guildID)
 }
 
-// LogRound mocks base method.
-func (m *MockRoundDB) LogRound(ctx context.Context, guildID sharedtypes.GuildID, round *roundtypes.Round) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogRound", ctx, guildID, round)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LogRound indicates an expected call of LogRound.
-func (mr *MockRoundDBMockRecorder) LogRound(ctx, guildID, round any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogRound", reflect.TypeOf((*MockRoundDB)(nil).LogRound), ctx, guildID, round)
-}
-
 // RemoveParticipant mocks base method.
 func (m *MockRoundDB) RemoveParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) ([]roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
@@ -208,20 +193,6 @@ func (m *MockRoundDB) RemoveParticipant(ctx context.Context, guildID sharedtypes
 func (mr *MockRoundDBMockRecorder) RemoveParticipant(ctx, guildID, roundID, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveParticipant", reflect.TypeOf((*MockRoundDB)(nil).RemoveParticipant), ctx, guildID, roundID, userID)
-}
-
-// TagUpdates mocks base method.
-func (m *MockRoundDB) TagUpdates(ctx context.Context, guildID sharedtypes.GuildID, arg2 bun.IDB, round *roundtypes.Round) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TagUpdates", ctx, guildID, arg2, round)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// TagUpdates indicates an expected call of TagUpdates.
-func (mr *MockRoundDBMockRecorder) TagUpdates(ctx, guildID, arg2, round any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TagUpdates", reflect.TypeOf((*MockRoundDB)(nil).TagUpdates), ctx, guildID, arg2, round)
 }
 
 // UpdateEventMessageID mocks base method.

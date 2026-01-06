@@ -3,8 +3,11 @@ package guilddb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
+	"unicode"
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -12,26 +15,218 @@ import (
 )
 
 type GuildDBImpl struct {
-	DB *bun.DB
+	// Supports both *bun.DB and *bun.Tx
+	DB bun.IDB
 }
 
-func (db *GuildDBImpl) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
-	var config GuildConfig
-	err := db.DB.NewSelect().Model(&config).Where("guild_id = ? AND is_active = true", guildID).Scan(ctx)
+// allowedUpdateColumns defines which columns can be updated via UpdateConfig.
+// Keys are in snake_case to match database columns.
+var allowedUpdateColumns = map[string]struct{}{
+	"signup_channel_id":      {},
+	"signup_message_id":      {},
+	"event_channel_id":       {},
+	"leaderboard_channel_id": {},
+	"user_role_id":           {},
+	"editor_role_id":         {},
+	"admin_role_id":          {},
+	"signup_emoji":           {},
+	"auto_setup_completed":   {},
+	"setup_completed_at":     {},
+	// Future fields commented out until supported
+	// "subscription_tier":           {},
+	// "max_concurrent_rounds":       {},
+	// "max_participants_per_round":  {},
+	// "commands_per_minute":         {},
+	// "rounds_per_day":              {},
+	// "custom_leaderboards_enabled": {},
+}
+
+// upsertColumns defines the columns that are updated when a conflict occurs during SaveConfig.
+// This ensures that the configuration is always fully synchronized.
+var upsertColumns = []string{
+	"signup_channel_id",
+	"signup_message_id",
+	"event_channel_id",
+	"leaderboard_channel_id",
+	"user_role_id",
+	"editor_role_id",
+	"admin_role_id",
+	"signup_emoji",
+	"auto_setup_completed",
+	"setup_completed_at",
+	// Future fields commented out until supported
+	// "subscription_tier",
+	// "max_concurrent_rounds",
+	// "max_participants_per_round",
+	// "commands_per_minute",
+	// "rounds_per_day",
+	// "custom_leaderboards_enabled",
+	"is_active",  // Re-activate if it was soft-deleted
+	"updated_at", // Always refresh timestamp
+}
+
+//
+// READ
+
+func (db *GuildDBImpl) GetConfig(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) (*guildtypes.GuildConfig, error) {
+
+	var model GuildConfig
+
+	err := db.DB.NewSelect().
+		Model(&model).
+		Where("guild_id = ?", guildID).
+		Limit(1).
+		Scan(ctx)
+
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // Config not found, return nil without error
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("get guild config guild_id=%s: %w", guildID, err)
 	}
-	return toSharedModel(&config), nil
+
+	// Respect soft delete, but keep semantic distinction internally
+	if !model.IsActive {
+		return nil, nil
+	}
+
+	return toSharedModel(&model), nil
 }
 
-// toSharedModel converts the DB GuildConfig to the shared type
+// SaveConfig creates or updates (upsert) the guild configuration.
+func (db *GuildDBImpl) SaveConfig(
+	ctx context.Context,
+	config *guildtypes.GuildConfig,
+) error {
+	dbModel := toDBModel(config)
+	dbModel.IsActive = true
+	dbModel.UpdatedAt = time.Now().UTC()
+
+	q := db.DB.NewInsert().
+		Model(dbModel).
+		On("CONFLICT (guild_id) DO UPDATE")
+
+	// Explicitly set columns to update on conflict.
+	for _, col := range upsertColumns {
+		q = q.Set("? = EXCLUDED.?", bun.Ident(col), bun.Ident(col))
+	}
+
+	if _, err := q.Exec(ctx); err != nil {
+		return fmt.Errorf("save guild config guild_id=%s: %w", config.GuildID, err)
+	}
+
+	return nil
+}
+
+// UpdateConfig performs a partial update of the guild configuration.
+// It accepts a map of fields to update, which are sanitized and mapped to DB columns.
+func (db *GuildDBImpl) UpdateConfig(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	updates map[string]any,
+) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	sanitized, err := sanitizeAndMapUpdates(updates)
+	if err != nil {
+		return fmt.Errorf("sanitize updates: %w", err)
+	}
+
+	if len(sanitized) == 0 {
+		return nil
+	}
+
+	// Always update the updated_at timestamp.
+	sanitized["updated_at"] = time.Now().UTC()
+
+	q := db.DB.NewUpdate().
+		Table("guild_configs").
+		Where("guild_id = ? AND is_active = true", guildID)
+
+	for col, val := range sanitized {
+		q = q.SetColumn(col, "?", val)
+	}
+
+	res, err := q.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("update guild config guild_id=%s: %w", guildID, err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		// This could mean the guild doesn't exist or is inactive.
+		// We treat it as ErrNoRows to be consistent.
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+// DeleteConfig soft-deletes the guild configuration.
+func (db *GuildDBImpl) DeleteConfig(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) error {
+	res, err := db.DB.NewUpdate().
+		Table("guild_configs").
+		Set("is_active = ?", false).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("guild_id = ? AND is_active = ?", guildID, true).
+		Exec(ctx)
+
+	if err != nil {
+		return fmt.Errorf("delete guild config guild_id=%s: %w", guildID, err)
+	}
+
+	// Idempotent: if rows affected is 0, it means it was already deleted or didn't exist.
+	// We don't return an error in that case.
+	_, _ = res.RowsAffected()
+
+	return nil
+}
+
+//
+// Helpers
+//
+
+// sanitizeAndMapUpdates validates and converts update map keys to snake_case.
+func sanitizeAndMapUpdates(updates map[string]any) (map[string]any, error) {
+	clean := make(map[string]any, len(updates))
+
+	for k, v := range updates {
+		col := toSnakeCase(k)
+
+		// Prevent updating protected fields explicitly via this method.
+		switch col {
+		case "guild_id", "created_at", "updated_at", "is_active":
+			return nil, fmt.Errorf("field %q cannot be updated manually", k)
+		}
+
+		if _, ok := allowedUpdateColumns[col]; !ok {
+			return nil, fmt.Errorf("unknown or disallowed update field %q", k)
+		}
+
+		clean[col] = v
+	}
+
+	return clean, nil
+}
+
+// toSharedModel converts the DB model to the domain model.
 func toSharedModel(cfg *GuildConfig) *guildtypes.GuildConfig {
 	if cfg == nil {
 		return nil
 	}
+
 	return &guildtypes.GuildConfig{
 		GuildID:              cfg.GuildID,
 		SignupChannelID:      cfg.SignupChannelID,
@@ -44,21 +239,15 @@ func toSharedModel(cfg *GuildConfig) *guildtypes.GuildConfig {
 		SignupEmoji:          cfg.SignupEmoji,
 		AutoSetupCompleted:   cfg.AutoSetupCompleted,
 		SetupCompletedAt:     cfg.SetupCompletedAt,
-		// Add more fields as needed
 	}
 }
 
-func (db *GuildDBImpl) SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) error {
-	dbModel := toDBModel(config)
-	_, err := db.DB.NewInsert().Model(dbModel).Exec(ctx)
-	return err
-}
-
-// toDBModel converts the shared GuildConfig to the DB model
+// toDBModel converts the domain model to the DB model.
 func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 	if cfg == nil {
 		return nil
 	}
+
 	return &GuildConfig{
 		GuildID:              cfg.GuildID,
 		SignupChannelID:      cfg.SignupChannelID,
@@ -71,43 +260,23 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 		SignupEmoji:          cfg.SignupEmoji,
 		AutoSetupCompleted:   cfg.AutoSetupCompleted,
 		SetupCompletedAt:     cfg.SetupCompletedAt,
-		// Add more fields as needed
 	}
 }
 
-func (db *GuildDBImpl) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates map[string]interface{}) error {
-	// Convert Go field names to snake_case column names for database
-	columnUpdates := make(map[string]interface{})
-	for k, v := range updates {
-		columnName := toSnakeCase(k)
-		columnUpdates[columnName] = v
-	}
-	
-	q := db.DB.NewUpdate().Model(&GuildConfig{}).Where("guild_id = ?", guildID)
-	for k, v := range columnUpdates {
-		q = q.Set(fmt.Sprintf("%s = ?", k), v)
-	}
-	_, err := q.Exec(ctx)
-	return err
-}
-
-// toSnakeCase converts a Go field name to snake_case
-// e.g., "EventChannelID" -> "event_channel_id", "EditorRoleID" -> "editor_role_id"
+// toSnakeCase converts "CamelCase" or "mixedCase" to "snake_case".
 func toSnakeCase(s string) string {
-	var result []rune
+	var b strings.Builder
+	b.Grow(len(s) + 5) // Preallocate with some buffer (e.g. for underscores)
+
 	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			// Don't insert underscore if previous character was uppercase (handles acronyms)
-			if i > 0 && s[i-1] >= 'a' && s[i-1] <= 'z' {
-				result = append(result, '_')
+		if i > 0 && unicode.IsUpper(r) {
+			prev := rune(s[i-1])
+			if unicode.IsLower(prev) || (unicode.IsUpper(prev) && i+1 < len(s) && unicode.IsLower(rune(s[i+1]))) {
+				b.WriteRune('_')
 			}
 		}
-		result = append(result, r)
+		b.WriteRune(unicode.ToLower(r))
 	}
-	return strings.ToLower(string(result))
-}
 
-func (db *GuildDBImpl) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {
-	_, err := db.DB.NewDelete().Model(&GuildConfig{}).Where("guild_id = ?", guildID).Exec(ctx)
-	return err
+	return b.String()
 }
