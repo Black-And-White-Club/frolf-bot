@@ -42,6 +42,20 @@ func (m *MockGuildDB) EXPECT() *MockGuildDBMockRecorder {
 	return m.recorder
 }
 
+// DeleteConfig mocks base method.
+func (m *MockGuildDB) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteConfig", ctx, guildID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteConfig indicates an expected call of DeleteConfig.
+func (mr *MockGuildDBMockRecorder) DeleteConfig(ctx, guildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConfig", reflect.TypeOf((*MockGuildDB)(nil).DeleteConfig), ctx, guildID)
+}
+
 // GetConfig mocks base method.
 func (m *MockGuildDB) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
 	m.ctrl.T.Helper()

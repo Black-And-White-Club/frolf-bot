@@ -44,8 +44,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 		}
 
 		// Soft delete: set IsActive = false
-		updates := map[string]interface{}{"is_active": false}
-		err = s.GuildDB.UpdateConfig(ctx, guildID, updates)
+		err = s.GuildDB.DeleteConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
 				Failure: &guildevents.GuildConfigDeletionFailedPayload{

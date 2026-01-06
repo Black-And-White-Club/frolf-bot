@@ -38,7 +38,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			name: "success",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {
 				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(validConfig, nil)
-				m.EXPECT().UpdateConfig(gomock.Any(), sharedtypes.GuildID("guild-1"), map[string]interface{}{"is_active": false}).Return(nil)
+				m.EXPECT().DeleteConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(nil)
 			},
 			guildID: "guild-1",
 			wantResult: GuildOperationResult{
@@ -77,19 +77,19 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			wantErr: errors.New("db error"),
 		},
 		{
-			name: "db error on update",
+			name: "db error on delete",
 			mockDBSetup: func(m *guilddb.MockGuildDB) {
 				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-4")).Return(validConfig, nil)
-				m.EXPECT().UpdateConfig(gomock.Any(), sharedtypes.GuildID("guild-4"), map[string]interface{}{"is_active": false}).Return(errors.New("update error"))
+				m.EXPECT().DeleteConfig(gomock.Any(), sharedtypes.GuildID("guild-4")).Return(errors.New("delete error"))
 			},
 			guildID: "guild-4",
 			wantResult: GuildOperationResult{
 				Failure: &guildevents.GuildConfigDeletionFailedPayload{
 					GuildID: "guild-4",
-					Reason:  "update error",
+					Reason:  "delete error",
 				},
 			},
-			wantErr: errors.New("update error"),
+			wantErr: errors.New("delete error"),
 		},
 		{
 			name:        "invalid guildID",
