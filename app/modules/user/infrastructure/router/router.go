@@ -155,7 +155,7 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 		// User Creation Flow (from creation.go)
 		userevents.UserSignupRequestedV1: handlers.HandleUserSignupRequest,
 
-		// Tag Availability Flow (from tags.go)
+		// Tag Availability Flow (from tags.go) - responses published to user stream by leaderboard
 		userevents.TagAvailableV1:   handlers.HandleTagAvailable,
 		userevents.TagUnavailableV1: handlers.HandleTagUnavailable,
 

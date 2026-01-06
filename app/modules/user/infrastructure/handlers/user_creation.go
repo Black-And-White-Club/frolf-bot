@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -45,16 +46,16 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 				ctx, span := h.tracer.Start(ctx, "TagAvailabilityCheck")
 				defer span.End()
 
-				eventPayload := &userevents.TagAvailabilityCheckRequestedPayloadV1{
+				eventPayload := &leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
 					GuildID:   guildID,
-					TagNumber: tagNumber,
+					TagNumber: userSignupPayload.TagNumber,
 					UserID:    userID,
 				}
 
 				tagAvailabilityMsg, err := h.helpers.CreateResultMessage(
 					msg,
 					eventPayload,
-					userevents.TagAvailabilityCheckRequestedV1,
+					leaderboardevents.TagAvailabilityCheckRequestedV1,
 				)
 				if err != nil {
 					span.RecordError(err)

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
@@ -69,7 +70,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					},
 				)
 				// CreateResultMessage for TagAvailabilityCheckRequested
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), userevents.TagAvailabilityCheckRequestedV1).
+				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), leaderboardevents.TagAvailabilityCheckRequestedV1).
 					Return(message.NewMessage("tag-check-id", []byte{}), nil)
 			},
 			want:    []*message.Message{message.NewMessage("tag-check-id", []byte{})},

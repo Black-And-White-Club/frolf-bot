@@ -6,6 +6,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
@@ -98,17 +99,16 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				fmt.Println("DEBUG: Before CreateResultMessage for User", result)
 				h.logger.InfoContext(ctx, "DEBUG: Before CreateResultMessage for User", attr.Any("result", result))
 
-				availablePayload := &leaderboardevents.LeaderboardTagAvailablePayloadV1{
-					GuildID:      result.GuildID,
-					UserID:       result.UserID,
-					TagNumber:    result.TagNumber,
-					AssignmentID: uuid.New().String(),
+				availablePayload := &userevents.TagAvailablePayloadV1{
+					GuildID:   result.GuildID,
+					UserID:    result.UserID,
+					TagNumber: *result.TagNumber,
 				}
 
 				createUser, err := h.Helpers.CreateResultMessage(
 					msg,
 					availablePayload,
-					leaderboardevents.LeaderboardTagAvailableV1,
+					userevents.TagAvailableV1,
 				)
 
 				// DEBUG: After CreateResultMessage for User
@@ -151,10 +151,10 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 
 				return []*message.Message{createUser, assignTag}, nil
 			} else {
-				tagUnavailable := &leaderboardevents.LeaderboardTagUnavailablePayloadV1{
+				tagUnavailable := &userevents.TagUnavailablePayloadV1{
 					GuildID:   result.GuildID,
 					UserID:    result.UserID,
-					TagNumber: result.TagNumber,
+					TagNumber: *result.TagNumber,
 					Reason:    result.Reason,
 				}
 				h.logger.InfoContext(ctx, "Tag is not available",
@@ -167,7 +167,7 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(msg *message.M
 				tagNotAvailableMsg, err := h.Helpers.CreateResultMessage(
 					msg,
 					tagUnavailable,
-					leaderboardevents.LeaderboardTagUnavailableV1,
+					userevents.TagUnavailableV1,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("failed to create tag not available message: %w", err)

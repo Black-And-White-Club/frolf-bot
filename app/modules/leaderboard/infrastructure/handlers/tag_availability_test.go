@@ -9,6 +9,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
@@ -84,18 +85,18 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // Use gomock.Any() because handler creates new payload with dynamic UUID
-					leaderboardevents.LeaderboardTagAvailableV1,
+					userevents.TagAvailableV1,
 				).DoAndReturn(func(msg *message.Message, payload interface{}, eventType string) (*message.Message, error) {
 					// Verify payload type
-					availablePayload, ok := payload.(*leaderboardevents.LeaderboardTagAvailablePayloadV1)
+					availablePayload, ok := payload.(*userevents.TagAvailablePayloadV1)
 					if !ok {
-						t.Errorf("Expected LeaderboardTagAvailablePayloadV1 but got %T", payload)
+						t.Errorf("Expected TagAvailablePayloadV1 but got %T", payload)
 					}
 
 					// Verify the important fields
 					if availablePayload.UserID != testUserID ||
-						*availablePayload.TagNumber != testTagNumber {
-						t.Errorf("LeaderboardTagAvailablePayloadV1 has wrong fields")
+						availablePayload.TagNumber != testTagNumber {
+						t.Errorf("TagAvailablePayloadV1 has wrong fields")
 					}
 
 					return tagAvailableMsg, nil
@@ -199,7 +200,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // handler creates new payload with dynamic UUID
-					leaderboardevents.LeaderboardTagAvailableV1,
+				userevents.TagAvailableV1,
 				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
 			msg:            testMsg,
@@ -237,11 +238,11 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				mockHelpers.EXPECT().CreateResultMessage(
 					gomock.Any(),
 					gomock.Any(), // handler creates new payload with dynamic UUID
-					leaderboardevents.LeaderboardTagAvailableV1,
-				).Return(tagAvailableMsg, nil)
+				userevents.TagAvailableV1,
+			).Return(tagAvailableMsg, nil)
 
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
+			mockHelpers.EXPECT().CreateResultMessage(
+				gomock.Any(),
 					gomock.Any(),
 					sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
 				).Return(nil, fmt.Errorf("failed to create tag assignment message"))
@@ -275,16 +276,16 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 					nil,
 				)
 
-				tagNotAvailablePayload := &leaderboardevents.LeaderboardTagUnavailablePayloadV1{
-					UserID:    testUserID,
-					TagNumber: &testTagNumber,
-				}
+			tagNotAvailablePayload := &userevents.TagUnavailablePayloadV1{
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
+			}
 
-				tagUnavailableMsg := message.NewMessage("tag-unavailable-id", []byte("tag unavailable"))
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					tagNotAvailablePayload,
-					leaderboardevents.LeaderboardTagUnavailableV1,
+			tagUnavailableMsg := message.NewMessage("tag-unavailable-id", []byte("tag unavailable"))
+			mockHelpers.EXPECT().CreateResultMessage(
+				gomock.Any(),
+				tagNotAvailablePayload,
+				userevents.TagUnavailableV1,
 				).Return(tagUnavailableMsg, nil)
 			},
 			msg: testMsg,
