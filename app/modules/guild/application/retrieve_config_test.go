@@ -137,8 +137,30 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}
-				if exp.Config != actual.Config {
-					t.Errorf("expected Config %v, got %v", exp.Config, actual.Config)
+				expCfg := exp.Config
+				actCfg := actual.Config
+				if expCfg.SignupChannelID != actCfg.SignupChannelID {
+					t.Errorf("expected SignupChannelID %v, got %v", expCfg.SignupChannelID, actCfg.SignupChannelID)
+				}
+				if expCfg.EventChannelID != actCfg.EventChannelID {
+					t.Errorf("expected EventChannelID %v, got %v", expCfg.EventChannelID, actCfg.EventChannelID)
+				}
+				if expCfg.LeaderboardChannelID != actCfg.LeaderboardChannelID {
+					t.Errorf("expected LeaderboardChannelID %v, got %v", expCfg.LeaderboardChannelID, actCfg.LeaderboardChannelID)
+				}
+				if expCfg.UserRoleID != actCfg.UserRoleID {
+					t.Errorf("expected UserRoleID %v, got %v", expCfg.UserRoleID, actCfg.UserRoleID)
+				}
+				if expCfg.SignupEmoji != actCfg.SignupEmoji {
+					t.Errorf("expected SignupEmoji %v, got %v", expCfg.SignupEmoji, actCfg.SignupEmoji)
+				}
+				if expCfg.AutoSetupCompleted != actCfg.AutoSetupCompleted {
+					t.Errorf("expected AutoSetupCompleted %v, got %v", expCfg.AutoSetupCompleted, actCfg.AutoSetupCompleted)
+				}
+				if (expCfg.SetupCompletedAt == nil) != (actCfg.SetupCompletedAt == nil) {
+					t.Errorf("expected SetupCompletedAt nil mismatch: %v vs %v", expCfg.SetupCompletedAt, actCfg.SetupCompletedAt)
+				} else if expCfg.SetupCompletedAt != nil && actCfg.SetupCompletedAt != nil && !expCfg.SetupCompletedAt.Equal(*actCfg.SetupCompletedAt) {
+					t.Errorf("expected SetupCompletedAt %v, got %v", expCfg.SetupCompletedAt, actCfg.SetupCompletedAt)
 				}
 			}
 			if tt.wantResult.Failure != nil {
