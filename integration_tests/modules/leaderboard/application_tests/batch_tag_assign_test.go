@@ -49,12 +49,12 @@ func TestProcessTagAssignments(t *testing.T) {
 		{
 			name: "Successful batch assignment",
 			setupData: func(db *bun.DB, generator *testutils.TestDataGenerator) ([]testutils.User, *leaderboarddb.Leaderboard, error) {
-				// Generate and insert initial users.
+				// Generate and insert initial users using the new schema.
 				users := generator.GenerateUsers(3)
 				users[0].UserID = "user_1"
 				users[1].UserID = "user_2"
 				users[2].UserID = "user_3"
-				_, err := db.NewInsert().Model(&users).Exec(context.Background())
+				err := testutils.InsertTestUsers(context.Background(), db, users, "test_guild")
 				if err != nil {
 					return nil, nil, err
 				}
@@ -201,7 +201,7 @@ func TestProcessTagAssignments(t *testing.T) {
 				users := generator.GenerateUsers(2)
 				users[0].UserID = "user_a"
 				users[1].UserID = "user_c"
-				_, err := db.NewInsert().Model(&users).Exec(context.Background())
+				err := testutils.InsertTestUsers(context.Background(), db, users, "test_guild")
 				if err != nil {
 					return nil, nil, err
 				}
@@ -363,7 +363,7 @@ func TestProcessTagAssignments(t *testing.T) {
 				// Insert a user and an initial active leaderboard with existing data.
 				users := generator.GenerateUsers(1)
 				users[0].UserID = "existing_user"
-				_, err := db.NewInsert().Model(&users).Exec(context.Background())
+				err := testutils.InsertTestUsers(context.Background(), db, users, "test_guild")
 				if err != nil {
 					return nil, nil, err
 				}
@@ -470,7 +470,7 @@ func TestProcessTagAssignments(t *testing.T) {
 				users := generator.GenerateUsers(2)
 				users[0].UserID = "user_with_tag"
 				users[1].UserID = "user_requesting_tag"
-				_, err := db.NewInsert().Model(&users).Exec(context.Background())
+				err := testutils.InsertTestUsers(context.Background(), db, users, "test_guild")
 				if err != nil {
 					return nil, nil, err
 				}

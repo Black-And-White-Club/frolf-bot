@@ -9,7 +9,8 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	mockdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -22,9 +23,6 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTag := sharedtypes.TagNumber(42)
-	negativeTag := sharedtypes.TagNumber(-1)
-
-	mockDB := userdb.NewMockUserDB(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
@@ -32,147 +30,140 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	tracer := tracerProvider.Tracer("test")
 
 	tests := []struct {
-		name             string
-		mockDBSetup      func(*userdb.MockUserDB)
-		userID           sharedtypes.DiscordID
-		tag              *sharedtypes.TagNumber
-		expectedOpResult UserOperationResult
-		expectedErr      error // This should be the error returned by the mocked serviceWrapper
+		name               string
+		mockDBSetup        func(*mockdb.MockUserDB)
+		userID             sharedtypes.DiscordID
+		guildID            sharedtypes.GuildID
+		tag                *sharedtypes.TagNumber
+		expectedSuccess    bool
+		expectedIsReturning bool
+		expectedReason     string
+		expectErr          bool
 	}{
 		{
-			name: "Successfully creates a user",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				mockDB.EXPECT().
-					CreateUser(gomock.Any(), gomock.Any()).
-					Return(nil)
+			name: "New user creation (IsReturningUser=false)",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// Step 1: User doesn't exist globally
+				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
+				// Step 2: Create global user succeeds
+				m.EXPECT().CreateGlobalUser(gomock.Any(), gomock.Any()).Return(nil)
+				// Step 3: Create guild membership succeeds
+				m.EXPECT().CreateGuildMembership(gomock.Any(), gomock.Any()).Return(nil)
 			},
-			userID: testUserID,
-			tag:    &testTag,
-			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserCreatedPayloadV1{
-					UserID:    testUserID,
-					TagNumber: &testTag,
-				},
-				Failure: nil,
-				Error:   nil,
-			},
-			expectedErr: nil,
+			userID:              testUserID,
+			guildID:             testGuildID,
+			tag:                 &testTag,
+			expectedSuccess:     true,
+			expectedIsReturning: false,
+			expectErr:           false,
 		},
 		{
-			name: "Fails to create a user due to DB error",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				// Simulate a DB error that translateDBError will convert to ErrUserAlreadyExists
-				mockDB.EXPECT().
-					CreateUser(gomock.Any(), gomock.Any()).
-					Return(errors.New("SQLSTATE 23505: duplicate key value")) // Use a specific SQL error
+			name: "Returning user to new guild (IsReturningUser=true)",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// Step 1: User exists globally
+				existingUser := &userdb.User{UserID: testUserID}
+				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(existingUser, nil)
+				// Step 1b: User not yet in this guild
+				m.EXPECT().GetGuildMembership(gomock.Any(), testUserID, testGuildID).Return(nil, errors.New("not found"))
+				// Step 3: Create guild membership succeeds
+				m.EXPECT().CreateGuildMembership(gomock.Any(), gomock.Any()).Return(nil)
 			},
-			userID: testUserID,
-			tag:    &testTag,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserCreationFailedPayloadV1{
-					UserID:    testUserID,
-					TagNumber: &testTag,
-					Reason:    ErrUserAlreadyExists.Error(), // Expected reason from translateDBError
-				},
-				Error: ErrUserAlreadyExists, // Expected error from translateDBError
-			},
-			expectedErr: ErrUserAlreadyExists, // The mocked serviceWrapper returns this error directly
+			userID:              testUserID,
+			guildID:             testGuildID,
+			tag:                 nil,
+			expectedSuccess:     true,
+			expectedIsReturning: true,
+			expectErr:           false,
 		},
 		{
-			name: "With nil tag pointer",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				mockDB.EXPECT().
-					CreateUser(gomock.Any(), gomock.Any()).
-					Return(nil)
+			name: "User already exists in guild (failure)",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// Step 1: User exists globally
+				existingUser := &userdb.User{UserID: testUserID}
+				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(existingUser, nil)
+				// Step 1b: User already in this guild
+				existingMembership := &userdb.GuildMembership{UserID: testUserID, GuildID: testGuildID}
+				m.EXPECT().GetGuildMembership(gomock.Any(), testUserID, testGuildID).Return(existingMembership, nil)
 			},
-			userID: testUserID,
-			tag:    nil,
-			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserCreatedPayloadV1{
-					UserID:    testUserID,
-					TagNumber: nil,
-				},
-				Failure: nil,
-				Error:   nil,
-			},
-			expectedErr: nil,
+			userID:          testUserID,
+			guildID:         testGuildID,
+			tag:             &testTag,
+			expectedSuccess: false,
+			expectedReason:  "user already exists in this guild",
+			expectErr:       true,
 		},
 		{
-			name: "Fails due to unexpected database error",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				// Simulate an unexpected DB error
-				mockDB.EXPECT().
-					CreateUser(gomock.Any(), gomock.Any()).
-					Return(errors.New("database connection lost"))
+			name: "CreateGlobalUser fails (duplicate user error)",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// Step 1: User doesn't exist globally
+				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
+				// Step 2: CreateGlobalUser fails with duplicate error
+				m.EXPECT().CreateGlobalUser(gomock.Any(), gomock.Any()).Return(errors.New("SQLSTATE 23505: duplicate key value"))
 			},
-			userID: testUserID,
-			tag:    &testTag,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserCreationFailedPayloadV1{
-					UserID:    testUserID,
-					TagNumber: &testTag,
-					Reason:    "database connection lost", // translateDBError returns original error
-				},
-				Error: errors.New("database connection lost"), // translateDBError returns original error
-			},
-			expectedErr: errors.New("database connection lost"), // The mocked serviceWrapper returns this error directly
+			userID:          testUserID,
+			guildID:         testGuildID,
+			tag:             nil,
+			expectedSuccess: false,
+			expectedReason:  "user already exists",
+			expectErr:       true,
 		},
 		{
-			name: "Fails due to empty Discord ID",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				// No expectations since the function should return early
+			name: "CreateGuildMembership fails",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// Step 1: User doesn't exist globally
+				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
+				// Step 2: CreateGlobalUser succeeds
+				m.EXPECT().CreateGlobalUser(gomock.Any(), gomock.Any()).Return(nil)
+				// Step 3: CreateGuildMembership fails
+				m.EXPECT().CreateGuildMembership(gomock.Any(), gomock.Any()).Return(errors.New("database error"))
 			},
-			userID: "",
-			tag:    &testTag,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserCreationFailedPayloadV1{
-					UserID:    "",
-					TagNumber: &testTag,
-					Reason:    ErrInvalidDiscordID.Error(),
-				},
-				Error: ErrInvalidDiscordID,
-			},
-			expectedErr: ErrInvalidDiscordID,
+			userID:          testUserID,
+			guildID:         testGuildID,
+			tag:             &testTag,
+			expectedSuccess: false,
+			expectedReason:  "database error",
+			expectErr:       true,
 		},
 		{
-			name: "Fails due to negative tag number",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				// No expectations since the function should return early
+			name: "Empty Discord ID validation",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// No DB calls expected
 			},
-			userID: testUserID,
-			tag:    &negativeTag,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserCreationFailedPayloadV1{
-					UserID:    testUserID,
-					TagNumber: &negativeTag,
-					Reason:    ErrNegativeTagNumber.Error(),
-				},
-				Error: ErrNegativeTagNumber,
-			},
-			expectedErr: ErrNegativeTagNumber,
+			userID:          "",
+			guildID:         testGuildID,
+			tag:             &testTag,
+			expectedSuccess: false,
+			expectedReason:  "invalid Discord ID",
+			expectErr:       true,
 		},
 		{
-			name: "Fails due to nil context",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
-				// No expectations since the function should return early
+			name: "Negative tag number validation",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// No DB calls expected
 			},
-			userID: testUserID,
-			tag:    &testTag,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: nil, // Nil context returns a failure payload with nil Failure field
-				Error:   ErrNilContext,
+			userID:          testUserID,
+			guildID:         testGuildID,
+			tag:             func() *sharedtypes.TagNumber { t := sharedtypes.TagNumber(-1); return &t }(),
+			expectedSuccess: false,
+			expectedReason:  "tag number cannot be negative",
+			expectErr:       true,
+		},
+		{
+			name: "Nil context validation",
+			mockDBSetup: func(m *mockdb.MockUserDB) {
+				// No DB calls expected
 			},
-			expectedErr: ErrNilContext,
+			userID:          testUserID,
+			guildID:         testGuildID,
+			tag:             &testTag,
+			expectedSuccess: false,
+			expectErr:       true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mockDB := mockdb.NewMockUserDB(ctrl)
 			tt.mockDBSetup(mockDB)
 
 			s := &UserServiceImpl{
@@ -180,83 +171,52 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				// Mock the serviceWrapper to call the provided function directly in tests
 				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
-					// In the test wrapper, just call the actual service function and return its result
-					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
-					// as these are concerns of the wrapper itself, not the service method logic being tested.
 					return serviceFunc(ctx)
 				},
 			}
 
-			// For the nil context test case, explicitly pass nil
 			ctxArg := ctx
-			if tt.name == "Fails due to nil context" {
+			if tt.name == "Nil context validation" {
 				ctxArg = nil
 			}
 
-			gotResult, gotErr := s.CreateUser(ctxArg, testGuildID, tt.userID, tt.tag, nil, nil)
+			result, err := s.CreateUser(ctxArg, tt.guildID, tt.userID, tt.tag, nil, nil)
 
-			// Validate the returned UserOperationResult
-			if tt.expectedOpResult.Success != nil {
-				expectedSuccess := tt.expectedOpResult.Success.(*userevents.UserCreatedPayloadV1)
-				gotSuccess, ok := gotResult.Success.(*userevents.UserCreatedPayloadV1)
-				if !ok {
-					t.Errorf("Expected success payload of type *userevents.UserCreatedPayloadV1, got %T", gotResult.Success)
-				} else if gotSuccess.UserID != expectedSuccess.UserID {
-					t.Errorf("Mismatched UserID, got: %v, expected: %v", gotSuccess.UserID, expectedSuccess.UserID)
+			// Check success/failure
+			if tt.expectedSuccess {
+				if result.Success == nil {
+					t.Errorf("Expected success, got failure: %v", result.Failure)
+				} else {
+					payload := result.Success.(*userevents.UserCreatedPayloadV1)
+					if payload.UserID != tt.userID {
+						t.Errorf("UserID mismatch: expected %q, got %q", tt.userID, payload.UserID)
+					}
+					if payload.IsReturningUser != tt.expectedIsReturning {
+						t.Errorf("IsReturningUser mismatch: expected %v, got %v", tt.expectedIsReturning, payload.IsReturningUser)
+					}
 				}
-				// Compare tag numbers carefully due to pointers
-				if (gotSuccess.TagNumber == nil && expectedSuccess.TagNumber != nil) ||
-					(gotSuccess.TagNumber != nil && expectedSuccess.TagNumber == nil) ||
-					(gotSuccess.TagNumber != nil && expectedSuccess.TagNumber != nil && *gotSuccess.TagNumber != *expectedSuccess.TagNumber) {
-					t.Errorf("Mismatched TagNumber, got: %v, expected: %v", gotSuccess.TagNumber, expectedSuccess.TagNumber)
+			} else {
+				// For nil context validation, expect error directly in result.Error
+				if tt.name == "Nil context validation" {
+					if result.Error == nil {
+						t.Errorf("Expected error in result, got nil")
+					}
+				} else if result.Failure == nil {
+					t.Errorf("Expected failure, got success")
+				} else {
+					failurePayload := result.Failure.(*userevents.UserCreationFailedPayloadV1)
+					if tt.expectedReason != "" && failurePayload.Reason != tt.expectedReason {
+						t.Errorf("Reason mismatch: expected %q, got %q", tt.expectedReason, failurePayload.Reason)
+					}
 				}
-			} else if gotResult.Success != nil {
-				t.Errorf("Unexpected success payload: %v", gotResult.Success)
 			}
 
-			if tt.expectedOpResult.Failure != nil {
-				expectedFailure := tt.expectedOpResult.Failure.(*userevents.UserCreationFailedPayloadV1)
-				gotFailure, ok := gotResult.Failure.(*userevents.UserCreationFailedPayloadV1)
-				if !ok {
-					t.Errorf("Expected failure payload of type *userevents.UserCreationFailedPayloadV1, got %T", gotResult.Failure)
-				} else if gotFailure.Reason != expectedFailure.Reason {
-					t.Errorf("Mismatched failure reason, got: %v, expected: %v", gotFailure.Reason, expectedFailure.Reason)
-				}
-				if gotFailure.UserID != expectedFailure.UserID {
-					t.Errorf("Mismatched failure UserID, got: %v, expected: %v", gotFailure.UserID, expectedFailure.UserID)
-				}
-				// Compare tag numbers carefully due to pointers
-				if (gotFailure.TagNumber == nil && expectedFailure.TagNumber != nil) ||
-					(gotFailure.TagNumber != nil && expectedFailure.TagNumber == nil) ||
-					(gotFailure.TagNumber != nil && expectedFailure.TagNumber != nil && *gotFailure.TagNumber != *expectedFailure.TagNumber) {
-					t.Errorf("Mismatched failure TagNumber, got: %v, expected: %v", gotFailure.TagNumber, expectedFailure.TagNumber)
-				}
-			} else if gotResult.Failure != nil {
-				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
-			}
-
-			// Validate the Error field within the UserOperationResult
-			if tt.expectedOpResult.Error != nil {
-				if gotResult.Error == nil {
-					t.Errorf("Expected error in result, got nil")
-				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
-					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
-				}
-			} else if gotResult.Error != nil {
-				t.Errorf("Unexpected error in result: %v", gotResult.Error)
-			}
-
-			// Validate the top-level returned error
-			if tt.expectedErr != nil {
-				if gotErr == nil {
-					t.Errorf("Expected a top-level error but got nil")
-				} else if gotErr.Error() != tt.expectedErr.Error() {
-					t.Errorf("Mismatched top-level error reason, got: %v, expected: %v", gotErr.Error(), tt.expectedErr.Error())
-				}
-			} else if gotErr != nil {
-				t.Errorf("Unexpected top-level error: %v", gotErr)
+			// Check error
+			if tt.expectErr && err == nil {
+				t.Errorf("Expected error, got nil")
+			} else if !tt.expectErr && err != nil {
+				t.Errorf("Expected no error, got %v", err)
 			}
 		})
 	}

@@ -205,6 +205,149 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			timeout:            5 * time.Second, // Default timeout for this test case
 		},
 		{
+			name: "Success - New User (IsReturningUser=false)",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// No setup needed - brand new user
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				userID := sharedtypes.DiscordID("testuser-brand-new-999")
+				payload := userevents.UserSignupRequestedPayloadV1{
+					GuildID:   "test-guild",
+					UserID:    userID,
+					TagNumber: nil,
+				}
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				userID := sharedtypes.DiscordID("testuser-brand-new-999")
+				guildID := sharedtypes.GuildID("test-guild")
+
+				// Verify user was created
+				err := testutils.WaitFor(5*time.Second, 100*time.Millisecond, func() error {
+					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
+					if getUserErr != nil {
+						return fmt.Errorf("service returned error: %w", getUserErr)
+					}
+					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
+						return errors.New("user not found in DB yet")
+					}
+					return nil
+				})
+				if err != nil {
+					t.Fatalf("User not found after waiting: %v", err)
+				}
+
+				// Verify the UserCreated event was published with IsReturningUser=false
+				expectedTopic := userevents.UserCreatedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+
+				receivedMsg := msgs[0]
+				var successPayload userevents.UserCreatedPayloadV1
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
+					t.Fatalf("Failed to unmarshal UserCreatedPayload: %v", err)
+				}
+
+				if successPayload.UserID != userID {
+					t.Errorf("UserCreatedPayload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
+				}
+				if successPayload.IsReturningUser != false {
+					t.Errorf("UserCreatedPayload IsReturningUser mismatch: expected false, got %v", successPayload.IsReturningUser)
+				}
+			},
+			expectHandlerError: false,
+			timeout:            5 * time.Second,
+		},
+		{
+			name: "Success - Returning User to New Guild (IsReturningUser=true)",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				// Pre-create the user in guild-1
+				userID := sharedtypes.DiscordID("testuser-returning-888")
+				guild1 := sharedtypes.GuildID("test-guild-1")
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guild1, userID, nil, nil, nil)
+				if createErr != nil || createResult.Success == nil {
+					t.Fatalf("Failed to pre-create user for test setup: %v, result: %+v", createErr, createResult.Failure)
+				}
+				log.Printf("Pre-created returning user %q in guild-1", userID)
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				userID := sharedtypes.DiscordID("testuser-returning-888")
+				payload := userevents.UserSignupRequestedPayloadV1{
+					GuildID:   "test-guild-2", // Different guild
+					UserID:    userID,
+					TagNumber: nil,
+				}
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				userID := sharedtypes.DiscordID("testuser-returning-888")
+				guild2 := sharedtypes.GuildID("test-guild-2")
+
+				// Verify user now exists in guild-2
+				err := testutils.WaitFor(5*time.Second, 100*time.Millisecond, func() error {
+					getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guild2, userID)
+					if getUserErr != nil {
+						return fmt.Errorf("service returned error: %w", getUserErr)
+					}
+					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
+						return errors.New("user not found in guild-2 yet")
+					}
+					return nil
+				})
+				if err != nil {
+					t.Fatalf("User not found in guild-2 after waiting: %v", err)
+				}
+
+				// Verify the UserCreated event was published with IsReturningUser=true
+				expectedTopic := userevents.UserCreatedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+
+				receivedMsg := msgs[0]
+				var successPayload userevents.UserCreatedPayloadV1
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
+					t.Fatalf("Failed to unmarshal UserCreatedPayload: %v", err)
+				}
+
+				if successPayload.UserID != userID {
+					t.Errorf("UserCreatedPayload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
+				}
+				if successPayload.IsReturningUser != true {
+					t.Errorf("UserCreatedPayload IsReturningUser mismatch: expected true, got %v", successPayload.IsReturningUser)
+				}
+			},
+			expectHandlerError: false,
+			timeout:            5 * time.Second,
+		},
+		{
 			name: "Failure - User Already Exists (no tag)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Pre-create the user to simulate "already exists" scenario
@@ -277,10 +420,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				if failedPayload.UserID != userID {
 					t.Errorf("UserCreationFailedPayload UserID mismatch: expected %q, got %q", userID, failedPayload.UserID)
 				}
-				expectedReason := "user already exists" // Assuming this is the reason from your service/wrapper
-				if failedPayload.Reason != expectedReason {
-					t.Errorf("UserCreationFailedPayload Reason mismatch: expected %q, got %q", expectedReason, failedPayload.Reason)
-				}
+				   expectedReason := "user already exists in this guild"
+				   if failedPayload.Reason != expectedReason {
+					   t.Errorf("UserCreationFailedPayload Reason mismatch: expected %q, got %q", expectedReason, failedPayload.Reason)
+				   }
 				// This check is correct for the event payload
 				if failedPayload.TagNumber != nil {
 					t.Errorf("UserCreationFailedPayload TagNumber mismatch: expected nil, got %v", failedPayload.TagNumber)

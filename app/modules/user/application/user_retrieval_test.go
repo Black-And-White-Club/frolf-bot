@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
@@ -35,17 +36,20 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 		name             string
 		mockDBSetup      func(*userdb.MockUserDB)
 		expectedOpResult UserOperationResult
-		expectedErr      error // This should be the error returned by the mocked serviceWrapper
+		expectedErr      error
 	}{
 		{
 			name: "Successfully retrieves user",
 			mockDBSetup: func(mockDB *userdb.MockUserDB) {
 				mockDB.EXPECT().
 					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
-					Return(&userdbtypes.User{
-						ID:     1,
-						UserID: testUserID,
-						Role:   sharedtypes.UserRoleAdmin,
+					Return(&userdbtypes.UserWithMembership{
+						User: &userdbtypes.User{
+							ID:     1,
+							UserID: testUserID,
+						},
+						Role:     sharedtypes.UserRoleAdmin,
+						JoinedAt: time.Now(),
 					}, nil)
 			},
 			expectedOpResult: UserOperationResult{
@@ -72,11 +76,11 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				Success: nil,
 				Failure: &userevents.GetUserFailedPayloadV1{
 					UserID: testUserID,
-					Reason: "user not found", // Reason set in the service code
+					Reason: "user not found",
 				},
-				Error: nil, // Service code returns nil error in result for user not found
+				Error: nil,
 			},
-			expectedErr: nil, // Mocked serviceWrapper returns nil error at top level for user not found
+			expectedErr: nil,
 		},
 		{
 			name: "Database error retrieving user",
@@ -90,11 +94,11 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				Success: nil,
 				Failure: &userevents.GetUserFailedPayloadV1{
 					UserID: testUserID,
-					Reason: "failed to retrieve user from database", // Reason set in the service code
+					Reason: "failed to retrieve user from database",
 				},
-				Error: errors.New("database connection failed"), // Original DB error is returned in the result
+				Error: errors.New("database connection failed"),
 			},
-			expectedErr: errors.New("database connection failed"), // Mocked serviceWrapper returns the original DB error
+			expectedErr: errors.New("database connection failed"),
 		},
 	}
 

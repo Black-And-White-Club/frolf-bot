@@ -1,21 +1,45 @@
 package userdb
 
 import (
+	"time"
+
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
 )
 
-// User represents a user in the system.
+// User represents a global user identity (source of truth).
 type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
-	ID            int64                    `bun:"id,pk,autoincrement" json:"id"`
-	UserID        sharedtypes.DiscordID    `bun:"user_id,unique"`
-	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'User'" json:"role"`
-	GuildID       sharedtypes.GuildID      `bun:"guild_id,notnull"`
+	ID            int64                 `bun:"id,pk,autoincrement" json:"id"`
+	UserID        sharedtypes.DiscordID `bun:"user_id,unique,notnull" json:"user_id"`
+	UDiscUsername *string               `bun:"udisc_username,nullzero" json:"udisc_username,omitempty"` // @username
+	UDiscName     *string               `bun:"udisc_name,nullzero" json:"udisc_name,omitempty"`         // Name shown on casual rounds
+	CreatedAt     time.Time             `bun:"created_at,notnull,default:current_timestamp" json:"created_at"`
 
-	// UDisc linkage - values stored normalized (lowercase, trimmed)
-	UDiscUsername *string `bun:"udisc_username,nullzero" json:"udisc_username,omitempty"` // @username
-	UDiscName     *string `bun:"udisc_name,nullzero" json:"udisc_name,omitempty"`         // Name shown on casual rounds
+	// ORM relationships
+	Memberships []*GuildMembership `bun:"rel:has-many,join:user_id=user_id" json:"-"`
+}
+
+// GuildMembership represents a user's membership in a specific guild.
+type GuildMembership struct {
+	bun.BaseModel `bun:"table:guild_memberships,alias:gm"`
+	ID            int64                    `bun:"id,pk,autoincrement" json:"id"`
+	UserID        sharedtypes.DiscordID    `bun:"user_id,notnull" json:"user_id"`
+	GuildID       sharedtypes.GuildID      `bun:"guild_id,notnull" json:"guild_id"`
+	Role          sharedtypes.UserRoleEnum `bun:"role,notnull,default:'User'" json:"role"`
+	JoinedAt      time.Time                `bun:"joined_at,notnull,default:current_timestamp" json:"joined_at"`
+
+	// ORM relationships
+	// User is a hard FK; Guild is a logical link (no constraint) for module order-independence
+	User *User `bun:"rel:belongs-to,join:user_id=user_id" json:"-"`
+}
+
+// UserWithMembership combines user identity with guild-specific data.
+// Used for queries that need both global and guild context.
+type UserWithMembership struct {
+	User      *User
+	Role      sharedtypes.UserRoleEnum `bun:"role"`
+	JoinedAt  time.Time                `bun:"joined_at"`
 }
 
 // Add these methods to your User struct
@@ -31,14 +55,3 @@ func (u *User) GetUserID() sharedtypes.DiscordID {
 	return u.UserID
 }
 
-func (u *User) GetRole() sharedtypes.UserRoleEnum {
-	return u.Role
-}
-
-// UserData struct implementing the User interface
-type UserData struct {
-	ID int64 `json:"id"`
-	// Name      string                 `json:"name"`
-	UserID sharedtypes.DiscordID    `json:"user_id"`
-	Role   sharedtypes.UserRoleEnum `json:"role"` // Use UserRoleEnum here
-}

@@ -30,8 +30,8 @@ func (s *UserServiceImpl) GetUser(ctx context.Context, guildID sharedtypes.Guild
 			Success: &userevents.GetUserResponsePayloadV1{
 				GuildID: guildID,
 				User: &usertypes.UserData{
-					ID:     user.ID,
-					UserID: user.UserID,
+					ID:     user.User.ID,
+					UserID: user.User.UserID,
 					Role:   user.Role,
 				},
 			},

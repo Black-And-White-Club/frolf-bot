@@ -323,7 +323,10 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
 
 				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "testuser").
-					Return(&userrepo.User{UserID: "discord-user-1"}, nil)
+					Return(&userrepo.UserWithMembership{
+						User: &userrepo.User{UserID: "discord-user-1"},
+						Role: sharedtypes.UserRoleUser,
+					}, nil)
 			},
 			want: UserOperationResult{
 				Success: &userevents.UDiscMatchConfirmedPayloadV1{
@@ -359,7 +362,10 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "test user").
 					Return(nil, userrepo.ErrUserNotFound)
 				mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, "test user").
-					Return(&userrepo.User{UserID: "discord-user-2"}, nil)
+					Return(&userrepo.UserWithMembership{
+						User: &userrepo.User{UserID: "discord-user-2"},
+						Role: sharedtypes.UserRoleUser,
+					}, nil)
 			},
 			want: UserOperationResult{
 				Success: &userevents.UDiscMatchConfirmedPayloadV1{
@@ -478,9 +484,9 @@ func TestUserServiceImpl_UpdateUDiscIdentity(t *testing.T) {
 		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
 		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "UpdateUDiscIdentity", testUserID)
 
-		// Expect normalized values
-		mockDB.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, gid sharedtypes.GuildID, uid sharedtypes.DiscordID, u *string, n *string) error {
+		// Expect normalized values - now calls UpdateUDiscIdentityGlobal (no guildID)
+		mockDB.EXPECT().UpdateUDiscIdentityGlobal(gomock.Any(), testUserID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, uid sharedtypes.DiscordID, u *string, n *string) error {
 				if *u != "testuser" {
 					t.Errorf("expected normalized username 'testuser', got '%s'", *u)
 				}
@@ -504,7 +510,7 @@ func TestUserServiceImpl_UpdateUDiscIdentity(t *testing.T) {
 		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
 		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "UpdateUDiscIdentity", testUserID)
 
-		mockDB.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, gomock.Any(), gomock.Any()).
+		mockDB.EXPECT().UpdateUDiscIdentityGlobal(gomock.Any(), testUserID, gomock.Any(), gomock.Any()).
 			Return(errors.New("db error"))
 
 		_, err := service.UpdateUDiscIdentity(context.Background(), testGuildID, testUserID, &username, &name)
@@ -535,13 +541,16 @@ func TestUserServiceImpl_FindByUDiscUsername(t *testing.T) {
 		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
 
 		mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
-			Return(&userrepo.User{UserID: "found-user"}, nil)
+			Return(&userrepo.UserWithMembership{
+				User: &userrepo.User{UserID: "found-user"},
+				Role: sharedtypes.UserRoleUser,
+			}, nil)
 
 		got, err := service.FindByUDiscUsername(context.Background(), testGuildID, testUsername)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if got.Success.(*userrepo.User).UserID != "found-user" {
+		if got.Success.(*userrepo.UserWithMembership).User.UserID != "found-user" {
 			t.Errorf("expected user ID found-user")
 		}
 	})
@@ -582,13 +591,16 @@ func TestUserServiceImpl_FindByUDiscName(t *testing.T) {
 		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
 
 		mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testName).
-			Return(&userrepo.User{UserID: "found-user"}, nil)
+			Return(&userrepo.UserWithMembership{
+				User: &userrepo.User{UserID: "found-user"},
+				Role: sharedtypes.UserRoleUser,
+			}, nil)
 
 		got, err := service.FindByUDiscName(context.Background(), testGuildID, testName)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if got.Success.(*userrepo.User).UserID != "found-user" {
+		if got.Success.(*userrepo.UserWithMembership).User.UserID != "found-user" {
 			t.Errorf("expected user ID found-user")
 		}
 	})

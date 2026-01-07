@@ -68,8 +68,8 @@ func TestCreateUser(t *testing.T) {
 					t.Errorf("Success payload TagNumber mismatch: expected %d, got %d", 42, *successPayload.TagNumber)
 				}
 
-				if retrievedUser.UserID != userID {
-					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.UserID)
+				if retrievedUser.User.UserID != userID {
+					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.UserID)
 				}
 
 				expectedRole := sharedtypes.UserRoleEnum("User")
@@ -213,8 +213,8 @@ func TestCreateUser(t *testing.T) {
 					t.Errorf("Success payload TagNumber should be nil, got %d", *successPayload.TagNumber)
 				}
 
-				if retrievedUser.UserID != userID {
-					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.UserID)
+				if retrievedUser.User.UserID != userID {
+					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.UserID)
 				}
 			},
 			expectedSuccess: true,
@@ -303,9 +303,10 @@ func TestCreateUser(t *testing.T) {
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, *sharedtypes.TagNumber) {
 				userID := sharedtypes.DiscordID("99999999999999999")
 				tag := tagPtr(100)
+				guildID := sharedtypes.GuildID("test_guild")
 
 				// Call CreateUser for setup and check its result
-				result, err := deps.Service.CreateUser(deps.Ctx, sharedtypes.GuildID("test_guild"), userID, tag, nil, nil)
+				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag, nil, nil)
 				if err != nil && result.Failure == nil { // If error exists but no failure payload, something is wrong
 					t.Fatalf("Failed to setup test by creating initial user: %v (Result: %+v)", err, result)
 				}
@@ -317,7 +318,8 @@ func TestCreateUser(t *testing.T) {
 					t.Fatalf("Setup created user but returned unexpected error: %v", err)
 				}
 
-				// Return the same userID to attempt creation again in the test logic
+				// Return the same userID and guildID to attempt creation again in the test logic
+				// This will trigger "user already exists in guild" error
 				return deps.Ctx, userID, tag
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {

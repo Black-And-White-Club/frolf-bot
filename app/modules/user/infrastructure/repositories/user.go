@@ -13,13 +13,29 @@ import (
 
 var ErrUserNotFound = errors.New("user not found")
 
-// UserDB is a repository for user data operations.
+// UserDBImpl is a repository for user data operations.
 type UserDBImpl struct {
 	DB *bun.DB
 }
 
-// CreateUser creates a new user within a transaction.
-func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
+// GetUserGlobal checks if a user exists globally (no guild context).
+func (db *UserDBImpl) GetUserGlobal(ctx context.Context, userID sharedtypes.DiscordID) (*User, error) {
+	user := &User{}
+	err := db.DB.NewSelect().
+		Model(user).
+		Where("user_id = ?", userID).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get global user: %w", err)
+	}
+	return user, nil
+}
+
+// CreateGlobalUser creates a new global user record.
+func (db *UserDBImpl) CreateGlobalUser(ctx context.Context, user *User) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -28,7 +44,7 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 
 	_, err = tx.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
+		return fmt.Errorf("failed to create global user: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -38,8 +54,61 @@ func (db *UserDBImpl) CreateUser(ctx context.Context, user *User) error {
 	return nil
 }
 
-// UpdateUserRole updates the role of an existing user within a transaction.
-func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+// UpdateUDiscIdentityGlobal updates the global user record (applies to all guilds).
+func (db *UserDBImpl) UpdateUDiscIdentityGlobal(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) error {
+	normalizedUsername := normalizeNullablePointer(username)
+	normalizedName := normalizeNullablePointer(name)
+
+	_, err := db.DB.NewUpdate().
+		Model((*User)(nil)).
+		Set("udisc_username = ?", normalizedUsername).
+		Set("udisc_name = ?", normalizedName).
+		Where("user_id = ?", userID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update udisc identity: %w", err)
+	}
+	return nil
+}
+
+// CreateGuildMembership creates a new guild membership.
+func (db *UserDBImpl) CreateGuildMembership(ctx context.Context, membership *GuildMembership) error {
+	tx, err := db.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.NewInsert().Model(membership).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create guild membership: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetGuildMembership retrieves a guild membership.
+func (db *UserDBImpl) GetGuildMembership(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*GuildMembership, error) {
+	membership := &GuildMembership{}
+	err := db.DB.NewSelect().
+		Model(membership).
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get guild membership: %w", err)
+	}
+	return membership, nil
+}
+
+// UpdateMembershipRole updates the role in a guild membership.
+func (db *UserDBImpl) UpdateMembershipRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
 	tx, err := db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -51,12 +120,12 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.Dis
 	}
 
 	result, err := tx.NewUpdate().
-		Model((*User)(nil)).
+		Model((*GuildMembership)(nil)).
 		Set("role = ?", role).
 		Where("user_id = ? AND guild_id = ?", userID, guildID).
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to execute update user role query: %w", err)
+		return fmt.Errorf("failed to execute update membership role query: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -75,27 +144,87 @@ func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.Dis
 	return nil
 }
 
-// UpdateUDiscIdentity sets UDisc username/name for a user in a guild (stores normalized).
-func (db *UserDBImpl) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username *string, name *string) error {
-	normalizedUsername := normalizeNullablePointer(username)
-	normalizedName := normalizeNullablePointer(name)
-
-	_, err := db.DB.NewUpdate().Model((*User)(nil)).
-		Set("udisc_username = ?", normalizedUsername).
-		Set("udisc_name = ?", normalizedName).
-		Where("user_id = ? AND guild_id = ?", userID, guildID).
-		Exec(ctx)
+// GetUserMemberships retrieves all guild memberships for a user.
+func (db *UserDBImpl) GetUserMemberships(ctx context.Context, userID sharedtypes.DiscordID) ([]*GuildMembership, error) {
+	var memberships []*GuildMembership
+	err := db.DB.NewSelect().
+		Model(&memberships).
+		Where("user_id = ?", userID).
+		Scan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update udisc identity: %w", err)
+		return nil, fmt.Errorf("failed to get user memberships: %w", err)
 	}
-	return nil
+	return memberships, nil
 }
 
-// FindByUDiscUsername looks up a user by UDisc username (already normalized) within a guild.
-func (db *UserDBImpl) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*User, error) {
-	user := &User{}
-	err := db.DB.NewSelect().Model(user).
-		Where("guild_id = ? AND udisc_username = ?", guildID, strings.ToLower(strings.TrimSpace(username))).
+// GetUserByUserID retrieves a user with their guild membership by their Discord ID and Guild ID.
+func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error) {
+	uwm := &UserWithMembership{
+		User: &User{},
+	}
+	err := db.DB.NewSelect().
+		Model(uwm.User).
+		ColumnExpr("u.*").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("u.user_id = ?", userID).
+		Where("gm.guild_id = ?", guildID).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by user id: %w", err)
+	}
+
+	// Now get the membership details
+	membership := &GuildMembership{}
+	err = db.DB.NewSelect().
+		Model(membership).
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get guild membership: %w", err)
+	}
+
+	uwm.Role = membership.Role
+	uwm.JoinedAt = membership.JoinedAt
+
+	return uwm, nil
+}
+
+// GetUserRole retrieves the role of a user by their Discord ID and Guild ID.
+func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error) {
+	membership := &GuildMembership{}
+	err := db.DB.NewSelect().
+		Model(membership).
+		Column("role").
+		Where("user_id = ? AND guild_id = ?", userID, guildID).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrUserNotFound
+		}
+		return "", fmt.Errorf("failed to get user role: %w", err)
+	}
+	return membership.Role, nil
+}
+
+// UpdateUserRole updates the role of an existing user within a transaction.
+func (db *UserDBImpl) UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+	return db.UpdateMembershipRole(ctx, userID, guildID, role)
+}
+
+// FindByUDiscUsername looks up a user by UDisc username within a guild.
+func (db *UserDBImpl) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error) {
+	uwm := &UserWithMembership{
+		User: &User{},
+	}
+	err := db.DB.NewSelect().
+		Model(uwm.User).
+		ColumnExpr("u.*").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("LOWER(u.udisc_username) = LOWER(?)", username).
+		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -104,14 +233,34 @@ func (db *UserDBImpl) FindByUDiscUsername(ctx context.Context, guildID sharedtyp
 		}
 		return nil, fmt.Errorf("failed to find user by udisc username: %w", err)
 	}
-	return user, nil
+
+	// Now get the membership details
+	membership := &GuildMembership{}
+	err = db.DB.NewSelect().
+		Model(membership).
+		Where("user_id = ? AND guild_id = ?", uwm.User.UserID, guildID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get guild membership: %w", err)
+	}
+
+	uwm.Role = membership.Role
+	uwm.JoinedAt = membership.JoinedAt
+
+	return uwm, nil
 }
 
-// FindByUDiscName looks up a user by UDisc name (already normalized) within a guild.
-func (db *UserDBImpl) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*User, error) {
-	user := &User{}
-	err := db.DB.NewSelect().Model(user).
-		Where("guild_id = ? AND udisc_name = ?", guildID, strings.ToLower(strings.TrimSpace(name))).
+// FindByUDiscName looks up a user by UDisc name within a guild.
+func (db *UserDBImpl) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error) {
+	uwm := &UserWithMembership{
+		User: &User{},
+	}
+	err := db.DB.NewSelect().
+		Model(uwm.User).
+		ColumnExpr("u.*").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("LOWER(u.udisc_name) = LOWER(?)", name).
+		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -120,7 +269,21 @@ func (db *UserDBImpl) FindByUDiscName(ctx context.Context, guildID sharedtypes.G
 		}
 		return nil, fmt.Errorf("failed to find user by udisc name: %w", err)
 	}
-	return user, nil
+
+	// Now get the membership details
+	membership := &GuildMembership{}
+	err = db.DB.NewSelect().
+		Model(membership).
+		Where("user_id = ? AND guild_id = ?", uwm.User.UserID, guildID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get guild membership: %w", err)
+	}
+
+	uwm.Role = membership.Role
+	uwm.JoinedAt = membership.JoinedAt
+
+	return uwm, nil
 }
 
 func normalizeNullablePointer(val *string) *string {
@@ -129,34 +292,4 @@ func normalizeNullablePointer(val *string) *string {
 	}
 	normalized := strings.ToLower(strings.TrimSpace(*val))
 	return &normalized
-}
-
-// GetUserByUserID retrieves a user by their Discord ID and Guild ID.
-func (db *UserDBImpl) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*User, error) {
-	user := &User{}
-	err := db.DB.NewSelect().Model(user).Where("user_id = ? AND guild_id = ?", userID, guildID).Scan(ctx)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrUserNotFound
-		}
-		return nil, err
-	}
-	return user, nil
-}
-
-// GetUserRole retrieves the role of a user by their Discord ID and Guild ID.
-func (db *UserDBImpl) GetUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error) {
-	user := &User{}
-	err := db.DB.NewSelect().
-		Model(user).
-		Column("role").
-		Where("user_id = ? AND guild_id = ?", userID, guildID).
-		Scan(ctx)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", ErrUserNotFound
-		}
-		return "", err
-	}
-	return user.Role, nil
 }

@@ -61,8 +61,8 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 			name:  "Success - Sorted participant tags apply to new leaderboard",
 			users: generator.GenerateUsers(3),
 			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
-				// Insert the generated users into the database first
-				_, err := deps.DB.NewInsert().Model(&users).Exec(context.Background())
+				// Insert the generated users into the database using the new schema
+				err := testutils.InsertTestUsers(context.Background(), deps.DB, users, "test_guild")
 				if err != nil {
 					t.Fatalf("Failed to insert users: %v", err)
 				}

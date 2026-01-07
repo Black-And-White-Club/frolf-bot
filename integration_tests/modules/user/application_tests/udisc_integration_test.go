@@ -8,6 +8,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
 
@@ -20,22 +21,11 @@ func TestUDiscIntegration(t *testing.T) {
 	userID1 := sharedtypes.DiscordID("user-1")
 	userID2 := sharedtypes.DiscordID("user-2")
 
-	// Create users first
-	user1 := &userdb.User{
-		UserID:  userID1,
-		GuildID: guildID,
-		Role:    sharedtypes.UserRoleUser,
-	}
-	user2 := &userdb.User{
-		UserID:  userID2,
-		GuildID: guildID,
-		Role:    sharedtypes.UserRoleUser,
-	}
-
-	if err := deps.DB.CreateUser(deps.Ctx, user1); err != nil {
+	// Create users first using the test helper
+	if err := testutils.InsertUser(t, deps.BunDB, userID1, guildID, sharedtypes.UserRoleUser); err != nil {
 		t.Fatalf("Failed to create user 1: %v", err)
 	}
-	if err := deps.DB.CreateUser(deps.Ctx, user2); err != nil {
+	if err := testutils.InsertUser(t, deps.BunDB, userID2, guildID, sharedtypes.UserRoleUser); err != nil {
 		t.Fatalf("Failed to create user 2: %v", err)
 	}
 
@@ -57,12 +47,12 @@ func TestUDiscIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindByUDiscUsername failed: %v", err)
 		}
-		foundUserPayload := foundUser.Success.(*userdb.User)
-		if foundUserPayload.UserID != userID1 {
-			t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.UserID)
+		foundUserPayload := foundUser.Success.(*userdb.UserWithMembership)
+		if foundUserPayload.User.UserID != userID1 {
+			t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.User.UserID)
 		}
-		if *foundUserPayload.UDiscUsername != "testuser1" {
-			t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.UDiscUsername)
+		if *foundUserPayload.User.UDiscUsername != "testuser1" {
+			t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.User.UDiscUsername)
 		}
 	})
 
@@ -81,12 +71,12 @@ func TestUDiscIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindByUDiscName failed: %v", err)
 		}
-		foundUserPayload := foundUser.Success.(*userdb.User)
-		if foundUserPayload.UserID != userID2 {
-			t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.UserID)
+		foundUserPayload := foundUser.Success.(*userdb.UserWithMembership)
+		if foundUserPayload.User.UserID != userID2 {
+			t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.User.UserID)
 		}
-		if *foundUserPayload.UDiscName != "test name 2" {
-			t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.UDiscName)
+		if *foundUserPayload.User.UDiscName != "test name 2" {
+			t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.User.UDiscName)
 		}
 	})
 

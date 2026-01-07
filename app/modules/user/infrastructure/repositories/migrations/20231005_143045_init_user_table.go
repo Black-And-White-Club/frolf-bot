@@ -4,28 +4,39 @@ import (
 	"context"
 	"fmt"
 
-	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
 func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		fmt.Println("Creating user table...")
+		fmt.Println("Creating users table (monolithic schema)...")
 
-		if _, err := db.NewCreateTable().Model((*userdb.User)(nil)).IfNotExists().Exec(ctx); err != nil {
-			return err
+		// Freeze the schema exactly as it was when first deployed to Prod
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS users (
+				id BIGSERIAL PRIMARY KEY,
+				user_id TEXT NOT NULL,
+				guild_id TEXT NOT NULL,
+				role TEXT NOT NULL DEFAULT 'User',
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				UNIQUE(user_id, guild_id)
+			);
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to create users table: %w", err)
 		}
 
-		fmt.Println("User table created successfully!")
+		fmt.Println("Users table created successfully!")
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
-		fmt.Println("Dropping user table...")
+		fmt.Println("Dropping users table...")
 
-		if _, err := db.NewDropTable().Model((*userdb.User)(nil)).IfExists().Exec(ctx); err != nil {
-			return err
+		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS users;`)
+		if err != nil {
+			return fmt.Errorf("failed to drop users table: %w", err)
 		}
 
-		fmt.Println("User table dropped successfully!")
+		fmt.Println("Users table dropped successfully!")
 		return nil
 	})
 }

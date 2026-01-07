@@ -193,7 +193,7 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 
 			mappings = append(mappings, userevents.UDiscConfirmedMappingV1{
 				PlayerName:    player.PlayerName,
-				DiscordUserID: user.UserID,
+				DiscordUserID: user.User.UserID,
 			})
 		}
 
@@ -219,19 +219,18 @@ func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roun
 	})
 }
 
-// UpdateUDiscIdentity sets UDisc username/name for a user (stores normalized).
+// UpdateUDiscIdentity sets UDisc username/name for a user (stores normalized, applies globally).
 func (s *UserServiceImpl) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username *string, name *string) (UserOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateUDiscIdentity", userID, func(ctx context.Context) (UserOperationResult, error) {
 		// Normalize before passing to DB
 		normalizedUsername := normalizeStringPointer(username)
 		normalizedName := normalizeStringPointer(name)
 
-		if err := s.UserDB.UpdateUDiscIdentity(ctx, guildID, userID, normalizedUsername, normalizedName); err != nil {
+		if err := s.UserDB.UpdateUDiscIdentityGlobal(ctx, userID, normalizedUsername, normalizedName); err != nil {
 			return UserOperationResult{Failure: fmt.Errorf("failed to update udisc identity: %w", err)}, err
 		}
 
-		s.logger.InfoContext(ctx, "Updated UDisc identity",
-			attr.String("guild_id", string(guildID)),
+		s.logger.InfoContext(ctx, "Updated UDisc identity globally",
 			attr.String("user_id", string(userID)),
 			attr.String("udisc_username", safeString(normalizedUsername)),
 			attr.String("udisc_name", safeString(normalizedName)),

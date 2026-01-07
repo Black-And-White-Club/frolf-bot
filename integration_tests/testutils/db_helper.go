@@ -106,7 +106,7 @@ func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Mi
 }
 
 // Known application tables (cached to avoid querying information_schema every time)
-var appTables = []string{"users", "scores", "leaderboards", "rounds", "guild_configs"}
+var appTables = []string{"guild_memberships", "users", "scores", "leaderboards", "rounds", "guild_configs"}
 
 // CleanupDatabase truncates all tables in the database to ensure a clean state
 func CleanupDatabase(ctx context.Context, db *bun.DB) error {

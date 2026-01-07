@@ -136,7 +136,12 @@ func (h *UserHandlers) HandleUserSignupRequest(msg *message.Message) ([]*message
 					return nil, errors.New("unexpected type for success payload")
 				}
 
-				h.logger.InfoContext(ctx, "User creation succeeded",
+				logMsg := "New user created"
+				if successPayload.IsReturningUser {
+					logMsg = "Returning user joined new guild"
+				}
+
+				h.logger.InfoContext(ctx, logMsg,
 					attr.CorrelationIDFromMsg(msg),
 					attr.String("user_id", string(userID)),
 				)

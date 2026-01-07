@@ -1,13 +1,16 @@
 package testutils
 
 import (
+	"context"
 	"time"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 type (
@@ -65,6 +68,41 @@ type Leaderboard struct {
 	UpdateSource        string                              `json:"update_source"`
 	UpdateID            RoundID                             `json:"update_id"`
 	RequestingDiscordID DiscordID                           `json:"requesting_discord_id"`
+}
+
+// InsertTestUsers converts testutils.User to actual database models and inserts them.
+// This handles the mapping from the simplified test User to the split schema (users + guild_memberships).
+func InsertTestUsers(ctx context.Context, db *bun.DB, testUsers []User, guildID sharedtypes.GuildID) error {
+	// Insert global users first
+	for _, testUser := range testUsers {
+		globalUser := &userdb.User{
+			UserID: sharedtypes.DiscordID(testUser.UserID),
+		}
+		// Insert or ignore if user already exists
+		_, err := db.NewInsert().Model(globalUser).On("CONFLICT (user_id) DO NOTHING").Exec(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Create guild membership
+		membership := &userdb.GuildMembership{
+			UserID:  sharedtypes.DiscordID(testUser.UserID),
+			GuildID: guildID,
+			Role:    sharedtypes.UserRoleEnum(testUser.Role),
+		}
+		_, err = db.NewInsert().Model(membership).Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GenerateUsersAndInsert is a convenience function that generates and inserts users in one call.
+func GenerateUsersAndInsert(ctx context.Context, db *bun.DB, generator *TestDataGenerator, count int, guildID sharedtypes.GuildID) ([]User, error) {
+	users := generator.GenerateUsers(count)
+	err := InsertTestUsers(ctx, db, users, guildID)
+	return users, err
 }
 
 // GenerateUsers creates a specified number of test users

@@ -24,7 +24,10 @@ func TestUserLookupAdapter_FindByNormalizedUDiscUsername(t *testing.T) {
 
 	t.Run("User found", func(t *testing.T) {
 		mockUserDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
-			Return(&userdb.User{UserID: testUserID}, nil)
+			Return(&userdb.UserWithMembership{
+				User: &userdb.User{UserID: testUserID},
+				Role: sharedtypes.UserRoleUser,
+			}, nil)
 
 		result, err := adapter.FindByNormalizedUDiscUsername(context.Background(), testGuildID, testUsername)
 		if err != nil {
@@ -74,7 +77,10 @@ func TestUserLookupAdapter_FindByNormalizedUDiscDisplayName(t *testing.T) {
 
 	t.Run("User found", func(t *testing.T) {
 		mockUserDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testDisplayName).
-			Return(&userdb.User{UserID: testUserID}, nil)
+			Return(&userdb.UserWithMembership{
+				User: &userdb.User{UserID: testUserID},
+				Role: sharedtypes.UserRoleUser,
+			}, nil)
 
 		result, err := adapter.FindByNormalizedUDiscDisplayName(context.Background(), testGuildID, testDisplayName)
 		if err != nil {

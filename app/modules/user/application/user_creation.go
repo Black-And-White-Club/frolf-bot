@@ -53,28 +53,83 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
 	result, err := s.serviceWrapper(ctx, "CreateUser", userID, func(ctx context.Context) (UserOperationResult, error) {
-		user := userdb.User{
-			UserID:  userID,
-			GuildID: guildID,
+		// Step 1: Check if user exists globally
+		globalUser, err := s.UserDB.GetUserGlobal(ctx, userID)
+		userExists := err == nil && globalUser != nil
+
+		if userExists {
+			// User exists globally - check if they're already in this guild
+			membership, err := s.UserDB.GetGuildMembership(ctx, userID, guildID)
+			if err == nil && membership != nil {
+				// Already a member of this guild
+				       return UserOperationResult{
+					       Failure: &userevents.UserCreationFailedPayloadV1{
+						       GuildID:   guildID,
+						       UserID:    userID,
+						       TagNumber: tag,
+						       Reason:    "user already exists in this guild",
+					       },
+					       Error: ErrUserAlreadyExists,
+				       }, ErrUserAlreadyExists
+			}
+
+			// User exists but not in this guild - create membership only
+			membership = &userdb.GuildMembership{
+				UserID:  userID,
+				GuildID: guildID,
+				Role:    sharedtypes.UserRoleUser,
+			}
+			if err := s.UserDB.CreateGuildMembership(ctx, membership); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to create guild membership",
+					attr.String("user_id", string(userID)),
+					attr.String("guild_id", string(guildID)),
+					attr.Error(err),
+				)
+				s.metrics.RecordUserCreationFailure(ctx, userType, source)
+				return UserOperationResult{
+					Failure: &userevents.UserCreationFailedPayloadV1{
+						GuildID:   guildID,
+						UserID:    userID,
+						TagNumber: tag,
+						Reason:    err.Error(),
+					},
+					Error: err,
+				}, err
+			}
+
+			// Success - returning user to new guild
+			s.metrics.RecordUserCreationSuccess(ctx, userType, source)
+
+			return UserOperationResult{
+				Success: &userevents.UserCreatedPayloadV1{
+					GuildID:         guildID,
+					UserID:          userID,
+					TagNumber:       tag,
+					IsReturningUser: true,
+				},
+			}, nil
+		}
+
+		// Step 2: User doesn't exist - create global user
+		newUser := &userdb.User{
+			UserID: userID,
 		}
 
 		// Normalize and set UDisc fields if provided
 		if udiscUsername != nil && *udiscUsername != "" {
 			normalized := normalizeUDiscName(*udiscUsername)
-			user.UDiscUsername = &normalized
+			newUser.UDiscUsername = &normalized
 		}
 		if udiscName != nil && *udiscName != "" {
 			normalized := normalizeUDiscName(*udiscName)
-			user.UDiscName = &normalized
+			newUser.UDiscName = &normalized
 		}
 
 		dbStart := time.Now()
-		err := s.UserDB.CreateUser(ctx, &user)
-		dbDuration := time.Since(dbStart)
-		s.metrics.RecordDBQueryDuration(ctx, dbDuration)
+		if err := s.UserDB.CreateGlobalUser(ctx, newUser); err != nil {
+			dbDuration := time.Since(dbStart)
+			s.metrics.RecordDBQueryDuration(ctx, dbDuration)
 
-		if err != nil {
-			// Standardize common database errors
 			domainErr := translateDBError(err)
 			logLevel := "error"
 
@@ -85,7 +140,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 
 			// Log with appropriate level
 			if logLevel == "error" {
-				s.logger.ErrorContext(ctx, "Failed to create user",
+				s.logger.ErrorContext(ctx, "Failed to create global user",
 					attr.String("user_id", string(userID)),
 					attr.String("guild_id", string(guildID)),
 					attr.Error(domainErr),
@@ -99,7 +154,6 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			}
 
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
-			// Return UserOperationResult with standardized failure
 			return UserOperationResult{
 				Failure: &userevents.UserCreationFailedPayloadV1{
 					GuildID:   guildID,
@@ -110,15 +164,43 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 				Error: domainErr,
 			}, domainErr
 		}
+		dbDuration := time.Since(dbStart)
+		s.metrics.RecordDBQueryDuration(ctx, dbDuration)
 
-		// Success
+		// Step 3: Create guild membership
+		membership := &userdb.GuildMembership{
+			UserID:  userID,
+			GuildID: guildID,
+			Role:    sharedtypes.UserRoleUser,
+		}
+
+		if err := s.UserDB.CreateGuildMembership(ctx, membership); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to create guild membership",
+				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
+				attr.Error(err),
+			)
+			s.metrics.RecordUserCreationFailure(ctx, userType, source)
+			return UserOperationResult{
+				Failure: &userevents.UserCreationFailedPayloadV1{
+					GuildID:   guildID,
+					UserID:    userID,
+					TagNumber: tag,
+					Reason:    err.Error(),
+				},
+				Error: err,
+			}, err
+		}
+
+		// Success - new user
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
 
 		return UserOperationResult{
 			Success: &userevents.UserCreatedPayloadV1{
-				GuildID:   guildID,
-				UserID:    userID,
-				TagNumber: tag,
+				GuildID:         guildID,
+				UserID:          userID,
+				TagNumber:       tag,
+				IsReturningUser: false,
 			},
 		}, nil
 	})

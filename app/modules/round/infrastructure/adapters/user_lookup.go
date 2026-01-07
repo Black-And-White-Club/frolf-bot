@@ -27,7 +27,7 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, g
 		return nil, err
 	}
 
-	return &roundservice.UserIdentity{UserID: user.UserID}, nil
+	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
 }
 
 func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
@@ -39,5 +39,5 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context
 		return nil, err
 	}
 
-	return &roundservice.UserIdentity{UserID: user.UserID}, nil
+	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
 }

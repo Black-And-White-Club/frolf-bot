@@ -42,25 +42,39 @@ func (m *MockUserDB) EXPECT() *MockUserDBMockRecorder {
 	return m.recorder
 }
 
-// CreateUser mocks base method.
-func (m *MockUserDB) CreateUser(ctx context.Context, user *userdb.User) error {
+// CreateGlobalUser mocks base method.
+func (m *MockUserDB) CreateGlobalUser(ctx context.Context, user *userdb.User) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateUser", ctx, user)
+	ret := m.ctrl.Call(m, "CreateGlobalUser", ctx, user)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CreateUser indicates an expected call of CreateUser.
-func (mr *MockUserDBMockRecorder) CreateUser(ctx, user any) *gomock.Call {
+// CreateGlobalUser indicates an expected call of CreateGlobalUser.
+func (mr *MockUserDBMockRecorder) CreateGlobalUser(ctx, user any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockUserDB)(nil).CreateUser), ctx, user)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGlobalUser", reflect.TypeOf((*MockUserDB)(nil).CreateGlobalUser), ctx, user)
+}
+
+// CreateGuildMembership mocks base method.
+func (m *MockUserDB) CreateGuildMembership(ctx context.Context, membership *userdb.GuildMembership) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateGuildMembership", ctx, membership)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateGuildMembership indicates an expected call of CreateGuildMembership.
+func (mr *MockUserDBMockRecorder) CreateGuildMembership(ctx, membership any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGuildMembership", reflect.TypeOf((*MockUserDB)(nil).CreateGuildMembership), ctx, membership)
 }
 
 // FindByUDiscName mocks base method.
-func (m *MockUserDB) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*userdb.User, error) {
+func (m *MockUserDB) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByUDiscName", ctx, guildID, name)
-	ret0, _ := ret[0].(*userdb.User)
+	ret0, _ := ret[0].(*userdb.UserWithMembership)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -72,10 +86,10 @@ func (mr *MockUserDBMockRecorder) FindByUDiscName(ctx, guildID, name any) *gomoc
 }
 
 // FindByUDiscUsername mocks base method.
-func (m *MockUserDB) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*userdb.User, error) {
+func (m *MockUserDB) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*userdb.UserWithMembership, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByUDiscUsername", ctx, guildID, username)
-	ret0, _ := ret[0].(*userdb.User)
+	ret0, _ := ret[0].(*userdb.UserWithMembership)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -86,11 +100,26 @@ func (mr *MockUserDBMockRecorder) FindByUDiscUsername(ctx, guildID, username any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByUDiscUsername", reflect.TypeOf((*MockUserDB)(nil).FindByUDiscUsername), ctx, guildID, username)
 }
 
+// GetGuildMembership mocks base method.
+func (m *MockUserDB) GetGuildMembership(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.GuildMembership, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGuildMembership", ctx, userID, guildID)
+	ret0, _ := ret[0].(*userdb.GuildMembership)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGuildMembership indicates an expected call of GetGuildMembership.
+func (mr *MockUserDBMockRecorder) GetGuildMembership(ctx, userID, guildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGuildMembership", reflect.TypeOf((*MockUserDB)(nil).GetGuildMembership), ctx, userID, guildID)
+}
+
 // GetUserByUserID mocks base method.
-func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.User, error) {
+func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.UserWithMembership, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserByUserID", ctx, userID, guildID)
-	ret0, _ := ret[0].(*userdb.User)
+	ret0, _ := ret[0].(*userdb.UserWithMembership)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -99,6 +128,36 @@ func (m *MockUserDB) GetUserByUserID(ctx context.Context, userID sharedtypes.Dis
 func (mr *MockUserDBMockRecorder) GetUserByUserID(ctx, userID, guildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByUserID", reflect.TypeOf((*MockUserDB)(nil).GetUserByUserID), ctx, userID, guildID)
+}
+
+// GetUserGlobal mocks base method.
+func (m *MockUserDB) GetUserGlobal(ctx context.Context, userID sharedtypes.DiscordID) (*userdb.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserGlobal", ctx, userID)
+	ret0, _ := ret[0].(*userdb.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserGlobal indicates an expected call of GetUserGlobal.
+func (mr *MockUserDBMockRecorder) GetUserGlobal(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserGlobal", reflect.TypeOf((*MockUserDB)(nil).GetUserGlobal), ctx, userID)
+}
+
+// GetUserMemberships mocks base method.
+func (m *MockUserDB) GetUserMemberships(ctx context.Context, userID sharedtypes.DiscordID) ([]*userdb.GuildMembership, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserMemberships", ctx, userID)
+	ret0, _ := ret[0].([]*userdb.GuildMembership)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserMemberships indicates an expected call of GetUserMemberships.
+func (mr *MockUserDBMockRecorder) GetUserMemberships(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserMemberships", reflect.TypeOf((*MockUserDB)(nil).GetUserMemberships), ctx, userID)
 }
 
 // GetUserRole mocks base method.
@@ -116,18 +175,32 @@ func (mr *MockUserDBMockRecorder) GetUserRole(ctx, userID, guildID any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRole", reflect.TypeOf((*MockUserDB)(nil).GetUserRole), ctx, userID, guildID)
 }
 
-// UpdateUDiscIdentity mocks base method.
-func (m *MockUserDB) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username, name *string) error {
+// UpdateMembershipRole mocks base method.
+func (m *MockUserDB) UpdateMembershipRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUDiscIdentity", ctx, guildID, userID, username, name)
+	ret := m.ctrl.Call(m, "UpdateMembershipRole", ctx, userID, guildID, role)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateUDiscIdentity indicates an expected call of UpdateUDiscIdentity.
-func (mr *MockUserDBMockRecorder) UpdateUDiscIdentity(ctx, guildID, userID, username, name any) *gomock.Call {
+// UpdateMembershipRole indicates an expected call of UpdateMembershipRole.
+func (mr *MockUserDBMockRecorder) UpdateMembershipRole(ctx, userID, guildID, role any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUDiscIdentity", reflect.TypeOf((*MockUserDB)(nil).UpdateUDiscIdentity), ctx, guildID, userID, username, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMembershipRole", reflect.TypeOf((*MockUserDB)(nil).UpdateMembershipRole), ctx, userID, guildID, role)
+}
+
+// UpdateUDiscIdentityGlobal mocks base method.
+func (m *MockUserDB) UpdateUDiscIdentityGlobal(ctx context.Context, userID sharedtypes.DiscordID, username, name *string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUDiscIdentityGlobal", ctx, userID, username, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateUDiscIdentityGlobal indicates an expected call of UpdateUDiscIdentityGlobal.
+func (mr *MockUserDBMockRecorder) UpdateUDiscIdentityGlobal(ctx, userID, username, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUDiscIdentityGlobal", reflect.TypeOf((*MockUserDB)(nil).UpdateUDiscIdentityGlobal), ctx, userID, username, name)
 }
 
 // UpdateUserRole mocks base method.
