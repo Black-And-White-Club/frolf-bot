@@ -213,28 +213,38 @@ func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandle
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						// Add specific logging for round reminder messages
-						if publishTopic == roundevents.RoundReminder {
-							r.logger.InfoContext(ctx, "🚀 Publishing Discord Round Reminder",
-								attr.String("original_message_id", msg.UUID),
-								attr.String("new_message_id", m.UUID),
-								attr.String("topic", publishTopic),
-								attr.String("handler_name", handlerName),
-							)
-						} else {
-							r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return",
-								attr.String("message_id", m.UUID),
-								attr.String("topic", publishTopic),
-							)
-						}
 
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
+					// INVARIANT: Topic must be resolvable
+					if publishTopic == "" {
+						r.logger.Error("router failed to resolve publish topic - MESSAGE DROPPED",
+							attr.String("handler", handlerName),
+							attr.String("msg_uuid", m.UUID),
+							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+						)
+						// Skip publishing but don't fail entire batch
+						continue
+					}
+
+					// Add specific logging for round reminder messages
+					if publishTopic == roundevents.RoundReminder {
+						r.logger.InfoContext(ctx, "Publishing Discord Round Reminder",
+							attr.String("original_message_id", msg.UUID),
+							attr.String("new_message_id", m.UUID),
+							attr.String("topic", publishTopic),
+							attr.String("handler_name", handlerName),
+							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+						)
 					} else {
-						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
+						r.logger.InfoContext(ctx, "publishing message",
+							attr.String("message_id", m.UUID),
+							attr.String("topic", publishTopic),
+							attr.String("handler", handlerName),
+							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+						)
+					}
+
+					if err := r.publisher.Publish(publishTopic, m); err != nil {
+						return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 					}
 				}
 				return nil, nil

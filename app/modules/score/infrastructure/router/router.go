@@ -130,11 +130,26 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 				}
 				for _, m := range messages {
 					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						// Pass the context from RegisterHandlers (routerCtx) to Publish
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
+
+					// INVARIANT: Topic must be resolvable
+					if publishTopic == "" {
+						r.logger.Error("router failed to resolve publish topic - MESSAGE DROPPED",
+							attr.String("handler", handlerName),
+							attr.String("msg_uuid", m.UUID),
+							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+						)
+						// Skip publishing but don't fail entire batch
+						continue
+					}
+
+					r.logger.InfoContext(ctx, "publishing message",
+						attr.String("topic", publishTopic),
+						attr.String("handler", handlerName),
+						attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+					)
+
+					if err := r.publisher.Publish(publishTopic, m); err != nil {
+						return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 					}
 				}
 				return nil, nil
