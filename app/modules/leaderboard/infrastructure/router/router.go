@@ -183,16 +183,11 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 				}
 
 				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
+					publishTopic := r.getPublishTopic(handlerName, m)
 
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
-					} else {
-						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
+					if err := r.publisher.Publish(publishTopic, m); err != nil {
+						r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
+						return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 					}
 				}
 
@@ -201,6 +196,19 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 		)
 	}
 	return nil
+}
+
+// getPublishTopic resolves the topic to publish for a given handler's returned message.
+// During the migration we keep the metadata fallback for handlers that can emit
+// multiple different outcome events. As handlers are stabilized we can make
+// explicit mappings here and remove the metadata fallback.
+func (r *LeaderboardRouter) getPublishTopic(handlerName string, msg *message.Message) string {
+	switch handlerName {
+	// No deterministic single-output handlers in this router yet. Keep metadata
+	// fallback so multi-outcome handlers continue to work during migration.
+	default:
+		return msg.Metadata.Get("topic")
+	}
 }
 
 // Close stops the router.

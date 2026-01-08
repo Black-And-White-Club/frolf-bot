@@ -102,14 +102,28 @@ func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandle
 					return nil, err
 				}
 				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
-					} else {
-						r.logger.Warn("Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
+					// Router resolves topic (not metadata)
+					publishTopic := r.getPublishTopic(handlerName, m)
+
+					// INVARIANT: Topic must be resolvable
+					if publishTopic == "" {
+						r.logger.Error("router failed to resolve publish topic - MESSAGE DROPPED",
+							attr.String("handler", handlerName),
+							attr.String("msg_uuid", m.UUID),
+							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+						)
+						// Skip publishing but don't fail entire batch
+						continue
+					}
+
+					r.logger.InfoContext(ctx, "publishing message",
+						attr.String("topic", publishTopic),
+						attr.String("handler", handlerName),
+						attr.String("correlation_id", m.Metadata.Get("correlation_id")),
+					)
+
+					if err := r.publisher.Publish(publishTopic, m); err != nil {
+						return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
 					}
 				}
 				return nil, nil
@@ -117,6 +131,29 @@ func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandle
 		)
 	}
 	return nil
+}
+
+// getPublishTopic resolves the topic to publish for a given handler's returned message.
+// Router owns routing decisions; during migration we fallback to message metadata when the
+// mapping is ambiguous (success vs failure outputs).
+func (r *GuildRouter) getPublishTopic(handlerName string, msg *message.Message) string {
+	switch {
+	case handlerName == "guild."+guildevents.GuildConfigCreationRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigRetrievalRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigUpdateRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigDeletionRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildSetupRequestedV1:
+		return msg.Metadata.Get("topic")
+	default:
+		r.logger.Warn("unknown handler in topic resolution",
+			attr.String("handler", handlerName),
+		)
+		return msg.Metadata.Get("topic")
+	}
 }
 
 // Close stops the router.
