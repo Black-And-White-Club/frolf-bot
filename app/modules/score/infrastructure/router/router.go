@@ -8,6 +8,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
@@ -129,7 +130,8 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 					return nil, err
 				}
 				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
+					// Router resolves topic (not metadata)
+					publishTopic := r.getPublishTopic(handlerName, m)
 
 					// INVARIANT: Topic must be resolvable
 					if publishTopic == "" {
@@ -161,4 +163,29 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 
 func (r *ScoreRouter) Close() error {
 	return r.Router.Close()
+}
+
+// getPublishTopic resolves the topic to publish for a given handler's returned message.
+// Use explicit mapping where possible; fallback to metadata during migration for
+// handlers that can emit multiple different output topics.
+func (r *ScoreRouter) getPublishTopic(handlerName string, msg *message.Message) string {
+	switch {
+	case handlerName == "score."+scoreevents.ProcessRoundScoresRequestedV1:
+		// HandleProcessRoundScoresRequest always publishes a leaderboard batch assignment request
+		return sharedevents.LeaderboardBatchTagAssignmentRequestedV1
+
+	case handlerName == "score."+scoreevents.ScoreUpdateRequestedV1:
+		// CorrectScore may emit success or failure; use metadata fallback during migration
+		return msg.Metadata.Get("topic")
+
+	case handlerName == "score."+scoreevents.ScoreBulkUpdateRequestedV1:
+		// Bulk updates can produce different topics; fallback to metadata
+		return msg.Metadata.Get("topic")
+
+	default:
+		r.logger.Warn("unknown handler in topic resolution",
+			attr.String("handler", handlerName),
+		)
+		return msg.Metadata.Get("topic")
+	}
 }

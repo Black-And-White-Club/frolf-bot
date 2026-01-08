@@ -145,6 +145,29 @@ func (r *UserRouter) Configure(routerCtx context.Context, userService userservic
 	return nil
 }
 
+// getPublishTopic resolves the topic to publish for a given handler's returned message.
+// This centralizes routing logic in the router (not in handlers or helpers).
+func (r *UserRouter) getPublishTopic(handlerName string, msg *message.Message) string {
+	switch {
+	case handlerName == "user."+userevents.TagAvailableV1:
+		// HandleTagAvailable always returns UserCreatedV1
+		return userevents.UserCreatedV1
+
+	case handlerName == "user."+userevents.TagUnavailableV1:
+		// HandleTagUnavailable always returns UserCreationFailedV1
+		return userevents.UserCreationFailedV1
+
+	// Most handlers can return multiple different result messages (success/failure/etc.)
+	// During migration we fallback to the metadata topic so handlers can continue to
+	// drive specific result routing until the router covers all cases.
+	default:
+		r.logger.Warn("unknown handler in topic resolution - falling back to metadata",
+			attr.String("handler", handlerName),
+		)
+		return msg.Metadata.Get("topic")
+	}
+}
+
 // RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers.Handlers) error {
 	fmt.Printf("DEBUG: RegisterHandlers() called for user module\n")
@@ -203,8 +226,8 @@ func (r *UserRouter) RegisterHandlers(ctx context.Context, handlers userhandlers
 
 				// Manually iterate over any messages returned by the handler and publish them
 				for _, m := range messages {
-					// Get the intended output topic from metadata
-					publishTopic := m.Metadata.Get("topic")
+					// Router resolves topic (not metadata)
+					publishTopic := r.getPublishTopic(handlerName, m)
 
 					// INVARIANT: Topic must be resolvable
 					if publishTopic == "" {

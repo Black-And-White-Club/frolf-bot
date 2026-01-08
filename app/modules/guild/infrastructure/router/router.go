@@ -102,7 +102,8 @@ func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandle
 					return nil, err
 				}
 				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
+					// Router resolves topic (not metadata)
+					publishTopic := r.getPublishTopic(handlerName, m)
 
 					// INVARIANT: Topic must be resolvable
 					if publishTopic == "" {
@@ -130,6 +131,29 @@ func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandle
 		)
 	}
 	return nil
+}
+
+// getPublishTopic resolves the topic to publish for a given handler's returned message.
+// Router owns routing decisions; during migration we fallback to message metadata when the
+// mapping is ambiguous (success vs failure outputs).
+func (r *GuildRouter) getPublishTopic(handlerName string, msg *message.Message) string {
+	switch {
+	case handlerName == "guild."+guildevents.GuildConfigCreationRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigRetrievalRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigUpdateRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildConfigDeletionRequestedV1:
+		return msg.Metadata.Get("topic")
+	case handlerName == "guild."+guildevents.GuildSetupRequestedV1:
+		return msg.Metadata.Get("topic")
+	default:
+		r.logger.Warn("unknown handler in topic resolution",
+			attr.String("handler", handlerName),
+		)
+		return msg.Metadata.Get("topic")
+	}
 }
 
 // Close stops the router.
