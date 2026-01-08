@@ -14,6 +14,8 @@ type GuildConfig struct {
 	CreatedAt            time.Time           `bun:"created_at,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt            time.Time           `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 	IsActive             bool                `bun:"is_active,notnull,default:true"`
+	// Tracks deletion lifecycle for reset operations.
+	DeletionStatus       *string             `bun:"deletion_status,type:deletion_status_enum"`
 	SignupChannelID      string              `bun:"signup_channel_id,nullzero,type:varchar(20)"`
 	SignupMessageID      string              `bun:"signup_message_id,nullzero,type:varchar(20)"`
 	EventChannelID       string              `bun:"event_channel_id,nullzero,type:varchar(20)"`

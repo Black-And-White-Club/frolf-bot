@@ -212,6 +212,8 @@ func (db *GuildDBImpl) DeleteConfig(
 			Where("guild_id = ? AND is_active = ?", guildID, true)
 
 		q = q.Set("resource_state = ?", rs)
+        // Mark deletion as pending so background workers can process it.
+        q = q.Set("deletion_status = ?", "pending")
 		// Nullify explicit ID columns so the rest of the app no longer treats them as live.
 		q = q.Set("signup_channel_id = NULL")
 		q = q.Set("signup_message_id = NULL")
