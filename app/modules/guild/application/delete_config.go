@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
@@ -43,7 +44,19 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 			}, errors.New("guild config not found")
 		}
 
-		// Soft delete: set IsActive = false
+		// Build resource snapshot for the event from the existing config.
+		rs := guildtypes.ResourceState{
+			SignupChannelID:      existing.SignupChannelID,
+			SignupMessageID:      existing.SignupMessageID,
+			EventChannelID:       existing.EventChannelID,
+			LeaderboardChannelID: existing.LeaderboardChannelID,
+			UserRoleID:           existing.UserRoleID,
+			EditorRoleID:         existing.EditorRoleID,
+			AdminRoleID:          existing.AdminRoleID,
+			Results:              map[string]guildtypes.DeletionResult{},
+		}
+
+		// Soft delete: set IsActive = false and snapshot resource_state.
 		err = s.GuildDB.DeleteConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
@@ -55,10 +68,11 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 			}, err
 		}
 
-		// Success payload
+		// Success payload includes the resource snapshot so consumers can act.
 		return GuildOperationResult{
 			Success: &guildevents.GuildConfigDeletedPayload{
-				GuildID: guildID,
+				GuildID:       guildID,
+				ResourceState: rs,
 			},
 		}, nil
 	})

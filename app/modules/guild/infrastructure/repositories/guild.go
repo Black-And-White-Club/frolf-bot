@@ -176,22 +176,62 @@ func (db *GuildDBImpl) DeleteConfig(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 ) error {
-	res, err := db.DB.NewUpdate().
-		Table("guild_configs").
-		Set("is_active = ?", false).
-		Set("updated_at = ?", time.Now().UTC()).
-		Where("guild_id = ? AND is_active = ?", guildID, true).
-		Exec(ctx)
+	// Snapshot current resource IDs into `resource_state` and nullify explicit ID
+	// columns in a single transaction. Do not perform any external IO here.
+	return db.DB.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var model GuildConfig
 
-	if err != nil {
-		return fmt.Errorf("delete guild config guild_id=%s: %w", guildID, err)
-	}
+		err := tx.NewSelect().
+			Model(&model).
+			Where("guild_id = ? AND is_active = ?", guildID, true).
+			Limit(1).
+			Scan(ctx)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// Nothing to do; idempotent.
+				return nil
+			}
+			return fmt.Errorf("get guild config for delete guild_id=%s: %w", guildID, err)
+		}
 
-	// Idempotent: if rows affected is 0, it means it was already deleted or didn't exist.
-	// We don't return an error in that case.
-	_, _ = res.RowsAffected()
+		// Build resource snapshot
+		rs := &ResourceState{
+			SignupChannelID:      model.SignupChannelID,
+			SignupMessageID:      model.SignupMessageID,
+			EventChannelID:       model.EventChannelID,
+			LeaderboardChannelID: model.LeaderboardChannelID,
+			UserRoleID:           model.UserRoleID,
+			EditorRoleID:         model.EditorRoleID,
+			AdminRoleID:          model.AdminRoleID,
+			Results:              make(map[string]DeletionResult),
+		}
 
-	return nil
+		// Prepare update: set resource_state JSONB, nullify explicit columns, mark inactive.
+		q := tx.NewUpdate().
+			Table("guild_configs").
+			Where("guild_id = ? AND is_active = ?", guildID, true)
+
+		q = q.Set("resource_state = ?", rs)
+        // Mark deletion as pending so background workers can process it.
+        q = q.Set("deletion_status = ?", "pending")
+		// Nullify explicit ID columns so the rest of the app no longer treats them as live.
+		q = q.Set("signup_channel_id = NULL")
+		q = q.Set("signup_message_id = NULL")
+		q = q.Set("event_channel_id = NULL")
+		q = q.Set("leaderboard_channel_id = NULL")
+		q = q.Set("user_role_id = NULL")
+		q = q.Set("editor_role_id = NULL")
+		q = q.Set("admin_role_id = NULL")
+
+		q = q.Set("is_active = ?", false)
+		q = q.Set("updated_at = ?", time.Now().UTC())
+
+		if _, err := q.Exec(ctx); err != nil {
+			return fmt.Errorf("delete guild config guild_id=%s: %w", guildID, err)
+		}
+
+		return nil
+	})
 }
 
 //
@@ -239,6 +279,7 @@ func toSharedModel(cfg *GuildConfig) *guildtypes.GuildConfig {
 		SignupEmoji:          cfg.SignupEmoji,
 		AutoSetupCompleted:   cfg.AutoSetupCompleted,
 		SetupCompletedAt:     cfg.SetupCompletedAt,
+		ResourceState:        mapResourceStateToShared(cfg.ResourceState),
 	}
 }
 
@@ -247,7 +288,6 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 	if cfg == nil {
 		return nil
 	}
-
 	return &GuildConfig{
 		GuildID:              cfg.GuildID,
 		SignupChannelID:      cfg.SignupChannelID,
@@ -260,6 +300,59 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 		SignupEmoji:          cfg.SignupEmoji,
 		AutoSetupCompleted:   cfg.AutoSetupCompleted,
 		SetupCompletedAt:     cfg.SetupCompletedAt,
+		ResourceState:        mapResourceStateToDB(&cfg.ResourceState),
+	}
+}
+
+// mapResourceStateToShared converts DB ResourceState to shared type
+func mapResourceStateToShared(rs *ResourceState) guildtypes.ResourceState {
+	if rs == nil {
+		return guildtypes.ResourceState{}
+	}
+	// Convert DeletionResult map
+	results := make(map[string]guildtypes.DeletionResult, len(rs.Results))
+	for k, v := range rs.Results {
+		results[k] = guildtypes.DeletionResult{
+			Status:    v.Status,
+			Error:     v.Error,
+			DeletedAt: v.DeletedAt,
+		}
+	}
+	return guildtypes.ResourceState{
+		SignupChannelID:      rs.SignupChannelID,
+		SignupMessageID:      rs.SignupMessageID,
+		EventChannelID:       rs.EventChannelID,
+		LeaderboardChannelID: rs.LeaderboardChannelID,
+		UserRoleID:           rs.UserRoleID,
+		EditorRoleID:         rs.EditorRoleID,
+		AdminRoleID:          rs.AdminRoleID,
+		Results:              results,
+	}
+}
+
+// mapResourceStateToDB converts shared ResourceState to DB ResourceState pointer
+func mapResourceStateToDB(rs *guildtypes.ResourceState) *ResourceState {
+	// Treat an empty or nil ResourceState as nil to avoid storing empty JSONB.
+	if rs == nil || rs.IsEmpty() {
+		return nil
+	}
+	results := make(map[string]DeletionResult, len(rs.Results))
+	for k, v := range rs.Results {
+		results[k] = DeletionResult{
+			Status:    v.Status,
+			Error:     v.Error,
+			DeletedAt: v.DeletedAt,
+		}
+	}
+	return &ResourceState{
+		SignupChannelID:      rs.SignupChannelID,
+		SignupMessageID:      rs.SignupMessageID,
+		EventChannelID:       rs.EventChannelID,
+		LeaderboardChannelID: rs.LeaderboardChannelID,
+		UserRoleID:           rs.UserRoleID,
+		EditorRoleID:         rs.EditorRoleID,
+		AdminRoleID:          rs.AdminRoleID,
+		Results:              results,
 	}
 }
 
