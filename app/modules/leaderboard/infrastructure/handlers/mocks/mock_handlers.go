@@ -10,9 +10,13 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
-	message "github.com/ThreeDotsLabs/watermill/message"
+	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,121 +45,121 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleBatchTagAssignmentRequested mocks base method.
-func (m *MockHandlers) HandleBatchTagAssignmentRequested(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleBatchTagAssignmentRequested(ctx context.Context, payload *sharedevents.BatchTagAssignmentRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleBatchTagAssignmentRequested", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleBatchTagAssignmentRequested", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleBatchTagAssignmentRequested indicates an expected call of HandleBatchTagAssignmentRequested.
-func (mr *MockHandlersMockRecorder) HandleBatchTagAssignmentRequested(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleBatchTagAssignmentRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBatchTagAssignmentRequested", reflect.TypeOf((*MockHandlers)(nil).HandleBatchTagAssignmentRequested), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBatchTagAssignmentRequested", reflect.TypeOf((*MockHandlers)(nil).HandleBatchTagAssignmentRequested), ctx, payload)
 }
 
 // HandleGetLeaderboardRequest mocks base method.
-func (m *MockHandlers) HandleGetLeaderboardRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleGetLeaderboardRequest(ctx context.Context, payload *leaderboardevents.GetLeaderboardRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleGetLeaderboardRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleGetLeaderboardRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleGetLeaderboardRequest indicates an expected call of HandleGetLeaderboardRequest.
-func (mr *MockHandlersMockRecorder) HandleGetLeaderboardRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleGetLeaderboardRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetLeaderboardRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetLeaderboardRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetLeaderboardRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetLeaderboardRequest), ctx, payload)
 }
 
 // HandleGetTagByUserIDRequest mocks base method.
-func (m *MockHandlers) HandleGetTagByUserIDRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleGetTagByUserIDRequest(ctx context.Context, payload *sharedevents.DiscordTagLookupRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleGetTagByUserIDRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleGetTagByUserIDRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleGetTagByUserIDRequest indicates an expected call of HandleGetTagByUserIDRequest.
-func (mr *MockHandlersMockRecorder) HandleGetTagByUserIDRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleGetTagByUserIDRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetTagByUserIDRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetTagByUserIDRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGetTagByUserIDRequest", reflect.TypeOf((*MockHandlers)(nil).HandleGetTagByUserIDRequest), ctx, payload)
 }
 
 // HandleGuildConfigCreated mocks base method.
-func (m *MockHandlers) HandleGuildConfigCreated(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleGuildConfigCreated(ctx context.Context, payload *guildevents.GuildConfigCreatedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleGuildConfigCreated", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleGuildConfigCreated", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleGuildConfigCreated indicates an expected call of HandleGuildConfigCreated.
-func (mr *MockHandlersMockRecorder) HandleGuildConfigCreated(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleGuildConfigCreated(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildConfigCreated", reflect.TypeOf((*MockHandlers)(nil).HandleGuildConfigCreated), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildConfigCreated", reflect.TypeOf((*MockHandlers)(nil).HandleGuildConfigCreated), ctx, payload)
 }
 
 // HandleLeaderboardUpdateRequested mocks base method.
-func (m *MockHandlers) HandleLeaderboardUpdateRequested(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleLeaderboardUpdateRequested(ctx context.Context, payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleLeaderboardUpdateRequested", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleLeaderboardUpdateRequested", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleLeaderboardUpdateRequested indicates an expected call of HandleLeaderboardUpdateRequested.
-func (mr *MockHandlersMockRecorder) HandleLeaderboardUpdateRequested(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleLeaderboardUpdateRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleLeaderboardUpdateRequested", reflect.TypeOf((*MockHandlers)(nil).HandleLeaderboardUpdateRequested), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleLeaderboardUpdateRequested", reflect.TypeOf((*MockHandlers)(nil).HandleLeaderboardUpdateRequested), ctx, payload)
 }
 
 // HandleRoundGetTagRequest mocks base method.
-func (m *MockHandlers) HandleRoundGetTagRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleRoundGetTagRequest(ctx context.Context, payload *sharedevents.RoundTagLookupRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRoundGetTagRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleRoundGetTagRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleRoundGetTagRequest indicates an expected call of HandleRoundGetTagRequest.
-func (mr *MockHandlersMockRecorder) HandleRoundGetTagRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleRoundGetTagRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundGetTagRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundGetTagRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundGetTagRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundGetTagRequest), ctx, payload)
 }
 
 // HandleTagAvailabilityCheckRequested mocks base method.
-func (m *MockHandlers) HandleTagAvailabilityCheckRequested(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleTagAvailabilityCheckRequested(ctx context.Context, payload *leaderboardevents.TagAvailabilityCheckRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagAvailabilityCheckRequested", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleTagAvailabilityCheckRequested", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleTagAvailabilityCheckRequested indicates an expected call of HandleTagAvailabilityCheckRequested.
-func (mr *MockHandlersMockRecorder) HandleTagAvailabilityCheckRequested(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleTagAvailabilityCheckRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAvailabilityCheckRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagAvailabilityCheckRequested), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagAvailabilityCheckRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagAvailabilityCheckRequested), ctx, payload)
 }
 
 // HandleTagSwapRequested mocks base method.
-func (m *MockHandlers) HandleTagSwapRequested(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleTagSwapRequested(ctx context.Context, payload *leaderboardevents.TagSwapRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleTagSwapRequested", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleTagSwapRequested", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleTagSwapRequested indicates an expected call of HandleTagSwapRequested.
-func (mr *MockHandlersMockRecorder) HandleTagSwapRequested(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleTagSwapRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagSwapRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagSwapRequested), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagSwapRequested", reflect.TypeOf((*MockHandlers)(nil).HandleTagSwapRequested), ctx, payload)
 }

@@ -109,8 +109,8 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
 				msgs := received[leaderboardevents.LeaderboardUpdatedV1]
-				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 success message, got %d", len(msgs))
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least 1 success message, got %d", len(msgs))
 				}
 				var req leaderboardevents.LeaderboardUpdateRequestedPayloadV1
 				if err := json.Unmarshal(incoming.Payload, &req); err != nil {

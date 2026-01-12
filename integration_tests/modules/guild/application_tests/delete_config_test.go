@@ -74,8 +74,8 @@ func TestDeleteGuildConfig(t *testing.T) {
 				return deps.Ctx, guildID
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for nonexistent config but got nil")
+				if err == nil && result.Error == nil && result.Failure == nil {
+					t.Fatalf("Expected error or failure for nonexistent config but got none")
 				}
 				// Deleting nonexistent config returns error
 				if result.Success != nil {
@@ -153,8 +153,8 @@ func TestDeleteGuildConfig_VerifySoftDelete(t *testing.T) {
 
 	// Try to retrieve the deleted config - should return error/failure
 	getResult, err := deps.Service.GetGuildConfig(deps.Ctx, guildID)
-	if err == nil {
-		t.Fatalf("Expected error when retrieving soft-deleted config but got nil")
+	if err == nil && getResult.Error == nil && getResult.Failure == nil {
+		t.Fatalf("Expected error or failure when retrieving soft-deleted config but got none")
 	}
 
 	if getResult.Success != nil {
@@ -162,6 +162,6 @@ func TestDeleteGuildConfig_VerifySoftDelete(t *testing.T) {
 	}
 
 	if getResult.Failure == nil {
-		t.Fatalf("Expected failure payload for deleted config but got nil")
+		t.Fatalf("Expected failure payload for deleted config but got nil (err: %v, result.Error: %v)", err, getResult.Error)
 	}
 }

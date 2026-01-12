@@ -32,23 +32,23 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 	}
 	guildID := config.GuildID
 	if guildID == "" {
-		return createGuildConfigFailureResult(guildID, config, ErrInvalidGuildID), ErrInvalidGuildID
+		return createGuildConfigFailureResult(guildID, config, ErrInvalidGuildID), nil
 	}
 	// Validation: require key config fields
 	if config.SignupChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("signup channel ID required")), errors.New("signup channel ID required")
+		return createGuildConfigFailureResult(guildID, config, errors.New("signup channel ID required")), nil
 	}
 	if config.EventChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("event channel ID required")), errors.New("event channel ID required")
+		return createGuildConfigFailureResult(guildID, config, errors.New("event channel ID required")), nil
 	}
 	if config.LeaderboardChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("leaderboard channel ID required")), errors.New("leaderboard channel ID required")
+		return createGuildConfigFailureResult(guildID, config, errors.New("leaderboard channel ID required")), nil
 	}
 	if config.UserRoleID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("user role ID required")), errors.New("user role ID required")
+		return createGuildConfigFailureResult(guildID, config, errors.New("user role ID required")), nil
 	}
 	if config.SignupEmoji == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("signup emoji required")), errors.New("signup emoji required")
+		return createGuildConfigFailureResult(guildID, config, errors.New("signup emoji required")), nil
 	}
 
 	// Check if config already exists
@@ -68,7 +68,7 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 			}, nil
 		}
 
-		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigConflict), ErrGuildConfigConflict
+		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigConflict), nil
 	}
 
 	// Save config (repository handles conversion to DB model)

@@ -2,222 +2,128 @@ package guildhandlers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"reflect"
 	"testing"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	mocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 	guildmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestGuildHandlers_HandleCreateGuildConfig(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	validPayload := &guildevents.GuildConfigCreationRequestedPayloadV1{
-		GuildID:              "guild-1",
-		SignupChannelID:      "signup-chan",
-		SignupMessageID:      "msg-1",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		EditorRoleID:         "role-2",
-		AdminRoleID:          "role-3",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-	}
-	validConfig := &guildtypes.GuildConfig{
-		GuildID:              "guild-1",
-		SignupChannelID:      "signup-chan",
-		SignupMessageID:      "msg-1",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		EditorRoleID:         "role-2",
-		AdminRoleID:          "role-3",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-	}
-	payloadBytes, _ := json.Marshal(validPayload)
-	testMsg := message.NewMessage(uuid.New().String(), payloadBytes)
-	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
-
-	mockService := guildmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &guildmetrics.NoOpMetrics{}
-
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name      string
+		payload   *guildevents.GuildConfigCreationRequestedPayloadV1
+		mockSetup func(*guildmocks.MockService)
+		wantErr   bool
+		wantTopic string
+		wantLen   int
 	}{
 		{
-			name: "success",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigCreationRequestedPayloadV1) = *validPayload
-						return nil
-					},
-				)
-				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
+			name: "success - guild config created",
+			payload: &guildevents.GuildConfigCreationRequestedPayloadV1{
+				GuildID:              "guild-1",
+				SignupChannelID:      "signup-chan",
+				SignupMessageID:      "msg-1",
+				EventChannelID:       "event-chan",
+				LeaderboardChannelID: "leaderboard-chan",
+				UserRoleID:           "role-1",
+				EditorRoleID:         "role-2",
+				AdminRoleID:          "role-3",
+				SignupEmoji:          ":frolf:",
+				AutoSetupCompleted:   true,
+			},
+			mockSetup: func(m *guildmocks.MockService) {
+				m.EXPECT().CreateGuildConfig(gomock.Any(), gomock.Any()).Return(guildservice.GuildOperationResult{
 					Success: &guildevents.GuildConfigCreatedPayloadV1{
 						GuildID: "guild-1",
-						Config:  *validConfig,
+						Config: guildtypes.GuildConfig{
+							GuildID:              "guild-1",
+							SignupChannelID:      "signup-chan",
+							SignupMessageID:      "msg-1",
+							EventChannelID:       "event-chan",
+							LeaderboardChannelID: "leaderboard-chan",
+							UserRoleID:           "role-1",
+							EditorRoleID:         "role-2",
+							AdminRoleID:          "role-3",
+							SignupEmoji:          ":frolf:",
+							AutoSetupCompleted:   true,
+						},
 					},
 				}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&guildevents.GuildConfigCreatedPayloadV1{
-						GuildID: "guild-1",
-						Config:  *validConfig,
-					},
-					guildevents.GuildConfigCreatedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantErr:   false,
+			wantTopic: guildevents.GuildConfigCreatedV1,
+			wantLen:   1,
 		},
 		{
-			name: "fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+			name: "failure - validation error",
+			payload: &guildevents.GuildConfigCreationRequestedPayloadV1{
+				GuildID: "",
 			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
-		},
-		{
-			name: "service failure",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigCreationRequestedPayloadV1) = *validPayload
-						return nil
-					},
-				)
-				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{}, fmt.Errorf("internal service error"))
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle CreateGuildConfigRequested event: internal service error",
-		},
-		{
-			name: "failure payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigCreationRequestedPayloadV1) = *validPayload
-						return nil
-					},
-				)
-				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
+			mockSetup: func(m *guildmocks.MockService) {
+				m.EXPECT().CreateGuildConfig(gomock.Any(), gomock.Any()).Return(guildservice.GuildOperationResult{
 					Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
-						GuildID: "guild-1",
-						Reason:  "some failure",
+						GuildID: "",
+						Reason:  "invalid guild id",
 					},
+					Error: guildservice.ErrInvalidGuildID,
 				}, nil)
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&guildevents.GuildConfigCreationFailedPayloadV1{
-						GuildID: "guild-1",
-						Reason:  "some failure",
-					},
-					guildevents.GuildConfigCreationFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantErr:   false,
+			wantTopic: guildevents.GuildConfigCreationFailedV1,
+			wantLen:   1,
 		},
 		{
-			name: "failure payload with domain error",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigCreationRequestedPayloadV1) = *validPayload
-						return nil
-					},
-				)
-				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
-						GuildID: "guild-1",
-						Reason:  guildservice.ErrGuildConfigConflict.Error(),
-					},
-				}, fmt.Errorf("%w", guildservice.ErrGuildConfigConflict))
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&guildevents.GuildConfigCreationFailedPayloadV1{
-						GuildID: "guild-1",
-						Reason:  guildservice.ErrGuildConfigConflict.Error(),
-					},
-					guildevents.GuildConfigCreationFailedV1,
-				).Return(testMsg, nil)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			name:    "error - nil payload",
+			payload: nil,
+			wantErr: true,
+			wantLen: 0,
 		},
 		{
-			name: "unexpected result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*guildevents.GuildConfigCreationRequestedPayloadV1) = *validPayload
-						return nil
-					},
-				)
-				mockService.EXPECT().CreateGuildConfig(gomock.Any(), validConfig).Return(guildservice.GuildOperationResult{}, nil)
+			name: "error - service error",
+			payload: &guildevents.GuildConfigCreationRequestedPayloadV1{
+				GuildID: "guild-1",
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			mockSetup: func(m *guildmocks.MockService) {
+				m.EXPECT().CreateGuildConfig(gomock.Any(), gomock.Any()).Return(guildservice.GuildOperationResult{}, context.DeadlineExceeded)
+			},
+			wantErr: true,
+			wantLen: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockService := guildmocks.NewMockService(ctrl)
 			if tt.mockSetup != nil {
-				tt.mockSetup()
+				tt.mockSetup(mockService)
 			}
-			h := &GuildHandlers{
-				guildService: mockService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
-				helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
-			got, err := h.HandleCreateGuildConfig(tt.msg)
+
+			logger := loggerfrolfbot.NoOpLogger
+			tracer := noop.NewTracerProvider().Tracer("test")
+			metrics := &guildmetrics.NoOpMetrics{}
+
+			h := NewGuildHandlers(mockService, logger, tracer, nil, metrics)
+			results, err := h.HandleCreateGuildConfig(context.Background(), tt.payload)
+
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleCreateGuildConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("got error %v, want error %v", err, tt.wantErr)
 			}
-			if tt.wantErr && tt.expectedErrMsg != "" && err != nil && err.Error() != tt.expectedErrMsg {
-				t.Errorf("expected error message %q, got %q", tt.expectedErrMsg, err.Error())
+
+			if len(results) != tt.wantLen {
+				t.Errorf("got %d results, want %d", len(results), tt.wantLen)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleCreateGuildConfig() = %v, want %v", got, tt.want)
+
+			if len(results) > 0 && results[0].Topic != tt.wantTopic {
+				t.Errorf("got topic %s, want %s", results[0].Topic, tt.wantTopic)
 			}
 		})
 	}

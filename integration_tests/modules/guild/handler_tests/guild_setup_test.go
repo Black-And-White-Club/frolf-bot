@@ -33,7 +33,7 @@ func TestHandleGuildSetup(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				guildID := sharedtypes.GuildID("823456789012345678")
-				payload := guildevents.GuildConfigCreationRequestedPayloadV1{
+				payload := guildtypes.GuildConfig{
 					GuildID:              guildID,
 					SignupChannelID:      "834567890123456789",
 					EventChannelID:       "845678901234567890",
@@ -68,12 +68,12 @@ func TestHandleGuildSetup(t *testing.T) {
 					if getResult.Success == nil {
 						return errors.New("config not found yet or success payload is nil")
 					}
-					
+
 					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayload)
 					if !ok {
 						return errors.New("success payload is not of type GuildConfigRetrievedPayload")
 					}
-					
+
 					config = &successPayload.Config
 					return nil
 				})
@@ -85,31 +85,28 @@ func TestHandleGuildSetup(t *testing.T) {
 					t.Errorf("Expected SignupChannelID %s, got %s", "834567890123456789", config.SignupChannelID)
 				}
 
-				// Verify GuildConfigCreated event was published
+				// Verify GuildConfigCreated event was published (accept >=1 and find matching payload)
 				expectedTopic := guildevents.GuildConfigCreatedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
 				}
-				if len(msgs) > 1 {
-					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
-				}
 
-				receivedMsg := msgs[0]
-				var successPayload guildevents.GuildConfigCreatedPayload
-				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
-					t.Fatalf("Failed to unmarshal success payload: %v", err)
+				// Find a message with matching GuildID and correlation ID
+				var matched bool
+				for _, m := range msgs {
+					var successPayload guildevents.GuildConfigCreatedPayload
+					if err := deps.TestHelpers.UnmarshalPayload(m, &successPayload); err != nil {
+						// ignore unmarshal errors for non-matching messages
+						continue
+					}
+					if successPayload.GuildID == guildID && m.Metadata.Get(middleware.CorrelationIDMetadataKey) == incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+						matched = true
+						break
+					}
 				}
-
-				if successPayload.GuildID != guildID {
-					t.Errorf("Expected GuildID %s, got %s", guildID, successPayload.GuildID)
-				}
-
-				// Verify correlation ID is propagated
-				if receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-					t.Errorf("Correlation ID mismatch: expected %q, got %q", 
-						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-						receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
+				if !matched {
+					t.Fatalf("Did not find a GuildConfigCreated message with expected GuildID %s and matching correlation ID among %d messages", guildID, len(msgs))
 				}
 			},
 			expectHandlerError: false,
@@ -135,7 +132,7 @@ func TestHandleGuildSetup(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				guildID := sharedtypes.GuildID("923456789012345678")
-				payload := guildevents.GuildConfigCreationRequestedPayloadV1{
+				payload := guildtypes.GuildConfig{
 					GuildID:              guildID,
 					SignupChannelID:      "944567890123456789",
 					EventChannelID:       "955678901234567890",
@@ -160,24 +157,26 @@ func TestHandleGuildSetup(t *testing.T) {
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				guildID := initialState.(sharedtypes.GuildID)
 
-				// Verify failure event was published
+				// Verify failure event was published (accept >=1 and find matching payload)
 				expectedTopic := guildevents.GuildConfigCreationFailedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
 				}
-				if len(msgs) > 1 {
-					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
-				}
 
-				receivedMsg := msgs[0]
-				var failurePayload guildevents.GuildConfigCreationFailedPayload
-				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &failurePayload); err != nil {
-					t.Fatalf("Failed to unmarshal failure payload: %v", err)
+				var matched bool
+				for _, m := range msgs {
+					var failurePayload guildevents.GuildConfigCreationFailedPayload
+					if err := deps.TestHelpers.UnmarshalPayload(m, &failurePayload); err != nil {
+						continue
+					}
+					if failurePayload.GuildID == guildID && m.Metadata.Get(middleware.CorrelationIDMetadataKey) == incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+						matched = true
+						break
+					}
 				}
-
-				if failurePayload.GuildID != guildID {
-					t.Errorf("Expected GuildID %s, got %s", guildID, failurePayload.GuildID)
+				if !matched {
+					t.Fatalf("Did not find a GuildConfigCreationFailed message with expected GuildID %s and matching correlation ID among %d messages", guildID, len(msgs))
 				}
 
 				// Verify original config is unchanged
@@ -188,28 +187,30 @@ func TestHandleGuildSetup(t *testing.T) {
 				if getResult.Success == nil {
 					t.Fatalf("Expected GetGuildConfig to return success payload, but got nil. Failure: %+v", getResult.Failure)
 				}
-				
+
 				successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayload)
 				if !ok {
 					t.Fatalf("Success payload is not of type GuildConfigRetrievedPayload")
 				}
-				
+
 				existingConfig := &successPayload.Config
 				if existingConfig.SignupChannelID != "934567890123456789" {
 					t.Errorf("Original config was modified. Expected SignupChannelID %s, got %s", "934567890123456789", existingConfig.SignupChannelID)
 				}
 
-				// Verify correlation ID is propagated
-				if receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-					t.Errorf("Correlation ID mismatch: expected %q, got %q",
-						incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey),
-						receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
-				}
-
 				// Verify no success event was published
 				unexpectedTopic := guildevents.GuildConfigCreatedV1
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
-					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
+					// it's okay to have unrelated messages, but ensure none match the guildID
+					for _, m := range receivedMsgs[unexpectedTopic] {
+						var successPayload guildevents.GuildConfigCreatedPayload
+						if err := deps.TestHelpers.UnmarshalPayload(m, &successPayload); err != nil {
+							continue
+						}
+						if successPayload.GuildID == guildID {
+							t.Errorf("Expected no success messages for GuildID %s on topic %q, but found one", guildID, unexpectedTopic)
+						}
+					}
 				}
 			},
 			expectHandlerError: false,

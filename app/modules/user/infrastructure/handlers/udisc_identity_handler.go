@@ -2,67 +2,38 @@ package userhandlers
 
 import (
 	"context"
-	"fmt"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
 // HandleUpdateUDiscIdentityRequest handles UDisc identity update requests.
-func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(msg *message.Message) ([]*message.Message, error) {
-	return h.handlerWrapper(
-		"HandleUpdateUDiscIdentityRequest",
-		&userevents.UpdateUDiscIdentityRequestedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			updatePayload := payload.(*userevents.UpdateUDiscIdentityRequestedPayloadV1)
+func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(
+	ctx context.Context,
+	payload *userevents.UpdateUDiscIdentityRequestedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.userService.UpdateUDiscIdentity(
+		ctx,
+		payload.GuildID,
+		payload.UserID,
+		payload.Username,
+		payload.Name,
+	)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received UpdateUDiscIdentity request",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("user_id", string(updatePayload.UserID)),
-				attr.String("guild_id", string(updatePayload.GuildID)),
-			)
+	if result.Failure != nil {
+		return []handlerwrapper.Result{
+			{Topic: userevents.UDiscIdentityUpdateFailedV1, Payload: result.Failure},
+		}, nil
+	}
 
-			result, err := h.userService.UpdateUDiscIdentity(
-				ctx,
-				updatePayload.GuildID,
-				updatePayload.UserID,
-				updatePayload.Username,
-				updatePayload.Name,
-			)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to update UDisc identity",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to update UDisc identity: %w", err)
-			}
+	if result.Success != nil {
+		return []handlerwrapper.Result{
+			{Topic: userevents.UDiscIdentityUpdatedV1, Payload: result.Success},
+		}, nil
+	}
 
-			if result.Failure != nil {
-				failureMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					userevents.UDiscIdentityUpdateFailedV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", err)
-				}
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					result.Success,
-					userevents.UDiscIdentityUpdatedV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-				return []*message.Message{successMsg}, nil
-			}
-
-			return nil, fmt.Errorf("unexpected result from UpdateUDiscIdentity")
-		},
-	)(msg)
+	return nil, nil
 }

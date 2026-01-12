@@ -20,7 +20,6 @@ type RoundStartWorker struct {
 	helpers  utils.Helpers
 }
 
-// NewRoundStartWorker creates a new round start worker
 func NewRoundStartWorker(logger *slog.Logger, eventBus eventbus.EventBus, helpers utils.Helpers) *RoundStartWorker {
 	return &RoundStartWorker{
 		logger:   logger,
@@ -29,36 +28,34 @@ func NewRoundStartWorker(logger *slog.Logger, eventBus eventbus.EventBus, helper
 	}
 }
 
-// Work processes a round start job by publishing the round.started event
 func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJob]) error {
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
 		attr.String("guild_id", string(job.Args.GuildID)),
 		attr.String("round_id", job.Args.RoundID),
 		attr.String("operation", "process_round_start_job"),
-		attr.String("job_kind", job.Kind),
 	)
 
 	ctxLogger.Info("Processing round start job")
 
-	// Defensive enrichment: ensure GuildID is present in payload (older jobs may have been scheduled before GuildID population patch)
+	// SAFEGUARD: Defensive enrichment for older jobs
 	if job.Args.RoundData.GuildID == "" && job.Args.GuildID != "" {
 		job.Args.RoundData.GuildID = job.Args.GuildID
 	}
 
-	// Create Watermill message using helpers (same as your handlers)
+	// Create Watermill message using helpers to satisfy the EventBus interface
 	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundStartedV1)
 	if err != nil {
 		ctxLogger.Error("Failed to create round started message", attr.Error(err))
 		return fmt.Errorf("failed to create round started message: %w", err)
 	}
 
-	// Add guild_id metadata if missing
+	// Ensure guild_id metadata is present for the router's middleware/routing logic
 	if msg.Metadata.Get("guild_id") == "" && job.Args.GuildID != "" {
 		msg.Metadata.Set("guild_id", string(job.Args.GuildID))
 	}
 
-	// Publish using your eventbus interface - it expects topic and messages
+	// Publish the raw message so the RoundRouter picks it up
 	if err := w.eventBus.Publish(roundevents.RoundStartedV1, msg); err != nil {
 		ctxLogger.Error("Failed to publish round started event", attr.Error(err))
 		return fmt.Errorf("failed to publish round started event: %w", err)
@@ -68,7 +65,7 @@ func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJo
 	return nil
 }
 
-// RoundReminderWorker processes round reminder jobs by publishing round.reminder events
+// RoundReminderWorker processes round reminder jobs
 type RoundReminderWorker struct {
 	river.WorkerDefaults[RoundReminderJob]
 	logger   *slog.Logger
@@ -76,7 +73,6 @@ type RoundReminderWorker struct {
 	helpers  utils.Helpers
 }
 
-// NewRoundReminderWorker creates a new round reminder worker
 func NewRoundReminderWorker(logger *slog.Logger, eventBus eventbus.EventBus, helpers utils.Helpers) *RoundReminderWorker {
 	return &RoundReminderWorker{
 		logger:   logger,
@@ -85,19 +81,17 @@ func NewRoundReminderWorker(logger *slog.Logger, eventBus eventbus.EventBus, hel
 	}
 }
 
-// Work processes a round reminder job by publishing the round.reminder event
 func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundReminderJob]) error {
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
 		attr.String("guild_id", string(job.Args.GuildID)),
 		attr.String("round_id", job.Args.RoundID),
 		attr.String("operation", "process_round_reminder_job"),
-		attr.String("job_kind", job.Kind),
 	)
 
 	ctxLogger.Info("Processing round reminder job")
 
-	// Defensive enrichment: ensure GuildID & DiscordGuildID present (jobs scheduled pre-patch may lack these)
+	// SAFEGUARD: Defensive enrichment
 	if job.Args.RoundData.GuildID == "" && job.Args.GuildID != "" {
 		job.Args.RoundData.GuildID = job.Args.GuildID
 	}
@@ -105,26 +99,19 @@ func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundRemi
 		job.Args.RoundData.DiscordGuildID = string(job.Args.GuildID)
 	}
 
-	// Create Watermill message using helpers (same as your handlers)
+	// Create Watermill message using helpers
 	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundReminderScheduledV1)
 	if err != nil {
 		ctxLogger.Error("Failed to create round reminder message", attr.Error(err))
 		return fmt.Errorf("failed to create round reminder message: %w", err)
 	}
 
-	// Instrumentation: log payload guild/round IDs actually embedded in message payload
-	ctxLogger.Debug("Round reminder payload debug",
-		attr.String("payload_guild_id", string(job.Args.RoundData.GuildID)),
-		attr.RoundID("payload_round_id", job.Args.RoundData.RoundID),
-		attr.String("reminder_type", job.Args.RoundData.ReminderType),
-	)
-
-	// Add guild_id metadata if missing
+	// Ensure guild_id metadata is present
 	if msg.Metadata.Get("guild_id") == "" && job.Args.GuildID != "" {
 		msg.Metadata.Set("guild_id", string(job.Args.GuildID))
 	}
 
-	// Publish using your eventbus interface - it expects topic and messages
+	// Publish to the scheduled topic for the Router to handle
 	if err := w.eventBus.Publish(roundevents.RoundReminderScheduledV1, msg); err != nil {
 		ctxLogger.Error("Failed to publish round reminder event", attr.Error(err))
 		return fmt.Errorf("failed to publish round reminder event: %w", err)

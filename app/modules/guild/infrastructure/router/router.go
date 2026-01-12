@@ -7,9 +7,9 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 	guildhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/handlers"
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -68,92 +68,62 @@ func (r *GuildRouter) Configure(routerCtx context.Context, guildService guildser
 	return nil
 }
 
-// RegisterHandlers registers event handlers using V1 versioned event constants.
-func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandlers.Handlers) error {
-	eventsToHandlers := map[string]message.HandlerFunc{
-		// Guild Config Creation Flow (from config.go)
-		guildevents.GuildConfigCreationRequestedV1: handlers.HandleCreateGuildConfig,
-
-		// Guild Config Retrieval Flow (from config.go)
-		guildevents.GuildConfigRetrievalRequestedV1: handlers.HandleRetrieveGuildConfig,
-
-		// Guild Config Update Flow (from config.go)
-		guildevents.GuildConfigUpdateRequestedV1: handlers.HandleUpdateGuildConfig,
-
-		// Guild Config Deletion Flow (from config.go)
-		guildevents.GuildConfigDeletionRequestedV1: handlers.HandleDeleteGuildConfig,
-
-		// Guild Setup Flow (from config.go)
-		guildevents.GuildSetupRequestedV1: handlers.HandleGuildSetup,
-	}
-
-	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("guild.%s", topic)
-		r.Router.AddHandler(
-			handlerName,
-			topic,
-			r.subscriber,
-			"",
-			nil,
-			func(msg *message.Message) ([]*message.Message, error) {
-				messages, err := handlerFunc(msg)
-				if err != nil {
-					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
-					return nil, err
-				}
-				for _, m := range messages {
-					// Router resolves topic (not metadata)
-					publishTopic := r.getPublishTopic(handlerName, m)
-
-					// INVARIANT: Topic must be resolvable
-					if publishTopic == "" {
-						r.logger.Error("router failed to resolve publish topic - MESSAGE DROPPED",
-							attr.String("handler", handlerName),
-							attr.String("msg_uuid", m.UUID),
-							attr.String("correlation_id", m.Metadata.Get("correlation_id")),
-						)
-						// Skip publishing but don't fail entire batch
-						continue
-					}
-
-					r.logger.InfoContext(ctx, "publishing message",
-						attr.String("topic", publishTopic),
-						attr.String("handler", handlerName),
-						attr.String("correlation_id", m.Metadata.Get("correlation_id")),
-					)
-
-					if err := r.publisher.Publish(publishTopic, m); err != nil {
-						return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-					}
-				}
-				return nil, nil
-			},
-		)
-	}
-	return nil
+type handlerDeps struct {
+	router     *message.Router
+	subscriber eventbus.EventBus
+	publisher  eventbus.EventBus
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	helper     utils.Helpers
+	metrics    handlerwrapper.ReturningMetrics
 }
 
-// getPublishTopic resolves the topic to publish for a given handler's returned message.
-// Router owns routing decisions; during migration we fallback to message metadata when the
-// mapping is ambiguous (success vs failure outputs).
-func (r *GuildRouter) getPublishTopic(handlerName string, msg *message.Message) string {
-	switch {
-	case handlerName == "guild."+guildevents.GuildConfigCreationRequestedV1:
-		return msg.Metadata.Get("topic")
-	case handlerName == "guild."+guildevents.GuildConfigRetrievalRequestedV1:
-		return msg.Metadata.Get("topic")
-	case handlerName == "guild."+guildevents.GuildConfigUpdateRequestedV1:
-		return msg.Metadata.Get("topic")
-	case handlerName == "guild."+guildevents.GuildConfigDeletionRequestedV1:
-		return msg.Metadata.Get("topic")
-	case handlerName == "guild."+guildevents.GuildSetupRequestedV1:
-		return msg.Metadata.Get("topic")
-	default:
-		r.logger.Warn("unknown handler in topic resolution",
-			attr.String("handler", handlerName),
-		)
-		return msg.Metadata.Get("topic")
+// registerHandler registers a pure transformation-pattern handler with typed payload.
+func registerHandler[T any](
+	deps handlerDeps,
+	topic string,
+	handler func(context.Context, *T) ([]handlerwrapper.Result, error),
+) {
+	handlerName := "guild." + topic
+
+	deps.router.AddHandler(
+		handlerName,
+		topic,
+		deps.subscriber,
+		"", // Watermill reads topic from message metadata when empty
+		deps.publisher,
+		handlerwrapper.WrapTransformingTyped(
+			handlerName,
+			deps.logger,
+			deps.tracer,
+			deps.helper,
+			deps.metrics,
+			handler,
+		),
+	)
+}
+
+// RegisterHandlers registers event handlers using the pure transformation pattern.
+func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandlers.Handlers) error {
+	var metrics handlerwrapper.ReturningMetrics // reserved for Phase 6
+
+	deps := handlerDeps{
+		router:     r.Router,
+		subscriber: r.subscriber,
+		publisher:  r.publisher,
+		logger:     r.logger,
+		tracer:     r.tracer,
+		helper:     r.helper,
+		metrics:    metrics,
 	}
+
+	registerHandler(deps, guildevents.GuildConfigCreationRequestedV1, handlers.HandleCreateGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigRetrievalRequestedV1, handlers.HandleRetrieveGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigUpdateRequestedV1, handlers.HandleUpdateGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigDeletionRequestedV1, handlers.HandleDeleteGuildConfig)
+	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
+
+	return nil
 }
 
 // Close stops the router.

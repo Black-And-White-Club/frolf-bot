@@ -95,13 +95,13 @@ func (s *LeaderboardService) ProcessTagAssignments(
 						attr.String("guild_id", string(guildID)),
 						attr.Error(createErr),
 					)
-					return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to create initial leaderboard"), createErr
+					return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to create initial leaderboard"), nil
 				}
 
 				// Use the newly created empty leaderboard
 				currentLeaderboard = emptyLeaderboard
 			} else {
-				return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), err
+				return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), nil
 			}
 		}
 
@@ -175,8 +175,8 @@ func (s *LeaderboardService) ProcessTagAssignments(
 				attr.Any("error", err),
 				attr.String("source", string(sourceType)),
 			)
-			// Infrastructure error - return failure response with the error
-			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), err
+			// Infrastructure error - return failure response with nil error
+			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), nil
 		}
 
 		// Convert complete leaderboard to requests format for Discord client
@@ -237,8 +237,8 @@ func (s *LeaderboardService) processScoreUpdate(
 		s.logger.ErrorContext(ctx, "Failed to update leaderboard for score processing",
 			attr.Any("error", err),
 		)
-		// Infrastructure error - return failure response with the error
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), err
+		// Infrastructure error - return failure response with nil error
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
 	}
 
 	// Convert complete leaderboard to requests format
@@ -355,8 +355,8 @@ func (s *LeaderboardService) processSingleAssignment(
 			attr.Any("error", err),
 			attr.String("user_id", string(request.UserID)),
 		)
-		// Infrastructure error - return failure response with the error
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), err
+		// Infrastructure error - return failure response with nil error
+		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
 	}
 
 	// Convert complete leaderboard to requests format
@@ -452,11 +452,14 @@ func (s *LeaderboardService) buildSuccessResponse(
 ) LeaderboardOperationResult {
 	switch source {
 	case sharedtypes.ServiceUpdateSourceProcessScores:
-		// Score processing updates return leaderboard updated event
+		// Score processing updates return leaderboard updated event (V1)
 		return LeaderboardOperationResult{
-			Success: &leaderboardevents.LeaderboardUpdatedPayload{
+			Success: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 				GuildID: guildID,
 				RoundID: sharedtypes.RoundID(operationID),
+				// LeaderboardID and LeaderboardData will be populated by DB consumers; include empty defaults
+				LeaderboardID:   0,
+				LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
 			},
 		}
 
@@ -490,9 +493,9 @@ func (s *LeaderboardService) buildFailureResponse(
 ) LeaderboardOperationResult {
 	switch source {
 	case sharedtypes.ServiceUpdateSourceProcessScores:
-		// Score processing failures return leaderboard update failed event
+		// Score processing failures return leaderboard update failed event (V1)
 		return LeaderboardOperationResult{
-			Failure: &leaderboardevents.LeaderboardUpdateFailedPayload{
+			Failure: &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
 				RoundID: sharedtypes.RoundID(operationID),
 				Reason:  errorReason,
 			},

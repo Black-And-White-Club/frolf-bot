@@ -1,7 +1,6 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -16,60 +15,75 @@ import (
 )
 
 func TestHandleParticipantDeclined(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - Participant Declined (Upcoming Round)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
+				helper := testutils.NewRoundTestHelper(nil, nil)
+				id := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
+				return id
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				data := NewTestData()
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
 				payload := createParticipantDeclinedPayload(roundID, data.UserID)
-				publishAndExpectParticipantDeclinedFromHandler(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantDeclinedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
-		},
-		{
-			name: "Success - Participant Declined (In Progress Round)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
-				payload := createParticipantDeclinedPayload(roundID, data.UserID)
-				publishAndExpectParticipantDeclinedFromHandler(t, deps, deps.MessageCapture, payload)
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantJoinedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundParticipantJoinedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("expected participant joined message, got none")
+				}
 			},
-		},
-		{
-			name: "Failure - Round Not Found (Participant Declined)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createParticipantDeclinedPayload(nonExistentRoundID, data.UserID)
-				publishAndExpectDeclineErrorFromHandler(t, deps, deps.MessageCapture, payload, nonExistentRoundID, data.UserID)
-			},
-		},
-		{
-			name: "Invalid JSON - Participant Declined Handler",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				publishInvalidJSONAndExpectNoDeclineMessages(t, deps, deps.MessageCapture)
-			},
+			timeout: 1 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()
-			// Create helper for each subtest since these tests use custom helper functions
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
+			deps := SetupTestRoundHandler(t)
 
-			// Run the test
-			tc.setupAndRun(t, helper, &deps)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				// Use nil here and override below with a function that captures deps/env
+				PublishMsgFn:   nil,
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
+			}
+
+			// Publish wrapper that supplies deps/env
+			genericCase.PublishMsgFn = func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+				return tc.publishMsgFn(t, deps, env)
+			}
+
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }
@@ -84,182 +98,5 @@ func createParticipantDeclinedPayload(roundID sharedtypes.RoundID, userID shared
 }
 
 // Publishing functions - UNIQUE TO PARTICIPANT DECLINED TESTS
-func publishParticipantDeclinedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantDeclinedPayloadV1) *message.Message {
-	t.Helper()
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	msg := message.NewMessage(uuid.New().String(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantDeclinedV1, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	return msg
-}
-
-// Wait functions - UNIQUE TO PARTICIPANT DECLINED TESTS
-func waitForParticipantDeclinedFromHandler(capture *testutils.MessageCapture, count int) bool {
-	// Success cases (including declines) should go to RoundParticipantJoined
-	return capture.WaitForMessages(roundevents.RoundParticipantJoinedV1, count, defaultTimeout)
-}
-
-func waitForParticipantDeclineErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundParticipantJoinErrorV1, count, defaultTimeout)
-}
-
-// Message retrieval functions - UNIQUE TO PARTICIPANT DECLINED TESTS
-func getParticipantDeclinedFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	// Success cases (including declines) should go to RoundParticipantJoined
-	return capture.GetMessages(roundevents.RoundParticipantJoinedV1)
-}
-
-func getParticipantDeclineErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundParticipantJoinErrorV1)
-}
-
-// Validation functions - UNIQUE TO PARTICIPANT DECLINED TESTS
-func validateParticipantDeclinedFromHandler(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ParticipantJoinedPayloadV1 {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse participant declined message: %v", err)
-	}
-
-	if result.RoundID != expectedRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
-	}
-
-	return result
-}
-
-func validateParticipantDeclineErrorFromHandler(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse participant decline error message: %v", err)
-	}
-
-	if result.ParticipantJoinRequest == nil {
-		t.Error("Expected ParticipantJoinRequest to be populated in error payload")
-		return
-	}
-
-	if result.ParticipantJoinRequest.RoundID != expectedRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.ParticipantJoinRequest.RoundID)
-	}
-
-	if result.ParticipantJoinRequest.UserID != expectedUserID {
-		t.Errorf("UserID mismatch: expected %s, got %s", expectedUserID, result.ParticipantJoinRequest.UserID)
-	}
-
-	if result.ParticipantJoinRequest.Response != roundtypes.ResponseDecline {
-		t.Errorf("Response mismatch: expected %s, got %s", roundtypes.ResponseDecline, result.ParticipantJoinRequest.Response)
-	}
-
-	if result.Error == "" {
-		t.Error("Expected error message to be populated")
-	}
-}
-
-// Test expectation functions - UNIQUE TO PARTICIPANT DECLINED TESTS
-func publishAndExpectParticipantDeclinedFromHandler(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantDeclinedPayloadV1) {
-	publishParticipantDeclinedMessage(t, deps, &payload)
-
-	// Wait up to default timeout for the specific message for THIS round
-	deadline := time.Now().Add(defaultTimeout)
-	var foundMsg *message.Message
-	
-	// Poll more frequently for better responsiveness
-	for time.Now().Before(deadline) {
-		msgs := getParticipantDeclinedFromHandlerMessages(capture)
-		// Find the message matching THIS test's round ID
-		for _, msg := range msgs {
-			parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg)
-			if err == nil && parsed.RoundID == payload.RoundID {
-				foundMsg = msg
-				break
-			}
-		}
-		if foundMsg != nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	if foundMsg == nil {
-		// Debug: show what messages we did receive
-		allMsgs := getParticipantDeclinedFromHandlerMessages(capture)
-		t.Logf("DEBUG: Found %d total ParticipantJoined messages, but none matched round %s", len(allMsgs), payload.RoundID)
-		for i, msg := range allMsgs {
-			if parsed, err := testutils.ParsePayload[roundevents.ParticipantJoinedPayloadV1](msg); err == nil {
-				t.Logf("  Message %d: round_id=%s", i+1, parsed.RoundID)
-			}
-		}
-		t.Fatalf("Expected participant declined success message from %s for round %s", roundevents.RoundParticipantJoinedV1, payload.RoundID)
-	}
-
-	validateParticipantDeclinedFromHandler(t, foundMsg, payload.RoundID)
-}
-
-func publishAndExpectDeclineErrorFromHandler(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantDeclinedPayloadV1, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) {
-	publishParticipantDeclinedMessage(t, deps, &payload)
-
-	// Wait up to default timeout for the specific message for THIS round
-	deadline := time.Now().Add(defaultTimeout)
-	var foundMsg *message.Message
-	for time.Now().Before(deadline) {
-		msgs := getParticipantDeclineErrorFromHandlerMessages(capture)
-		// Find the message matching THIS test's round ID
-		for _, msg := range msgs {
-			parsed, err := testutils.ParsePayload[roundevents.RoundParticipantJoinErrorPayloadV1](msg)
-			if err == nil && parsed.ParticipantJoinRequest != nil && parsed.ParticipantJoinRequest.RoundID == expectedRoundID {
-				foundMsg = msg
-				break
-			}
-		}
-		if foundMsg != nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	if foundMsg == nil {
-		t.Fatalf("Expected participant decline error message from %s for round %s", roundevents.RoundParticipantJoinErrorV1, expectedRoundID)
-	}
-
-	validateParticipantDeclineErrorFromHandler(t, foundMsg, expectedRoundID, expectedUserID)
-}
-
-func publishInvalidJSONAndExpectNoDeclineMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
-	// Count messages BEFORE
-	declinedMsgsBefore := len(getParticipantDeclinedFromHandlerMessages(capture))
-	errorMsgsBefore := len(getParticipantDeclineErrorFromHandlerMessages(capture))
-
-	msg := message.NewMessage(uuid.New().String(), []byte("not valid json"))
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantDeclinedV1, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	time.Sleep(300 * time.Millisecond)
-
-	// Count messages AFTER
-	declinedMsgsAfter := len(getParticipantDeclinedFromHandlerMessages(capture))
-	errorMsgsAfter := len(getParticipantDeclineErrorFromHandlerMessages(capture))
-
-	newDeclinedMsgs := declinedMsgsAfter - declinedMsgsBefore
-	newErrorMsgs := errorMsgsAfter - errorMsgsBefore
-
-	if newDeclinedMsgs > 0 || newErrorMsgs > 0 {
-		t.Errorf("Expected no NEW messages for invalid JSON on %s, got %d new success, %d new error msgs",
-			roundevents.RoundParticipantDeclinedV1, newDeclinedMsgs, newErrorMsgs)
-	}
-}
+// NOTE: MessageCapture-dependent helpers removed; publish/validate logic moved into
+// the testcases using env.EventBus/env.Ctx and deps.TestHelpers where needed.

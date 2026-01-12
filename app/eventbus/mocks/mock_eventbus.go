@@ -148,6 +148,21 @@ func (mr *MockEventBusMockRecorder) Subscribe(ctx, topic any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockEventBus)(nil).Subscribe), ctx, topic)
 }
 
+// SubscribeForTest mocks base method.
+func (m *MockEventBus) SubscribeForTest(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeForTest", ctx, topic)
+	ret0, _ := ret[0].(<-chan *message.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeForTest indicates an expected call of SubscribeForTest.
+func (mr *MockEventBusMockRecorder) SubscribeForTest(ctx, topic any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeForTest", reflect.TypeOf((*MockEventBus)(nil).SubscribeForTest), ctx, topic)
+}
+
 // MockHealthChecker is a mock of HealthChecker interface.
 type MockHealthChecker struct {
 	ctrl     *gomock.Controller

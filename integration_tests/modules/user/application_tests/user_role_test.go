@@ -142,8 +142,9 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				return deps.Ctx, userID, newRole
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UserOperationResult, err error) {
-				if err == nil { // Service returns non-nil err for DB errors
-					t.Fatal("Expected error for user not found, got nil")
+				// Service now returns failure payload with nil top-level error for user-not-found
+				if err != nil {
+					t.Fatalf("Did not expect top-level error for user-not-found case, got: %v", err)
 				}
 				if result.Error == nil { // Service sets result.Error to the original DB error
 					t.Fatal("Result contained nil Error, expected non-nil")
@@ -170,10 +171,6 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				expectedFailureReasonString := "user not found" // Service puts reason in string Reason field
 				if failurePayload.Reason != expectedFailureReasonString {
 					t.Errorf("Failure payload Reason string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Reason)
-				}
-				expectedWrappedErrMsg := "HandleUpdateUserRole operation failed: failed to update user role: user not found"
-				if err.Error() != expectedWrappedErrMsg {
-					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedWrappedErrMsg, err.Error())
 				}
 				expectedOriginalErr := userdb.ErrUserNotFound // Service sets result.Error to the original DB error
 				if !errors.Is(result.Error, expectedOriginalErr) {

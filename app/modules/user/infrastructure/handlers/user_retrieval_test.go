@@ -2,20 +2,15 @@ package userhandlers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -31,41 +26,26 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		Role:   "member",
 	}
 
-	testPayload := &userevents.GetUserRequestedPayloadV1{
-		GuildID: testGuildID,
-		UserID:  testUserID,
-	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
 	mockUserService := usermocks.NewMockService(ctrl)
-	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name      string
+		payload   *userevents.GetUserRequestedPayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successfully handle GetUser Request",
+			payload: &userevents.GetUserRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.GetUserResponsePayloadV1{User: testUserData},
@@ -74,27 +54,18 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserResponsePayloadV1{User: testUserData},
-					userevents.GetUserResponseV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantLen:   1,
+			wantTopic: userevents.GetUserResponseV1,
+			wantErr:   false,
 		},
 		{
 			name: "User not found",
+			payload: &userevents.GetUserRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
@@ -106,45 +77,24 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserFailedPayloadV1{UserID: testUserID, Reason: "user not found"},
-					userevents.GetUserFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			wantLen:   1,
+			wantTopic: userevents.GetUserFailedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Service failure in GetUser",
+			payload: &userevents.GetUserRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{},
-					fmt.Errorf("service error"),
+					nil,
 				)
 			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "technical error during GetUser service call: service error",
+			wantErr: true,
 		},
 	}
 
@@ -152,28 +102,23 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			h := &UserHandlers{
-				userService: mockUserService,
-				logger:      logger,
-				tracer:      tracer,
-				metrics:     metrics,
-				helpers:     mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
+			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
 
-			got, err := h.HandleGetUserRequest(tt.msg)
+			results, err := h.HandleGetUserRequest(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleGetUserRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleGetUserRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleGetUserRequest() = %v, want %v", got, tt.want)
+			if !tt.wantErr {
+				if len(results) != tt.wantLen {
+					t.Errorf("HandleGetUserRequest() got %d results, want %d", len(results), tt.wantLen)
+					return
+				}
+				if results[0].Topic != tt.wantTopic {
+					t.Errorf("HandleGetUserRequest() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				}
 			}
 		})
 	}
@@ -186,41 +131,26 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 
-	testPayload := &userevents.GetUserRoleRequestedPayloadV1{
-		GuildID: testGuildID,
-		UserID:  testUserID,
-	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
 	mockUserService := usermocks.NewMockService(ctrl)
-	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name      string
+		payload   *userevents.GetUserRoleRequestedPayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successfully handle GetUserRoleRequest",
+			payload: &userevents.GetUserRoleRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.GetUserRoleResponsePayloadV1{UserID: testUserID, Role: "admin"},
@@ -229,27 +159,18 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserRoleResponsePayloadV1{UserID: testUserID, Role: "admin"},
-					userevents.GetUserRoleResponseV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantLen:   1,
+			wantTopic: userevents.GetUserRoleResponseV1,
+			wantErr:   false,
 		},
 		{
 			name: "User role not found",
+			payload: &userevents.GetUserRoleRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{
 						Success: nil,
@@ -261,45 +182,24 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.GetUserRoleFailedPayloadV1{UserID: testUserID, Reason: "user role not found"},
-					userevents.GetUserRoleFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			wantLen:   1,
+			wantTopic: userevents.GetUserRoleFailedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Service failure in GetUserRole",
+			payload: &userevents.GetUserRoleRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.GetUserRoleRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
 					userservice.UserOperationResult{},
-					fmt.Errorf("service error"),
+					nil,
 				)
 			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "technical error during GetUserRole service call: service error",
+			wantErr: true,
 		},
 	}
 
@@ -307,28 +207,23 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			h := &UserHandlers{
-				userService: mockUserService,
-				logger:      logger,
-				tracer:      tracer,
-				metrics:     metrics,
-				helpers:     mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
+			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
 
-			got, err := h.HandleGetUserRoleRequest(tt.msg)
+			results, err := h.HandleGetUserRoleRequest(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleGetUserRoleRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleGetUserRoleRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleGetUserRoleRequest() = %v, want %v", got, tt.want)
+			if !tt.wantErr {
+				if len(results) != tt.wantLen {
+					t.Errorf("HandleGetUserRoleRequest() got %d results, want %d", len(results), tt.wantLen)
+					return
+				}
+				if results[0].Topic != tt.wantTopic {
+					t.Errorf("HandleGetUserRoleRequest() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				}
 			}
 		})
 	}

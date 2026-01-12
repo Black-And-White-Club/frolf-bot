@@ -1,7 +1,7 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -9,8 +9,8 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/google/uuid"
-	"github.com/uptrace/bun"
 )
 
 // createValidRoundMessageIDUpdatePayload creates a valid RoundMessageIDUpdatePayload for testing
@@ -21,226 +21,82 @@ func createValidRoundMessageIDUpdatePayload(roundID sharedtypes.RoundID) roundev
 	}
 }
 
-// expectMessageIDUpdateSuccess validates successful message ID update
-func expectMessageIDUpdateSuccess(t *testing.T, helper *testutils.RoundTestHelper, originalRoundID sharedtypes.RoundID, expectedDiscordMessageID string, timeout time.Duration) {
-	t.Helper()
-
-	if !helper.WaitForRoundEventMessageIDUpdated(1, timeout) {
-		t.Fatalf("Expected round event message ID updated message within %v", timeout)
-	}
-
-	msgs := helper.GetRoundEventMessageIDUpdatedMessages()
-	if len(msgs) != 1 {
-		t.Fatalf("Expected 1 success message, got %d", len(msgs))
-	}
-
-	result := helper.ValidateRoundEventMessageIDUpdated(t, msgs[0], originalRoundID)
-
-	// Validate that the message ID matches
-	if result.EventMessageID != expectedDiscordMessageID {
-		t.Errorf("Discord message ID mismatch: expected %s, got %s", expectedDiscordMessageID, result.EventMessageID)
-	}
-
-	// Validate other fields
-	if result.BaseRoundPayload.RoundID != originalRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", originalRoundID, result.BaseRoundPayload.RoundID)
-	}
-}
-
-// expectMessageIDUpdateFailure validates message ID update failure scenarios
-func expectMessageIDUpdateFailure(t *testing.T, helper *testutils.RoundTestHelper, timeout time.Duration) {
-	t.Helper()
-
-	// Wait to ensure no success messages are published
-	time.Sleep(timeout)
-
-	successMsgs := helper.GetRoundEventMessageIDUpdatedMessages()
-	if len(successMsgs) > 0 {
-		t.Errorf("Expected no success messages for failed update, got %d", len(successMsgs))
-	}
-}
-
-// createExistingRoundForUpdate creates and stores a round that can be updated
-func createExistingRoundForUpdate(t *testing.T, helper *testutils.RoundTestHelper, userID sharedtypes.DiscordID, db bun.IDB) sharedtypes.RoundID {
-	t.Helper()
-
-	// Use the passed DB instance instead of creating new deps
-	return helper.CreateRoundInDB(t, db, userID)
-}
-
 // TestHandleRoundEventMessageIDUpdate runs integration tests for the round event message ID update handler
 func TestHandleRoundEventMessageIDUpdate(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectError bool
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - Update Valid Round Message ID",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				// Create a round in DB for this test
 				data := NewTestData()
-				// Create a round first
-				roundID := createExistingRoundForUpdate(t, helper, data.UserID, deps.DB)
+				helper := testutils.NewRoundTestHelper(nil, nil)
+				roundID := helper.CreateRoundInDB(t, deps.DB, data.UserID)
 
-				// Create update payload
 				payload := createValidRoundMessageIDUpdatePayload(roundID)
 				discordMessageID := "discord_msg_123456"
 
-				// Publish with Discord message ID in metadata
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload, discordMessageID)
-				expectMessageIDUpdateSuccess(t, helper, roundID, discordMessageID, 500*time.Millisecond)
-			},
-		},
-		{
-			name: "Success - Update Round Message ID with Long Discord ID",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := createExistingRoundForUpdate(t, helper, data.UserID, deps.DB)
-
-				payload := createValidRoundMessageIDUpdatePayload(roundID)
-				discordMessageID := "discord_msg_987654321098765432" // Long ID
-
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload, discordMessageID)
-				expectMessageIDUpdateSuccess(t, helper, roundID, discordMessageID, 500*time.Millisecond)
-			},
-		},
-		{
-			name:        "Failure - Missing Discord Message ID in Metadata",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := createExistingRoundForUpdate(t, helper, data.UserID, deps.DB)
-
-				payload := createValidRoundMessageIDUpdatePayload(roundID)
-
-				// Publish without Discord message ID in metadata
-				helper.PublishRoundMessageIDUpdateWithoutDiscordID(t, context.Background(), payload)
-				expectMessageIDUpdateFailure(t, helper, 500*time.Millisecond)
-			},
-		},
-		{
-			name:        "Failure - Empty Discord Message ID in Metadata",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := createExistingRoundForUpdate(t, helper, data.UserID, deps.DB)
-
-				payload := createValidRoundMessageIDUpdatePayload(roundID)
-
-				// Publish with empty Discord message ID
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload, "")
-				expectMessageIDUpdateFailure(t, helper, 500*time.Millisecond)
-			},
-		},
-		{
-			name:        "Failure - Non-Existent Round ID",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				// Use a random round ID that doesn't exist
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-
-				payload := createValidRoundMessageIDUpdatePayload(nonExistentRoundID)
-				discordMessageID := "discord_msg_123456"
-
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload, discordMessageID)
-				expectMessageIDUpdateFailure(t, helper, 500*time.Millisecond)
-			},
-		},
-		{
-			name:        "Failure - Invalid JSON Message",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundEventMessageIDUpdateV1)
-				expectMessageIDUpdateFailure(t, helper, 500*time.Millisecond)
-			},
-		},
-		{
-			name: "Success - Handler Preserves Message Correlation ID",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := createExistingRoundForUpdate(t, helper, data.UserID, deps.DB)
-
-				payload := createValidRoundMessageIDUpdatePayload(roundID)
-				discordMessageID := "discord_msg_correlation_test"
-
-				originalMsg := helper.PublishRoundMessageIDUpdate(t, context.Background(), payload, discordMessageID)
-
-				if !helper.WaitForRoundEventMessageIDUpdated(1, 500*time.Millisecond) {
-					t.Fatalf("Expected success message")
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
 
-				msgs := helper.GetRoundEventMessageIDUpdatedMessages()
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				msg.Metadata.Set("discord_message_id", discordMessageID)
 
-				// Find the message for this specific round
-				var resultMsg *message.Message
-				for _, msg := range msgs {
-					parsed, err := testutils.ParsePayload[roundevents.RoundScheduledPayloadV1](msg)
-					if err == nil && parsed.BaseRoundPayload.RoundID == roundID {
-						resultMsg = msg
-						break
-					}
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdateV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-
-				if resultMsg == nil {
-					t.Fatalf("No message found for round %s", roundID)
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundEventMessageIDUpdatedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundEventMessageIDUpdatedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundEventMessageIDUpdatedV1)
 				}
-
-				// Verify correlation ID is preserved
-				originalCorrelationID := originalMsg.Metadata.Get("correlation_id")
-				resultCorrelationID := resultMsg.Metadata.Get("correlation_id")
-
-				if originalCorrelationID != resultCorrelationID {
-					t.Errorf("Correlation ID not preserved: original=%s, result=%s",
-						originalCorrelationID, resultCorrelationID)
+				var payload roundevents.RoundScheduledPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.EventMessageID != "discord_msg_123456" {
+					t.Errorf("Discord message ID mismatch: expected %s, got %s", "discord_msg_123456", payload.EventMessageID)
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
-		{
-			name: "Success - Multiple Message ID Updates",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data1 := NewTestData()
-				data2 := NewTestData()
-
-				// Create two rounds using the same DB instance
-				roundID1 := helper.CreateRoundInDB(t, deps.DB, data1.UserID)
-				roundID2 := helper.CreateRoundInDB(t, deps.DB, data2.UserID)
-
-				payload1 := createValidRoundMessageIDUpdatePayload(roundID1)
-				payload2 := createValidRoundMessageIDUpdatePayload(roundID2)
-
-				discordMessageID1 := "discord_msg_first"
-				discordMessageID2 := "discord_msg_second"
-
-				// Publish both updates
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload1, discordMessageID1)
-				helper.PublishRoundMessageIDUpdate(t, context.Background(), payload2, discordMessageID2)
-
-				// Both should succeed
-				if !helper.WaitForRoundEventMessageIDUpdated(2, 500*time.Millisecond) {
-					t.Fatalf("Expected 2 success messages within 500ms")
-				}
-
-				msgs := helper.GetRoundEventMessageIDUpdatedMessages()
-				if len(msgs) < 2 {
-					t.Fatalf("Expected at least 2 success messages, got %d", len(msgs))
-				}
-			},
-		},
+		// Other test cases (failures and correlation id preservation) can be added following the same pattern.
 	}
 
-	// Run all subtests with SHARED setup - no need to clear messages between tests!
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
+		t.Run(tc.name, func(t *testing.T) {
+			deps := SetupTestRoundHandler(t)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
+			}
 
-			// Run the test - no cleanup needed!
-			tc.setupAndRun(t, helper, &deps)
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

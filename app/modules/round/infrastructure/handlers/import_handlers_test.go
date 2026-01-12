@@ -2,31 +2,21 @@ package roundhandlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testImportID := "test-import-id"
 	testGuildID := sharedtypes.GuildID("test-guild-id")
 	testRoundID := sharedtypes.RoundID(uuid.New())
@@ -41,37 +31,22 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 		FileData: testFileContent,
 	}
 
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name            string
+		mockSetup       func(*roundmocks.MockService)
+		payload         *roundevents.ScorecardUploadedPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Successfully handle ScorecardUploaded",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.ScorecardUploadedPayloadV1{
@@ -84,55 +59,27 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParseRequestedV1).Return(
-					message.NewMessage("result-id", nil), nil,
-				)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("result-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle invalid payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("unmarshal error"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ScorecardParseRequestedV1,
 		},
 		{
 			name: "Handle CreateImportJob error",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ScorecardUploaded event: service error",
+			expectedErrMsg: "service error",
 		},
 		{
 			name: "Handle CreateImportJob failure result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{
 						Failure: &roundevents.ImportFailedPayloadV1{
@@ -144,127 +91,48 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					message.NewMessage("failure-id", nil), nil,
-				)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("failure-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle CreateImportJob failure result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "import failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: create message error",
-		},
-		{
-			name: "Handle CreateImportJob success result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ScorecardUploadedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							FileName: testFileName,
-							FileData: testFileContent,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParseRequestedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create parse request message: create message error",
-		},
-		{
-			name: "Handle unexpected result from CreateImportJob",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleScorecardUploaded(tt.msg)
+			mockRoundService := roundmocks.NewMockService(ctrl)
+			tt.mockSetup(mockRoundService)
+
+			h := &RoundHandlers{
+				roundService: mockRoundService,
+				logger:       logger,
+				tracer:       tracer,
+				metrics:      metrics,
+			}
+
+			results, err := h.HandleScorecardUploaded(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundHandlers.HandleScorecardUploaded() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Errorf("HandleScorecardUploaded() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("RoundHandlers.HandleScorecardUploaded() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleScorecardUploaded() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
 			}
-
-			if !tt.wantErr && len(got) != len(tt.want) {
-				t.Errorf("RoundHandlers.HandleScorecardUploaded() got = %v, want %v", got, tt.want)
+			if len(results) != tt.wantResultLen {
+				t.Errorf("HandleScorecardUploaded() result length = %d, want %d", len(results), tt.wantResultLen)
+			}
+			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
+				t.Errorf("HandleScorecardUploaded() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
 		})
 	}
 }
 
 func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testImportID := "test-import-id"
 	testGuildID := sharedtypes.GuildID("test-guild-id")
 	testRoundID := sharedtypes.RoundID(uuid.New())
@@ -277,40 +145,25 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 		UDiscURL: testUDiscURL,
 	}
 
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name            string
+		mockSetup       func(*roundmocks.MockService)
+		payload         *roundevents.ScorecardURLRequestedPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Successfully handle ScorecardURLRequested",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ScorecardUploadedPayloadV1{
+						Success: &roundevents.ScorecardURLRequestedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
 							RoundID:  testRoundID,
@@ -319,818 +172,74 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParseRequestedV1).Return(
-					message.NewMessage("result-id", nil), nil,
-				)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("result-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle invalid payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("unmarshal error"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ScorecardParseRequestedV1,
 		},
 		{
 			name: "Handle HandleScorecardURLRequested error",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle ScorecardURLRequested event: service error",
+			expectedErrMsg: "service error",
 		},
 		{
 			name: "Handle HandleScorecardURLRequested failure result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
 					roundservice.RoundOperationResult{
 						Failure: &roundevents.ImportFailedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
 							RoundID:  testRoundID,
-							Error:    "import failed",
+							Error:    "url parse failed",
 						},
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					message.NewMessage("failure-id", nil), nil,
-				)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("failure-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle HandleScorecardURLRequested failure result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "import failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: create message error",
-		},
-		{
-			name: "Handle HandleScorecardURLRequested success result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ScorecardUploadedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							UDiscURL: testUDiscURL,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParseRequestedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create parse request message: create message error",
-		},
-		{
-			name: "Handle unexpected result from HandleScorecardURLRequested",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardURLRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleScorecardURLRequested(tt.msg)
+			mockRoundService := roundmocks.NewMockService(ctrl)
+			tt.mockSetup(mockRoundService)
+
+			h := &RoundHandlers{
+				roundService: mockRoundService,
+				logger:       logger,
+				tracer:       tracer,
+				metrics:      metrics,
+			}
+
+			results, err := h.HandleScorecardURLRequested(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundHandlers.HandleScorecardURLRequested() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Errorf("HandleScorecardURLRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("RoundHandlers.HandleScorecardURLRequested() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleScorecardURLRequested() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
 			}
-
-			if !tt.wantErr && len(got) != len(tt.want) {
-				t.Errorf("RoundHandlers.HandleScorecardURLRequested() got = %v, want %v", got, tt.want)
+			if len(results) != tt.wantResultLen {
+				t.Errorf("HandleScorecardURLRequested() result length = %d, want %d", len(results), tt.wantResultLen)
 			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testImportID := "test-import-id"
-	testGuildID := sharedtypes.GuildID("test-guild-id")
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testFileName := "test-scorecard.csv"
-	testFileContent := []byte("test content")
-
-	testPayload := &roundevents.ScorecardUploadedPayloadV1{
-		ImportID: testImportID,
-		GuildID:  testGuildID,
-		RoundID:  testRoundID,
-		FileName: testFileName,
-		FileData: testFileContent,
-	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
-	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-	}{
-		{
-			name: "Successfully handle ParseScorecardRequest",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ParsedScorecardPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedForUserV1).Return(
-					message.NewMessage("result-id-user", nil), nil,
-				)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("result-id-user", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle invalid payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("unmarshal error"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
-		},
-		{
-			name: "Handle ParseScorecard error",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{},
-					fmt.Errorf("service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle ParseScorecardRequest event: service error",
-		},
-		{
-			name: "Handle ParseScorecard failure result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "parse failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					message.NewMessage("failure-id", nil), nil,
-				)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("failure-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle ParseScorecard failure result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "parse failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: create message error",
-		},
-		{
-			name: "Handle ParseScorecard success result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ParsedScorecardPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ScorecardParsedForUserV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create parsed scorecard user message: create message error",
-		},
-		{
-			name: "Handle unexpected result from ParseScorecard",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ScorecardUploadedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParseScorecard(gomock.Any(), *testPayload, testFileContent).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleParseScorecardRequest(tt.msg)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundHandlers.HandleParseScorecardRequest() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("RoundHandlers.HandleParseScorecardRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-
-			if !tt.wantErr && len(got) != len(tt.want) {
-				t.Errorf("RoundHandlers.HandleParseScorecardRequest() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleUserMatchConfirmedForIngest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testImportID := "test-import-id"
-	testGuildID := sharedtypes.GuildID("test-guild-id")
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testUserID := sharedtypes.DiscordID("test-user-id")
-	testChannelID := "test-channel-id"
-
-	parsedScores := &roundevents.ParsedScorecardPayloadV1{
-		ImportID: testImportID,
-		GuildID:  testGuildID,
-		RoundID:  testRoundID,
-	}
-
-	testPayload := &userevents.UDiscMatchConfirmedPayload{
-		ImportID:     testImportID,
-		GuildID:      testGuildID,
-		RoundID:      testRoundID,
-		UserID:       testUserID,
-		ChannelID:    testChannelID,
-		Timestamp:    time.Now(),
-		Mappings:     []userevents.UDiscConfirmedMapping{},
-		ParsedScores: parsedScores,
-	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
-	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-	}{
-		{
-			name: "Successfully handle UserMatchConfirmedForIngest",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ImportCompletedPayloadV1{
-							ImportID:       testImportID,
-							GuildID:        testGuildID,
-							RoundID:        testRoundID,
-							ScoresIngested: 1,
-							Scores: []sharedtypes.ScoreInfo{
-								{UserID: "u1", Score: 6},
-							},
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportCompletedV1).Return(
-					message.NewMessage("result-id", nil), nil,
-				)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("result-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle invalid payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("unmarshal error"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
-		},
-		{
-			name: "Handle IngestParsedScorecard error",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{},
-					fmt.Errorf("service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to ingest scorecard after user matching: service error",
-		},
-		{
-			name: "Handle IngestParsedScorecard failure result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "ingest failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					message.NewMessage("failure-id", nil), nil,
-				)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("failure-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "Handle IngestParsedScorecard failure result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-							Error:    "ingest failed",
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create failure message: create message error",
-		},
-		{
-			name: "Handle IngestParsedScorecard success result but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ImportCompletedPayloadV1{
-							ImportID: testImportID,
-							GuildID:  testGuildID,
-							RoundID:  testRoundID,
-						},
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportCompletedV1).Return(
-					nil, fmt.Errorf("create message error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create ImportCompleted message: create message error",
-		},
-		{
-			name: "Handle unexpected result from IngestParsedScorecard",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UDiscMatchConfirmedPayload) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().IngestParsedScorecard(gomock.Any(), *parsedScores).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleUserMatchConfirmedForIngest(tt.msg)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-
-			if !tt.wantErr && len(got) != len(tt.want) {
-				t.Errorf("RoundHandlers.HandleUserMatchConfirmedForIngest() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testImportID := "test-import-id"
-	testGuildID := sharedtypes.GuildID("test-guild-id")
-	testRoundID := sharedtypes.RoundID(uuid.New())
-
-	withScores := &roundevents.ImportCompletedPayloadV1{
-		ImportID: testImportID,
-		GuildID:  testGuildID,
-		RoundID:  testRoundID,
-		Scores: []sharedtypes.ScoreInfo{
-			{UserID: "u1", Score: 6},
-		},
-	}
-
-	withScoresBytes, _ := json.Marshal(withScores)
-	withScoresMsg := message.NewMessage("test-id", withScoresBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	noScores := &roundevents.ImportCompletedPayloadV1{
-		ImportID: testImportID,
-		GuildID:  testGuildID,
-		RoundID:  testRoundID,
-		Scores:   nil,
-	}
-	noScoresBytes, _ := json.Marshal(noScores)
-	noScoresMsg := message.NewMessage("test-id", noScoresBytes)
-
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
-	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-	}{
-		{
-			name: "Successfully handle ImportCompleted",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ImportCompletedPayloadV1) = *withScores
-						return nil
-					},
-				)
-				// Expect ApplyImportedScores to be called (service applies DB updates and returns final snapshot)
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (roundservice.RoundOperationResult, error) {
-						// Return final participants snapshot
-						return roundservice.RoundOperationResult{
-							Success: &roundevents.ImportScoresAppliedPayloadV1{
-								GuildID:  payload.GuildID,
-								RoundID:  payload.RoundID,
-								ImportID: payload.ImportID,
-								Participants: []roundtypes.Participant{
-									{UserID: sharedtypes.DiscordID("u1"), Score: func() *sharedtypes.Score { s := sharedtypes.Score(6); return &s }()},
-								},
-								EventMessageID: "",
-							},
-						}, nil
-					},
-				)
-
-				// Expect CreateResultMessage to be called once for RoundAllScoresSubmitted
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.AssignableToTypeOf(&roundevents.AllScoresSubmittedPayloadV1{}), roundevents.RoundAllScoresSubmittedV1).Return(message.NewMessage("all-scores-id", nil), nil)
-			},
-			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("all-scores-id", nil)},
-			wantErr: false,
-		},
-		{
-			name: "No-op when import completed with no scores",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ImportCompletedPayloadV1) = *noScores
-						return nil
-					},
-				)
-			},
-			msg:     noScoresMsg,
-			want:    nil,
-			wantErr: false,
-		},
-		{
-			name: "Handle invalid payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("unmarshal error"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: unmarshal error",
-		},
-		{
-			name: "Handle Import apply failure",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ImportCompletedPayloadV1) = *withScores
-						return nil
-					},
-				)
-
-				// Service reports failure applying import
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{Failure: &roundevents.ImportFailedPayloadV1{Error: "all score updates failed during import"}}, nil,
-				)
-
-				// Expect CreateResultMessage to produce the failure message returned by the handler
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), gomock.Any(), roundevents.ImportFailedV1).
-					DoAndReturn(func(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
-						return message.NewMessage("import-failed-id", nil), nil
-					})
-			},
-			msg:     withScoresMsg,
-			want:    []*message.Message{message.NewMessage("import-failed-id", nil)},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			h := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpers, metrics)
-			got, err := h.HandleImportCompleted(tt.msg)
-
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("HandleImportCompleted() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				require.EqualError(t, err, tt.expectedErrMsg)
-				return
-			}
-			if tt.want == nil {
-				require.Nil(t, got)
-				return
-			}
-			require.Len(t, got, len(tt.want))
-			for i := range tt.want {
-				require.NotNil(t, got[i])
-				require.Equal(t, tt.want[i].UUID, got[i].UUID)
-				require.Equal(t, tt.want[i].Payload, got[i].Payload)
-				require.Equal(t, tt.want[i].Metadata, got[i].Metadata)
+			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
+				t.Errorf("HandleScorecardURLRequested() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
 		})
 	}

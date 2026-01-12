@@ -41,7 +41,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 					Reason:  "guild config not found",
 				},
 				Error: errors.New("guild config not found"),
-			}, errors.New("guild config not found")
+			}, nil
 		}
 
 		// Build resource snapshot for the event from the existing config.

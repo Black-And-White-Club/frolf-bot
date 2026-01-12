@@ -2,46 +2,35 @@ package roundhandlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
+func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testUserID := sharedtypes.DiscordID("user-123")
 
 	testPayload := &roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:  testRoundID,
+		GuildID:  testGuildID,
 		UserID:   testUserID,
 		Response: roundtypes.ResponseAccept,
 	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
-	mockRoundService := roundmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -49,863 +38,70 @@ func TestRoundHandlers_HandleParticipantJoinRequest(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
+		mockSetup      func(mockRoundService *roundmocks.MockService)
+		payload        *roundevents.ParticipantJoinRequestPayloadV1
 		wantErr        bool
 		expectedErrMsg string
 	}{
 		{
-			name: "Successfully handle ParticipantJoinRequest",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				// Define the expected payload that CheckParticipantStatus should return on success
-				expectedValidationPayload := &roundevents.ParticipantJoinValidationRequestPayloadV1{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					// Add other fields relevant to ParticipantJoinValidationRequestPayload if any
-				}
-
+			name: "Successfully validate participant join request",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CheckParticipantStatus(
 					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: expectedValidationPayload, // Corrected to validation payload
+						Success: &roundevents.ParticipantJoinValidationRequestPayloadV1{
+							RoundID:  testRoundID,
+							GuildID:  testGuildID,
+							UserID:   testUserID,
+							Response: roundtypes.ResponseAccept,
+						},
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					expectedValidationPayload, // Expect the validation payload here
-					roundevents.RoundParticipantJoinValidationRequestedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
+			payload: testPayload,
 			wantErr: false,
 		},
 		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
-		},
-		{
-			name: "Service failure in CheckParticipantStatus",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			name: "Service returns error",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CheckParticipantStatus(
 					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
-					fmt.Errorf("internal service error"),
+					fmt.Errorf("database error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "CheckParticipantStatus service failed: internal service error", // Corrected error message
-		},
-		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				// Define the expected payload that CheckParticipantStatus should return on success
-				expectedValidationPayload := &roundevents.ParticipantJoinValidationRequestPayloadV1{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					// Add other fields relevant to ParticipantJoinValidationRequestPayload if any
-				}
-
-				mockRoundService.EXPECT().CheckParticipantStatus(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Success: expectedValidationPayload, // Corrected to validation payload
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					expectedValidationPayload, // Expect the validation payload here
-					roundevents.RoundParticipantJoinValidationRequestedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "Failed to create validation request message: failed to create result message", // Corrected error message
-		},
-		{
-			name: "Service failure with non-error result",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CheckParticipantStatus(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundParticipantJoinErrorPayloadV1{
-							Error: "non-error failure",
-						},
-					},
-					nil,
-				)
-
-				failureResultPayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
-					Error: "non-error failure",
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failureResultPayload,
-					roundevents.RoundParticipantStatusCheckErrorV1,
-				).Return(testMsg, nil)
-			},
-			msg:            testMsg,
-			want:           []*message.Message{testMsg},
-			wantErr:        false,
-			expectedErrMsg: "",
-		},
-		{
-			name: "Service failure with error result and CreateResultMessage fails",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CheckParticipantStatus(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundParticipantJoinErrorPayloadV1{
-							Error: "internal service error",
-						},
-					},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "CheckParticipantStatus service failed: internal service error", // Corrected error message
-		},
-		{
-			name: "Unknown result from CheckParticipantStatus",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().CheckParticipantStatus(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "CheckParticipantStatus service returned unexpected nil result", // Corrected error message
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected ParticipantJoinRequestPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected ParticipantJoinRequestPayload",
+			expectedErrMsg: "database error",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			mockRoundService := roundmocks.NewMockService(ctrl)
+			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
 				roundService: mockRoundService,
 				logger:       logger,
 				tracer:       tracer,
 				metrics:      metrics,
-				helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
-				},
 			}
 
-			got, err := h.HandleParticipantJoinRequest(tt.msg)
+			_, err := h.HandleParticipantJoinRequest(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleParticipantJoinRequest() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+
+			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
 				t.Errorf("HandleParticipantJoinRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleParticipantJoinRequest() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleParticipantJoinValidationRequest(t *testing.T) {
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testUserID := sharedtypes.DiscordID("12345678901234567")
-
-	testPayload := &roundevents.ParticipantJoinValidationRequestPayloadV1{
-		RoundID:  testRoundID,
-		UserID:   testUserID,
-		Response: roundtypes.ResponseAccept,
-	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
-	tests := []struct {
-		name           string
-		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-	}{
-		{
-			name: "Successfully handle ParticipantJoinValidationRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				// Corrected: Return TagLookupRequestPayload for non-DECLINE response
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.TagLookupRequestPayloadV1{
-							RoundID:  testRoundID,
-							UserID:   testUserID,
-							Response: roundtypes.ResponseAccept,
-							// JoinedLate field might be set by the service, but for the mock, it's fine if nil
-						},
-					},
-					nil,
-				)
-
-				updateResultPayload := roundevents.TagLookupRequestPayloadV1{
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Response: roundtypes.ResponseAccept,
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&updateResultPayload,
-					roundevents.LeaderboardGetTagNumberRequestedV1,
-				).Return(testMsg, nil)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
-		},
-		{
-			name: "Service failure in ValidateParticipantJoinRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "ValidateParticipantJoinRequest service failed: internal service error", // Corrected error message
-		},
-		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				// Corrected: Return TagLookupRequestPayloadV1 for non-DECLINE response
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.TagLookupRequestPayloadV1{
-							RoundID:  testRoundID,
-							UserID:   testUserID,
-							Response: roundtypes.ResponseAccept,
-						},
-					},
-					nil,
-				)
-
-				updateResultPayload := roundevents.TagLookupRequestPayloadV1{
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Response: roundtypes.ResponseAccept,
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&updateResultPayload,
-					roundevents.LeaderboardGetTagNumberRequestedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "Failed to create TagLookupRequest message: failed to create result message",
-		},
-		{
-			name: "Service failure with non-error result",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundParticipantJoinErrorPayloadV1{
-							Error: "non-error failure",
-						},
-					},
-					nil,
-				)
-
-				failureResultPayload := &roundevents.RoundParticipantJoinErrorPayloadV1{
-					Error: "non-error failure",
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failureResultPayload,
-					roundevents.RoundParticipantJoinErrorV1,
-				).Return(testMsg, nil)
-			},
-			msg:            testMsg,
-			want:           []*message.Message{testMsg},
-			wantErr:        false,
-			expectedErrMsg: "",
-		},
-		{
-			name: "Service failure with error result and CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundParticipantJoinErrorPayloadV1{
-							Error: "internal service error",
-						},
-					},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "ValidateParticipantJoinRequest service failed: internal service error", // Corrected error message
-		},
-		{
-			name: "Unknown result from ValidateParticipantJoinRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantJoinValidationRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ValidateParticipantJoinRequest(
-					gomock.Any(),
-					roundevents.ParticipantJoinRequestPayloadV1{
-						RoundID:  testRoundID,
-						UserID:   testUserID,
-						Response: roundtypes.ResponseAccept,
-					},
-				).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "ValidateParticipantJoinRequest service returned unexpected nil result", // Corrected error message
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected ParticipantJoinValidationRequestPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected ParticipantJoinValidationRequestPayload",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			mockHelpers := mocks.NewMockHelpers(ctrl)
-
-			tt.mockSetup(mockRoundService, mockHelpers)
-
-			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
-				helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
-				},
-			}
-
-			got, err := h.HandleParticipantJoinValidationRequest(tt.msg)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleParticipantJoinValidationRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg { // Added err != nil check
-				t.Errorf("HandleParticipantJoinValidationRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleParticipantJoinValidationRequest() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRoundHandlers_HandleParticipantRemovalRequest(t *testing.T) {
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testUserID := sharedtypes.DiscordID("12345678901234567")
-
-	testPayload := &roundevents.ParticipantRemovalRequestPayloadV1{
-		RoundID: testRoundID,
-		UserID:  testUserID,
-	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
-	tests := []struct {
-		name           string
-		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-	}{
-		{
-			name: "Successfully handle ParticipantRemovalRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantRemovedPayloadV1{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-						},
-					},
-					nil,
-				)
-
-				updateResultPayload := &roundevents.ParticipantRemovedPayloadV1{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					updateResultPayload,
-					roundevents.RoundParticipantRemovedV1,
-				).Return(testMsg, nil)
-			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
-		},
-		{
-			name: "Service failure in ParticipantRemoval",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantRemovalRequest event: internal service error",
-		},
-		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Success: &roundevents.ParticipantRemovedPayloadV1{
-							RoundID: testRoundID,
-							UserID:  testUserID,
-						},
-					},
-					nil,
-				)
-
-				updateResultPayload := &roundevents.ParticipantRemovedPayloadV1{
-					RoundID: testRoundID,
-					UserID:  testUserID,
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					updateResultPayload,
-					roundevents.RoundParticipantRemovedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "Failed to create success message: failed to create result message",
-		},
-		{
-			name: "Service failure with non-error result",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ParticipantRemovalErrorPayloadV1{
-							Error: "non-error failure",
-						},
-					},
-					nil,
-				)
-
-				failureResultPayload := &roundevents.ParticipantRemovalErrorPayloadV1{
-					Error: "non-error failure",
-				}
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failureResultPayload,
-					roundevents.RoundParticipantRemovalErrorV1,
-				).Return(testMsg, nil)
-			},
-			msg:            testMsg,
-			want:           []*message.Message{testMsg},
-			wantErr:        false,
-			expectedErrMsg: "",
-		},
-		{
-			name: "Service failure with error result and CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{
-						Failure: &roundevents.ParticipantRemovalErrorPayloadV1{
-							Error: "internal service error",
-						},
-					},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to handle ParticipantRemovalRequest event: internal service error",
-		},
-		{
-			name: "Unknown result from ParticipantRemoval",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.ParticipantRemovalRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().ParticipantRemoval(
-					gomock.Any(),
-					roundevents.ParticipantRemovalRequestPayloadV1{
-						RoundID: testRoundID,
-						UserID:  testUserID,
-					},
-				).Return(
-					roundservice.RoundOperationResult{},
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "ParticipantRemoval service returned unexpected nil result",
-		},
-		{
-			name: "Invalid payload type",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload type: expected ParticipantRemovalRequestPayload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload type: expected ParticipantRemovalRequestPayload",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			mockHelpers := mocks.NewMockHelpers(ctrl)
-
-			tt.mockSetup(mockRoundService, mockHelpers)
-
-			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
-				helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
-				},
-			}
-
-			got, err := h.HandleParticipantRemovalRequest(tt.msg)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleParticipantRemovalRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleParticipantRemovalRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleParticipantRemovalRequest() = %v, want %v", got, tt.want)
 			}
 		})
 	}

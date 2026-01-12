@@ -1,6 +1,7 @@
 package roundhandler_integration_tests
 
 import (
+	"context"
 	"log"
 	"os"
 	"testing"
@@ -8,81 +9,43 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 )
 
-// TestMain initializes and cleans up the global test environment.
-// Per-test setup (router, event bus, module) is now handled within test functions.
 func TestMain(m *testing.M) {
 	log.Println("TestMain started in package roundhandler_integration_tests")
 
-	// Initialize the global test environment exactly once.
-	testEnvOnce.Do(func() {
-		log.Println("TestMain: Initializing global test environment...")
-
-		// Create a test instance for the global environment
-		// This is needed because NewTestEnvironment now requires a *testing.T
-		globalTestInstance := &testing.T{}
-		testEnv, testEnvErr = testutils.NewTestEnvironment(globalTestInstance)
-		if testEnvErr != nil {
-			log.Printf("TestMain: Failed to setup test environment: %v", testEnvErr)
-			// Do not call os.Exit here yet, let the deferred cleanup run first if possible.
-		} else {
-			log.Println("TestMain: Global test environment initialized successfully.")
-		}
-	})
-
-	// If test environment initialization failed, log the error and exit immediately
-	// after any deferred cleanup that might still be relevant (like closing logs).
-	if testEnvErr != nil {
-		// We can't proceed if the environment isn't set up.
-		log.Fatalf("Exiting due to failed test environment initialization: %v", testEnvErr)
-		// os.Exit(1) is handled by log.Fatalf
+	// 1. Initialize the global Containers (Postgres/NATS)
+	globalT := &testing.T{}
+	var err error
+	testEnv, err = testutils.NewTestEnvironment(globalT)
+	if err != nil {
+		log.Fatalf("TestMain: Failed to initialize test environment: %v", err)
 	}
 
-	// Set the APP_ENV environment variable to "test" for the entire test run
-	// This is important to enable test-specific behavior in various components
-	oldAppEnv := os.Getenv("APP_ENV")
-	os.Setenv("APP_ENV", "test")
-
-	// Defer the global test environment cleanup.
-	defer func() {
-		log.Println("TestMain defer: Running global test environment cleanup.")
-
-		// Restore the original APP_ENV value
-		os.Setenv("APP_ENV", oldAppEnv)
-
-		// Close shared router and module
-		if sharedRouter != nil {
-			log.Println("TestMain defer: Closing shared Watermill router...")
-			if err := sharedRouter.Close(); err != nil {
-				log.Printf("TestMain defer: Error closing router: %v", err)
-			}
-		}
-		if sharedModule != nil {
-			log.Println("TestMain defer: Closing shared round module...")
-			if err := sharedModule.Close(); err != nil {
-				log.Printf("TestMain defer: Error closing module: %v", err)
-			}
-		}
-
-		if testEnv != nil {
-			// Perform a final container health check and cleanup
-			log.Println("TestMain defer: Performing final container cleanup...")
-			testEnv.Cleanup()
-		}
-		log.Println("TestMain defer: Global test environment cleanup finished.")
-		log.Println("TestMain defer: All cleanup complete.")
-	}()
-
-	log.Println("TestMain: Running tests with m.Run()...")
-
-	// Add periodic container recreation logging
-	if testEnv != nil {
-		log.Printf("TestMain: Container recreation configured every %d tests", 20)
+	// 2. Initialize Shared Application Infrastructure (Router/Module/EventBus)
+	// We call this once here to ensure it's ready before any test runs
+	ctx := context.Background()
+	deps, err := initSharedInfrastructure(ctx, testEnv)
+	if err != nil {
+		log.Fatalf("TestMain: Failed to initialize application infra: %v", err)
 	}
+	sharedDeps = deps
 
-	// Run the tests. The exit code captures the test results.
+	log.Println("TestMain: Global environment and application infra ready.")
+
+	// 3. Run Tests
 	exitCode := m.Run()
-	log.Printf("TestMain: m.Run() finished with exit code: %d", exitCode)
 
-	// os.Exit with the test result code. Deferred functions will run before exiting.
+	// 4. Global Cleanup
+	log.Println("TestMain: Running global cleanup...")
+	if sharedDeps.RoundModule != nil {
+		sharedDeps.RoundModule.Close()
+	}
+	if sharedDeps.Router != nil {
+		sharedDeps.Router.Close()
+	}
+	if sharedDeps.EventBus != nil {
+		sharedDeps.EventBus.Close()
+	}
+	testEnv.Cleanup()
+
 	os.Exit(exitCode)
 }

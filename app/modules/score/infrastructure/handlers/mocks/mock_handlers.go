@@ -10,9 +10,11 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
-	message "github.com/ThreeDotsLabs/watermill/message"
+	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,61 +43,61 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleBulkCorrectScoreRequest mocks base method.
-func (m *MockHandlers) HandleBulkCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreBulkUpdateRequestPayload) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleBulkCorrectScoreRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleBulkCorrectScoreRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleBulkCorrectScoreRequest indicates an expected call of HandleBulkCorrectScoreRequest.
-func (mr *MockHandlersMockRecorder) HandleBulkCorrectScoreRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleBulkCorrectScoreRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBulkCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleBulkCorrectScoreRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBulkCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleBulkCorrectScoreRequest), ctx, payload)
 }
 
 // HandleCorrectScoreRequest mocks base method.
-func (m *MockHandlers) HandleCorrectScoreRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleCorrectScoreRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleCorrectScoreRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleCorrectScoreRequest indicates an expected call of HandleCorrectScoreRequest.
-func (mr *MockHandlersMockRecorder) HandleCorrectScoreRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleCorrectScoreRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleCorrectScoreRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCorrectScoreRequest", reflect.TypeOf((*MockHandlers)(nil).HandleCorrectScoreRequest), ctx, payload)
 }
 
 // HandleProcessRoundScoresRequest mocks base method.
-func (m *MockHandlers) HandleProcessRoundScoresRequest(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleProcessRoundScoresRequest(ctx context.Context, payload *scoreevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleProcessRoundScoresRequest", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleProcessRoundScoresRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleProcessRoundScoresRequest indicates an expected call of HandleProcessRoundScoresRequest.
-func (mr *MockHandlersMockRecorder) HandleProcessRoundScoresRequest(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleProcessRoundScoresRequest(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleProcessRoundScoresRequest", reflect.TypeOf((*MockHandlers)(nil).HandleProcessRoundScoresRequest), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleProcessRoundScoresRequest", reflect.TypeOf((*MockHandlers)(nil).HandleProcessRoundScoresRequest), ctx, payload)
 }
 
 // HandleReprocessAfterScoreUpdate mocks base method.
-func (m *MockHandlers) HandleReprocessAfterScoreUpdate(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleReprocessAfterScoreUpdate(ctx context.Context, payload any) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleReprocessAfterScoreUpdate", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleReprocessAfterScoreUpdate", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleReprocessAfterScoreUpdate indicates an expected call of HandleReprocessAfterScoreUpdate.
-func (mr *MockHandlersMockRecorder) HandleReprocessAfterScoreUpdate(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleReprocessAfterScoreUpdate(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleReprocessAfterScoreUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleReprocessAfterScoreUpdate), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleReprocessAfterScoreUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleReprocessAfterScoreUpdate), ctx, payload)
 }

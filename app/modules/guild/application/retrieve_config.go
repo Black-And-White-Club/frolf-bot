@@ -42,7 +42,7 @@ func (s *GuildService) GetGuildConfig(ctx context.Context, guildID sharedtypes.G
 					Reason:  ErrGuildConfigNotFound.Error(),
 				},
 				Error: notFoundErr,
-			}, notFoundErr
+			}, nil
 		}
 
 		return GuildOperationResult{

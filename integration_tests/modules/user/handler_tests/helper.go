@@ -135,7 +135,7 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 	// Use NoOpMetrics and TracerProvider for test observability
 	testObservability := observability.Observability{
 		Provider: &observability.Provider{
-			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger: slog.New(slog.NewTextHandler(os.Stdout, nil)),
 		},
 		Registry: &observability.Registry{
 			UserMetrics: &usermetrics.NoOpMetrics{},

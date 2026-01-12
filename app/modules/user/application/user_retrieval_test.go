@@ -98,7 +98,8 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				},
 				Error: errors.New("database connection failed"),
 			},
-			expectedErr: errors.New("database connection failed"),
+			// Service now returns failure payload with Error populated but no top-level error
+			expectedErr: nil,
 		},
 	}
 
@@ -234,7 +235,8 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 				},
 				Error: errors.New("failed to retrieve user role"), // Original DB error is returned in the result
 			},
-			expectedErr: errors.New("failed to retrieve user role"), // Mocked serviceWrapper returns the original DB error
+			// Service now returns failure payload with Error populated but no top-level error
+			expectedErr: nil,
 		},
 		{
 			name: "Retrieved invalid user role",

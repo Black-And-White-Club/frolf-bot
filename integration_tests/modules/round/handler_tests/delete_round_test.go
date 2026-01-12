@@ -1,13 +1,15 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -21,238 +23,222 @@ func createValidRoundDeleteRequestPayload(roundID sharedtypes.RoundID, requestin
 	}
 }
 
-// createValidRoundDeleteAuthorizedPayload creates a valid RoundDeleteAuthorizedPayload for testing
-func createValidRoundDeleteAuthorizedPayload(roundID sharedtypes.RoundID) roundevents.RoundDeleteAuthorizedPayloadV1 {
-	return roundevents.RoundDeleteAuthorizedPayloadV1{
-		GuildID: "test-guild",
-		RoundID: roundID,
-	}
-}
-
-// TestHandleRoundDeleteRequest tests the handler logic for RoundDeleteRequest
 // createExistingRoundForDeletion creates and stores a round that can be deleted
-func createExistingRoundForDeletion(t *testing.T, helper *testutils.RoundTestHelper, userID sharedtypes.DiscordID, db bun.IDB) sharedtypes.RoundID {
+func createExistingRoundForDeletion(t *testing.T, userID sharedtypes.DiscordID, db bun.IDB) sharedtypes.RoundID {
 	t.Helper()
-
-	// Use the passed DB instance instead of creating new deps
+	helper := testutils.NewRoundTestHelper(nil, nil)
 	return helper.CreateRoundInDB(t, db, userID)
 }
 
 // TestHandleRoundDeleteRequest tests the handler logic for RoundDeleteRequest
 func TestHandleRoundDeleteRequest(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	const testTimeout = 500 * time.Millisecond
-
-	testCases := []struct {
-		name             string
-		setupAndRun      func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectAuthorized bool
-		expectError      bool
-		expectNoMessages bool
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
-			name:             "Success - Valid Delete Request",
-			expectAuthorized: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Success - Valid Delete Request",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				roundID := createExistingRoundForDeletion(t, helper, data.UserID, deps.DB)
-				payload := createValidRoundDeleteRequestPayload(roundID, data.UserID)
-				helper.PublishRoundDeleteRequest(t, context.Background(), payload)
+				roundID := createExistingRoundForDeletion(t, data.UserID, deps.DB)
+				return roundID
 			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				data := NewTestData()
+				// For this test we need to get the roundID from setup, but since we create it here too,
+				// we'll create another one. In production you'd pass it through initial state.
+				roundID := createExistingRoundForDeletion(t, data.UserID, deps.DB)
+				payload := createValidRoundDeleteRequestPayload(roundID, data.UserID)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundDeleteAuthorizedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundDeleteAuthorizedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+
+				// Ensure no error messages
+				errorMsgs := receivedMsgs[roundevents.RoundDeleteErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
-			name:             "Failure - Nil Round ID",
-			expectNoMessages: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Failure - Nil Round ID",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				payload := createValidRoundDeleteRequestPayload(sharedtypes.RoundID(uuid.Nil), data.UserID)
-				helper.PublishRoundDeleteRequest(t, context.Background(), payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{}, // No messages expected
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// Verify no authorized or error messages
+				authorizedMsgs := receivedMsgs[roundevents.RoundDeleteAuthorizedV1]
+				errorMsgs := receivedMsgs[roundevents.RoundDeleteErrorV1]
+				if len(authorizedMsgs) > 0 {
+					t.Errorf("Expected no authorized messages, got %d", len(authorizedMsgs))
+				}
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
-			name:        "Failure - Non-Existent Round ID",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Failure - Non-Existent Round ID",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				payload := createValidRoundDeleteRequestPayload(nonExistentRoundID, data.UserID)
-				helper.PublishRoundDeleteRequest(t, context.Background(), payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundDeleteErrorV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundDeleteErrorV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected error message on topic %q", expectedTopic)
+				}
+
+				// Ensure no authorized messages
+				authorizedMsgs := receivedMsgs[roundevents.RoundDeleteAuthorizedV1]
+				if len(authorizedMsgs) > 0 {
+					t.Errorf("Expected no authorized messages, got %d", len(authorizedMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
-			name:        "Failure - Unauthorized User",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Failure - Unauthorized User",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				data1 := NewTestData()
+				roundID := createExistingRoundForDeletion(t, data1.UserID, deps.DB)
+				return roundID
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data1 := NewTestData()
 				data2 := NewTestData()
-				roundID := createExistingRoundForDeletion(t, helper, data1.UserID, deps.DB)
+				roundID := createExistingRoundForDeletion(t, data1.UserID, deps.DB)
 				payload := createValidRoundDeleteRequestPayload(roundID, data2.UserID)
-				helper.PublishRoundDeleteRequest(t, context.Background(), payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
-		},
-		{
-			name:             "Failure - Invalid JSON Message",
-			expectNoMessages: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundDeleteRequestedV1)
-			},
-		},
-	}
-
-	// Run all subtests with SHARED setup - no need to clear messages between tests!
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			// Run the test - no cleanup needed!
-			tc.setupAndRun(t, helper, &deps)
-
-			if tc.expectAuthorized {
-				if !helper.WaitForRoundDeleteAuthorized(1, testTimeout) {
-					t.Error("Timed out waiting for authorized message")
+			expectedOutgoingTopics: []string{roundevents.RoundDeleteErrorV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundDeleteErrorV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected error message on topic %q", expectedTopic)
 				}
-			} else if tc.expectError {
-				if !helper.WaitForRoundDeleteError(1, testTimeout) {
-					t.Error("Timed out waiting for error message")
-				}
-			} else if tc.expectNoMessages {
-				time.Sleep(testTimeout)
-			}
 
-			authorizedMsgs := helper.GetRoundDeleteAuthorizedMessages()
-			errorMsgs := helper.GetRoundDeleteErrorMessages()
-
-			if tc.expectAuthorized {
-				if len(authorizedMsgs) == 0 {
-					t.Error("Expected authorized message, got none")
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			} else if tc.expectError {
-				if len(errorMsgs) == 0 {
-					t.Error("Expected error message, got none")
-				}
+				// Ensure no authorized messages
+				authorizedMsgs := receivedMsgs[roundevents.RoundDeleteAuthorizedV1]
 				if len(authorizedMsgs) > 0 {
 					t.Errorf("Expected no authorized messages, got %d", len(authorizedMsgs))
 				}
-			} else if tc.expectNoMessages {
+			},
+			timeout: 5 * time.Second,
+		},
+		{
+			name: "Failure - Invalid JSON Message",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				invalidJSON := []byte(`invalid json`)
+				msg := message.NewMessage(uuid.New().String(), invalidJSON)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{}, // No valid messages expected
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// Verify no authorized or error messages
+				authorizedMsgs := receivedMsgs[roundevents.RoundDeleteAuthorizedV1]
+				errorMsgs := receivedMsgs[roundevents.RoundDeleteErrorV1]
 				if len(authorizedMsgs) > 0 {
 					t.Errorf("Expected no authorized messages, got %d", len(authorizedMsgs))
 				}
 				if len(errorMsgs) > 0 {
 					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
 				}
-			}
-		})
-	}
-}
-
-// TestHandleRoundDeleteAuthorized tests the authorized delete handler
-func TestHandleRoundDeleteAuthorized(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	const testTimeout = 500 * time.Millisecond
-
-	testCases := []struct {
-		name             string
-		setupAndRun      func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectDeleted    bool
-		expectError      bool
-		expectNoMessages bool
-	}{
-		{
-			name:          "Success - Delete Existing Round",
-			expectDeleted: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				roundID := createExistingRoundForDeletion(t, helper, data.UserID, deps.DB)
-				payload := createValidRoundDeleteAuthorizedPayload(roundID)
-				helper.PublishRoundDeleteAuthorized(t, context.Background(), payload)
 			},
-		},
-		{
-			name:        "Failure - Non-Existent Round ID",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				payload := createValidRoundDeleteAuthorizedPayload(nonExistentRoundID)
-				helper.PublishRoundDeleteAuthorized(t, context.Background(), payload)
-			},
-		},
-		{
-			name:             "Failure - Invalid JSON Message",
-			expectNoMessages: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundDeleteAuthorizedV1)
-			},
+			timeout: 5 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear messages before each subtest to ensure isolation
-			deps.MessageCapture.Clear()
+			deps := SetupTestRoundHandler(t)
 
-			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			// Run the test
-			tc.setupAndRun(t, helper, &deps)
-
-			if tc.expectDeleted {
-				if !helper.WaitForRoundDeleted(1, testTimeout) {
-					t.Error("Timed out waiting for deleted message")
-				}
-			} else if tc.expectError {
-				if !helper.WaitForRoundDeleteError(1, testTimeout) {
-					t.Error("Timed out waiting for error message")
-				}
-			} else if tc.expectNoMessages {
-				time.Sleep(testTimeout)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
 			}
-
-			deletedMsgs := helper.GetRoundDeletedMessages()
-			errorMsgs := helper.GetRoundDeleteErrorMessages()
-
-			if tc.expectDeleted {
-				if len(deletedMsgs) == 0 {
-					t.Error("Expected deleted message, got none")
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-					// Log the actual error to help debug
-					if len(errorMsgs) > 0 {
-						result, err := testutils.ParsePayload[roundevents.RoundDeleteErrorPayloadV1](errorMsgs[0])
-						if err == nil {
-							t.Logf("Error payload: %+v", result)
-						}
-					}
-				}
-			} else if tc.expectError {
-				if len(errorMsgs) == 0 {
-					t.Error("Expected error message, got none")
-				}
-				if len(deletedMsgs) > 0 {
-					t.Errorf("Expected no deleted messages, got %d", len(deletedMsgs))
-				}
-			} else if tc.expectNoMessages {
-				if len(deletedMsgs) > 0 {
-					t.Errorf("Expected no deleted messages, got %d", len(deletedMsgs))
-				}
-				if len(errorMsgs) > 0 {
-					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
-				}
-			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

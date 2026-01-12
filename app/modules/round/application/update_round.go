@@ -102,6 +102,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
 					RoundUpdateRequest: nil,
 					Error:              fmt.Sprintf("validation failed: %s", strings.Join(errs, "; ")),
 				},
@@ -128,15 +129,20 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 			validatedPayload.Title = *payload.Title
 		}
 		if payload.Description != nil {
-			validatedPayload.Description = payload.Description
+			// Allocate new pointer to avoid dangling reference to input payload
+			validatedPayload.Description = new(roundtypes.Description)
+			*validatedPayload.Description = *payload.Description
 		}
 		if payload.Location != nil {
-			validatedPayload.Location = payload.Location
+			// Allocate new pointer to avoid dangling reference to input payload
+			validatedPayload.Location = new(roundtypes.Location)
+			*validatedPayload.Location = *payload.Location
 		}
 
 		// Return validation success payload (like create round pattern)
 		return RoundOperationResult{
 			Success: &roundevents.RoundUpdateValidatedPayloadV1{
+				GuildID:                   payload.GuildID,
 				RoundUpdateRequestPayload: validatedPayload,
 			},
 		}, nil
@@ -168,15 +174,21 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			updatedFields = append(updatedFields, "title")
 		}
 		if payload.RoundUpdateRequestPayload.Description != nil {
-			updateRound.Description = payload.RoundUpdateRequestPayload.Description
+			// Allocate new pointer to avoid issues with shared memory
+			updateRound.Description = new(roundtypes.Description)
+			*updateRound.Description = *payload.RoundUpdateRequestPayload.Description
 			updatedFields = append(updatedFields, "description")
 		}
 		if payload.RoundUpdateRequestPayload.Location != nil {
-			updateRound.Location = payload.RoundUpdateRequestPayload.Location
+			// Allocate new pointer to avoid issues with shared memory
+			updateRound.Location = new(roundtypes.Location)
+			*updateRound.Location = *payload.RoundUpdateRequestPayload.Location
 			updatedFields = append(updatedFields, "location")
 		}
 		if payload.RoundUpdateRequestPayload.StartTime != nil {
-			updateRound.StartTime = payload.RoundUpdateRequestPayload.StartTime
+			// Allocate new pointer to avoid issues with shared memory
+			updateRound.StartTime = new(sharedtypes.StartTime)
+			*updateRound.StartTime = *payload.RoundUpdateRequestPayload.StartTime
 			updatedFields = append(updatedFields, "start_time")
 		}
 		if payload.RoundUpdateRequestPayload.EventType != nil {
@@ -191,6 +203,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			)
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID:            payload.RoundUpdateRequestPayload.GuildID,
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              "no valid fields to update",
 				},
@@ -213,6 +226,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID:            payload.RoundUpdateRequestPayload.GuildID,
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              fmt.Sprintf("failed to update round in database: %v", err),
 				},
@@ -225,9 +239,13 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 			attr.Any("updated_fields", updatedFields),
 		)
 
+		// Ensure GuildID is set on the returned round object
+		updatedRound.GuildID = payload.RoundUpdateRequestPayload.GuildID
+
 		return RoundOperationResult{
 			Success: &roundevents.RoundEntityUpdatedPayloadV1{
-				Round: *updatedRound,
+				GuildID: payload.RoundUpdateRequestPayload.GuildID,
+				Round:   *updatedRound,
 			},
 		}, nil
 	})

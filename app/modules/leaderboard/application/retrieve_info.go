@@ -47,14 +47,14 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedt
 				}, nil
 			}
 
-			// For other database errors, return both failure and error
+			// For other database errors, return failure with nil error
 			return LeaderboardOperationResult{
 				Failure: &leaderboardevents.GetLeaderboardFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  "Database error when retrieving leaderboard",
 				},
 				Error: err,
-			}, err
+			}, nil
 		}
 
 		// 2. Prepare the response payload.
@@ -153,8 +153,8 @@ func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sh
 			)
 			s.metrics.RecordTagGetFailure(ctx, "LeaderboardService")
 
-			// Return the error in the result struct and as a standard error
-			return LeaderboardOperationResult{Error: fmt.Errorf("failed to get tag by UserID (Round): %w", err)}, fmt.Errorf("failed to get tag by UserID (Round): %w", err)
+			// Return the error in the result struct with nil error
+			return LeaderboardOperationResult{Error: fmt.Errorf("failed to get tag by UserID (Round): %w", err)}, nil
 		}
 
 		// Handle the case where err is nil, but tagNumber is also nil (should be treated as not found)

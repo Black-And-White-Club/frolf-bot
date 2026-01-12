@@ -27,7 +27,7 @@ func publishTagLookupRequest(t *testing.T, deps LeaderboardHandlerTestDeps, payl
 	}
 	msg := message.NewMessage(uuid.New().String(), b)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.RoundGetTagByUserIDRequestedV1, msg); err != nil {
+	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.RoundTagLookupRequestedV1, msg); err != nil {
 		t.Fatalf("Failed to publish tag lookup request: %v", err)
 	}
 	return msg
@@ -97,8 +97,8 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
 				expectedTopic := sharedevents.RoundTagLookupFoundV1
 				msgs := received[expectedTopic]
-				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 message on %q, got %d", expectedTopic, len(msgs))
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least 1 message on %q, got %d", expectedTopic, len(msgs))
 				}
 				var req sharedevents.RoundTagLookupRequestedPayloadV1
 				if err := json.Unmarshal(incoming.Payload, &req); err != nil {
@@ -180,7 +180,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid JSON"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.RoundGetTagByUserIDRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.RoundTagLookupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg

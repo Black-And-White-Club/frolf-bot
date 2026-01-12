@@ -294,7 +294,16 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 
 			got, err := s.CreateGuildConfig(testCtx, tt.config)
 			if tt.wantErr != nil {
-				if err == nil || err.Error() != tt.wantErr.Error() {
+				// Accept the error either returned directly or embedded in the result.Error
+				if err != nil {
+					if err.Error() != tt.wantErr.Error() {
+						t.Errorf("expected error: %v, got: %v", tt.wantErr, err)
+					}
+				} else if got.Error != nil {
+					if got.Error.Error() != tt.wantErr.Error() {
+						t.Errorf("expected error: %v, got result.Error: %v", tt.wantErr, got.Error)
+					}
+				} else {
 					t.Errorf("expected error: %v, got: %v", tt.wantErr, err)
 				}
 			} else if err != nil {

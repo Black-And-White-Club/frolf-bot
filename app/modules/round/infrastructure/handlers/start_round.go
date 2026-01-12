@@ -2,79 +2,42 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-func (h *RoundHandlers) HandleRoundStarted(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleRoundStarted",
-		&roundevents.RoundStartedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundStartedPayload := payload.(*roundevents.RoundStartedPayloadV1)
+// HandleRoundStarted processes the transition of a round to the started state.
+func (h *RoundHandlers) HandleRoundStarted(
+	ctx context.Context,
+	payload *roundevents.RoundStartedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.roundService.ProcessRoundStart(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received RoundStarted event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundStartedPayload.RoundID),
-			)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "round start processing failed",
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundStartFailedV1, Payload: result.Failure},
+		}, nil
+	}
 
-			// Call the service function to handle the event
-			result, err := h.roundService.ProcessRoundStart(ctx, *roundStartedPayload)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle RoundStarted event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
-				)
-				return nil, fmt.Errorf("failed to handle RoundStarted event: %w", err)
-			}
+	if result.Success != nil {
+		discordStartPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayloadV1)
+		if !ok {
+			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from ProcessRoundStart"}
+		}
 
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Round start processing failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundStartedDiscordV1, Payload: discordStartPayload},
+		}, nil
+	}
 
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Round start processed successfully", attr.CorrelationIDFromMsg(msg))
-
-				// Create success message to publish
-				discordStartPayload := result.Success.(*roundevents.DiscordRoundStartPayloadV1)
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					discordStartPayload,
-					roundevents.RoundStartedDiscordV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-
-				return []*message.Message{successMsg}, nil
-			}
-
-			// If neither Failure nor Success is set, return an error
-			h.logger.ErrorContext(ctx, "Unexpected result from ProcessRoundStart service",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			return nil, fmt.Errorf("unexpected result from service")
-		},
-	)
-
-	// Execute the wrapped handler with the message
-	return wrappedHandler(msg)
+	return nil, sharedtypes.ValidationError{Message: "unexpected result from service during round start"}
 }
