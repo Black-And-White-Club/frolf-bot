@@ -245,7 +245,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 	if string(guildID) == "" {
 		s.logger.WarnContext(ctx, "UpdateRoundMessageID proceeding with empty guildID",
 			attr.RoundID("round_id", roundID),
-			attr.String("message_id", discordMessageID),
+			attr.String("discord_message_id", discordMessageID),
 		)
 	}
 
@@ -256,7 +256,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 	result, err := s.serviceWrapper(dbCtx, "UpdateRoundMessageID", roundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Attempting to update Discord message ID for round",
 			attr.RoundID("round_id", roundID),
-			attr.String("message_id", discordMessageID),
+			attr.String("discord_message_id", discordMessageID),
 			attr.Any("guild_id_type", fmt.Sprintf("%T", guildID)),
 			attr.Any("round_id_type", fmt.Sprintf("%T", roundID)),
 			attr.Any("discord_message_id_type", fmt.Sprintf("%T", discordMessageID)),
@@ -269,7 +269,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 			s.metrics.RecordDBOperationError(ctx, "update_round_message_id")
 			s.logger.ErrorContext(ctx, "Failed to update Discord event message ID in DB",
 				attr.RoundID("round_id", roundID),
-				attr.String("message_id", discordMessageID),
+				attr.String("discord_message_id", discordMessageID),
 				attr.String("guild_id_value", string(guildID)),
 				attr.Error(dbErr),
 			)
@@ -284,7 +284,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 		s.metrics.RecordDBOperationSuccess(ctx, "update_round_message_id")
 		s.logger.InfoContext(ctx, "Successfully updated Discord message ID in DB",
 			attr.RoundID("round_id", roundID),
-			attr.String("message_id", discordMessageID),
+			attr.String("discord_message_id", discordMessageID),
 			attr.String("guild_id_value", string(guildID)),
 		)
 

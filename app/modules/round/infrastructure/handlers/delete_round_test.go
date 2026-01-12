@@ -290,13 +290,13 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 				)
 			},
 			payload:         testPayload,
-			ctx:             context.WithValue(context.Background(), "message_id", "msg-123"),
+			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:         false,
 			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundDeletedV1,
 			checkMetadata:   true,
 			expectedMetadata: map[string]string{
-				"message_id": "msg-123",
+				"discord_message_id": "msg-123",
 			},
 		},
 		{

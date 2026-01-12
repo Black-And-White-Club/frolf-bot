@@ -264,7 +264,7 @@ func (h *RoundTestHelper) PublishRoundMessageIDUpdate(t *testing.T, ctx context.
 
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-	msg.Metadata.Set("message_id", discordMessageID)
+	msg.Metadata.Set("discord_message_id", discordMessageID)
 
 	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundEventMessageIDUpdateV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)

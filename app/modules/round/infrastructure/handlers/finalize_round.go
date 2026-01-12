@@ -69,7 +69,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 			Topic:   roundevents.RoundFinalizedDiscordV1,
 			Payload: discordFinalizationPayload,
 			Metadata: map[string]string{
-				"message_id": fetchedRound.EventMessageID,
+				"discord_message_id": fetchedRound.EventMessageID,
 			},
 		},
 		{

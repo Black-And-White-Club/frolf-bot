@@ -63,7 +63,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	payload *roundevents.RoundDeleteAuthorizedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	// 1. Extract the Discord Message ID from context to ensure it propagates
-	discordMessageID, _ := ctx.Value("message_id").(string)
+	discordMessageID, _ := ctx.Value("discord_message_id").(string)
 
 	result, err := h.roundService.DeleteRound(ctx, *payload)
 	if err != nil {
@@ -90,7 +90,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		// handler knows which embed to delete.
 		if discordMessageID != "" {
 			res.Metadata = map[string]string{
-				"message_id": discordMessageID,
+				"discord_message_id": discordMessageID,
 			}
 		}
 
