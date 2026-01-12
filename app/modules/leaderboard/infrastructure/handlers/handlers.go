@@ -91,7 +91,7 @@ func handlerWrapper(
 
 		logger.InfoContext(ctx, handlerName+" triggered",
 			attr.CorrelationIDFromMsg(msg),
-			attr.String("discord_message_id", msg.UUID),
+			attr.String("message_id", msg.UUID),
 		)
 
 		// Create a new instance of the payload type
