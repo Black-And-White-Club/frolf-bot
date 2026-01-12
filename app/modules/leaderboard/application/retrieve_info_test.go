@@ -91,7 +91,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 			expectedFail: &leaderboardevents.GetLeaderboardFailedPayloadV1{
 				Reason: "Database error when retrieving leaderboard",
 			},
-			expectedError: errors.New("database connection error"),
+			expectedError: nil,
 		},
 		{
 			name:    "Successfully retrieves empty leaderboard",
@@ -458,12 +458,13 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		guildID        sharedtypes.GuildID
-		mockDBSetup    func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
-		requestPayload sharedevents.RoundTagLookupRequestedPayloadV1
-		expectedResult *sharedevents.RoundTagLookupResultPayloadV1
-		expectedError  error
+		name               string
+		guildID            sharedtypes.GuildID
+		mockDBSetup        func(*leaderboarddb.MockLeaderboardDB, sharedtypes.GuildID)
+		requestPayload     sharedevents.RoundTagLookupRequestedPayloadV1
+		expectedResult     *sharedevents.RoundTagLookupResultPayloadV1
+		expectedError      error
+		expectedResultError error
 	}{
 		{
 			name:    "Successfully retrieves tag number",
@@ -496,7 +497,8 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: nil,
-			expectedError:  errors.New("failed to get tag by UserID (Round): database connection error"),
+			expectedError:  nil,
+			expectedResultError: errors.New("failed to get tag by UserID (Round): database connection error"),
 		},
 		{
 			name:    "User ID not found in database (sql.ErrNoRows)",
@@ -525,7 +527,8 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			},
 			requestPayload: dummyRequestPayload,
 			expectedResult: nil,
-			expectedError:  errors.New("failed to get tag by UserID (Round): user not found in DB"),
+			expectedError:  nil,
+			expectedResultError: errors.New("failed to get tag by UserID (Round): user not found in DB"),
 		},
 		{
 			name:    "Nil tag number returned from database",
@@ -582,6 +585,20 @@ func TestLeaderboardService_RoundGetTagByUserID(t *testing.T) {
 			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
 				t.Errorf("LeaderboardService.RoundGetTagByUserID() standard error message mismatch: got = %v, want %v", err.Error(), tt.expectedError.Error())
 				return
+			}
+
+			if tt.expectedResultError != nil {
+				if got.Error == nil {
+					t.Errorf("Expected result struct error: %v, got nil", tt.expectedResultError)
+				} else if got.Error.Error() != tt.expectedResultError.Error() {
+					if !strings.Contains(got.Error.Error(), tt.expectedResultError.Error()) {
+						t.Errorf("Result struct error mismatch: expected error to contain: %q, got %q", tt.expectedResultError.Error(), got.Error.Error())
+					}
+				}
+			} else {
+				if got.Error != nil {
+					t.Errorf("Expected nil result struct error, got: %v", got.Error)
+				}
 			}
 
 			if tt.expectedResult != nil {

@@ -90,7 +90,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:             &testTag,
 			expectedSuccess: false,
 			expectedReason:  "user already exists in this guild",
-			expectErr:       true,
+			expectErr:       false,
 		},
 		{
 			name: "CreateGlobalUser fails (duplicate user error)",
@@ -134,7 +134,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:             &testTag,
 			expectedSuccess: false,
 			expectedReason:  "invalid Discord ID",
-			expectErr:       true,
+			expectErr:       false,
 		},
 		{
 			name: "Negative tag number validation",
@@ -146,7 +146,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:             func() *sharedtypes.TagNumber { t := sharedtypes.TagNumber(-1); return &t }(),
 			expectedSuccess: false,
 			expectedReason:  "tag number cannot be negative",
-			expectErr:       true,
+			expectErr:       false,
 		},
 		{
 			name: "Nil context validation",

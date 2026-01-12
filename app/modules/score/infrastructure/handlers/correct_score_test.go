@@ -2,18 +2,16 @@ package scorehandlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -36,14 +34,9 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		Score:     testScore,
 		TagNumber: &testTagNumber,
 	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	// Mock dependencies
 	mockScoreService := scoremocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -52,21 +45,14 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
+		payload        *scoreevents.ScoreUpdateRequestedPayloadV1
 		wantErr        bool
 		expectedErrMsg string
+		checkResults   func(t *testing.T, results []handlerwrapper.Result)
 	}{
 		{
 			name: "Successfully handle CorrectScoreRequest",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
@@ -90,13 +76,6 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					nil,
 				)
 
-				successMsg := message.NewMessage("success-msg-id", []byte("success"))
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					successPayload,
-					scoreevents.ScoreUpdatedV1,
-				).Return(successMsg, nil)
-
 				// Expect GetScoresForRound to be called for reprocessing
 				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
@@ -105,39 +84,42 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				).Return([]sharedtypes.ScoreInfo{
 					{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
 				}, nil)
-
-				// Expect CreateResultMessage for the reprocess request
-				reprocessMsg := message.NewMessage("reprocess-msg-id", []byte("reprocess"))
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(), // The ProcessRoundScoresRequestedPayloadV1
-					scoreevents.ProcessRoundScoresRequestedV1,
-				).Return(reprocessMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{message.NewMessage("success-msg-id", []byte("success")), message.NewMessage("reprocess-msg-id", []byte("reprocess"))},
+			payload: testPayload,
 			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 2 {
+					t.Fatalf("expected 2 results, got %d", len(results))
+				}
+				// First result: ScoreUpdated
+				if results[0].Topic != scoreevents.ScoreUpdatedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdatedV1, results[0].Topic)
+				}
+				successPayload, ok := results[0].Payload.(*scoreevents.ScoreUpdatedPayloadV1)
+				if !ok {
+					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
+				}
+				if successPayload.UserID != testUserID {
+					t.Errorf("expected UserID %s, got %s", testUserID, successPayload.UserID)
+				}
+				// Second result: Reprocess request
+				if results[1].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[1].Topic)
+				}
+			},
 		},
 		{
-			name: "Fail to unmarshal payload",
+			name: "Nil payload",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+				// No expectations - handler returns early
 			},
-			msg:            invalidMsg,
-			want:           nil,
+			payload:        nil,
 			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			expectedErrMsg: "payload is nil",
 		},
 		{
 			name: "Service failure in CorrectScore",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				failurePayload := &scoreevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
@@ -160,28 +142,28 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				// When there's a failure, the handler creates a failure message
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failurePayload,
-					scoreevents.ScoreUpdateFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false, // No error because failure is handled gracefully
+			payload: testPayload,
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(results))
+				}
+				if results[0].Topic != scoreevents.ScoreUpdateFailedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdateFailedV1, results[0].Topic)
+				}
+				failurePayload, ok := results[0].Payload.(*scoreevents.ScoreUpdateFailedPayloadV1)
+				if !ok {
+					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
+				}
+				if failurePayload.Reason != "internal service error" {
+					t.Errorf("expected reason 'internal service error', got %s", failurePayload.Reason)
+				}
+			},
 		},
 		{
 			name: "Service returns error",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testGuildID,
@@ -194,21 +176,13 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					fmt.Errorf("service error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "service error", // Changed from "technical error during CorrectScore service call: service error"
+			expectedErrMsg: "service error",
 		},
 		{
-			name: "Service success but CreateResultMessage fails",
+			name: "GetScoresForRound fails - returns only success result",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
@@ -232,34 +206,37 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					nil,
 				)
 
-				mockHelpers.EXPECT().CreateResultMessage(
+				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
-					successPayload,
-					scoreevents.ScoreUpdatedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
+					testGuildID,
+					testRoundID,
+				).Return(nil, fmt.Errorf("db error"))
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create ScoreUpdateSuccess message: failed to create result message",
+			payload: testPayload,
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result (no reprocess due to error), got %d", len(results))
+				}
+				if results[0].Topic != scoreevents.ScoreUpdatedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdatedV1, results[0].Topic)
+				}
+			},
 		},
 		{
-			name: "Service failure but CreateResultMessage fails",
+			name: "Unknown result from CorrectScore",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				failurePayload := &scoreevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Reason:  "internal service error",
-				}
-
+				mockScoreService.EXPECT().CorrectScore(
+					gomock.Any(), testGuildID, testRoundID, testUserID, testScore, &testTagNumber,
+				).Return(scoreservice.ScoreOperationResult{}, nil)
+			},
+			payload:        testPayload,
+			wantErr:        true,
+			expectedErrMsg: "unexpected result from service: neither success nor failure",
+		},
+		{
+			name: "Wrong failure payload type",
+			mockSetup: func() {
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testGuildID,
@@ -269,34 +246,18 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					&testTagNumber,
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: nil,
-						Failure: failurePayload,
-						Error:   nil,
+						Failure: "wrong type",
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failurePayload,
-					scoreevents.ScoreUpdateFailedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "failed to create ScoreUpdateFailure message: failed to create result message",
+			expectedErrMsg: "unexpected failure payload type from service",
 		},
 		{
-			name: "Unknown result from CorrectScore",
+			name: "Wrong success payload type",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockScoreService.EXPECT().CorrectScore(
 					gomock.Any(),
 					testGuildID,
@@ -305,14 +266,15 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					testScore,
 					&testTagNumber,
 				).Return(
-					scoreservice.ScoreOperationResult{},
+					scoreservice.ScoreOperationResult{
+						Success: "wrong type",
+					},
 					nil,
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service: neither success nor failure",
+			expectedErrMsg: "unexpected success payload type from service",
 		},
 	}
 
@@ -325,29 +287,20 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				logger:       logger,
 				tracer:       tracer,
 				metrics:      metrics,
-				Helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
 			}
 
-			got, err := h.HandleCorrectScoreRequest(tt.msg)
+			ctx := context.Background()
+			got, err := h.HandleCorrectScoreRequest(ctx, tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleCorrectScoreRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
 				t.Errorf("HandleCorrectScoreRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			// Compare message count and UUIDs instead of deep equality on pointers
-			if len(got) != len(tt.want) {
-				t.Errorf("HandleCorrectScoreRequest() returned %d messages, want %d", len(got), len(tt.want))
-			}
-			for i := range got {
-				if i < len(tt.want) && got[i].UUID != tt.want[i].UUID {
-					t.Errorf("HandleCorrectScoreRequest() message[%d].UUID = %v, want %v", i, got[i].UUID, tt.want[i].UUID)
-				}
+			if !tt.wantErr && tt.checkResults != nil {
+				tt.checkResults(t, got)
 			}
 		})
 	}

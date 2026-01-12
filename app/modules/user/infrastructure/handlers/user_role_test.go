@@ -2,19 +2,14 @@ package userhandlers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -27,42 +22,27 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("55555555555555555")
 	testNewRole := sharedtypes.UserRoleEnum("admin")
 
-	testPayload := &userevents.UserRoleUpdateRequestedPayloadV1{
-		GuildID: testGuildID,
-		UserID:  testUserID,
-		Role:    testNewRole,
-	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
 	mockUserService := usermocks.NewMockService(ctrl)
-	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name         string
+		payload      *userevents.UserRoleUpdateRequestedPayloadV1
+		mockSetup    func()
+		wantLen      int
+		wantTopic    string
+		wantErr      bool
 	}{
 		{
 			name: "Successfully handle UserRoleUpdateRequest",
+			payload: &userevents.UserRoleUpdateRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+				Role:    testNewRole,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				updateResultPayload := &userevents.UserRoleUpdateResultPayloadV1{
 					GuildID: testGuildID,
 					Success: true,
@@ -79,28 +59,19 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				// Handler passes the pointer - expect the pointer
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					updateResultPayload, // This is the pointer that the handler passes
-					userevents.UserRoleUpdatedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantLen:   1,
+			wantTopic: userevents.UserRoleUpdatedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Failed to update user role",
+			payload: &userevents.UserRoleUpdateRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+				Role:    testNewRole,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				failurePayload := &userevents.UserRoleUpdateResultPayloadV1{
 					GuildID: testGuildID,
 					Success: false,
@@ -117,59 +88,25 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 					},
 					nil,
 				)
-
-				// Handler passes the pointer - expect the pointer
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					failurePayload, // This is the pointer that the handler passes
-					userevents.UserRoleUpdateFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			wantLen:   1,
+			wantTopic: userevents.UserRoleUpdateFailedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Service failure in UpdateUserRoleInDatabase",
+			payload: &userevents.UserRoleUpdateRequestedPayloadV1{
+				GuildID: testGuildID,
+				UserID:  testUserID,
+				Role:    testNewRole,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.UserRoleUpdateRequestedPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
 					userservice.UserOperationResult{},
-					fmt.Errorf("service error"),
+					nil,
 				)
-
-				// Handler creates a new payload and passes a value - expect the value
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					userevents.UserRoleUpdateResultPayloadV1{
-						GuildID: testGuildID,
-						Success: false,
-						UserID:  testUserID,
-						Role:    testNewRole,
-						Reason:  "internal service error: service error",
-					},
-					userevents.UserRoleUpdateFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantErr: true,
 		},
 	}
 
@@ -177,28 +114,23 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			h := &UserHandlers{
-				userService: mockUserService,
-				logger:      logger,
-				tracer:      tracer,
-				metrics:     metrics,
-				helpers:     mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
+			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
 
-			got, err := h.HandleUserRoleUpdateRequest(tt.msg)
+			results, err := h.HandleUserRoleUpdateRequest(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleUserRoleUpdateRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleUserRoleUpdateRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleUserRoleUpdateRequest() = %v, want %v", got, tt.want)
+			if !tt.wantErr {
+				if len(results) != tt.wantLen {
+					t.Errorf("HandleUserRoleUpdateRequest() got %d results, want %d", len(results), tt.wantLen)
+					return
+				}
+				if results[0].Topic != tt.wantTopic {
+					t.Errorf("HandleUserRoleUpdateRequest() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				}
 			}
 		})
 	}

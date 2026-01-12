@@ -2,223 +2,112 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-func (h *RoundHandlers) HandleAllScoresSubmitted(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleAllScoresSubmitted",
-		&roundevents.AllScoresSubmittedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			allScoresSubmittedPayload, ok := payload.(*roundevents.AllScoresSubmittedPayloadV1)
-			if !ok {
-				h.logger.ErrorContext(ctx, "Invalid payload type for HandleAllScoresSubmitted",
-					attr.Any("payload", payload),
-				)
-				return nil, fmt.Errorf("invalid payload type for HandleAllScoresSubmitted")
-			}
+// HandleAllScoresSubmitted handles the transition from all scores being in to finalizing the round.
+func (h *RoundHandlers) HandleAllScoresSubmitted(
+	ctx context.Context,
+	payload *roundevents.AllScoresSubmittedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	finalizeResult, err := h.roundService.FinalizeRound(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received AllScoresSubmitted event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("round_id", allScoresSubmittedPayload.RoundID.String()),
-			)
+	if finalizeResult.Failure != nil {
+		h.logger.WarnContext(ctx, "backend round finalization failed",
+			attr.Any("failure", finalizeResult.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundFinalizationErrorV1, Payload: finalizeResult.Failure},
+		}, nil
+	}
 
-			finalizeResult, finalizeErr := h.roundService.FinalizeRound(ctx, *allScoresSubmittedPayload)
-			if finalizeErr != nil {
-				h.logger.ErrorContext(ctx, "Failed during backend FinalizeRound service call",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", finalizeErr),
-				)
-				return nil, fmt.Errorf("failed during backend FinalizeRound service call: %w", finalizeErr)
-			}
+	if finalizeResult.Success == nil {
+		return nil, sharedtypes.ValidationError{Message: "unexpected result from service: both success and failure are nil"}
+	}
 
-			if finalizeResult.Failure != nil {
-				h.logger.InfoContext(ctx, "Backend round finalization failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", finalizeResult.Failure),
-				)
+	// Prepare data for multiple outgoing events
+	fetchedRound := &payload.RoundData
 
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					finalizeResult.Failure,
-					roundevents.RoundFinalizationErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
+	discordFinalizationPayload := &roundevents.RoundFinalizedDiscordPayloadV1{
+		GuildID:        payload.GuildID,
+		RoundID:        payload.RoundID,
+		Title:          fetchedRound.Title,
+		StartTime:      fetchedRound.StartTime,
+		Location:       fetchedRound.Location,
+		Participants:   payload.Participants,
+		EventMessageID: fetchedRound.EventMessageID,
+	}
 
-				return []*message.Message{failureMsg}, nil
-			}
-
-			h.logger.InfoContext(ctx, "Backend round finalization successful", attr.CorrelationIDFromMsg(msg))
-
-			// Use the round data from the payload instead of fetching again
-			fetchedRound := &allScoresSubmittedPayload.RoundData
-
-			// Create Discord-specific finalization payload and message FIRST. This uses a
-			// separate topic so Discord consumers receive a type-safe payload. Creating
-			// the Discord message first ensures mocks expecting the Discord publication
-			// order are satisfied (Discord then backend).
-			discordFinalizationPayload := roundevents.RoundFinalizedDiscordPayloadV1{
-				GuildID:        allScoresSubmittedPayload.GuildID,
-				RoundID:        allScoresSubmittedPayload.RoundID,
-				Title:          fetchedRound.Title,
-				StartTime:      fetchedRound.StartTime,
-				Location:       fetchedRound.Location,
-				Participants:   allScoresSubmittedPayload.Participants,
-				EventMessageID: fetchedRound.EventMessageID,
-			}
-
-			discordFinalizedMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				&discordFinalizationPayload,
-				roundevents.RoundFinalizedDiscordV1,
-			)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create Discord RoundFinalized message",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to create RoundFinalized message: %w", err)
-			}
-
-			// Preserve discord event metadata so downstream Discord handlers can locate the message
-			if discordFinalizedMsg != nil && fetchedRound.EventMessageID != "" {
-				discordFinalizedMsg.Metadata.Set("discord_message_id", fetchedRound.EventMessageID)
-			}
-
-			// Create BACKEND finalization message with authoritative participants from payload
-			backendFinalizationPayload := roundevents.RoundFinalizedPayloadV1{
-				GuildID: allScoresSubmittedPayload.GuildID,
-				RoundID: allScoresSubmittedPayload.RoundID,
-				RoundData: roundtypes.Round{
-					ID:             fetchedRound.ID,
-					Title:          fetchedRound.Title,
-					Description:    fetchedRound.Description,
-					Location:       fetchedRound.Location,
-					StartTime:      fetchedRound.StartTime,
-					EventMessageID: fetchedRound.EventMessageID,
-					CreatedBy:      fetchedRound.CreatedBy,
-					State:          fetchedRound.State,
-					// USE PARTICIPANTS FROM THE PAYLOAD, NOT FROM fetchedRound
-					Participants: allScoresSubmittedPayload.Participants, // This contains the scores!
-				},
-			}
-
-			backendFinalizedMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				&backendFinalizationPayload,
-				roundevents.RoundFinalizedV1, // Backend consumers subscribe to this domain topic
-			)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create backend RoundFinalized message",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to create RoundFinalized message: %w", err)
-			}
-
-			h.logger.InfoContext(ctx, "Publishing parallel messages for round finalization",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("discord_topic", roundevents.RoundFinalizedDiscordV1),
-				attr.String("backend_topic", roundevents.RoundFinalizedV1),
-				attr.Int("participants_with_scores", len(allScoresSubmittedPayload.Participants)),
-			)
-
-			// Return BOTH messages: discord-specific and backend domain message
-			return []*message.Message{discordFinalizedMsg, backendFinalizedMsg}, nil
+	backendFinalizationPayload := &roundevents.RoundFinalizedPayloadV1{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+		RoundData: roundtypes.Round{
+			ID:             fetchedRound.ID,
+			Title:          fetchedRound.Title,
+			Description:    fetchedRound.Description,
+			Location:       fetchedRound.Location,
+			StartTime:      fetchedRound.StartTime,
+			EventMessageID: fetchedRound.EventMessageID,
+			CreatedBy:      fetchedRound.CreatedBy,
+			State:          fetchedRound.State,
+			Participants:   payload.Participants,
 		},
-	)
-	return wrappedHandler(msg)
+	}
+
+	// We return two separate results. The Discord-bound event needs the message ID
+	// metadata to allow the Discord module to update/finalize the correct message.
+	return []handlerwrapper.Result{
+		{
+			Topic:   roundevents.RoundFinalizedDiscordV1,
+			Payload: discordFinalizationPayload,
+			Metadata: map[string]string{
+				"discord_message_id": fetchedRound.EventMessageID,
+			},
+		},
+		{
+			Topic:   roundevents.RoundFinalizedV1,
+			Payload: backendFinalizationPayload,
+		},
+	}, nil
 }
 
-func (h *RoundHandlers) HandleRoundFinalized(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleRoundFinalized",
-		&roundevents.RoundFinalizedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundFinalizedPayload := payload.(*roundevents.RoundFinalizedPayloadV1)
+// HandleRoundFinalized handles the domain event after a round is finalized, notifying the score module.
+func (h *RoundHandlers) HandleRoundFinalized(
+	ctx context.Context,
+	payload *roundevents.RoundFinalizedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.roundService.NotifyScoreModule(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received RoundFinalized event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("round_id", roundFinalizedPayload.RoundID.String()),
-			)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "notify score module failed",
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundFinalizationErrorV1, Payload: result.Failure},
+		}, nil
+	}
 
-			// Call the service function to handle the event
-			result, err := h.roundService.NotifyScoreModule(ctx, *roundFinalizedPayload)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle RoundFinalized event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
-				)
-				return nil, fmt.Errorf("failed to handle RoundFinalized event: %w", err)
-			}
+	if result.Success != nil {
+		successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
+		if !ok {
+			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from NotifyScoreModule"}
+		}
 
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Notify Score Module failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.ProcessRoundScoresRequestedV1, Payload: successPayload},
+		}, nil
+	}
 
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundFinalizationErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Notify Score Module successful", attr.CorrelationIDFromMsg(msg))
-
-				// Create success message to publish - this should contain the ProcessRoundScoresRequestPayload
-				successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
-				if !ok {
-					h.logger.ErrorContext(ctx, "Unexpected success payload type from NotifyScoreModule",
-						attr.CorrelationIDFromMsg(msg),
-						attr.Any("payload_type", fmt.Sprintf("%T", result.Success)),
-					)
-					return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
-				}
-
-				// Log the payload data to debug the issue
-				h.logger.InfoContext(ctx, "Publishing ProcessRoundScoresRequest",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("round_id", successPayload.RoundID.String()),
-					attr.Int("num_scores", len(successPayload.Scores)),
-				)
-
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					successPayload,
-					roundevents.ProcessRoundScoresRequestedV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-
-				return []*message.Message{successMsg}, nil
-			}
-
-			// If neither Failure nor Success is set, return an error
-			h.logger.ErrorContext(ctx, "Unexpected result from NotifyScoreModule service (neither success nor failure)",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			return nil, fmt.Errorf("unexpected result from service (neither success nor failure)")
-		},
-	)
-
-	// Execute the wrapped handler with the message
-	return wrappedHandler(msg)
+	return nil, sharedtypes.ValidationError{Message: "unexpected result from service: both success and failure are nil"}
 }

@@ -45,7 +45,7 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 					Reason:  "guild config not found",
 				},
 				Error: errors.New("guild config not found"),
-			}, errors.New("guild config not found")
+			}, nil
 		}
 
 		// Build updates map from config.

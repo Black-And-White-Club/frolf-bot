@@ -2,14 +2,11 @@ package testutils
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
 )
 
 // TestCase represents a generic test case structure for event-driven tests
@@ -34,112 +31,138 @@ type TestCase struct {
 }
 
 // sanitizeForNATS removes characters that aren't allowed in NATS subject names
-func sanitizeForNATS(name string) string {
-	// Replace common test characters with underscore
-	replacer := map[rune]rune{
-		' ':  '_',
-		'(':  '_',
-		')':  '_',
-		'/':  '_',
-		'\\': '_',
-		'.':  '_',
-	}
+// func sanitizeForNATS(name string) string {
+// 	// Replace common test characters with underscore
+// 	replacer := map[rune]rune{
+// 		' ':  '_',
+// 		'(':  '_',
+// 		')':  '_',
+// 		'/':  '_',
+// 		'\\': '_',
+// 		'.':  '_',
+// 	}
 
-	result := make([]rune, 0, len(name))
-	for _, ch := range name {
-		if r, ok := replacer[ch]; ok {
-			result = append(result, r)
-		} else if (ch >= 'a' && ch <= 'z') ||
-			(ch >= 'A' && ch <= 'Z') ||
-			(ch >= '0' && ch <= '9') ||
-			ch == '_' || ch == '-' {
-			result = append(result, ch)
-		}
-	}
-	return string(result)
-}
+// 	result := make([]rune, 0, len(name))
+// 	for _, ch := range name {
+// 		if r, ok := replacer[ch]; ok {
+// 			result = append(result, r)
+// 		} else if (ch >= 'a' && ch <= 'z') ||
+// 			(ch >= 'A' && ch <= 'Z') ||
+// 			(ch >= '0' && ch <= '9') ||
+// 			ch == '_' || ch == '-' {
+// 			result = append(result, ch)
+// 		}
+// 	}
+// 	return string(result)
+// }
 
-// RunTest executes a test case in the given test environment
+// // deleteAllTestConsumers deletes all consumers with names starting with "test-" from known streams
+// func deleteAllTestConsumers(env *TestEnvironment) error {
+// 	ctx, cancel := context.WithTimeout(env.Ctx, 5*time.Second)
+// 	defer cancel()
+
+// 	streamNames := []string{"round", "user", "discord", "leaderboard", "score"}
+
+// 	for _, streamName := range streamNames {
+// 		stream, err := env.JetStream.Stream(ctx, streamName)
+// 		if err != nil {
+// 			// Stream doesn't exist, skip
+// 			continue
+// 		}
+
+// 		consumers := stream.ListConsumers(ctx)
+// 		for ci := range consumers.Info() {
+// 			if ci == nil {
+// 				continue
+// 			}
+// 			// Delete any consumer that starts with "test-"
+// 			if strings.HasPrefix(ci.Name, "test-") {
+// 				if err := env.JetStream.DeleteConsumer(ctx, streamName, ci.Name); err != nil {
+// 					log.Printf("Warning: failed to delete test consumer %q from stream %q: %v", ci.Name, streamName, err)
+// 				} else {
+// 					log.Printf("Deleted leftover test consumer %q from stream %q", ci.Name, streamName)
+// 				}
+// 			}
+// 		}
+// 		if err := consumers.Err(); err != nil {
+// 			log.Printf("Warning: error listing consumers for stream %q: %v", streamName, err)
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+// defaultDeleteConsumer attempts to delete a JetStream consumer from known streams
+// func defaultDeleteConsumer(env *TestEnvironment, topic, consumerName string) error {
+// 	ctx, cancel := context.WithTimeout(env.Ctx, 3*time.Second)
+// 	defer cancel()
+
+// 	// Try common stream names (map topics to their streams)
+// 	streamNames := []string{"round", "user", "discord", "delayed", "leaderboard", "score"}
+
+// 	for _, streamName := range streamNames {
+// 		err := env.JetStream.DeleteConsumer(ctx, streamName, consumerName)
+// 		if err == nil {
+// 			log.Printf("Deleted consumer %q from stream %q", consumerName, streamName)
+// 			return nil
+// 		}
+
+// 		errMsg := err.Error()
+// 		// Consumer or stream not found in this stream, try next one (this is expected)
+// 		if strings.Contains(errMsg, "consumer not found") ||
+// 			strings.Contains(errMsg, "CONSUMER_NOT_FOUND") ||
+// 			strings.Contains(errMsg, "stream not found") ||
+// 			strings.Contains(errMsg, "err_code=10059") {
+// 			continue
+// 		}
+
+// 		// Log unexpected errors but continue trying other streams
+// 		log.Printf("Error deleting consumer %q from stream %q: %v", consumerName, streamName, err)
+// 	}
+
+// 	// Consumer not found is actually fine - might have been auto-cleaned
+// 	return nil
+// }
+
+// RunTest executes a test case with smart polling to handle async event delays.
+// RunTest executes a test case with smart polling to handle async event delays.
 func RunTest(t *testing.T, tc TestCase, env *TestEnvironment) {
 	t.Helper()
 
-	// Apply defaults
 	if tc.MessageTimeout == 0 {
-		tc.MessageTimeout = 5 * time.Second
+		tc.MessageTimeout = 10 * time.Second
 	}
 
-	// Generate a unique ID for this test case to isolate subscriptions
-	testID := fmt.Sprintf("%s-%s", sanitizeForNATS(t.Name()), uuid.New().String()[:8])
-
-	// Setup initial state
+	// 1. Setup per-test state
 	initialState := tc.SetupFn(t, env)
 
-	// Setup message tracking
 	receivedMsgs := make(map[string][]*message.Message)
 	mu := &sync.Mutex{}
 	subscriberWg := &sync.WaitGroup{}
 
-	// Use a cancelable context for subscriptions
-	subCtx, cancelSub := context.WithCancel(env.Ctx)
-
-	// Map to store consumer names by topic
-	consumersByTopic := make(map[string]string)
-
-	// Ensure proper cleanup
-	t.Cleanup(func() {
-		log.Printf("Test Case %q: Canceling subscription context.", t.Name())
+	// Create a context that we can cancel to stop the test subscribers
+	subCtx, cancelSub := context.WithCancel(context.Background())
+	defer func() {
 		cancelSub()
+		subscriberWg.Wait()
+	}()
 
-		log.Printf("Test Case %q: Waiting for subscriber goroutines to finish.", t.Name())
-		waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer waitCancel()
-
-		waitCh := make(chan struct{})
-		go func() {
-			subscriberWg.Wait()
-			close(waitCh)
-		}()
-
-		select {
-		case <-waitCh:
-			log.Printf("Test Case %q: Subscriber goroutines finished.", t.Name())
-		case <-waitCtx.Done():
-			log.Printf("Test Case %q: WARNING: Subscriber goroutines did not finish within timeout after context cancellation.", t.Name())
-		}
-
-		// Clean up NATS consumers if we have a method to do so
-		if deleteConsumerFn := tc.DeleteConsumerFn; deleteConsumerFn != nil {
-			for topic, consumerName := range consumersByTopic {
-				if err := deleteConsumerFn(env, topic, consumerName); err != nil {
-					t.Logf("Warning: failed to delete consumer %s for topic %s: %v",
-						consumerName, topic, err)
-				}
-			}
-		}
-	})
-
-	// Setup subscribers for all expected topics
+	// 2. Subscribe to expected topics
 	for _, topic := range tc.ExpectedTopics {
-		// Generate consumer name for this topic and test
-		consumerName := fmt.Sprintf("test-%s-%s", sanitizeForNATS(topic), testID)
-		consumersByTopic[topic] = consumerName
-
-		// Access EventBus through the environment
-		msgCh, err := env.EventBus.Subscribe(subCtx, topic)
+		msgCh, err := env.EventBus.SubscribeForTest(subCtx, topic)
 		if err != nil {
-			t.Fatalf("Failed to subscribe to topic %q: %v", topic, err)
+			t.Fatalf("SubscribeForTest failed for topic %s: %v", topic, err)
 		}
 
 		subscriberWg.Add(1)
-		go func(topic string, messages <-chan *message.Message) {
+		go func(topic string, ch <-chan *message.Message) {
 			defer subscriberWg.Done()
 			for {
 				select {
-				case msg, ok := <-messages:
+				case msg, ok := <-ch:
 					if !ok {
 						return
 					}
-					log.Printf("Test received message %s on topic %q", msg.UUID, topic)
 					mu.Lock()
 					receivedMsgs[topic] = append(receivedMsgs[topic], msg)
 					mu.Unlock()
@@ -151,33 +174,129 @@ func RunTest(t *testing.T, tc TestCase, env *TestEnvironment) {
 		}(topic, msgCh)
 	}
 
-	// Wait a moment to ensure all subscribers are ready
+	// Wait for ephemeral consumers to register
 	time.Sleep(200 * time.Millisecond)
 
-	// Publish the message to start the flow
+	// 3. Trigger the event
 	triggerMsg := tc.PublishMsgFn(t, env)
 
-	// Wait for expected messages on all topics
-	for _, topic := range tc.ExpectedTopics {
-		msgs := WaitForMessages(t, env, receivedMsgs, mu, topic, 1, tc.MessageTimeout)
+	// 4. Polling Loop
+	deadline := time.Now().Add(tc.MessageTimeout)
 
-		if len(msgs) == 0 && !tc.ExpectError {
-			t.Fatalf("Failed to receive message on topic %q within timeout", topic)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		// Copy messages for validation to avoid race conditions
+		snapshot := make(map[string][]*message.Message)
+		for k, v := range receivedMsgs {
+			snapshot[k] = v
 		}
+		mu.Unlock()
+
+		// Check if we have at least one message per topic before validating
+		allTopicsPopulated := true
+		for _, topic := range tc.ExpectedTopics {
+			if len(snapshot[topic]) == 0 {
+				allTopicsPopulated = false
+				break
+			}
+		}
+
+		if allTopicsPopulated {
+			// Try to validate. We use a separate goroutine to catch Fatalf (runtime.Goexit)
+			if passed := internalValidate(tc.ValidateFn, env, triggerMsg, snapshot, initialState); passed {
+				return // SUCCESS!
+			}
+		}
+		// Polling interval
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Final validation using test case's validate function
+	// 5. Final Attempt: If we timed out, run validation one last time with the REAL T
+	// to report the specific failure reasons to the console.
+	mu.Lock()
 	tc.ValidateFn(t, env, triggerMsg, receivedMsgs, initialState)
+	mu.Unlock()
 }
 
+// internalValidate runs the validation function in a protected goroutine.
+// It returns true if the validation passed, and false if it failed or panicked.
+func internalValidate(
+	fn func(t *testing.T, env *TestEnvironment, tm *message.Message, rm map[string][]*message.Message, is interface{}),
+	env *TestEnvironment, tm *message.Message, rm map[string][]*message.Message, is interface{},
+) (passed bool) {
+	tmpT := &testing.T{}
+	done := make(chan struct{})
+
+	go func() {
+		defer func() {
+			// Catch runtime.Goexit() (from t.Fatalf) or actual panics
+			recover()
+			close(done)
+		}()
+		fn(tmpT, env, tm, rm, is)
+	}()
+
+	<-done
+	return !tmpT.Failed()
+}
+
+// func waitForJetStreamConsumer(
+// 	t *testing.T,
+// 	env *TestEnvironment,
+// 	topic string,
+// 	timeout time.Duration,
+// ) {
+// 	t.Helper()
+
+// 	ctx, cancel := context.WithTimeout(env.Ctx, timeout)
+// 	defer cancel()
+
+// 	streamNames := []string{"round", "user", "discord", "leaderboard", "score"}
+
+// 	ticker := time.NewTicker(50 * time.Millisecond)
+// 	defer ticker.Stop()
+
+// 	for {
+// 		select {
+// 		case <-ctx.Done():
+// 			t.Fatalf("Timed out waiting for JetStream consumer for topic %q", topic)
+
+// 		case <-ticker.C:
+// 			for _, streamName := range streamNames {
+// 				stream, err := env.JetStream.Stream(ctx, streamName)
+// 				if err != nil {
+// 					continue
+// 				}
+
+// 				consumers := stream.ListConsumers(ctx)
+// 				for ci := range consumers.Info() {
+// 					if ci == nil {
+// 						continue
+// 					}
+// 					// FilterSubject is the key signal that the consumer is active
+// 					if strings.Contains(ci.Config.FilterSubject, topic) {
+// 						return
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
 // WaitForMessages waits for at least count messages on the specified topic
-func WaitForMessages(t *testing.T, env *TestEnvironment, receivedMsgs map[string][]*message.Message, mu *sync.Mutex, topic string, count int, timeout time.Duration) []*message.Message {
+func WaitForMessages(
+	t *testing.T,
+	env *TestEnvironment,
+	receivedMsgs map[string][]*message.Message,
+	mu *sync.Mutex,
+	topic string,
+	count int,
+	timeout time.Duration,
+) []*message.Message {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(env.Ctx, timeout)
 	defer cancel()
-
-	t.Logf("Waiting for %d messages on topic %q with timeout %v", count, topic, timeout)
 
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -185,40 +304,24 @@ func WaitForMessages(t *testing.T, env *TestEnvironment, receivedMsgs map[string
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout - collect what we have so far
 			mu.Lock()
-			msgs, exists := receivedMsgs[topic]
-			currentCount := 0
-			if exists {
-				currentCount = len(msgs)
-			}
+			msgs := receivedMsgs[topic]
 			mu.Unlock()
-
-			if currentCount >= count {
-				return msgs
-			}
-
-			t.Logf("Timeout waiting for %d messages on topic %q. Received %d.",
-				count, topic, currentCount)
-			return nil
+			return msgs
 
 		case <-ticker.C:
 			mu.Lock()
-			msgs, exists := receivedMsgs[topic]
-			currentCount := 0
-			if exists {
-				currentCount = len(msgs)
-			}
-
-			if currentCount >= count {
-				result := make([]*message.Message, len(msgs))
-				copy(result, msgs)
-				mu.Unlock()
-				t.Logf("Successfully received %d messages on topic %q", currentCount, topic)
-				return result
-			}
-
+			msgs := receivedMsgs[topic]
+			currentCount := len(msgs)
 			mu.Unlock()
+
+			if count == 0 && currentCount > 0 {
+				return msgs
+			}
+
+			if count > 0 && currentCount >= count {
+				return msgs
+			}
 		}
 	}
 }

@@ -59,7 +59,7 @@ func (env *TestEnvironment) DeleteJetStreamConsumers(ctx context.Context, stream
 	return nil
 }
 
-// ResetJetStreamState purges all messages from JetStream streams (much faster than deleting/recreating)
+// ResetJetStreamState purges all messages from JetStream streams
 func (env *TestEnvironment) ResetJetStreamState(ctx context.Context, streamNames ...string) error {
 	if env.JetStream == nil {
 		return fmt.Errorf("JetStream context is nil")
@@ -76,7 +76,7 @@ func (env *TestEnvironment) ResetJetStreamState(ctx context.Context, streamNames
 			continue
 		}
 
-		// Purge all messages from the stream (keeps the stream and consumers)
+		// Purge all messages from the stream (this preserves consumers)
 		if err := stream.Purge(ctx); err != nil {
 			log.Printf("Warning: failed to purge stream %s: %v", streamName, err)
 		}

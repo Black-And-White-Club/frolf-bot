@@ -1,7 +1,6 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -16,89 +15,189 @@ import (
 )
 
 func TestHandleDiscordMessageIDUpdated(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - Schedule Events for Future Round",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Create a round scheduled for 2 hours in the future
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				startTime := time.Now().Add(2 * time.Hour)
 				roundID := helper.CreateRoundInDBWithTime(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming, &startTime)
 
-				// Create schedule payload
 				payload := createScheduleRoundPayload(roundID, "Test Round", &startTime, "test-message-123")
-
-				publishAndExpectScheduleSuccess(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{}, // Success means no error
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// Verify no error messages
+				errorMsgs := receivedMsgs[roundevents.RoundErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Schedule Events for Round Less Than 1 Hour Away",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Create a round scheduled for 30 minutes in the future (should skip reminder)
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				startTime := time.Now().Add(30 * time.Minute)
 				roundID := helper.CreateRoundInDBWithTime(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming, &startTime)
 
-				// Create schedule payload
 				payload := createScheduleRoundPayload(roundID, "Test Round", &startTime, "test-message-456")
-
-				publishAndExpectScheduleSuccess(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				errorMsgs := receivedMsgs[roundevents.RoundErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Schedule Events for Round Far in Future",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Create a round scheduled for 1 day in the future
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				startTime := time.Now().Add(24 * time.Hour)
 				roundID := helper.CreateRoundInDBWithTime(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming, &startTime)
 
-				// Create schedule payload
 				payload := createScheduleRoundPayload(roundID, "Future Round", &startTime, "test-message-789")
-
-				publishAndExpectScheduleSuccess(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				errorMsgs := receivedMsgs[roundevents.RoundErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Handle Round with Past Start Time",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Create a round with start time in the past
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				startTime := time.Now().Add(-1 * time.Hour)
 				roundID := helper.CreateRoundInDBWithTime(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming, &startTime)
 
-				// Create schedule payload
 				payload := createScheduleRoundPayload(roundID, "Past Round", &startTime, "test-message-past")
-
-				publishAndExpectScheduleSuccess(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				errorMsgs := receivedMsgs[roundevents.RoundErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Invalid JSON Message",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
-				publishInvalidJSONAndExpectNoScheduleMessages(t, deps, deps.MessageCapture)
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
 			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				invalidJSON := []byte(`invalid json`)
+				msg := message.NewMessage(uuid.New().String(), invalidJSON)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				errorMsgs := receivedMsgs[roundevents.RoundErrorV1]
+				if len(errorMsgs) > 0 {
+					t.Errorf("Expected no error messages for invalid JSON, got %d", len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-			tc.setupAndRun(t, helper, &deps)
+			deps := SetupTestRoundHandler(t)
+
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
+			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }
@@ -123,96 +222,5 @@ func createScheduleRoundPayload(roundID sharedtypes.RoundID, title string, start
 			StartTime:   sharedStartTime,
 		},
 		EventMessageID: eventMessageID,
-	}
-}
-
-// Publishing functions - UNIQUE TO SCHEDULE ROUND TESTS
-func publishScheduleRoundMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.RoundScheduledPayloadV1) *message.Message {
-	t.Helper()
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	msg := message.NewMessage(uuid.New().String(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundEventMessageIDUpdatedV1, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	return msg
-}
-
-func publishInvalidJSONAndExpectNoScheduleMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
-	t.Helper()
-
-	// Create invalid JSON message
-	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
-	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	// Publish to the correct topic that the handler listens to.
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundEventMessageIDUpdatedV1, invalidMsg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	// Wait a bit to ensure no messages are published
-	time.Sleep(500 * time.Millisecond)
-
-	errorMsgs := getScheduleErrorFromHandlerMessages(capture)
-
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for invalid JSON, got %d", len(errorMsgs))
-	}
-}
-
-// Wait functions - UNIQUE TO SCHEDULE ROUND TESTS
-func waitForScheduleErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundErrorV1, count, defaultTimeout)
-}
-
-// Message retrieval functions - UNIQUE TO SCHEDULE ROUND TESTS
-func getScheduleErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundErrorV1)
-}
-
-// Validation functions - UNIQUE TO SCHEDULE ROUND TESTS
-func validateScheduleErrorFromHandler(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.RoundErrorPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse schedule error message: %v", err)
-	}
-
-	if result.RoundID != expectedRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
-	}
-
-	if result.Error == "" {
-		t.Error("Expected error message to be populated")
-	}
-}
-
-// Test expectation functions - UNIQUE TO SCHEDULE ROUND TESTS
-func publishAndExpectScheduleSuccess(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.RoundScheduledPayloadV1) {
-	publishScheduleRoundMessage(t, deps, &payload)
-
-	// Wait a bit to ensure processing completes
-	time.Sleep(500 * time.Millisecond)
-
-	// Since this handler returns empty slice on success, we just check that no errors occurred
-	errorMsgs := getScheduleErrorFromHandlerMessages(capture)
-
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for successful scheduling, got %d", len(errorMsgs))
-		// Log the error for debugging
-		if len(errorMsgs) > 0 {
-			result, err := testutils.ParsePayload[roundevents.RoundErrorPayloadV1](errorMsgs[0])
-			if err == nil {
-				t.Logf("Error message: %s", result.Error)
-			}
-		}
 	}
 }

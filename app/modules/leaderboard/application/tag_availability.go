@@ -35,7 +35,8 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 					TagNumber: payload.TagNumber,
 					Reason:    "failed to check tag availability",
 				},
-			}, err
+				Error: err,
+			}, nil
 		}
 
 		s.logger.InfoContext(ctx, "Tag availability check result",
@@ -58,6 +59,7 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 			},
 		}, nil
 	})
+	// If the wrapped service returned an error inside the result, propagate it
 	if err != nil {
 		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayloadV1)
 		if !ok {
@@ -69,6 +71,20 @@ func (s *LeaderboardService) CheckTagAvailability(ctx context.Context, guildID s
 			}
 		}
 		return nil, failurePayload, err
+	}
+
+	// If the service function set an internal error on the result, propagate that as well
+	if result.Error != nil {
+		failurePayload, ok := result.Failure.(*leaderboardevents.TagAvailabilityCheckFailedPayloadV1)
+		if !ok {
+			failurePayload = &leaderboardevents.TagAvailabilityCheckFailedPayloadV1{
+				GuildID:   guildID,
+				UserID:    payload.UserID,
+				TagNumber: payload.TagNumber,
+				Reason:    "unexpected error format",
+			}
+		}
+		return nil, failurePayload, result.Error
 	}
 
 	successPayload, ok := result.Success.(*leaderboardevents.TagAvailabilityCheckResultPayloadV1)

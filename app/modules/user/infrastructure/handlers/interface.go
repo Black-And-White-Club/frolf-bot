@@ -1,17 +1,21 @@
 package userhandlers
 
 import (
-	"github.com/ThreeDotsLabs/watermill/message"
+	"context"
+
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
 // Handlers interface defines the contract for user-related message handlers.
 type Handlers interface {
-	HandleUserSignupRequest(msg *message.Message) ([]*message.Message, error)
-	HandleUserRoleUpdateRequest(msg *message.Message) ([]*message.Message, error)
-	HandleGetUserRequest(msg *message.Message) ([]*message.Message, error)
-	HandleGetUserRoleRequest(msg *message.Message) ([]*message.Message, error)
-	HandleTagUnavailable(msg *message.Message) ([]*message.Message, error)
-	HandleTagAvailable(msg *message.Message) ([]*message.Message, error)
-	HandleUpdateUDiscIdentityRequest(msg *message.Message) ([]*message.Message, error)
-	HandleScorecardParsed(msg *message.Message) ([]*message.Message, error)
+	HandleUserSignupRequest(ctx context.Context, payload *userevents.UserSignupRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleUserRoleUpdateRequest(ctx context.Context, payload *userevents.UserRoleUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleGetUserRequest(ctx context.Context, payload *userevents.GetUserRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleGetUserRoleRequest(ctx context.Context, payload *userevents.GetUserRoleRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleTagUnavailable(ctx context.Context, payload *userevents.TagUnavailablePayloadV1) ([]handlerwrapper.Result, error)
+	HandleTagAvailable(ctx context.Context, payload *userevents.TagAvailablePayloadV1) ([]handlerwrapper.Result, error)
+	HandleUpdateUDiscIdentityRequest(ctx context.Context, payload *userevents.UpdateUDiscIdentityRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleScorecardParsed(ctx context.Context, payload *roundevents.ParsedScorecardPayloadV1) ([]handlerwrapper.Result, error)
 }

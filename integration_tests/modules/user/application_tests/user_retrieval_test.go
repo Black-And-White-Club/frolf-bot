@@ -276,9 +276,13 @@ func TestGetUserRole(t *testing.T) {
 				return nil, guildID, userID
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
-				if err == nil {
-					t.Fatal("Expected error for nil context, got nil")
-				}
+                // Service now returns failure payload with nil top-level error for nil context in retrieval
+                if err != nil {
+                    t.Fatalf("Did not expect top-level error for nil context in GetUserRole, got: %v", err)
+                }
+                if result.Error == nil {
+                    t.Fatalf("Expected result.Error to be set for nil context in GetUserRole")
+                }
 			},
 			expectedSuccess: false,
 			skipCleanup:     true,

@@ -10,10 +10,10 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -138,68 +138,68 @@ func (r *LeaderboardRouter) Configure(routerCtx context.Context, leaderboardServ
 	return nil
 }
 
-// RegisterHandlers registers event handlers using V1 versioned event constants.
+type handlerDeps struct {
+	router     *message.Router
+	subscriber eventbus.EventBus
+	publisher  eventbus.EventBus
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	helper     utils.Helpers
+	metrics    handlerwrapper.ReturningMetrics
+}
+
+// registerHandler registers a pure transformation-pattern handler with typed payload
+func registerHandler[T any](
+	deps handlerDeps,
+	topic string,
+	handler func(context.Context, *T) ([]handlerwrapper.Result, error),
+) {
+	handlerName := "leaderboard." + topic
+
+	deps.router.AddHandler(
+		handlerName,
+		topic,
+		deps.subscriber,
+		"", // Watermill reads topic from message metadata when empty
+		deps.publisher,
+		handlerwrapper.WrapTransformingTyped(
+			handlerName,
+			deps.logger,
+			deps.tracer,
+			deps.helper,
+			deps.metrics,
+			handler,
+		),
+	)
+}
+
+// RegisterHandlers registers event handlers using V1 versioned event constants with pure transformation pattern.
 func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leaderboardhandlers.Handlers) error {
 	r.logger.InfoContext(ctx, "Entering Register Handlers for Leaderboard")
-	eventsToHandlers := map[string]message.HandlerFunc{
-		// Leaderboard Update Flow (from updates.go)
-		leaderboardevents.LeaderboardUpdateRequestedV1: handlers.HandleLeaderboardUpdateRequested,
 
-		// Tag Swap Flow (from tags.go)
-		leaderboardevents.TagSwapRequestedV1: handlers.HandleTagSwapRequested,
+	var metrics handlerwrapper.ReturningMetrics // reserved for metrics integration
 
-		// Leaderboard Retrieval Flow (from updates.go)
-		leaderboardevents.GetLeaderboardRequestedV1: handlers.HandleGetLeaderboardRequest,
-
-		// Discord Tag Lookup Flow (from shared/tags.go)
-		sharedevents.DiscordTagLookupRequestedV1: handlers.HandleGetTagByUserIDRequest,
-
-		// Tag Availability Check Flow (from tags.go)
-		leaderboardevents.TagAvailabilityCheckRequestedV1: handlers.HandleTagAvailabilityCheckRequested,
-
-		// Batch Tag Assignment Flow (from shared/tags.go)
-		sharedevents.LeaderboardBatchTagAssignmentRequestedV1: handlers.HandleBatchTagAssignmentRequested,
-
-		// Round Tag Lookup Flow (from tags.go)
-		leaderboardevents.RoundGetTagByUserIDRequestedV1: handlers.HandleRoundGetTagRequest,
-
-		// Cross-module: Guild Config Created (from guild/config.go)
-		guildevents.GuildConfigCreatedV1: handlers.HandleGuildConfigCreated,
+	deps := handlerDeps{
+		router:     r.Router,
+		subscriber: r.subscriber,
+		publisher:  r.publisher,
+		logger:     r.logger,
+		tracer:     r.tracer,
+		helper:     r.helper,
+		metrics:    metrics,
 	}
 
-	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("leaderboard.%s", topic)
-		r.Router.AddHandler(
-			handlerName,
-			topic,
-			r.subscriber,
-			"",
-			nil,
-			func(msg *message.Message) ([]*message.Message, error) {
-				messages, err := handlerFunc(msg)
-				if err != nil {
-					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
-					return nil, err
-				}
+	// Register all leaderboard module handlers using pure transformation pattern
+	registerHandler(deps, leaderboardevents.LeaderboardUpdateRequestedV1, handlers.HandleLeaderboardUpdateRequested)
+	registerHandler(deps, leaderboardevents.TagSwapRequestedV1, handlers.HandleTagSwapRequested)
+	registerHandler(deps, leaderboardevents.GetLeaderboardRequestedV1, handlers.HandleGetLeaderboardRequest)
+	registerHandler(deps, sharedevents.DiscordTagLookupRequestedV1, handlers.HandleGetTagByUserIDRequest)
+	registerHandler(deps, leaderboardevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)
+	registerHandler(deps, sharedevents.LeaderboardBatchTagAssignmentRequestedV1, handlers.HandleBatchTagAssignmentRequested)
+	// Register the V1 shared-events topic for round tag lookup.
+	registerHandler(deps, sharedevents.RoundTagLookupRequestedV1, handlers.HandleRoundGetTagRequest)
+	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)
 
-				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic))
-
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
-					} else {
-						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
-					}
-				}
-
-				return nil, nil
-			},
-		)
-	}
 	return nil
 }
 

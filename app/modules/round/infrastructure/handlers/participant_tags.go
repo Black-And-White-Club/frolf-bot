@@ -2,177 +2,79 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-func (h *RoundHandlers) HandleScheduledRoundTagUpdate(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleScheduledRoundTagUpdate",
-		&map[string]interface{}{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			tagUpdateMap := payload.(*map[string]interface{})
-
-			h.logger.InfoContext(ctx, "Received ScheduledRoundTagUpdate event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("source", getStringFromMap(tagUpdateMap, "source")),
-				attr.String("batch_id", getStringFromMap(tagUpdateMap, "batch_id")),
-			)
-
-			// Extract guild_id if present
-			var guildID sharedtypes.GuildID
-			if gidRaw, ok := (*tagUpdateMap)["guild_id"]; ok {
-				if gidStr, ok := gidRaw.(string); ok && gidStr != "" {
-					guildID = sharedtypes.GuildID(gidStr)
-				}
-			}
-
-			// Convert the map to the service payload format (changed tags)
-			changedTags := make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber)
-
-			if changedTagsRaw, ok := (*tagUpdateMap)["changed_tags"]; ok {
-				if changedTagsMap, ok := changedTagsRaw.(map[string]interface{}); ok {
-					for userID, tagNumberRaw := range changedTagsMap {
-						switch v := tagNumberRaw.(type) {
-						case float64:
-							tagNumber := sharedtypes.TagNumber(v)
-							changedTags[sharedtypes.DiscordID(userID)] = &tagNumber
-						case int:
-							tagNumber := sharedtypes.TagNumber(v)
-							changedTags[sharedtypes.DiscordID(userID)] = &tagNumber
-						default:
-							h.logger.WarnContext(ctx, "Unexpected tag number type",
-								attr.String("user_id", userID),
-								attr.Any("tag_number", tagNumberRaw),
-								attr.String("type", fmt.Sprintf("%T", tagNumberRaw)),
-							)
-						}
-					}
-				}
-			}
-
-			h.logger.InfoContext(ctx, "Converted changed tags",
-				attr.CorrelationIDFromMsg(msg),
-				attr.Int("changed_tags_count", len(changedTags)),
-			)
-
-			if len(changedTags) == 0 {
-				h.logger.InfoContext(ctx, "No valid tag changes found, skipping update")
-				return nil, nil
-			}
-
-			// Create the service payload
-			servicePayload := roundevents.ScheduledRoundTagUpdatePayloadV1{
-				GuildID:     guildID,
-				ChangedTags: changedTags,
-			}
-
-			if guildID == "" {
-				h.logger.WarnContext(ctx, "ScheduledRoundTagUpdate received without guild_id; backend will treat as no-op",
-					attr.CorrelationIDFromMsg(msg),
-				)
-			} else {
-				h.logger.InfoContext(ctx, "Prepared service payload for scheduled round tag update",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("guild_id", string(guildID)),
-					attr.Int("changed_tags_count", len(changedTags)),
-				)
-			}
-
-			// Call the service function to handle the event
-			result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, servicePayload)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle ScheduledRoundTagUpdate event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to handle ScheduledRoundTagUpdate event: %w", err)
-			}
-
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Scheduled round tag update failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
-
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundUpdateError,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				// FOLLOW THE SAME PATTERN AS REMINDER HANDLER - Extract and log the success payload details
-				tagsUpdatedPayload := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
-
-				h.logger.InfoContext(ctx, "Scheduled round tag update processed successfully",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Int("total_rounds_processed", tagsUpdatedPayload.Summary.TotalRoundsProcessed),
-					attr.Int("rounds_updated", tagsUpdatedPayload.Summary.RoundsUpdated),
-					attr.Int("participants_updated", tagsUpdatedPayload.Summary.ParticipantsUpdated),
-				)
-
-				// Log each round that will be updated (similar to reminder handler logging participants)
-				for _, roundInfo := range tagsUpdatedPayload.UpdatedRounds {
-					h.logger.InfoContext(ctx, "Round requires Discord embed update",
-						attr.CorrelationIDFromMsg(msg),
-						attr.RoundID("round_id", roundInfo.RoundID),
-						attr.String("round_title", string(roundInfo.Title)),
-						attr.String("event_message_id", roundInfo.EventMessageID),
-						attr.Int("total_participants", len(roundInfo.UpdatedParticipants)),
-						attr.Int("participants_with_tag_changes", roundInfo.ParticipantsChanged),
-					)
-				}
-
-				// Only publish Discord update if there are rounds to update
-				if len(tagsUpdatedPayload.UpdatedRounds) > 0 {
-					successMsg, err := h.helpers.CreateResultMessage(
-						msg,
-						tagsUpdatedPayload, // Pass the extracted payload, not result.Success
-						roundevents.TagsUpdatedForScheduledRoundsV1,
-					)
-					if err != nil {
-						return nil, fmt.Errorf("failed to create success message: %w", err)
-					}
-					return []*message.Message{successMsg}, nil
-				} else {
-					// No rounds to update, but processing was successful
-					h.logger.InfoContext(ctx, "Tag update processed but no rounds require Discord updates",
-						attr.CorrelationIDFromMsg(msg),
-						attr.Int("total_rounds_processed", tagsUpdatedPayload.Summary.TotalRoundsProcessed),
-					)
-					return []*message.Message{}, nil
-				}
-			}
-
-			// This should never happen now that service always returns Success or Failure
-			h.logger.ErrorContext(ctx, "Unexpected result from UpdateScheduledRoundsWithNewTags service",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			return nil, fmt.Errorf("service returned neither success nor failure")
-		},
-	)
-
-	return wrappedHandler(msg)
-}
-
-// Helper function to safely extract string values from the map
-func getStringFromMap(m *map[string]interface{}, key string) string {
-	if value, ok := (*m)[key]; ok {
-		if str, ok := value.(string); ok {
-			return str
-		}
+// HandleScheduledRoundTagUpdate processes tag updates for rounds that are currently in a scheduled state.
+// This is triggered when the leaderboard service emits a change in player tags.
+func (h *RoundHandlers) HandleScheduledRoundTagUpdate(
+	ctx context.Context,
+	payload *leaderboardevents.TagUpdateForScheduledRoundsPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	// If no tags actually changed, there's nothing for the round service to do.
+	if len(payload.ChangedTags) == 0 {
+		h.logger.DebugContext(ctx, "skipping scheduled round tag update: no changed tags in payload")
+		return nil, nil
 	}
-	return ""
+
+	// Transform the leaderboard event payload into the format expected by the round service.
+	servicePayload := roundevents.ScheduledRoundTagUpdatePayloadV1{
+		GuildID:     payload.GuildID,
+		ChangedTags: make(map[sharedtypes.DiscordID]*sharedtypes.TagNumber),
+	}
+
+	for userID, tag := range payload.ChangedTags {
+		// Create a local copy to avoid pointer aliasing during map iteration.
+		tagCopy := tag
+		servicePayload.ChangedTags[userID] = &tagCopy
+	}
+
+	// Execute the update across all eligible scheduled rounds in the database.
+	result, err := h.roundService.UpdateScheduledRoundsWithNewTags(ctx, servicePayload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle functional failures returned by the service.
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "failed to update scheduled rounds with new tags",
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundUpdateErrorV1, Payload: result.Failure},
+		}, nil
+	}
+
+	// Handle successful updates.
+	if result.Success != nil {
+		success, ok := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+		if !ok {
+			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from UpdateScheduledRoundsWithNewTags"}
+		}
+
+		// If the service processed the update but found no rounds actually required a change,
+		// we return nil to stop the event chain.
+		if len(success.UpdatedRounds) == 0 {
+			h.logger.InfoContext(ctx, "scheduled tag update complete: no rounds were affected")
+			return nil, nil
+		}
+
+		h.logger.InfoContext(ctx, "successfully updated tags for scheduled rounds",
+			attr.Int("rounds_updated", len(success.UpdatedRounds)),
+			attr.Int("participants_affected", success.Summary.ParticipantsUpdated),
+		)
+
+		// Publish the successful update event.
+		// This event is consumed by the Discord bot to update the RSVP embeds with the new tag numbers.
+		return []handlerwrapper.Result{
+			{Topic: roundevents.TagsUpdatedForScheduledRoundsV1, Payload: success},
+		}, nil
+	}
+
+	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from scheduled tag update service"}
 }

@@ -30,7 +30,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 		expectedSuccessType       string
 		expectedBatchPayload      *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1
 		expectedTagAssigned       *leaderboardevents.TagAssignedPayload
-		expectedLeaderboardUpdate *leaderboardevents.LeaderboardUpdatedPayload
+		expectedLeaderboardUpdate *leaderboardevents.LeaderboardUpdatedPayloadV1
 		expectedSwapRequested     *leaderboardevents.TagSwapRequestedPayload
 		expectedFailurePayload    interface{}
 		expectedError             error
@@ -148,7 +148,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			operationID:         uuid.New(),
 			batchID:             uuid.New(),
 			expectedSuccessType: "leaderboard_updated",
-			expectedLeaderboardUpdate: &leaderboardevents.LeaderboardUpdatedPayload{
+			expectedLeaderboardUpdate: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 				RoundID: sharedtypes.RoundID{},
 			},
 			expectedError: nil,
@@ -244,7 +244,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				BatchID:          "",
 				Reason:           "database error",
 			},
-			expectedError: errors.New("database error"),
+			expectedError: nil,
 		},
 		{
 			name: "No valid assignments in batch",
@@ -318,7 +318,7 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 				BatchID:          "",
 				Reason:           "failed to get leaderboard",
 			},
-			expectedError: errors.New("failed to get leaderboard"),
+			expectedError: nil,
 		},
 		{
 			name: "String source type - user_creation",
@@ -617,11 +617,11 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			requestingUserID: nil,
 			operationID:      uuid.New(),
 			batchID:          uuid.New(),
-			expectedFailurePayload: &leaderboardevents.LeaderboardUpdateFailedPayload{
+			expectedFailurePayload: &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
 				RoundID: sharedtypes.RoundID{},
 				Reason:  "database error",
 			},
-			expectedError: errors.New("database error"),
+			expectedError: nil,
 		},
 	}
 
@@ -671,7 +671,9 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 			if tt.expectedLeaderboardUpdate != nil {
 				tt.expectedLeaderboardUpdate.RoundID = sharedtypes.RoundID(tt.operationID)
 			}
-			if leaderboardFailure, ok := tt.expectedFailurePayload.(*leaderboardevents.LeaderboardUpdateFailedPayload); ok {
+			if leaderboardFailureV1, ok := tt.expectedFailurePayload.(*leaderboardevents.LeaderboardUpdateFailedPayloadV1); ok {
+				leaderboardFailureV1.RoundID = sharedtypes.RoundID(tt.operationID)
+			} else if leaderboardFailure, ok := tt.expectedFailurePayload.(*leaderboardevents.LeaderboardUpdateFailedPayload); ok {
 				leaderboardFailure.RoundID = sharedtypes.RoundID(tt.operationID)
 			}
 
@@ -714,9 +716,9 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						validateTagAssignedPayload(t, tt.expectedTagAssigned, tagPayload)
 					}
 				case "leaderboard_updated":
-					leaderboardPayload, ok := got.Success.(*leaderboardevents.LeaderboardUpdatedPayload)
+					leaderboardPayload, ok := got.Success.(*leaderboardevents.LeaderboardUpdatedPayloadV1)
 					if !ok {
-						t.Errorf("expected result to be *leaderboardevents.LeaderboardUpdatedPayload, got: %T", got.Success)
+						t.Errorf("expected result to be *leaderboardevents.LeaderboardUpdatedPayloadV1, got: %T", got.Success)
 					} else {
 						validateLeaderboardUpdatedPayload(t, tt.expectedLeaderboardUpdate, leaderboardPayload)
 					}
@@ -743,10 +745,10 @@ func TestLeaderboardService_ProcessTagAssignments(t *testing.T) {
 						} else {
 							validateFailurePayload(t, expectedFailure, failurePayload)
 						}
-					case *leaderboardevents.LeaderboardUpdateFailedPayload:
-						failurePayload, ok := got.Failure.(*leaderboardevents.LeaderboardUpdateFailedPayload)
+					case *leaderboardevents.LeaderboardUpdateFailedPayloadV1:
+						failurePayload, ok := got.Failure.(*leaderboardevents.LeaderboardUpdateFailedPayloadV1)
 						if !ok {
-							t.Errorf("expected result to be *leaderboardevents.LeaderboardUpdateFailedPayload, got: %T", got.Failure)
+							t.Errorf("expected result to be *leaderboardevents.LeaderboardUpdateFailedPayloadV1, got: %T", got.Failure)
 						} else {
 							validateLeaderboardUpdateFailedPayload(t, expectedFailure, failurePayload)
 						}
@@ -813,7 +815,7 @@ func validateFailurePayload(t *testing.T, expected, actual *leaderboardevents.Le
 	}
 }
 
-func validateLeaderboardUpdatedPayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardUpdatedPayload) {
+func validateLeaderboardUpdatedPayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardUpdatedPayloadV1) {
 	if actual.RoundID != expected.RoundID {
 		t.Errorf("RoundID mismatch: expected %v, got %v", expected.RoundID, actual.RoundID)
 	}
@@ -828,7 +830,7 @@ func validateTagSwapRequestedPayload(t *testing.T, expected, actual *leaderboard
 	}
 }
 
-func validateLeaderboardUpdateFailedPayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardUpdateFailedPayload) {
+func validateLeaderboardUpdateFailedPayload(t *testing.T, expected, actual *leaderboardevents.LeaderboardUpdateFailedPayloadV1) {
 	if actual.RoundID != expected.RoundID {
 		t.Errorf("RoundID mismatch: expected %v, got %v", expected.RoundID, actual.RoundID)
 	}

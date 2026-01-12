@@ -21,7 +21,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Module represents the round module.
 type Module struct {
 	EventBus           eventbus.EventBus
 	RoundService       roundservice.Service
@@ -34,7 +33,6 @@ type Module struct {
 	prometheusRegistry *prometheus.Registry
 }
 
-// NewRoundModule creates a new instance of the Round module.
 func NewRoundModule(
 	ctx context.Context,
 	cfg *config.Config,
@@ -52,16 +50,14 @@ func NewRoundModule(
 
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
-	// Get the underlying Bun DB from your existing roundDB implementation
 	roundDBImpl, ok := roundDB.(*rounddb.RoundDBImpl)
 	if !ok {
 		return nil, fmt.Errorf("roundDB is not of type *RoundDBImpl")
 	}
 
-	// Initialize River queue service using the existing Bun DB
 	queueService, err := roundqueue.NewService(
 		ctx,
-		roundDBImpl.DB, // Use the existing Bun DB connection
+		roundDBImpl.DB,
 		logger,
 		cfg.Postgres.DSN,
 		metrics,
@@ -72,15 +68,12 @@ func NewRoundModule(
 		return nil, fmt.Errorf("failed to initialize queue service: %w", err)
 	}
 
-	// Start the queue service
 	if err := queueService.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start queue service: %w", err)
 	}
 
-	// Use your existing round validator
 	roundValidator := roundutil.NewRoundValidator()
 
-	// Initialize round service with queue service and score DB
 	roundService := roundservice.NewRoundService(
 		roundDB,
 		queueService,
@@ -92,14 +85,14 @@ func NewRoundModule(
 		roundValidator,
 	)
 
-	// Create a Prometheus registry for this module
 	prometheusRegistry := prometheus.NewRegistry()
 
 	// Initialize round router
-	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
+	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, helpers, tracer, prometheusRegistry)
 
-	// Configure the router with the round service
-	if err := roundRouter.Configure(routerCtx, roundService, eventBus, metrics); err != nil {
+	// CRITICAL FIX: Configure registers the handlers and adds middleware (CorrelationID)
+	// Without this, the router is created but never listens to any topics.
+	if err := roundRouter.Configure(roundService, metrics); err != nil {
 		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
 
@@ -117,37 +110,30 @@ func NewRoundModule(
 	return module, nil
 }
 
-// Run starts the round module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 	logger := m.observability.Provider.Logger
 	logger.InfoContext(ctx, "Starting round module")
 
-	// Create a context that can be canceled
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
 	defer cancel()
 
-	// If we have a wait group, mark as done when this method exits
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
 	logger.InfoContext(ctx, "Round module goroutine stopped")
 }
 
-// Close stops the round module and cleans up resources.
 func (m *Module) Close() error {
 	logger := m.observability.Provider.Logger
 	logger.Info("Stopping round module")
 
-	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
 
-	// Stop the queue service
 	if m.QueueService != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -156,7 +142,6 @@ func (m *Module) Close() error {
 		}
 	}
 
-	// Close the RoundRouter
 	if m.RoundRouter != nil {
 		if err := m.RoundRouter.Close(); err != nil {
 			logger.Error("Error closing RoundRouter from module", "error", err)

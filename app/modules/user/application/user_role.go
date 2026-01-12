@@ -3,7 +3,6 @@ package userservice
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -63,7 +62,7 @@ func (s *UserServiceImpl) UpdateUserRoleInDatabase(ctx context.Context, guildID 
 					Reason:  failureReason,
 				},
 				Error: dbErr,
-			}, fmt.Errorf("failed to update user role: %w", dbErr)
+			}, nil
 		}
 
 		s.logger.InfoContext(ctx, "User role updated successfully",

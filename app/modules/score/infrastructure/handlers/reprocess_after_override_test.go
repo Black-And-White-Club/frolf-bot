@@ -2,17 +2,15 @@ package scorehandlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
 	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
-	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -33,7 +31,6 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 
 	// Mock dependencies
 	mockScoreService := scoremocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -41,43 +38,15 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		topic          string
-		payload        interface{}
-		metadata       map[string]string
 		mockSetup      func()
-		wantMsgCount   int
+		payload        interface{}
 		wantErr        bool
 		expectedErrMsg string
+		checkResults   func(t *testing.T, results []handlerwrapper.Result)
 	}{
 		{
-			name:  "Successfully handle bulk success with reprocess",
-			topic: scoreevents.ScoreBulkUpdatedV1,
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
-				GuildID:        testGuildID,
-				RoundID:        testRoundID,
-				AppliedCount:   2,
-				FailedCount:    0,
-				TotalRequested: 2,
-				UserIDsApplied: []sharedtypes.DiscordID{userID1, userID2},
-			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
+			name: "Successfully handle bulk success with reprocess",
 			mockSetup: func() {
-				bulkPayload := &scoreevents.ScoreBulkUpdatedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					AppliedCount:   2,
-					FailedCount:    0,
-					TotalRequested: 2,
-					UserIDsApplied: []sharedtypes.DiscordID{userID1, userID2},
-				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreBulkUpdatedPayloadV1) = *bulkPayload
-						return nil
-					},
-				)
-
 				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
 					testGuildID,
@@ -86,19 +55,37 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 					{UserID: userID1, Score: score1, TagNumber: &tag1},
 					{UserID: userID2, Score: score2, TagNumber: &tag2},
 				}, nil)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(), // ProcessRoundScoresRequestedPayloadV1
-					scoreevents.ProcessRoundScoresRequestedV1,
-				).Return(message.NewMessage("reprocess-msg", []byte("reprocess")), nil)
 			},
-			wantMsgCount: 1,
-			wantErr:      false,
+			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
+				GuildID:        testGuildID,
+				RoundID:        testRoundID,
+				AppliedCount:   2,
+				FailedCount:    0,
+				TotalRequested: 2,
+				UserIDsApplied: []sharedtypes.DiscordID{userID1, userID2},
+			},
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(results))
+				}
+				if results[0].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[0].Topic)
+				}
+				reprocessPayload, ok := results[0].Payload.(*scoreevents.ProcessRoundScoresRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
+				}
+				if len(reprocessPayload.Scores) != 2 {
+					t.Errorf("expected 2 scores, got %d", len(reprocessPayload.Scores))
+				}
+			},
 		},
 		{
-			name:  "Bulk success with zero applied count - skip reprocess",
-			topic: scoreevents.ScoreBulkUpdatedV1,
+			name: "Bulk success with zero applied count - skip reprocess",
+			mockSetup: func() {
+				// No service calls expected
+			},
 			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
@@ -107,52 +94,16 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				TotalRequested: 2,
 				UserIDsApplied: []sharedtypes.DiscordID{},
 			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
-			mockSetup: func() {
-				bulkPayload := &scoreevents.ScoreBulkUpdatedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					AppliedCount:   0,
-					FailedCount:    2,
-					TotalRequested: 2,
-					UserIDsApplied: []sharedtypes.DiscordID{},
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 0 {
+					t.Fatalf("expected 0 results (skip reprocess), got %d", len(results))
 				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreBulkUpdatedPayloadV1) = *bulkPayload
-						return nil
-					},
-				)
 			},
-			wantMsgCount: 0,
-			wantErr:      false,
 		},
 		{
-			name:  "Single success not part of bulk - trigger reprocess",
-			topic: scoreevents.ScoreUpdatedV1,
-			payload: &scoreevents.ScoreUpdatedPayloadV1{
-				GuildID: testGuildID,
-				RoundID: testRoundID,
-				UserID:  userID1,
-				Score:   score1,
-			},
-			metadata: map[string]string{"topic": scoreevents.ScoreUpdatedV1},
+			name: "Single success not part of bulk - trigger reprocess",
 			mockSetup: func() {
-				singlePayload := &scoreevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Score:   score1,
-				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdatedPayloadV1) = *singlePayload
-						return nil
-					},
-				)
-
 				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
 					testGuildID,
@@ -160,127 +111,41 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				).Return([]sharedtypes.ScoreInfo{
 					{UserID: userID1, Score: score1, TagNumber: &tag1},
 				}, nil)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestedV1,
-				).Return(message.NewMessage("reprocess-msg", []byte("reprocess")), nil)
 			},
-			wantMsgCount: 1,
-			wantErr:      false,
-		},
-		{
-			name:  "Single success part of bulk batch - skip reprocess",
-			topic: scoreevents.ScoreUpdatedV1,
 			payload: &scoreevents.ScoreUpdatedPayloadV1{
 				GuildID: testGuildID,
 				RoundID: testRoundID,
 				UserID:  userID1,
 				Score:   score1,
 			},
-			metadata: map[string]string{
-				"topic":           scoreevents.ScoreUpdatedV1,
-				"override":        "true",
-				"override_mode":   "bulk",
-			},
-			mockSetup: func() {
-				singlePayload := &scoreevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Score:   score1,
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(results))
 				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreUpdatedPayloadV1) = *singlePayload
-						return nil
-					},
-				).Times(0) // Should not unmarshal since we skip early
-			},
-			wantMsgCount: 0,
-			wantErr:      false,
-		},
-		{
-			name:  "Fail to unmarshal bulk payload",
-			topic: scoreevents.ScoreBulkUpdatedV1,
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
-				GuildID:      testGuildID,
-				RoundID:      testRoundID,
-				AppliedCount: 1,
-			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(
-					fmt.Errorf("unmarshal failed"),
-				)
-			},
-			wantMsgCount:   0,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal bulk success payload: unmarshal failed",
-		},
-		{
-			name:  "Fail to unmarshal single payload",
-			topic: scoreevents.ScoreUpdatedV1,
-			payload: &scoreevents.ScoreUpdatedPayloadV1{
-				GuildID: testGuildID,
-				RoundID: testRoundID,
-				UserID:  userID1,
-				Score:   score1,
-			},
-			metadata: map[string]string{"topic": scoreevents.ScoreUpdatedV1},
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(
-					fmt.Errorf("unmarshal failed"),
-				)
-			},
-			wantMsgCount:   0,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal success payload: unmarshal failed",
-		},
-		{
-			name:  "GetScoresForRound fails",
-			topic: scoreevents.ScoreBulkUpdatedV1,
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
-				GuildID:        testGuildID,
-				RoundID:        testRoundID,
-				AppliedCount:   1,
-				FailedCount:    0,
-				TotalRequested: 1,
-				UserIDsApplied: []sharedtypes.DiscordID{userID1},
-			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
-			mockSetup: func() {
-				bulkPayload := &scoreevents.ScoreBulkUpdatedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					AppliedCount:   1,
-					FailedCount:    0,
-					TotalRequested: 1,
-					UserIDsApplied: []sharedtypes.DiscordID{userID1},
+				if results[0].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[0].Topic)
 				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreBulkUpdatedPayloadV1) = *bulkPayload
-						return nil
-					},
-				)
-
+			},
+		},
+		{
+			name: "Nil payload",
+			mockSetup: func() {
+				// No expectations
+			},
+			payload:        nil,
+			wantErr:        true,
+			expectedErrMsg: "payload is nil",
+		},
+		{
+			name: "GetScoresForRound fails",
+			mockSetup: func() {
 				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
 				).Return(nil, fmt.Errorf("db error"))
 			},
-			wantMsgCount:   0,
-			wantErr:        true,
-			expectedErrMsg: "failed to load stored scores for reprocess: db error",
-		},
-		{
-			name:  "GetScoresForRound returns empty - skip reprocess",
-			topic: scoreevents.ScoreBulkUpdatedV1,
 			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
@@ -289,36 +154,18 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				TotalRequested: 1,
 				UserIDsApplied: []sharedtypes.DiscordID{userID1},
 			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
+			wantErr:        true,
+			expectedErrMsg: "failed to load stored scores for reprocess",
+		},
+		{
+			name: "GetScoresForRound returns empty - skip reprocess",
 			mockSetup: func() {
-				bulkPayload := &scoreevents.ScoreBulkUpdatedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					AppliedCount:   1,
-					FailedCount:    0,
-					TotalRequested: 1,
-					UserIDsApplied: []sharedtypes.DiscordID{userID1},
-				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreBulkUpdatedPayloadV1) = *bulkPayload
-						return nil
-					},
-				)
-
 				mockScoreService.EXPECT().GetScoresForRound(
 					gomock.Any(),
 					testGuildID,
 					testRoundID,
 				).Return([]sharedtypes.ScoreInfo{}, nil)
 			},
-			wantMsgCount: 0,
-			wantErr:      false,
-		},
-		{
-			name:  "CreateResultMessage fails during reprocess",
-			topic: scoreevents.ScoreBulkUpdatedV1,
 			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
@@ -327,41 +174,21 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				TotalRequested: 1,
 				UserIDsApplied: []sharedtypes.DiscordID{userID1},
 			},
-			metadata: map[string]string{"topic": scoreevents.ScoreBulkUpdatedV1},
-			mockSetup: func() {
-				bulkPayload := &scoreevents.ScoreBulkUpdatedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					AppliedCount:   1,
-					FailedCount:    0,
-					TotalRequested: 1,
-					UserIDsApplied: []sharedtypes.DiscordID{userID1},
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 0 {
+					t.Fatalf("expected 0 results (no scores to reprocess), got %d", len(results))
 				}
-
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*scoreevents.ScoreBulkUpdatedPayloadV1) = *bulkPayload
-						return nil
-					},
-				)
-
-				mockScoreService.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return([]sharedtypes.ScoreInfo{
-					{UserID: userID1, Score: score1, TagNumber: &tag1},
-				}, nil)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(),
-					scoreevents.ProcessRoundScoresRequestedV1,
-				).Return(nil, fmt.Errorf("create message failed"))
 			},
-			wantMsgCount:   0,
+		},
+		{
+			name: "Unexpected payload type",
+			mockSetup: func() {
+				// No expectations
+			},
+			payload:        "wrong type",
 			wantErr:        true,
-			expectedErrMsg: "failed to create reprocess request message: create message failed",
+			expectedErrMsg: "unexpected payload type",
 		},
 	}
 
@@ -369,35 +196,25 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			// Build message with metadata
-			payloadBytes, _ := json.Marshal(tt.payload)
-			msg := message.NewMessage("test-id", payloadBytes)
-			for key, val := range tt.metadata {
-				msg.Metadata.Set(key, val)
-			}
-
 			h := &ScoreHandlers{
 				scoreService: mockScoreService,
 				logger:       logger,
 				tracer:       tracer,
 				metrics:      metrics,
-				Helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
 			}
 
-			got, err := h.HandleReprocessAfterScoreUpdate(msg)
+			ctx := context.Background()
+			got, err := h.HandleReprocessAfterScoreUpdate(ctx, tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleReprocessAfterScoreUpdate() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
 				t.Errorf("HandleReprocessAfterScoreUpdate() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
-			if len(got) != tt.wantMsgCount {
-				t.Errorf("HandleReprocessAfterScoreUpdate() returned %d messages, want %d", len(got), tt.wantMsgCount)
+			if !tt.wantErr && tt.checkResults != nil {
+				tt.checkResults(t, got)
 			}
 		})
 	}

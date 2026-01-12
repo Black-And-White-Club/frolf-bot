@@ -129,8 +129,8 @@ func TestCreateGuildConfig(t *testing.T) {
 				return deps.Ctx, config
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for missing signup channel but got nil")
+				if err == nil && result.Error == nil && result.Failure == nil {
+					t.Fatalf("Expected error or failure for missing signup channel but got none")
 				}
 				if result.Success != nil {
 					t.Fatalf("Expected failure but got success: %+v", result.Success)
@@ -164,8 +164,8 @@ func TestCreateGuildConfig(t *testing.T) {
 				return deps.Ctx, config
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for missing event channel but got nil")
+				if err == nil && result.Error == nil && result.Failure == nil {
+					t.Fatalf("Expected error or failure for missing event channel but got none")
 				}
 				if result.Success != nil {
 					t.Fatalf("Expected failure but got success: %+v", result.Success)
@@ -190,8 +190,8 @@ func TestCreateGuildConfig(t *testing.T) {
 				return deps.Ctx, config
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for empty guild ID but got nil")
+				if err == nil && result.Error == nil && result.Failure == nil {
+					t.Fatalf("Expected error or failure for empty guild ID but got none")
 				}
 				if result.Success != nil {
 					t.Fatalf("Expected failure but got success: %+v", result.Success)
@@ -271,8 +271,8 @@ func TestCreateGuildConfig_AlreadyExists(t *testing.T) {
 	}
 
 	result, err := deps.Service.CreateGuildConfig(deps.Ctx, differentConfig)
-	if err == nil {
-		t.Fatalf("Expected error when config already exists with different settings but got nil")
+	if err == nil && result.Error == nil && result.Failure == nil {
+		t.Fatalf("Expected error or failure when config already exists with different settings but got none")
 	}
 
 	if result.Success != nil {

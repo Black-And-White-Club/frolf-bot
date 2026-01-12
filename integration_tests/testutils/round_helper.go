@@ -479,7 +479,7 @@ func (h *RoundTestHelper) PublishRoundFinalized(t *testing.T, ctx context.Contex
 
 // GetRoundFinalizedMessages returns captured discord round finalized messages
 func (h *RoundTestHelper) GetRoundFinalizedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundFinalizedV1)
+	return h.capture.GetMessages(roundevents.RoundFinalizedDiscordV1)
 }
 
 // GetProcessRoundScoresRequestMessages returns captured process round scores request messages
@@ -494,7 +494,7 @@ func (h *RoundTestHelper) GetRoundFinalizationErrorMessages() []*message.Message
 
 // WaitForRoundFinalized waits for discord round finalized messages
 func (h *RoundTestHelper) WaitForRoundFinalized(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundFinalizedV1, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundFinalizedDiscordV1, expectedCount, timeout)
 }
 
 // WaitForProcessRoundScoresRequest waits for process round scores request messages
@@ -508,10 +508,10 @@ func (h *RoundTestHelper) WaitForRoundFinalizationError(expectedCount int, timeo
 }
 
 // ValidateRoundFinalized parses and validates a discord round finalized message
-func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedPayloadV1 {
+func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.RoundFinalizedDiscordPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.RoundFinalizedPayloadV1](msg)
+	result, err := ParsePayload[roundevents.RoundFinalizedDiscordPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse discord round finalized message: %v", err)
 	}

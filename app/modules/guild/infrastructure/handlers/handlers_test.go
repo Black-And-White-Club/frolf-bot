@@ -3,7 +3,6 @@ package guildhandlers
 import (
 	"testing"
 
-	mocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application/mocks"
@@ -16,12 +15,11 @@ func TestNewGuildHandlers(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := guildmocks.NewMockService(ctrl)
-	mockHelpers := mocks.NewMockHelpers(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &guildmetrics.NoOpMetrics{}
 
-	handlers := NewGuildHandlers(mockService, logger, tracer, mockHelpers, metrics)
+	handlers := NewGuildHandlers(mockService, logger, tracer, nil, metrics)
 
 	if handlers == nil {
 		t.Fatal("NewGuildHandlers returned nil")
@@ -36,13 +34,7 @@ func TestNewGuildHandlers(t *testing.T) {
 	if handlers.tracer != tracer {
 		t.Error("tracer not set correctly")
 	}
-	if handlers.helpers != mockHelpers {
-		t.Error("helpers not set correctly")
-	}
 	if handlers.metrics != metrics {
 		t.Error("metrics not set correctly")
-	}
-	if handlers.handlerWrapper == nil {
-		t.Error("handlerWrapper not set")
 	}
 }

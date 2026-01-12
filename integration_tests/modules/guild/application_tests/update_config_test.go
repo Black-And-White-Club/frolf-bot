@@ -105,8 +105,8 @@ func TestUpdateGuildConfig(t *testing.T) {
 				return deps.Ctx, config
 			},
 			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for not found but got nil")
+				if err == nil && result.Error == nil && result.Failure == nil {
+					t.Fatalf("Expected error or failure for not found but got none")
 				}
 				if result.Success != nil {
 					t.Fatalf("Expected failure but got success: %+v", result.Success)

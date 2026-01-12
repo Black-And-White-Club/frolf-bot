@@ -12,6 +12,7 @@ import (
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -102,45 +103,83 @@ func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreser
 	return nil
 }
 
+// handlerDeps holds dependencies for handler registration
+type handlerDeps struct {
+	router     *message.Router
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	helper     utils.Helpers
+	metrics    handlerwrapper.ReturningMetrics
+	subscriber eventbus.EventBus
+	publisher  eventbus.EventBus
+}
+
+// registerHandler registers a typed handler using the generic WrapTransformingTyped wrapper.
+func registerHandler[T any](
+	deps handlerDeps,
+	topic string,
+	handler func(context.Context, *T) ([]handlerwrapper.Result, error),
+) {
+	handlerName := fmt.Sprintf("score.%s", topic)
+
+	deps.router.AddHandler(
+		handlerName,
+		topic,
+		deps.subscriber,
+		"", // No static output topic (each result has its own topic in metadata)
+		deps.publisher,
+		handlerwrapper.WrapTransformingTyped(
+			handlerName,
+			deps.logger,
+			deps.tracer,
+			deps.helper,
+			deps.metrics,
+			handler,
+		),
+	)
+}
+
 // RegisterHandlers registers event handlers using V1 versioned event constants.
 func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandlers.Handlers) error {
-	eventsToHandlers := map[string]message.HandlerFunc{
-		// Score Processing Flow (from processing.go)
-		scoreevents.ProcessRoundScoresRequestedV1: handlers.HandleProcessRoundScoresRequest,
+	// Note: metrics set to nil for now (reserved for future phase)
+	// ScoreMetrics interface has the required handler methods, but we use the base interface
+	var metrics handlerwrapper.ReturningMetrics
 
-		// Score Update Flow (from updates.go)
-		// These handlers now trigger reprocessing directly, so we don't need separate subscriptions
-		scoreevents.ScoreUpdateRequestedV1:     handlers.HandleCorrectScoreRequest,
-		scoreevents.ScoreBulkUpdateRequestedV1: handlers.HandleBulkCorrectScoreRequest,
+	deps := handlerDeps{
+		router:     r.Router,
+		logger:     r.logger,
+		tracer:     r.tracer,
+		helper:     r.helper,
+		metrics:    metrics,
+		subscriber: r.subscriber,
+		publisher:  r.publisher,
 	}
 
-	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("score.%s", topic)
-		r.Router.AddHandler(
-			handlerName,
-			topic,
-			r.subscriber,
-			"",
-			nil,
-			func(msg *message.Message) ([]*message.Message, error) {
-				messages, err := handlerFunc(msg)
-				if err != nil {
-					r.logger.ErrorContext(ctx, "Error processing message", attr.String("message_id", msg.UUID), attr.Any("error", err))
-					return nil, err
-				}
-				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						// Pass the context from RegisterHandlers (routerCtx) to Publish
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
-					}
-				}
-				return nil, nil
-			},
-		)
-	}
+	// Register ProcessRoundScoresRequest handler
+	registerHandler(
+		deps,
+		scoreevents.ProcessRoundScoresRequestedV1,
+		handlers.HandleProcessRoundScoresRequest,
+	)
+
+	// Register CorrectScoreRequest handler
+	registerHandler(
+		deps,
+		scoreevents.ScoreUpdateRequestedV1,
+		handlers.HandleCorrectScoreRequest,
+	)
+
+	// Register BulkCorrectScoreRequest handler
+	registerHandler(
+		deps,
+		scoreevents.ScoreBulkUpdateRequestedV1,
+		handlers.HandleBulkCorrectScoreRequest,
+	)
+
+	r.logger.Info("Registered score handlers",
+		attr.Int("handlers", 3),
+	)
+
 	return nil
 }
 

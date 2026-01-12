@@ -12,6 +12,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -44,16 +45,27 @@ func NewLeaderboardHandlers(
 		Helpers:            helpers,
 		metrics:            metrics,
 		// Assign the standalone handlerWrapper function
-		handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-			return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, helpers)
-		},
+			handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
+				// Support both factory-based and legacy pointer-based migration:
+				// - If caller provides a factory func() interface{}, use it directly
+				// - Otherwise, create a factory that uses the compatibility NewInstance
+				var factory func() interface{}
+				if unmarshalTo != nil {
+					if fn, ok := unmarshalTo.(func() interface{}); ok {
+						factory = fn
+					} else {
+						factory = func() interface{} { return utils.NewInstance(unmarshalTo) }
+					}
+				}
+				return handlerWrapper(handlerName, factory, handlerFunc, logger, metrics, tracer, helpers)
+			},
 	}
 }
 
 // handlerWrapper is a standalone function that handles common tracing, logging, and metrics for handlers.
 func handlerWrapper(
 	handlerName string,
-	unmarshalTo interface{},
+	unmarshalFactory func() interface{},
 	handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error),
 	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
@@ -85,10 +97,8 @@ func handlerWrapper(
 		// Create a new instance of the payload type
 		// Ensure payloadInstance is a pointer if unmarshalTo is a pointer to a struct
 		var payloadInstance interface{}
-		if unmarshalTo != nil {
-			// Use reflection to create a new instance of the type pointed to by unmarshalTo
-			// This assumes unmarshalTo is a pointer to a struct
-			payloadInstance = utils.NewInstance(unmarshalTo)
+		if unmarshalFactory != nil {
+			payloadInstance = unmarshalFactory()
 		}
 
 		// Unmarshal payload if a target is provided
@@ -135,19 +145,26 @@ func handlerWrapper(
 }
 
 // HandleGuildConfigCreated seeds an empty active leaderboard for the guild if missing.
-func (h *LeaderboardHandlers) HandleGuildConfigCreated(msg *message.Message) ([]*message.Message, error) {
-	wrapped := h.handlerWrapper(
-		"HandleGuildConfigCreated",
-		&guildevents.GuildConfigCreatedPayload{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			p := payload.(*guildevents.GuildConfigCreatedPayload)
-			if err := h.leaderboardService.EnsureGuildLeaderboard(ctx, p.GuildID); err != nil {
-				h.logger.ErrorContext(ctx, "Failed to ensure guild leaderboard", attr.Error(err))
-				// No retry storm: treat as transient and let Watermill retry
-				return nil, fmt.Errorf("ensure leaderboard failed: %w", err)
-			}
-			return nil, nil
-		},
+func (h *LeaderboardHandlers) HandleGuildConfigCreated(
+	ctx context.Context,
+	payload *guildevents.GuildConfigCreatedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	h.logger.InfoContext(ctx, "Received GuildConfigCreated event",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("guild_id", string(payload.GuildID)),
 	)
-	return wrapped(msg)
+
+	if err := h.leaderboardService.EnsureGuildLeaderboard(ctx, payload.GuildID); err != nil {
+		h.logger.ErrorContext(ctx, "Failed to ensure guild leaderboard",
+			attr.ExtractCorrelationID(ctx),
+			attr.Error(err),
+		)
+		return nil, err
+	}
+
+	h.logger.InfoContext(ctx, "Guild leaderboard ensured",
+		attr.ExtractCorrelationID(ctx),
+	)
+
+	return []handlerwrapper.Result{}, nil
 }

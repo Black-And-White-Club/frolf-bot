@@ -2,19 +2,14 @@ package userhandlers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"reflect"
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	utilmocks "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -27,43 +22,28 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testPayload := &userevents.TagAvailablePayloadV1{
-		GuildID:   testGuildID,
-		UserID:    testUserID,
-		TagNumber: testTagNumber,
-	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
 	mockUserService := usermocks.NewMockService(ctrl)
-	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name      string
+		payload   *userevents.TagAvailablePayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successfully handle TagAvailable event",
+			payload: &userevents.TagAvailablePayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
 					userservice.UserOperationResult{
 						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
@@ -71,27 +51,19 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
-					userevents.UserCreatedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			wantLen:   1,
+			wantTopic: userevents.UserCreatedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Fail to create user",
+			payload: &userevents.TagAvailablePayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
+			},
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
 					userservice.UserOperationResult{
 						Success: nil,
@@ -105,90 +77,25 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.UserCreationFailedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "failed"},
-					userevents.UserCreationFailedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
-		},
-		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			wantLen:   1,
+			wantTopic: userevents.UserCreationFailedV1,
+			wantErr:   false,
 		},
 		{
 			name: "Service failure in CreateUser",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
-					userservice.UserOperationResult{},
-					fmt.Errorf("internal service error"),
-				)
+			payload: &userevents.TagAvailablePayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
 			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "failed to create user with tag: internal service error",
-		},
-		{
-			name: "Failure to create success message",
 			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
-					userservice.UserOperationResult{
-						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
-						Failure: nil,
-						Error:   nil,
-					},
-					nil,
-				)
-
-				mockHelpers.EXPECT().CreateResultMessage(gomock.Any(), &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber}, userevents.UserCreatedV1).Return(nil, fmt.Errorf("failed to create success message"))
-			},
-			msg:            testMsg,
-			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create success message",
-		},
-		{
-			name: "Unknown result from CreateUser",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagAvailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), gomock.Any(), gomock.Any()).Return(
+				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
 					userservice.UserOperationResult{},
 					nil,
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "user creation service returned unexpected result",
+			wantErr: true,
 		},
 	}
 
@@ -196,28 +103,23 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			h := &UserHandlers{
-				userService: mockUserService,
-				logger:      logger,
-				tracer:      tracer,
-				metrics:     metrics,
-				helpers:     mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
+			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
 
-			got, err := h.HandleTagAvailable(tt.msg)
+			results, err := h.HandleTagAvailable(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleTagAvailable() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleTagAvailable() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleTagAvailable() = %v, want %v", got, tt.want)
+			if !tt.wantErr {
+				if len(results) != tt.wantLen {
+					t.Errorf("HandleTagAvailable() got %d results, want %d", len(results), tt.wantLen)
+					return
+				}
+				if results[0].Topic != tt.wantTopic {
+					t.Errorf("HandleTagAvailable() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				}
 			}
 		})
 	}
@@ -231,61 +133,48 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(2)
 
-	testPayload := &userevents.TagUnavailablePayloadV1{
-		GuildID:   testGuildID,
-		UserID:    testUserID,
-		TagNumber: testTagNumber,
-		Reason:    "tag not available",
-	}
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-unavailable-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
-
-	// Mock dependencies
 	mockUserService := usermocks.NewMockService(ctrl)
-	mockHelpers := utilmocks.NewMockHelpers(ctrl)
-
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		mockSetup      func()
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
+		name      string
+		payload   *userevents.TagUnavailablePayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successfully handle TagUnavailable event",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*userevents.TagUnavailablePayloadV1) = *testPayload
-						return nil
-					},
-				)
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					&userevents.UserCreationFailedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber, Reason: "tag not available"},
-					userevents.UserCreationFailedV1,
-				).Return(testMsg, nil)
+			payload: &userevents.TagUnavailablePayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
+				Reason:    "tag not available",
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			mockSetup: func() {
+				// No service call needed
+			},
+			wantLen:   1,
+			wantTopic: userevents.UserCreationFailedV1,
+			wantErr:   false,
 		},
 		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func() {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
+			name: "Handle empty reason",
+			payload: &userevents.TagUnavailablePayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: testTagNumber,
+				Reason:    "",
 			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
+			mockSetup: func() {
+				// No service call needed
+			},
+			wantLen:   1,
+			wantTopic: userevents.UserCreationFailedV1,
+			wantErr:   false,
 		},
 	}
 
@@ -293,26 +182,23 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			h := &UserHandlers{
-				userService: mockUserService,
-				logger:      logger,
-				tracer:      tracer,
-				metrics:     metrics,
-				helpers:     mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, metrics, tracer, mockHelpers)
-				},
-			}
+			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
 
-			got, err := h.HandleTagUnavailable(tt.msg)
+			results, err := h.HandleTagUnavailable(context.Background(), tt.payload)
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleTagUnavailable() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleTagUnavailable() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleTagUnavailable() = %v, want %v", got, tt.want)
+
+			if !tt.wantErr {
+				if len(results) != tt.wantLen {
+					t.Errorf("HandleTagUnavailable() got %d results, want %d", len(results), tt.wantLen)
+					return
+				}
+				if results[0].Topic != tt.wantTopic {
+					t.Errorf("HandleTagUnavailable() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				}
 			}
 		})
 	}

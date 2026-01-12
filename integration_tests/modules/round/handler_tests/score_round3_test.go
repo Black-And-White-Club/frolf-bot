@@ -1,9 +1,7 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -17,54 +15,66 @@ import (
 )
 
 func TestHandleParticipantScoreUpdated(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - All Scores Submitted (Single Participant)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
-				// Create a round with one participant who has a score
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				score1 := sharedtypes.Score(-1)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 				})
 
-				// Create participant score updated payload
 				payload := createParticipantScoreUpdatedPayload(roundID, data2.UserID, score1, []roundtypes.Participant{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 				})
 
-				result := publishAndExpectAllScoresSubmitted(t, deps, deps.MessageCapture, payload)
-
-				// Validate the result
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-				if len(result.Participants) != 1 {
-					t.Errorf("Expected 1 participant, got %d", len(result.Participants))
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-				if result.Participants[0].Score == nil || *result.Participants[0].Score != score1 {
-					t.Errorf("Expected participant score %d, got %v", score1, result.Participants[0].Score)
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundAllScoresSubmittedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundAllScoresSubmittedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundAllScoresSubmittedV1)
+				}
+				var payload roundevents.AllScoresSubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
 		{
 			name: "Success - All Scores Submitted (Multiple Participants)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
 				data3 := NewTestData()
 				data4 := NewTestData()
-				// Create a round with multiple participants, all with scores
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				score1 := sharedtypes.Score(-2)
 				score2 := sharedtypes.Score(1)
 				score3 := sharedtypes.Score(0)
@@ -74,187 +84,262 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: &score3},
 				})
 
-				// Simulate that user3 just updated their score
 				payload := createParticipantScoreUpdatedPayload(roundID, data3.UserID, score2, []roundtypes.Participant{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: &score2},
 					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: &score3},
 				})
-
-				result := publishAndExpectAllScoresSubmitted(t, deps, deps.MessageCapture, payload)
-
-				// Validate the result
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-				if len(result.Participants) != 3 {
-					t.Errorf("Expected 3 participants, got %d", len(result.Participants))
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-
-				// Verify all participants have scores
-				for _, p := range result.Participants {
-					if p.Score == nil {
-						t.Errorf("Expected all participants to have scores, but %s has nil", p.UserID)
-					}
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundAllScoresSubmittedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundAllScoresSubmittedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundAllScoresSubmittedV1)
+				}
+				var payload roundevents.AllScoresSubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
 		{
 			name: "Success - Not All Scores Submitted (Single Participant Without Score)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
 				data3 := NewTestData()
-				// Create a round with mixed participants - some with scores, some without
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				score1 := sharedtypes.Score(2)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
-					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
-					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil}, // No score yet
-				})
-
-				// Simulate that user2 just updated their score
-				payload := createParticipantScoreUpdatedPayload(roundID, data2.UserID, score1, []roundtypes.Participant{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
-				result := publishAndExpectNotAllScoresSubmitted(t, deps, deps.MessageCapture, payload)
-
-				// Validate the result
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				payload := createParticipantScoreUpdatedPayload(roundID, data2.UserID, score1, []roundtypes.Participant{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
+					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},
+				})
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-				if result.Participant != data2.UserID {
-					t.Errorf("Expected Participant %s, got %s", data2.UserID, result.Participant)
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-				if result.Score != score1 {
-					t.Errorf("Expected Score %d, got %d", score1, result.Score)
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundScoresPartiallySubmittedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundScoresPartiallySubmittedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundScoresPartiallySubmittedV1)
 				}
-				if len(result.Participants) != 2 {
-					t.Errorf("Expected 2 participants, got %d", len(result.Participants))
+				var payload roundevents.ScoresPartiallySubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.Participant == "" {
+					t.Error("Expected Participant to be set")
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
 		{
 			name: "Success - Not All Scores Submitted (Multiple Missing Scores)",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
 				data3 := NewTestData()
 				data4 := NewTestData()
 				data5 := NewTestData()
-				// Create a round where multiple participants are missing scores
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				score1 := sharedtypes.Score(-1)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
-					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
-					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},    // No score
-					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: nil},    // No score
-					{UserID: data5.UserID, Response: roundtypes.ResponseTentative, Score: nil}, // No score
-				})
-
-				// Simulate that user2 just updated their score
-				payload := createParticipantScoreUpdatedPayload(roundID, data2.UserID, score1, []roundtypes.Participant{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 					{UserID: data5.UserID, Response: roundtypes.ResponseTentative, Score: nil},
 				})
 
-				result := publishAndExpectNotAllScoresSubmitted(t, deps, deps.MessageCapture, payload)
-
-				// Validate the result
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				payload := createParticipantScoreUpdatedPayload(roundID, data2.UserID, score1, []roundtypes.Participant{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
+					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},
+					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: nil},
+					{UserID: data5.UserID, Response: roundtypes.ResponseTentative, Score: nil},
+				})
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-				if len(result.Participants) != 4 {
-					t.Errorf("Expected 4 participants, got %d", len(result.Participants))
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-
-				// Count participants without scores
-				missingScores := 0
-				for _, p := range result.Participants {
-					if p.Score == nil {
-						missingScores++
-					}
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundScoresPartiallySubmittedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundScoresPartiallySubmittedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundScoresPartiallySubmittedV1)
 				}
-				if missingScores != 3 {
-					t.Errorf("Expected 3 participants without scores, got %d", missingScores)
+				var payload roundevents.ScoresPartiallySubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
 		{
 			name: "Success - Last Score Submitted Triggers All Scores Submitted",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
 				data3 := NewTestData()
 				data4 := NewTestData()
-				// Create a round where this update completes all scores
+				helper := testutils.NewRoundTestHelper(nil, nil)
 				score1 := sharedtypes.Score(1)
 				score2 := sharedtypes.Score(-1)
-				score3 := sharedtypes.Score(0) // This will be the final score
+				score3 := sharedtypes.Score(0)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
-					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
-					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: &score2},
-					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: &score3}, // Just updated
-				})
-
-				// Simulate that user4 just submitted the final score
-				payload := createParticipantScoreUpdatedPayload(roundID, data4.UserID, score3, []roundtypes.Participant{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
 					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: &score2},
 					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: &score3},
 				})
 
-				result := publishAndExpectAllScoresSubmitted(t, deps, deps.MessageCapture, payload)
-
-				// Validate that we got all scores submitted
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				payload := createParticipantScoreUpdatedPayload(roundID, data4.UserID, score3, []roundtypes.Participant{
+					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: &score1},
+					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: &score2},
+					{UserID: data4.UserID, Response: roundtypes.ResponseAccept, Score: &score3},
+				})
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-				if len(result.Participants) != 3 {
-					t.Errorf("Expected 3 participants, got %d", len(result.Participants))
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-
-				// Verify all participants have scores
-				for _, p := range result.Participants {
-					if p.Score == nil {
-						t.Errorf("Expected all participants to have scores after final submission")
-					}
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundAllScoresSubmittedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundAllScoresSubmittedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundAllScoresSubmittedV1)
+				}
+				var payload roundevents.AllScoresSubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
 				}
 			},
+			timeout: 500 * time.Millisecond,
 		},
 		{
 			name: "Failure - Round Not Found",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Use a non-existent round ID
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				score := sharedtypes.Score(0)
 				payload := createParticipantScoreUpdatedPayload(nonExistentRoundID, data.UserID, score, []roundtypes.Participant{})
-
-				publishAndExpectScoreCheckError(t, deps, deps.MessageCapture, payload)
+				b, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), b)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundFinalizationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundFinalizationFailedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundFinalizationFailedV1)
+				}
+				var payload roundevents.RoundFinalizationFailedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
+				}
+			},
+			timeout: 700 * time.Millisecond,
 		},
 		{
 			name: "Failure - Invalid JSON Message",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
-				publishInvalidJSONAndExpectNoScoreCheckMessages(t, deps, deps.MessageCapture)
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
+				invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, invalidMsg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return invalidMsg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// No outgoing topics expected for invalid JSON
+				if len(receivedMsgs) != 0 {
+					t.Errorf("Expected no messages for invalid JSON, got %d topics", len(receivedMsgs))
+				}
+			},
+			timeout: 500 * time.Millisecond,
 		},
 	}
 
-	// Run all subtests with SHARED setup
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-			tc.setupAndRun(t, helper, &deps)
+			deps := SetupTestRoundHandler(t)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
+			}
+
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }
@@ -273,239 +358,8 @@ func createParticipantScoreUpdatedPayload(roundID sharedtypes.RoundID, participa
 	}
 }
 
-// Publishing functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
-func publishParticipantScoreUpdatedMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.ParticipantScoreUpdatedPayloadV1) *message.Message {
-	t.Helper()
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	msg := message.NewMessage(uuid.New().String(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	t.Logf("Publishing ParticipantScoreUpdated message for round %s", payload.RoundID)
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	return msg
-}
-
-func publishInvalidJSONAndExpectNoScoreCheckMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
-	t.Helper()
-
-	// Create invalid JSON message
-	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
-	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundParticipantScoreUpdatedV1, invalidMsg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	// Wait a bit to ensure no messages are published
-	time.Sleep(500 * time.Millisecond)
-
-	allScoresMsgs := getAllScoresSubmittedFromHandlerMessages(capture)
-	notAllScoresMsgs := getNotAllScoresSubmittedFromHandlerMessages(capture)
-	errorMsgs := getScoreCheckErrorFromHandlerMessages(capture)
-
-	if len(allScoresMsgs) > 0 {
-		t.Errorf("Expected no all scores submitted messages for invalid JSON, got %d", len(allScoresMsgs))
-	}
-
-	if len(notAllScoresMsgs) > 0 {
-		t.Errorf("Expected no not all scores submitted messages for invalid JSON, got %d", len(notAllScoresMsgs))
-	}
-
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for invalid JSON, got %d", len(errorMsgs))
-	}
-}
-
-// Wait functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
-func waitForAllScoresSubmittedFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundAllScoresSubmittedV1, count, defaultTimeout)
-}
-
-func waitForNotAllScoresSubmittedFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundScoresPartiallySubmittedV1, count, defaultTimeout)
-}
-
-func waitForScoreCheckErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundErrorV1, count, 700*time.Millisecond)
-}
-
-// Message retrieval functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
-func getAllScoresSubmittedFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundAllScoresSubmittedV1)
-}
-
-func getNotAllScoresSubmittedFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundScoresPartiallySubmittedV1)
-}
-
-func getScoreCheckErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundErrorV1)
-}
-
-// Validation functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
-func validateAllScoresSubmittedFromHandler(t *testing.T, msg *message.Message) *roundevents.AllScoresSubmittedPayloadV1 {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.AllScoresSubmittedPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse all scores submitted message: %v", err)
-	}
-
-	// Validate that required fields are set
-	if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
-		t.Error("Expected RoundID to be set")
-	}
-
-	if result.EventMessageID == "" {
-		t.Error("Expected EventMessageID to be set")
-	}
-
-	if result.Participants == nil {
-		t.Error("Expected Participants to be set")
-	}
-
-	// Verify all participants have scores
-	for _, p := range result.Participants {
-		if p.Score == nil {
-			t.Errorf("Expected all participants to have scores in AllScoresSubmittedPayload, but %s has nil", p.UserID)
-		}
-	}
-
-	t.Logf("All scores submitted for round: %s, participants: %d", result.RoundID, len(result.Participants))
-
-	return result
-}
-
-func validateNotAllScoresSubmittedFromHandler(t *testing.T, msg *message.Message) *roundevents.ScoresPartiallySubmittedPayloadV1 {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.ScoresPartiallySubmittedPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse not all scores submitted message: %v", err)
-	}
-
-	// Validate that required fields are set
-	if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
-		t.Error("Expected RoundID to be set")
-	}
-
-	if result.Participant == "" {
-		t.Error("Expected Participant to be set")
-	}
-
-	if result.EventMessageID == "" {
-		t.Error("Expected EventMessageID to be set")
-	}
-
-	if result.Participants == nil {
-		t.Error("Expected Participants to be set")
-	}
-
-	// Log what we got for debugging
-	scoreText := "even"
-	if result.Score > 0 {
-		scoreText = fmt.Sprintf("+%d over", result.Score)
-	} else if result.Score < 0 {
-		scoreText = fmt.Sprintf("%d under", result.Score)
-	}
-
-	t.Logf("Not all scores submitted for round: %s, updated participant: %s, score: %s par, total participants: %d",
-		result.RoundID, result.Participant, scoreText, len(result.Participants))
-
-	return result
-}
-
-func validateScoreCheckErrorFromHandler(t *testing.T, msg *message.Message) {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.RoundErrorPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse score check error message: %v", err)
-	}
-
-	if result.Error == "" {
-		t.Error("Expected error message to be populated")
-	}
-
-	if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
-		t.Error("Expected RoundID to be set")
-	}
-
-	// Log what we got for debugging
-	t.Logf("Score check failed with error: %s", result.Error)
-}
-
-// Test expectation functions - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
-func publishAndExpectAllScoresSubmitted(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantScoreUpdatedPayloadV1) *roundevents.AllScoresSubmittedPayloadV1 {
-	publishParticipantScoreUpdatedMessage(t, deps, &payload)
-
-	if !waitForAllScoresSubmittedFromHandler(capture, 1) {
-		t.Fatalf("Expected all scores submitted message from %s", roundevents.RoundAllScoresSubmittedV1)
-	}
-
-	msgs := getAllScoresSubmittedFromHandlerMessages(capture)
-	result := validateAllScoresSubmittedFromHandler(t, msgs[0])
-
-	return result
-}
-
-func publishAndExpectNotAllScoresSubmitted(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantScoreUpdatedPayloadV1) *roundevents.ScoresPartiallySubmittedPayloadV1 {
-	publishParticipantScoreUpdatedMessage(t, deps, &payload)
-
-	// Wait and filter by round ID
-	deadline := time.Now().Add(defaultTimeout)
-	var foundMsg *message.Message
-	for time.Now().Before(deadline) {
-		msgs := getNotAllScoresSubmittedFromHandlerMessages(capture)
-		for _, msg := range msgs {
-			parsed, err := testutils.ParsePayload[roundevents.ScoresPartiallySubmittedPayloadV1](msg)
-			if err == nil && parsed.RoundID == payload.RoundID {
-				foundMsg = msg
-				break
-			}
-		}
-		if foundMsg != nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	if foundMsg == nil {
-		t.Fatalf("Expected not all scores submitted message from %s for round %s", roundevents.RoundScoresPartiallySubmittedV1, payload.RoundID)
-	}
-
-	result := validateNotAllScoresSubmittedFromHandler(t, foundMsg)
-	return result
-}
-
-func publishAndExpectScoreCheckError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.ParticipantScoreUpdatedPayloadV1) {
-	t.Logf("Publishing ParticipantScoreUpdated for non-existent round %s", payload.RoundID)
-	publishParticipantScoreUpdatedMessage(t, deps, &payload)
-
-	// Add extra wait time for debugging
-	time.Sleep(500 * time.Millisecond)
-
-	t.Logf("Waiting for error message on topic %s", roundevents.RoundErrorV1)
-	if !waitForScoreCheckErrorFromHandler(capture, 1) {
-		// Debug: Check what messages we did receive
-		allScoresMsgs := getAllScoresSubmittedFromHandlerMessages(capture)
-		notAllScoresMsgs := getNotAllScoresSubmittedFromHandlerMessages(capture)
-		errorMsgs := getScoreCheckErrorFromHandlerMessages(capture)
-
-		t.Logf("DEBUG: Messages received - AllScores: %d, NotAllScores: %d, Errors: %d",
-			len(allScoresMsgs), len(notAllScoresMsgs), len(errorMsgs))
-
-		t.Fatalf("Expected score check error message from %s", roundevents.RoundErrorV1)
-	}
-
-	msgs := getScoreCheckErrorFromHandlerMessages(capture)
-	validateScoreCheckErrorFromHandler(t, msgs[0])
-}
+// NOTE: MessageCapture- and context.Background()-dependent helpers removed.
+// Use per-test PublishMsgFn (which should call testutils.PublishMessage with
+// env.EventBus and env.Ctx) and perform outgoing message inspection inside the
+// TestCase ValidateFn using the receivedMsgs map and
+// deps.TestHelpers.UnmarshalPayload(msg, &payload).

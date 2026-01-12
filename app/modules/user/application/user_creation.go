@@ -33,14 +33,14 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 		}, ErrNilContext
 	}
 
-	// Handle empty Discord ID
+	// Handle empty Discord ID - domain failure, not execution error
 	if userID == "" {
-		return createFailureResult(guildID, userID, tag, ErrInvalidDiscordID), ErrInvalidDiscordID
+		return createFailureResult(guildID, userID, tag, ErrInvalidDiscordID), nil
 	}
 
-	// Handle negative tag numbers
+	// Handle negative tag numbers - domain failure, not execution error
 	if tag != nil && *tag < 0 {
-		return createFailureResult(guildID, userID, tag, ErrNegativeTagNumber), ErrNegativeTagNumber
+		return createFailureResult(guildID, userID, tag, ErrNegativeTagNumber), nil
 	}
 
 	startTime := time.Now()
@@ -61,16 +61,16 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			// User exists globally - check if they're already in this guild
 			membership, err := s.UserDB.GetGuildMembership(ctx, userID, guildID)
 			if err == nil && membership != nil {
-				// Already a member of this guild
-				       return UserOperationResult{
-					       Failure: &userevents.UserCreationFailedPayloadV1{
-						       GuildID:   guildID,
-						       UserID:    userID,
-						       TagNumber: tag,
-						       Reason:    "user already exists in this guild",
-					       },
-					       Error: ErrUserAlreadyExists,
-				       }, ErrUserAlreadyExists
+				// Already a member of this guild - domain failure, not execution error
+				return UserOperationResult{
+					Failure: &userevents.UserCreationFailedPayloadV1{
+						GuildID:   guildID,
+						UserID:    userID,
+						TagNumber: tag,
+						Reason:    "user already exists in this guild",
+					},
+					Error: ErrUserAlreadyExists,
+				}, nil
 			}
 
 			// User exists but not in this guild - create membership only

@@ -88,11 +88,12 @@ func TestCreateUser(t *testing.T) {
 				return deps.Ctx, userID, tag
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
-				if err == nil {
-					t.Fatal("Expected error for empty Discord ID, got nil")
+				// Service now returns failure payload with nil top-level error; check result.Error and Failure
+				if err != nil {
+					t.Fatalf("Did not expect top-level error for validation failure, got: %v", err)
 				}
 				if result.Error == nil {
-					t.Fatalf("Result contained nil Error, expected non-nil: %v", err)
+					t.Fatalf("Result contained nil Error, expected non-nil for validation failure")
 				}
 				if result.Success != nil {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
@@ -116,8 +117,8 @@ func TestCreateUser(t *testing.T) {
 				}
 
 				expectedErrMsg := "invalid Discord ID"
-				if err.Error() != expectedErrMsg {
-					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedErrMsg, err.Error())
+				if result.Error == nil {
+					t.Fatalf("Expected result.Error to be non-nil for validation failure")
 				}
 				if result.Error.Error() != expectedErrMsg {
 					t.Errorf("Result error message mismatch: expected %q, got %q", expectedErrMsg, result.Error.Error())
@@ -134,11 +135,12 @@ func TestCreateUser(t *testing.T) {
 				return deps.Ctx, userID, tag
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
-				if err == nil {
-					t.Fatal("Expected error for negative tag number, got nil")
+				// Service now returns failure payload with nil top-level error; check result.Error and Failure
+				if err != nil {
+					t.Fatalf("Did not expect top-level error for validation failure, got: %v", err)
 				}
 				if result.Error == nil {
-					t.Fatalf("Result contained nil Error, expected non-nil: %v", err)
+					t.Fatalf("Result contained nil Error, expected non-nil for validation failure")
 				}
 				if result.Success != nil {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
@@ -162,8 +164,8 @@ func TestCreateUser(t *testing.T) {
 				}
 
 				expectedErrMsg := "tag number cannot be negative"
-				if err.Error() != expectedErrMsg {
-					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedErrMsg, err.Error())
+				if result.Error == nil {
+					t.Fatalf("Expected result.Error to be non-nil for validation failure")
 				}
 				if result.Error.Error() != expectedErrMsg {
 					t.Errorf("Result error message mismatch: expected %q, got %q", expectedErrMsg, result.Error.Error())
@@ -323,12 +325,12 @@ func TestCreateUser(t *testing.T) {
 				return deps.Ctx, userID, tag
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserOperationResult, err error) {
-				// We expect the second creation attempt to fail
-				if err == nil {
-					t.Fatal("Expected error when creating duplicate user, got nil")
+				// Service now returns failure payload with nil top-level error for duplicate user
+				if err != nil {
+					t.Fatalf("Did not expect top-level error when creating duplicate user, got: %v", err)
 				}
 				if result.Error == nil {
-					t.Fatalf("Result contained nil Error, expected non-nil: %v", err)
+					t.Fatalf("Result contained nil Error, expected non-nil for duplicate user failure")
 				}
 				if result.Success != nil {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)

@@ -2,215 +2,100 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/google/uuid"
 )
 
-func (h *RoundHandlers) HandleRoundDeleteRequest(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"OnRoundDeleteRequested",
-		&roundevents.RoundDeleteRequestPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteRequestPayload := payload.(*roundevents.RoundDeleteRequestPayloadV1)
+// HandleRoundDeleteRequest handles the initial request to delete a round.
+func (h *RoundHandlers) HandleRoundDeleteRequest(
+	ctx context.Context,
+	payload *roundevents.RoundDeleteRequestPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	// Pre-validation for safety
+	if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+		return nil, sharedtypes.ValidationError{Message: "invalid round ID: cannot process delete request with nil UUID"}
+	}
 
-			// Check for nil/zero UUID before proceeding
-			if roundDeleteRequestPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-				h.logger.ErrorContext(ctx, "Round delete request has nil UUID",
-					attr.CorrelationIDFromMsg(msg),
-				)
-				return nil, fmt.Errorf("invalid round ID: cannot process delete request with nil UUID")
-			}
+	result, err := h.roundService.ValidateRoundDeleteRequest(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received RoundDeleteRequest event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.String("round_id", roundDeleteRequestPayload.RoundID.String()),
-				attr.String("requesting_user", string(roundDeleteRequestPayload.RequestingUserUserID)),
-			)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "round delete request validation failed", attr.Any("failure", result.Failure))
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundDeleteErrorV1, Payload: result.Failure},
+		}, nil
+	}
 
-			// First validate the request format
-			validateResult, err := h.roundService.ValidateRoundDeleteRequest(ctx, *roundDeleteRequestPayload)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to validate RoundDeleteRequest",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
-				)
-				return nil, fmt.Errorf("failed to validate RoundDeleteRequest: %w", err)
-			}
+	if result.Success != nil {
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundDeleteValidatedV1, Payload: result.Success},
+		}, nil
+	}
 
-			if validateResult.Failure != nil {
-				h.logger.InfoContext(ctx, "Round delete request validation failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", validateResult.Failure),
-				)
-
-				// Create failure message for validation failure
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					validateResult.Failure,
-					roundevents.RoundDeleteErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create validation failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			// If validation succeeded, the service should handle everything else
-			if validateResult.Success != nil {
-				h.logger.InfoContext(ctx, "Round delete request validated successfully",
-					attr.CorrelationIDFromMsg(msg),
-					attr.String("round_id", roundDeleteRequestPayload.RoundID.String()),
-				)
-
-				// Create success message with the validated payload (dereference the pointer)
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					*validateResult.Success.(*roundevents.RoundDeleteValidatedPayloadV1),
-					roundevents.RoundDeleteValidatedV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-
-				return []*message.Message{successMsg}, nil
-			}
-
-			// If neither Failure nor Success is set, return an error
-			h.logger.ErrorContext(ctx, "Unexpected result from round delete validation and fetch",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			return nil, fmt.Errorf("unexpected result from service")
-		},
-	)
-
-	// Execute the wrapped handler with the message
-	return wrappedHandler(msg)
+	return nil, sharedtypes.ValidationError{Message: "service returned unexpected nil result from ValidateRoundDeleteRequest"}
 }
 
-func (h *RoundHandlers) HandleRoundDeleteValidated(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleRoundDeleteValidated",
-		&roundevents.RoundDeleteValidatedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteValidatedPayload := payload.(*roundevents.RoundDeleteValidatedPayloadV1)
+// HandleRoundDeleteValidated moves the process forward once validation is complete.
+func (h *RoundHandlers) HandleRoundDeleteValidated(
+	ctx context.Context,
+	payload *roundevents.RoundDeleteValidatedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	// Simple transformation to the authorized state.
+	authorizedPayload := &roundevents.RoundDeleteAuthorizedPayloadV1{
+		GuildID: payload.RoundDeleteRequestPayload.GuildID,
+		RoundID: payload.RoundDeleteRequestPayload.RoundID,
+	}
 
-			h.logger.InfoContext(ctx, "Received RoundDeleteValidated event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID),
-			)
-
-			// Convert validated payload to authorized payload
-			authorizedPayload := &roundevents.RoundDeleteAuthorizedPayloadV1{
-				GuildID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.GuildID,
-				RoundID: roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID,
-			}
-
-			successMsg, err := h.helpers.CreateResultMessage(
-				msg,
-				authorizedPayload,
-				roundevents.RoundDeleteAuthorizedV1,
-			)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to create RoundDeleteAuthorized message",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundDeleteValidatedPayload.RoundDeleteRequestPayload.RoundID),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to create RoundDeleteAuthorized message: %w", err)
-			}
-
-			return []*message.Message{successMsg}, nil
-		},
-	)
-
-	return wrappedHandler(msg)
+	return []handlerwrapper.Result{
+		{Topic: roundevents.RoundDeleteAuthorizedV1, Payload: authorizedPayload},
+	}, nil
 }
 
-func (h *RoundHandlers) HandleRoundDeleteAuthorized(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleRoundDeleteAuthorized",
-		&roundevents.RoundDeleteAuthorizedPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			roundDeleteAuthorizedPayload := payload.(*roundevents.RoundDeleteAuthorizedPayloadV1)
+// HandleRoundDeleteAuthorized executes the final deletion after authorization.
+func (h *RoundHandlers) HandleRoundDeleteAuthorized(
+	ctx context.Context,
+	payload *roundevents.RoundDeleteAuthorizedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	// 1. Extract the Discord Message ID from context to ensure it propagates
+	discordMessageID, _ := ctx.Value("discord_message_id").(string)
 
-			h.logger.InfoContext(ctx, "Received RoundDeleteAuthorized event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-			)
+	result, err := h.roundService.DeleteRound(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
 
-			result, err := h.roundService.DeleteRound(ctx, *roundDeleteAuthorizedPayload)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to execute RoundService.DeleteRound for RoundDeleteAuthorized event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-					attr.Any("service_call_error", err),
-				)
-				// Return the error, which will cause the message to be nacked/retried.
-				return nil, fmt.Errorf("RoundService.DeleteRound failed: %w", err)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "round delete execution failed",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundDeleteErrorV1, Payload: result.Failure},
+		}, nil
+	}
+
+	if result.Success != nil {
+		res := handlerwrapper.Result{
+			Topic:   roundevents.RoundDeletedV1,
+			Payload: result.Success,
+		}
+
+		// 2. If we have a message ID, promote it to metadata so the Discord
+		// handler knows which embed to delete.
+		if discordMessageID != "" {
+			res.Metadata = map[string]string{
+				"discord_message_id": discordMessageID,
 			}
+		}
 
-			// Check the result returned by the service for business logic success or failure
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "RoundService.DeleteRound returned failure result",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-					attr.Any("service_failure_payload", result.Failure),
-				)
+		return []handlerwrapper.Result{res}, nil
+	}
 
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundDeleteErrorV1,
-				)
-				if errMsg != nil {
-					h.logger.ErrorContext(ctx, "Failed to create failure message after RoundService.DeleteRound failure",
-						attr.CorrelationIDFromMsg(msg),
-						attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-						attr.Error(errMsg),
-					)
-					return nil, fmt.Errorf("RoundService.DeleteRound failed and failed to create failure message: %w", errMsg)
-				}
-
-				// ✅ FIX: Return nil error for business logic failures
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				h.logger.InfoContext(ctx, "RoundService.DeleteRound successful",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-				)
-
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					result.Success,
-					roundevents.RoundDeletedV1,
-				)
-				if err != nil {
-					h.logger.ErrorContext(ctx, "Failed to create RoundDeleted success message after service success",
-						attr.CorrelationIDFromMsg(msg),
-						attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-						attr.Error(err),
-					)
-					return nil, fmt.Errorf("failed to create RoundDeleted success message: %w", err)
-				}
-
-				return []*message.Message{successMsg}, nil
-			}
-
-			h.logger.ErrorContext(ctx, "Unexpected result from RoundService.DeleteRound - neither Success nor Failure is set",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", roundDeleteAuthorizedPayload.RoundID),
-			)
-			return nil, fmt.Errorf("unexpected result from RoundService.DeleteRound for round %s", roundDeleteAuthorizedPayload.RoundID.String())
-		},
-	)
-
-	return wrappedHandler(msg)
+	return nil, sharedtypes.ValidationError{Message: "service returned unexpected nil result from DeleteRound"}
 }

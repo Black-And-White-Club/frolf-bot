@@ -1,7 +1,7 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -9,6 +9,9 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/google/uuid"
 )
 
 // createValidRequest creates a valid round request for testing
@@ -64,190 +67,361 @@ func createInvalidRequest(userID sharedtypes.DiscordID, invalidType string) test
 	return base
 }
 
-// expectSuccess validates successful round creation
-func expectSuccess(t *testing.T, helper *testutils.RoundTestHelper, originalRequest testutils.RoundRequest, timeout time.Duration) {
-	t.Helper()
-
-	if !helper.WaitForRoundEntityCreated(1, timeout) {
-		t.Fatalf("Expected round.entity.created message within %v", timeout)
-	}
-
-	msgs := helper.GetRoundEntityCreatedMessages()
-	if len(msgs) != 1 {
-		t.Fatalf("Expected 1 success message, got %d", len(msgs))
-	}
-
-	result := helper.ValidateRoundEntityCreated(t, msgs[0], originalRequest.UserID)
-
-	// Validate specific transformation for create round
-	if result.Round.Title != roundtypes.Title(originalRequest.Title) {
-		t.Errorf("Title mismatch: expected %s, got %s", originalRequest.Title, result.Round.Title)
-	}
-
-	if result.Round.Location == nil || *result.Round.Location != roundtypes.Location(originalRequest.Location) {
-		t.Errorf("Location mismatch: expected %s, got %v", originalRequest.Location, result.Round.Location)
-	}
-
-	if len(result.Round.Participants) != 0 {
-		t.Errorf("Expected empty participants, got %d", len(result.Round.Participants))
-	}
-}
-
-// expectValidationFailure validates validation failure scenarios
-func expectValidationFailure(t *testing.T, helper *testutils.RoundTestHelper, originalRequest testutils.RoundRequest, timeout time.Duration) {
-	t.Helper()
-
-	if !helper.WaitForRoundValidationFailed(1, timeout) {
-		t.Fatalf("Expected validation failure message within %v", timeout)
-	}
-
-	msgs := helper.GetRoundValidationFailedMessages()
-	if len(msgs) != 1 {
-		t.Fatalf("Expected 1 failure message, got %d", len(msgs))
-	}
-
-	helper.ValidateRoundValidationFailed(t, msgs[0], originalRequest.UserID)
-
-	// Ensure no success message was published
-	successMsgs := helper.GetRoundEntityCreatedMessages()
-	if len(successMsgs) > 0 {
-		t.Errorf("Expected no success messages, got %d", len(successMsgs))
+// createCreateRoundPayload converts a RoundRequest to a CreateRoundRequestedPayloadV1
+func createCreateRoundPayload(req testutils.RoundRequest) roundevents.CreateRoundRequestedPayloadV1 {
+	location := roundtypes.Location(req.Location)
+	return roundevents.CreateRoundRequestedPayloadV1{
+		GuildID:     req.GuildID,
+		UserID:      req.UserID,
+		ChannelID:   req.ChannelID,
+		Title:       roundtypes.Title(req.Title),
+		Description: roundtypes.Description(req.Description),
+		Location:    location,
+		StartTime:   req.StartTime,
+		Timezone:    roundtypes.Timezone(req.Timezone),
 	}
 }
 
 // TestHandleCreateRoundRequest runs integration tests for the create round handler
 func TestHandleCreateRoundRequest(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper)
-		expectError bool
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - Create Valid Round",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createValidRequest(data.UserID)
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectSuccess(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundEntityCreatedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundEntityCreatedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+				if len(msgs) > 1 {
+					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
+				}
+
+				receivedMsg := msgs[0]
+				var payload roundevents.RoundEntityCreatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+
+				if payload.Round.Title != roundtypes.Title("Weekly Frolf Championship") {
+					t.Errorf("Title mismatch: expected %s, got %s", "Weekly Frolf Championship", payload.Round.Title)
+				}
+
+				if payload.Round.Location == nil || *payload.Round.Location != roundtypes.Location("Central Park Course") {
+					t.Errorf("Location mismatch: expected %s, got %v", "Central Park Course", payload.Round.Location)
+				}
+
+				if len(payload.Round.Participants) != 0 {
+					t.Errorf("Expected empty participants, got %d", len(payload.Round.Participants))
+				}
+
+				if receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != triggerMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
+					t.Errorf("Correlation ID mismatch")
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Create Round with Minimal Information",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createMinimalRequest(data.UserID)
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectSuccess(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundEntityCreatedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundEntityCreatedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+
+				receivedMsg := msgs[0]
+				var payload roundevents.RoundEntityCreatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+
+				if payload.Round.Title != roundtypes.Title("Quick Round") {
+					t.Errorf("Title mismatch: expected %s, got %s", "Quick Round", payload.Round.Title)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Empty Description",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "empty_description")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
+				}
+
+				// Ensure no success message was published
+				successMsgs := receivedMsgs[roundevents.RoundEntityCreatedV1]
+				if len(successMsgs) > 0 {
+					t.Errorf("Expected no success messages, got %d", len(successMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Invalid Time Format",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "invalid_time")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected validation failed message on topic %q", expectedTopic)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Past Start Time",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "past_time")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected validation failed message on topic %q", expectedTopic)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Empty Title",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "empty_title")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected validation failed message on topic %q", expectedTopic)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Empty Location",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "empty_location")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected validation failed message on topic %q", expectedTopic)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
-			name:        "Failure - Invalid JSON Message",
-			expectError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
-				// Count messages before
-				createdMsgsBefore := len(helper.GetRoundEntityCreatedMessages())
-				failedMsgsBefore := len(helper.GetRoundValidationFailedMessages())
-
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundCreationRequestedV1)
-
-				// Wait a bit to ensure no messages are published
-				time.Sleep(300 * time.Millisecond)
-
-				createdMsgsAfter := len(helper.GetRoundEntityCreatedMessages())
-				failedMsgsAfter := len(helper.GetRoundValidationFailedMessages())
-
-				newCreatedMsgs := createdMsgsAfter - createdMsgsBefore
-				newFailedMsgs := failedMsgsAfter - failedMsgsBefore
-
-				if newCreatedMsgs > 0 {
-					t.Errorf("Expected no NEW round.entity.created messages, got %d new", newCreatedMsgs)
+			name: "Failure - Invalid JSON Message",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				// Publish invalid JSON
+				invalidJSON := []byte(`invalid json`)
+				msg := message.NewMessage(uuid.New().String(), invalidJSON)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
 				}
-
-				if newFailedMsgs > 0 {
-					t.Errorf("Expected no NEW validation failure messages, got %d new", newFailedMsgs)
+				return msg
+			},
+			expectedOutgoingTopics: []string{}, // No valid messages expected for invalid JSON
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				// Verify no success or error messages were created
+				createdMsgs := receivedMsgs[roundevents.RoundEntityCreatedV1]
+				failedMsgs := receivedMsgs[roundevents.RoundValidationFailedV1]
+				if len(createdMsgs) > 0 || len(failedMsgs) > 0 {
+					t.Errorf("Expected no messages for invalid JSON, but got created=%d, failed=%d", len(createdMsgs), len(failedMsgs))
 				}
 			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Missing Required Fields",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper) {
-				PrepareSubTest(deps) // Clear message capture for test isolation
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				req := createInvalidRequest(data.UserID, "missing_fields")
-				helper.PublishRoundRequest(t, context.Background(), req)
-				expectValidationFailure(t, helper, req, 500*time.Millisecond)
+				payload := createCreateRoundPayload(req)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("Failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundCreationRequestedV1, msg); err != nil {
+					t.Fatalf("Failed to publish message: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				expectedTopic := roundevents.RoundValidationFailedV1
+				msgs := receivedMsgs[expectedTopic]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected validation failed message on topic %q", expectedTopic)
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup - no need to clear messages between tests!
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()
-			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
+			deps := SetupTestRoundHandler(t)
 
-			// Run the test - no cleanup needed!
-			tc.setupAndRun(t, helper)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
+			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

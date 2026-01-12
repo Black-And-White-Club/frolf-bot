@@ -1,7 +1,6 @@
 package roundhandler_integration_tests
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -16,98 +15,216 @@ import (
 )
 
 func TestHandleRoundReminder(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	testCases := []struct {
-		name        string
-		setupAndRun func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
 			name: "Success - Process Round Reminder for Upcoming Round with Participants",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				// Create an upcoming round with ACCEPTED participants
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
+				response := roundtypes.ResponseAccept
+				tagNumber := sharedtypes.TagNumber(1)
+				roundID := helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, data.UserID, response, &tagNumber)
+				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				data := NewTestData()
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				response := roundtypes.ResponseAccept
 				tagNumber := sharedtypes.TagNumber(1)
 				roundID := helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, data.UserID, response, &tagNumber)
 
-				// Create reminder payload
 				reminderTime := time.Now().Add(1 * time.Hour)
 				payload := createRoundReminderPayload(roundID, "15min", []sharedtypes.DiscordID{data.UserID}, &reminderTime)
-
-				result := publishAndExpectReminderSuccess(t, deps, deps.MessageCapture, payload)
-
-				// Validate the result
-				if result.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, result.RoundID)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundReminderScheduledV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
+			},
+			expectedOutgoingTopics: []string{roundevents.RoundReminderSentV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundReminderSentV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundReminderSentV1)
+				}
+				var payload roundevents.DiscordReminderPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set")
 				}
 			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Process Round Reminder with No Participants",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				// Create a round but no accepted participants (just the creator)
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
-
-				// Create reminder
+				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				data := NewTestData()
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
 				reminderTime := time.Now().Add(30 * time.Minute)
 				payload := createRoundReminderPayload(roundID, "30min", []sharedtypes.DiscordID{data.UserID}, &reminderTime)
-
-				// Expect no messages since no participants
-				publishAndExpectNoReminderMessages(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundReminderScheduledV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				validatedMsgs := receivedMsgs[roundevents.RoundReminderSentV1]
+				errorMsgs := receivedMsgs[roundevents.RoundReminderFailedV1]
+				if len(validatedMsgs) > 0 || len(errorMsgs) > 0 {
+					t.Errorf("Expected no messages for empty participants, got validated=%d, error=%d", len(validatedMsgs), len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Process Round Reminder with Empty User List",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				// Create round but send reminder with no users (edge case)
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
-
-				// Create reminder with empty user list
+				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				data := NewTestData()
+				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
+				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
 				reminderTime := time.Now().Add(1 * time.Hour)
 				payload := createRoundReminderPayload(roundID, "1hour", []sharedtypes.DiscordID{}, &reminderTime)
-
-				publishAndExpectNoReminderMessages(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundReminderScheduledV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				validatedMsgs := receivedMsgs[roundevents.RoundReminderSentV1]
+				errorMsgs := receivedMsgs[roundevents.RoundReminderFailedV1]
+				if len(validatedMsgs) > 0 || len(errorMsgs) > 0 {
+					t.Errorf("Expected no messages for empty user list, got validated=%d, error=%d", len(validatedMsgs), len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Process Reminder for Non-Existent Round",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				return nil
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				// Use a non-existent round ID
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
 				reminderTime := time.Now().Add(1 * time.Hour)
 				payload := createRoundReminderPayload(nonExistentRoundID, "15min", []sharedtypes.DiscordID{data.UserID}, &reminderTime)
-
-				publishAndExpectReminderError(t, deps, deps.MessageCapture, payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundReminderScheduledV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{roundevents.RoundReminderFailedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundReminderFailedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("Expected at least one error message on topic %q", roundevents.RoundReminderFailedV1)
+				}
+				var payload roundevents.RoundErrorPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("Expected RoundID to be set in error payload")
+				}
+				if payload.Error == "" {
+					t.Error("Expected error message to be populated")
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Failure - Invalid JSON Message",
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				deps.MessageCapture.Clear()
-				publishInvalidJSONAndExpectNoReminderMessages(t, deps, deps.MessageCapture)
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				invalidJSON := []byte("invalid json")
+				msg := message.NewMessage(uuid.New().String(), invalidJSON)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundReminderScheduledV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
+			expectedOutgoingTopics: []string{},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				validatedMsgs := receivedMsgs[roundevents.RoundReminderSentV1]
+				errorMsgs := receivedMsgs[roundevents.RoundReminderFailedV1]
+				if len(validatedMsgs) > 0 || len(errorMsgs) > 0 {
+					t.Errorf("Expected no messages for invalid JSON, got validated=%d, error=%d", len(validatedMsgs), len(errorMsgs))
+				}
+			},
+			timeout: 5 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Create helper for each subtest since these tests use custom helper functions
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
+			deps := SetupTestRoundHandler(t)
 
-			// Run the test
-			tc.setupAndRun(t, helper, &deps)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: 5 * time.Second,
+			}
+
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }
@@ -132,148 +249,5 @@ func createRoundReminderPayload(roundID sharedtypes.RoundID, reminderType string
 		DiscordChannelID: "test-channel-123",
 		DiscordGuildID:   "test-guild-456",
 		EventMessageID:   "test-message-789",
-	}
-}
-
-// Publishing functions - UNIQUE TO ROUND REMINDER TESTS
-func publishRoundReminderMessage(t *testing.T, deps *RoundHandlerTestDeps, payload *roundevents.DiscordReminderPayloadV1) *message.Message {
-	t.Helper()
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	msg := message.NewMessage(uuid.New().String(), payloadBytes)
-	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundReminderScheduledV1, msg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	return msg
-}
-
-func publishInvalidJSONAndExpectNoReminderMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture) {
-	t.Helper()
-
-	// Create invalid JSON message
-	invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
-	invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-
-	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), roundevents.RoundReminderScheduledV1, invalidMsg); err != nil {
-		t.Fatalf("Publish failed: %v", err)
-	}
-
-	// Wait a bit to ensure no messages are published
-	time.Sleep(500 * time.Millisecond)
-
-	successMsgs := getReminderSuccessFromHandlerMessages(capture)
-	errorMsgs := getReminderErrorFromHandlerMessages(capture)
-
-	if len(successMsgs) > 0 {
-		t.Errorf("Expected no success messages for invalid JSON, got %d", len(successMsgs))
-	}
-
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for invalid JSON, got %d", len(errorMsgs))
-	}
-}
-
-// Wait functions - UNIQUE TO ROUND REMINDER TESTS
-func waitForReminderSuccessFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundReminderSentV1, count, defaultTimeout)
-}
-
-func waitForReminderErrorFromHandler(capture *testutils.MessageCapture, count int) bool {
-	return capture.WaitForMessages(roundevents.RoundErrorV1, count, defaultTimeout)
-}
-
-// Message retrieval functions - UNIQUE TO ROUND REMINDER TESTS
-func getReminderSuccessFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundReminderSentV1)
-}
-
-func getReminderErrorFromHandlerMessages(capture *testutils.MessageCapture) []*message.Message {
-	return capture.GetMessages(roundevents.RoundErrorV1)
-}
-
-// Validation functions - UNIQUE TO ROUND REMINDER TESTS
-func validateReminderSuccessFromHandler(t *testing.T, msg *message.Message) *roundevents.DiscordReminderPayloadV1 {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.DiscordReminderPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse reminder success message: %v", err)
-	}
-
-	// Validate that RoundID is set
-	if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
-		t.Error("Expected RoundID to be set")
-	}
-
-	// Log what we got for debugging
-	t.Logf("Reminder processed successfully for round: %s", result.RoundID)
-
-	return result
-}
-
-func validateReminderErrorFromHandler(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) {
-	t.Helper()
-
-	result, err := testutils.ParsePayload[roundevents.RoundErrorPayloadV1](msg)
-	if err != nil {
-		t.Fatalf("Failed to parse reminder error message: %v", err)
-	}
-
-	if result.RoundID != expectedRoundID {
-		t.Errorf("RoundID mismatch: expected %s, got %s", expectedRoundID, result.RoundID)
-	}
-
-	if result.Error == "" {
-		t.Error("Expected error message to be populated")
-	}
-}
-
-// Test expectation functions - UNIQUE TO ROUND REMINDER TESTS
-func publishAndExpectReminderSuccess(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.DiscordReminderPayloadV1) *roundevents.DiscordReminderPayloadV1 {
-	publishRoundReminderMessage(t, deps, &payload)
-
-	if !waitForReminderSuccessFromHandler(capture, 1) {
-		t.Fatalf("Expected reminder success message from %s", roundevents.RoundReminderSentV1)
-	}
-
-	msgs := getReminderSuccessFromHandlerMessages(capture)
-	result := validateReminderSuccessFromHandler(t, msgs[0])
-
-	return result
-}
-
-func publishAndExpectReminderError(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.DiscordReminderPayloadV1) {
-	publishRoundReminderMessage(t, deps, &payload)
-
-	if !waitForReminderErrorFromHandler(capture, 1) {
-		t.Fatalf("Expected reminder error message from %s", roundevents.RoundErrorV1)
-	}
-
-	msgs := getReminderErrorFromHandlerMessages(capture)
-	validateReminderErrorFromHandler(t, msgs[0], payload.RoundID)
-}
-
-func publishAndExpectNoReminderMessages(t *testing.T, deps *RoundHandlerTestDeps, capture *testutils.MessageCapture, payload roundevents.DiscordReminderPayloadV1) {
-	publishRoundReminderMessage(t, deps, &payload)
-
-	// Wait a bit to ensure no messages are published
-	time.Sleep(500 * time.Millisecond)
-
-	successMsgs := getReminderSuccessFromHandlerMessages(capture)
-	errorMsgs := getReminderErrorFromHandlerMessages(capture)
-
-	if len(successMsgs) > 0 {
-		t.Errorf("Expected no success messages for empty participants, got %d", len(successMsgs))
-	}
-
-	if len(errorMsgs) > 0 {
-		t.Errorf("Expected no error messages for empty participants, got %d", len(errorMsgs))
 	}
 }

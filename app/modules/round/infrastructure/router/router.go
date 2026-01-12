@@ -2,22 +2,22 @@ package roundrouter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os" // Import os for environment variable check
+	"os"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
-	"github.com/Black-And-White-Club/frolf-bot/config"
+
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -25,226 +25,174 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Constants for environment check.
 const (
-	TestEnvironmentFlag  = "APP_ENV"
-	TestEnvironmentValue = "test"
+	appEnvVar = "APP_ENV"
+	envTest   = "test"
 )
 
-// RoundRouter handles routing for round module events.
 type RoundRouter struct {
-	logger             *slog.Logger
-	Router             *message.Router
-	subscriber         eventbus.EventBus
-	publisher          eventbus.EventBus
-	config             *config.Config
-	helper             utils.Helpers
-	tracer             trace.Tracer
-	middlewareHelper   utils.MiddlewareHelpers
-	metricsBuilder     *metrics.PrometheusMetricsBuilder
-	prometheusRegistry *prometheus.Registry
-	metricsEnabled     bool
+	logger     *slog.Logger
+	router     *message.Router
+	subscriber eventbus.EventBus
+	publisher  eventbus.EventBus
+	helper     utils.Helpers
+	tracer     trace.Tracer
+
+	metricsBuilder *metrics.PrometheusMetricsBuilder
+	metricsEnabled bool
 }
 
-// NewRoundRouter creates a new RoundRouter.
-// It now accepts a prometheusRegistry to conditionally enable metrics.
 func NewRoundRouter(
 	logger *slog.Logger,
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
-	config *config.Config,
 	helper utils.Helpers,
 	tracer trace.Tracer,
-	prometheusRegistry *prometheus.Registry,
+	registry *prometheus.Registry,
 ) *RoundRouter {
-	// Add logging to check environment variable and conditions
-	actualAppEnv := os.Getenv(TestEnvironmentFlag)
-	logger.Info("NewRoundRouter: Environment check",
-		"APP_ENV_Actual", actualAppEnv,
-		"TestEnvironmentValue", TestEnvironmentValue,
-		"prometheusRegistryProvided", prometheusRegistry != nil,
-	)
+	inTestEnv := os.Getenv(appEnvVar) == envTest
 
-	// Check if the application is running in the test environment
-	inTestEnv := actualAppEnv == TestEnvironmentValue
-	logger.Info("NewRoundRouter: inTestEnv determined", "inTestEnv", inTestEnv)
-
-	var metricsBuilder *metrics.PrometheusMetricsBuilder
-	// Only create the metrics builder if a registry is provided AND we are NOT in the test environment
-	// Add logging for the condition
-	if prometheusRegistry != nil && !inTestEnv {
-		logger.Info("NewRoundRouter: Creating Prometheus metrics builder")
-		builder := metrics.NewPrometheusMetricsBuilder(prometheusRegistry, "", "")
-		metricsBuilder = &builder
-	} else {
-		logger.Info("NewRoundRouter: Skipping Prometheus metrics builder creation",
-			"prometheusRegistryProvided", prometheusRegistry != nil,
-			"inTestEnv", inTestEnv,
-		)
+	var builder *metrics.PrometheusMetricsBuilder
+	if registry != nil && !inTestEnv {
+		b := metrics.NewPrometheusMetricsBuilder(registry, "", "")
+		builder = &b
 	}
 
-	// metricsEnabled is true only if a registry is provided AND we are NOT in the test environment
-	metricsEnabled := prometheusRegistry != nil && !inTestEnv
-	logger.Info("NewRoundRouter: metricsEnabled determined", "metricsEnabled", metricsEnabled)
-
 	return &RoundRouter{
-		logger:             logger,
-		Router:             router,
-		subscriber:         subscriber,
-		publisher:          publisher,
-		config:             config,
-		helper:             helper,
-		tracer:             tracer,
-		middlewareHelper:   utils.NewMiddlewareHelper(),
-		metricsBuilder:     metricsBuilder,
-		prometheusRegistry: prometheusRegistry,
-		metricsEnabled:     metricsEnabled,
+		logger:         logger,
+		router:         router,
+		subscriber:     subscriber,
+		publisher:      publisher,
+		helper:         helper,
+		tracer:         tracer,
+		metricsBuilder: builder,
+		metricsEnabled: builder != nil,
 	}
 }
 
-// Configure sets up the router with the necessary handlers and dependencies.
-func (r *RoundRouter) Configure(routerCtx context.Context, roundService roundservice.Service, eventbus eventbus.EventBus, roundMetrics roundmetrics.RoundMetrics) error {
-	r.logger.Info("Configure: Checking metricsEnabled before adding middleware",
-		"metricsEnabled", r.metricsEnabled,
-		"metricsBuilderNil", r.metricsBuilder == nil,
-	)
-
-	// Conditionally add Prometheus metrics middleware based on the metricsEnabled flag
-	if r.metricsEnabled && r.metricsBuilder != nil {
-		r.logger.Info("Adding Prometheus router metrics middleware for Round")
-		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
-	} else {
-		// This log message confirms that metrics are being skipped in the test environment
-		r.logger.Info("Skipping Prometheus router metrics middleware for Round - either in test environment or metrics not configured")
+func (r *RoundRouter) Configure(
+	service roundservice.Service,
+	roundMetrics roundmetrics.RoundMetrics,
+) error {
+	if r.metricsEnabled {
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.router)
 	}
 
-	// Create round handlers with logger and tracer
-	roundHandlers := roundhandlers.NewRoundHandlers(roundService, r.logger, r.tracer, r.helper, roundMetrics)
+	handlers := roundhandlers.NewRoundHandlers(
+		service,
+		r.logger,
+		r.tracer,
+		r.helper,
+		roundMetrics,
+	)
 
-	// Add middleware specific to the round module
-	r.Router.AddMiddleware(
+	r.router.AddMiddleware(
 		middleware.CorrelationID,
-		r.middlewareHelper.CommonMetadataMiddleware("round"),
-		r.middlewareHelper.DiscordMetadataMiddleware(),
-		r.middlewareHelper.RoutingMetadataMiddleware(),
+		utils.NewMiddlewareHelper().CommonMetadataMiddleware("round"),
+		utils.NewMiddlewareHelper().DiscordMetadataMiddleware(),
 		middleware.Recoverer,
 		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
-	// Pass routerCtx to RegisterHandlers
-	if err := r.RegisterHandlers(routerCtx, roundHandlers); err != nil {
-		return fmt.Errorf("failed to register handlers: %w", err)
-	}
-	return nil
+	return r.registerHandlers(handlers)
 }
 
-// RegisterHandlers registers event handlers using V1 versioned event constants.
-func (r *RoundRouter) RegisterHandlers(ctx context.Context, handlers roundhandlers.Handlers) error {
-	r.logger.InfoContext(ctx, "Entering RegisterHandlers for Round")
+type handlerDeps struct {
+	router     *message.Router
+	subscriber eventbus.EventBus
+	publisher  eventbus.EventBus
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	helper     utils.Helpers
+	metrics    handlerwrapper.ReturningMetrics
+}
 
-	eventsToHandlers := map[string]message.HandlerFunc{
-		// Round Creation Flow (from creation.go)
-		roundevents.RoundCreationRequestedV1:       handlers.HandleCreateRoundRequest,
-		roundevents.RoundEntityCreatedV1:           handlers.HandleRoundEntityCreated,
-		roundevents.RoundEventMessageIDUpdateV1:    handlers.HandleRoundEventMessageIDUpdate,
-		roundevents.RoundEventMessageIDUpdatedV1:   handlers.HandleDiscordMessageIDUpdated,
+// registerHandler registers a pure transformation-pattern handler with typed payload
+func registerHandler[T any](
+	deps handlerDeps,
+	topic string,
+	handler func(context.Context, *T) ([]handlerwrapper.Result, error),
+) {
+	handlerName := "round." + topic
 
-		// Round Update Flow (from update.go)
-		roundevents.RoundUpdateRequestedV1:  handlers.HandleRoundUpdateRequest,
-		roundevents.RoundUpdateValidatedV1:  handlers.HandleRoundUpdateValidated,
-		roundevents.RoundUpdatedV1:          handlers.HandleRoundScheduleUpdate,
-
-		// Round Delete Flow (from delete.go)
-		roundevents.RoundDeleteRequestedV1:  handlers.HandleRoundDeleteRequest,
-		roundevents.RoundDeleteValidatedV1:  handlers.HandleRoundDeleteValidated,
-		roundevents.RoundDeleteAuthorizedV1: handlers.HandleRoundDeleteAuthorized,
-
-		// Round Participant Flow (from participants.go)
-		roundevents.RoundParticipantJoinRequestedV1:           handlers.HandleParticipantJoinRequest,
-		roundevents.RoundParticipantJoinValidationRequestedV1: handlers.HandleParticipantJoinValidationRequest,
-		roundevents.RoundParticipantRemovalRequestedV1:        handlers.HandleParticipantRemovalRequest,
-		roundevents.RoundParticipantStatusUpdateRequestedV1:   handlers.HandleParticipantStatusUpdateRequest,
-		roundevents.RoundParticipantDeclinedV1:                handlers.HandleParticipantDeclined,
-
-		// Round Scoring Flow (from scoring.go)
-		roundevents.RoundScoreUpdateRequestedV1:   handlers.HandleScoreUpdateRequest,
-		roundevents.RoundScoreUpdateValidatedV1:   handlers.HandleScoreUpdateValidated,
-		roundevents.RoundParticipantScoreUpdatedV1: handlers.HandleParticipantScoreUpdated,
-		roundevents.RoundAllScoresSubmittedV1:     handlers.HandleAllScoresSubmitted,
-
-		// Round Lifecycle Flow (from lifecycle.go)
-		roundevents.RoundFinalizedV1:         handlers.HandleRoundFinalized,
-		roundevents.RoundReminderScheduledV1: handlers.HandleRoundReminder,
-		roundevents.RoundStartedV1:           handlers.HandleRoundStarted,
-
-		// Tag Lookup Flow - cross-module events (from shared/tags.go)
-		sharedevents.RoundTagLookupFoundV1:          handlers.HandleTagNumberFound,
-		sharedevents.RoundTagLookupNotFoundV1:       handlers.HandleTagNumberNotFound,
-		leaderboardevents.GetTagNumberFailedV1:      handlers.HandleTagNumberLookupFailed,
-		sharedevents.TagUpdateForScheduledRoundsV1:  handlers.HandleScheduledRoundTagUpdate,
-
-		// Round Retrieval Flow (from retrieval.go)
-		roundevents.GetRoundRequestedV1: handlers.HandleGetRoundRequest,
-
-		// Scorecard Import Flow (from import.go)
-		roundevents.ScorecardUploadedV1:     handlers.HandleScorecardUploaded,
-		roundevents.ScorecardURLRequestedV1: handlers.HandleScorecardURLRequested,
-		roundevents.ScorecardParseRequestedV1: handlers.HandleParseScorecardRequest,
-		roundevents.ImportCompletedV1:       handlers.HandleImportCompleted,
-
-		// Cross-module events (user module - from udisc.go)
-		userevents.UDiscMatchConfirmedV1: handlers.HandleUserMatchConfirmedForIngest,
-	}
-
-	for topic, handlerFunc := range eventsToHandlers {
-		handlerName := fmt.Sprintf("round.%s", topic)
-		r.Router.AddHandler(
+	deps.router.AddHandler(
+		handlerName,
+		topic,
+		deps.subscriber,
+		"", // Watermill reads topic from message metadata when empty
+		deps.publisher,
+		handlerwrapper.WrapTransformingTyped(
 			handlerName,
-			topic,
-			r.subscriber,
-			"",
-			nil,
-			func(msg *message.Message) ([]*message.Message, error) {
-				messages, err := handlerFunc(msg)
-				if err != nil {
-					r.logger.ErrorContext(ctx, "Error processing message by handler", attr.String("message_id", msg.UUID), attr.Any("error", err))
-					return nil, err
-				}
-				for _, m := range messages {
-					publishTopic := m.Metadata.Get("topic")
-					if publishTopic != "" {
-						// Add specific logging for round reminder messages
-						if publishTopic == roundevents.RoundReminder {
-							r.logger.InfoContext(ctx, "🚀 Publishing Discord Round Reminder",
-								attr.String("original_message_id", msg.UUID),
-								attr.String("new_message_id", m.UUID),
-								attr.String("topic", publishTopic),
-								attr.String("handler_name", handlerName),
-							)
-						} else {
-							r.logger.InfoContext(ctx, "🚀 Auto-publishing message from handler return",
-								attr.String("message_id", m.UUID),
-								attr.String("topic", publishTopic),
-							)
-						}
+			deps.logger,
+			deps.tracer,
+			deps.helper,
+			deps.metrics,
+			handler,
+		),
+	)
+}
 
-						if err := r.publisher.Publish(publishTopic, m); err != nil {
-							r.logger.ErrorContext(ctx, "Failed to publish message from handler return", attr.String("message_id", m.UUID), attr.String("topic", publishTopic), attr.Error(err))
-							return nil, fmt.Errorf("failed to publish to %s: %w", publishTopic, err)
-						}
-					} else {
-						r.logger.Warn("⚠️ Message returned by handler missing topic metadata, dropping", attr.String("message_id", msg.UUID))
-					}
-				}
-				return nil, nil
-			},
-		)
+func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
+	var metrics handlerwrapper.ReturningMetrics // reserved for Phase 6
+
+	deps := handlerDeps{
+		router:     r.router,
+		subscriber: r.subscriber,
+		publisher:  r.publisher,
+		logger:     r.logger,
+		tracer:     r.tracer,
+		helper:     r.helper,
+		metrics:    metrics,
 	}
+
+	registerHandler(deps, roundevents.ScorecardUploadedV1, h.HandleScorecardUploaded)
+	registerHandler(deps, roundevents.ScorecardURLRequestedV1, h.HandleScorecardURLRequested)
+	registerHandler(deps, roundevents.ScorecardParseRequestedV1, h.HandleParseScorecardRequest)
+	registerHandler(deps, userevents.UDiscMatchConfirmedV1, h.HandleUserMatchConfirmedForIngest)
+	registerHandler(deps, roundevents.ImportCompletedV1, h.HandleImportCompleted)
+
+	registerHandler(deps, roundevents.RoundCreationRequestedV1, h.HandleCreateRoundRequest)
+	registerHandler(deps, roundevents.RoundEntityCreatedV1, h.HandleRoundEntityCreated)
+	registerHandler(deps, roundevents.RoundEventMessageIDUpdateV1, h.HandleRoundEventMessageIDUpdate)
+
+	registerHandler(deps, roundevents.RoundDeleteRequestedV1, h.HandleRoundDeleteRequest)
+	registerHandler(deps, roundevents.RoundDeleteValidatedV1, h.HandleRoundDeleteValidated)
+	registerHandler(deps, roundevents.RoundDeleteAuthorizedV1, h.HandleRoundDeleteAuthorized)
+
+	registerHandler(deps, roundevents.RoundUpdateRequestedV1, h.HandleRoundUpdateRequest)
+	registerHandler(deps, roundevents.RoundUpdateValidatedV1, h.HandleRoundUpdateValidated)
+	registerHandler(deps, roundevents.RoundScheduleUpdatedV1, h.HandleRoundScheduleUpdate)
+
+	registerHandler(deps, roundevents.RoundScoreUpdateRequestedV1, h.HandleScoreUpdateRequest)
+	registerHandler(deps, roundevents.RoundScoreUpdateValidatedV1, h.HandleScoreUpdateValidated)
+	registerHandler(deps, roundevents.RoundParticipantScoreUpdatedV1, h.HandleParticipantScoreUpdated)
+
+	registerHandler(deps, roundevents.RoundAllScoresSubmittedV1, h.HandleAllScoresSubmitted)
+	registerHandler(deps, roundevents.RoundFinalizedV1, h.HandleRoundFinalized)
+	registerHandler(deps, roundevents.RoundStartedV1, h.HandleRoundStarted)
+
+	registerHandler(deps, roundevents.RoundParticipantJoinRequestedV1, h.HandleParticipantJoinRequest)
+	registerHandler(deps, roundevents.RoundParticipantJoinValidationRequestedV1, h.HandleParticipantJoinValidationRequest)
+	registerHandler(deps, roundevents.RoundParticipantStatusUpdateRequestedV1, h.HandleParticipantStatusUpdateRequest)
+	registerHandler(deps, roundevents.RoundParticipantRemovalRequestedV1, h.HandleParticipantRemovalRequest)
+	registerHandler(deps, roundevents.RoundParticipantDeclinedV1, h.HandleParticipantDeclined)
+
+	registerHandler(deps, sharedevents.RoundTagLookupFoundV1, h.HandleTagNumberFound)
+	registerHandler(deps, roundevents.RoundTagNumberNotFoundV1, h.HandleTagNumberNotFound)
+	registerHandler(deps, leaderboardevents.GetTagNumberFailedV1, h.HandleTagNumberLookupFailed)
+	// Listen for leaderboard tag update events for scheduled rounds. The leaderboard
+	// service publishes TagUpdateForScheduledRoundsV1 when player tag numbers change;
+	// the round service should consume that topic to update upcoming rounds.
+	registerHandler(deps, leaderboardevents.TagUpdateForScheduledRoundsV1, h.HandleScheduledRoundTagUpdate)
+
+	registerHandler(deps, roundevents.GetRoundRequestedV1, h.HandleGetRoundRequest)
+	registerHandler(deps, roundevents.RoundReminderScheduledV1, h.HandleRoundReminder)
+	registerHandler(deps, roundevents.RoundEventMessageIDUpdatedV1, h.HandleDiscordMessageIDUpdated)
+
 	return nil
 }
 
-// Close stops the router.
 func (r *RoundRouter) Close() error {
-	return r.Router.Close()
+	return r.router.Close()
 }

@@ -2,80 +2,45 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-func (h *RoundHandlers) HandleGetRoundRequest(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleGetRoundRequest",
-		&roundevents.GetRoundRequestPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			getRoundRequestPayload := payload.(*roundevents.GetRoundRequestPayloadV1)
+// HandleGetRoundRequest handles requests to retrieve details for a specific round.
+func (h *RoundHandlers) HandleGetRoundRequest(
+	ctx context.Context,
+	payload *roundevents.GetRoundRequestPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	// Call the service function to fetch the round
+	result, err := h.roundService.GetRound(ctx, payload.GuildID, payload.RoundID)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received GetRoundRequest event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", getRoundRequestPayload.RoundID),
-			)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "get round request failed",
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundRetrievalFailedV1, Payload: result.Failure},
+		}, nil
+	}
 
-			// Call the service function to handle the event
-			result, err := h.roundService.GetRound(ctx, getRoundRequestPayload.GuildID, getRoundRequestPayload.RoundID)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed to handle GetRoundRequest event",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("error", err),
-				)
-				return nil, fmt.Errorf("failed to handle GetRoundRequest event: %w", err)
-			}
+	if result.Success != nil {
+		round, ok := result.Success.(*roundtypes.Round)
+		if !ok {
+			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from GetRound service"}
+		}
 
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Get round request failed",
-					attr.CorrelationIDFromMsg(msg),
-					attr.Any("failure_payload", result.Failure),
-				)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundRetrievedV1, Payload: round},
+		}, nil
+	}
 
-				// Create failure message
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Get round request successful", attr.CorrelationIDFromMsg(msg))
-
-				// Create success message to publish
-				round := result.Success.(*roundtypes.Round)
-				successMsg, err := h.helpers.CreateResultMessage(
-					msg,
-					round,
-					roundevents.RoundRetrievedV1,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create success message: %w", err)
-				}
-
-				return []*message.Message{successMsg}, nil
-			}
-
-			// If neither Failure nor Success is set, return an error
-			h.logger.ErrorContext(ctx, "Unexpected result from GetRound service",
-				attr.CorrelationIDFromMsg(msg),
-			)
-			return nil, fmt.Errorf("unexpected result from service")
-		},
-	)
-
-	// Execute the wrapped handler with the message
-	return wrappedHandler(msg)
+	h.logger.ErrorContext(ctx, "unexpected empty result from GetRound service")
+	return nil, sharedtypes.ValidationError{Message: "unexpected result from service"}
 }

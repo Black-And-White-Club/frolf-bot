@@ -2,6 +2,7 @@ package roundhandler_integration_tests
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -72,17 +75,17 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 
 	// Convert to DB model and insert using the passed DB instance
 	roundDB := &rounddb.Round{
-		ID:             roundData.ID,
-		Title:          roundData.Title,
-		Description:    *roundData.Description,
-		Location:       *roundData.Location,
-		EventType:      roundData.EventType,
-		StartTime:      *roundData.StartTime,
-		Finalized:      roundData.Finalized,
-		CreatedBy:      roundData.CreatedBy,
-		State:          roundData.State,
-		Participants:   roundData.Participants,
-		GuildID:        "test-guild", // ✅ FIX: Must match handler test payloads
+		ID:           roundData.ID,
+		Title:        roundData.Title,
+		Description:  *roundData.Description,
+		Location:     *roundData.Location,
+		EventType:    roundData.EventType,
+		StartTime:    *roundData.StartTime,
+		Finalized:    roundData.Finalized,
+		CreatedBy:    roundData.CreatedBy,
+		State:        roundData.State,
+		Participants: roundData.Participants,
+		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
 	}
 
 	_, err := db.NewInsert().Model(roundDB).Exec(context.Background()) // ✅ Use passed DB
@@ -95,217 +98,142 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 
 // TestHandleAllScoresSubmitted tests the all scores submitted handler
 func TestHandleAllScoresSubmitted(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	const testTimeout = 2 * time.Second
-
-	testCases := []struct {
-		name                    string
-		setupAndRun             func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectDiscordFinalized  bool
-		expectFinalizationError bool
-		expectNoMessages        bool
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
-			name:                   "Success - Valid All Scores Submitted",
-			expectDiscordFinalized: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Success - Valid All Scores Submitted",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				data := NewTestData()
+				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				return struct {
+					id           sharedtypes.RoundID
+					participants []roundtypes.Participant
+					round        roundtypes.Round
+				}{roundID, participants, round}
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
+				// Reuse setup to build a payload
 				data := NewTestData()
 				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, deps.DB)
 				payload := createValidAllScoresSubmittedPayload(roundID, participants, round)
-				helper.PublishAllScoresSubmitted(t, context.Background(), payload)
-			},
-		},
-		{
-			name:                    "Failure - Non-Existent Round ID",
-			expectFinalizationError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				data := NewTestData()
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-
-				// Create a minimal round for the payload
-				dummyRound := roundtypes.Round{
-					ID:             nonExistentRoundID,
-					Title:          "Test Round",
-					EventMessageID: "test_message_id",
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
 				}
-
-				tagNumber := sharedtypes.TagNumber(1)
-				score := sharedtypes.Score(1)
-				participants := []roundtypes.Participant{
-					{
-						UserID:    data.UserID,
-						TagNumber: &tagNumber,
-						Response:  roundtypes.ResponseAccept,
-						Score:     &score,
-					},
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundAllScoresSubmittedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
 				}
-
-				payload := createValidAllScoresSubmittedPayload(nonExistentRoundID, participants, dummyRound)
-				helper.PublishAllScoresSubmitted(t, context.Background(), payload)
+				return msg
 			},
-		},
-		{
-			name:             "Failure - Invalid JSON Message",
-			expectNoMessages: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundAllScoresSubmittedV1)
+			expectedOutgoingTopics: []string{roundevents.RoundFinalizedDiscordV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.RoundFinalizedDiscordV1]
+				if len(msgs) == 0 {
+					t.Fatalf("expected discord finalized message, got none")
+				}
 			},
+			timeout: 2 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup - no need to clear messages between tests!
-	// Each test uses unique IDs so messages won't interfere
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()
-			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			// Run the test - no cleanup needed!
-			tc.setupAndRun(t, helper, &deps)
-
-			if tc.expectDiscordFinalized {
-				if !helper.WaitForRoundFinalized(1, testTimeout) {
-					t.Error("Timed out waiting for discord finalized message")
-				}
-			} else if tc.expectFinalizationError {
-				if !helper.WaitForRoundFinalizationError(1, testTimeout) {
-					t.Error("Timed out waiting for finalization error message")
-				}
-			} else if tc.expectNoMessages {
-				time.Sleep(testTimeout)
+			deps := SetupTestRoundHandler(t)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
 			}
-
-			// Check results
-			discordFinalizedMsgs := helper.GetRoundFinalizedMessages()
-			finalizationErrorMsgs := helper.GetRoundFinalizationErrorMessages()
-
-			if tc.expectDiscordFinalized {
-				if len(discordFinalizedMsgs) == 0 {
-					t.Error("Expected discord finalized message, got none")
-				}
-				if len(finalizationErrorMsgs) > 0 {
-					t.Errorf("Expected no finalization error messages, got %d", len(finalizationErrorMsgs))
-				}
-			} else if tc.expectFinalizationError {
-				if len(finalizationErrorMsgs) == 0 {
-					t.Error("Expected finalization error message, got none")
-				}
-				if len(discordFinalizedMsgs) > 0 {
-					t.Errorf("Expected no discord finalized messages, got %d", len(discordFinalizedMsgs))
-				}
-			} else if tc.expectNoMessages {
-				if len(discordFinalizedMsgs) > 0 {
-					t.Errorf("Expected no discord finalized messages, got %d", len(discordFinalizedMsgs))
-				}
-				if len(finalizationErrorMsgs) > 0 {
-					t.Errorf("Expected no finalization error messages, got %d", len(finalizationErrorMsgs))
-				}
-			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }
 
 // TestHandleRoundFinalized tests the round finalized handler
 func TestHandleRoundFinalized(t *testing.T) {
-	// Setup ONCE for all subtests
-	deps := SetupTestRoundHandler(t)
-
-
-	const testTimeout = 2 * time.Second
-
-	testCases := []struct {
-		name                    string
-		setupAndRun             func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps)
-		expectScoreProcessing   bool
-		expectFinalizationError bool
-		expectNoMessages        bool
+	tests := []struct {
+		name                   string
+		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
+		publishMsgFn           func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message
+		validateFn             func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{})
+		expectedOutgoingTopics []string
+		timeout                time.Duration
 	}{
 		{
-			name:                  "Success - Valid Round Finalized",
-			expectScoreProcessing: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
+			name: "Success - Valid Round Finalized",
+			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
+				data := NewTestData()
+				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				return struct{
+					id sharedtypes.RoundID
+					r  roundtypes.Round
+				}{roundID, existingRound}
+			},
+			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, deps.DB)
 				payload := createValidRoundFinalizedPayload(roundID, existingRound)
-				helper.PublishRoundFinalized(t, context.Background(), payload)
+				payloadBytes, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("failed to marshal payload: %v", err)
+				}
+				msg := message.NewMessage(uuid.New().String(), payloadBytes)
+				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundFinalizedV1, msg); err != nil {
+					t.Fatalf("Publish failed: %v", err)
+				}
+				return msg
 			},
-		},
-		{
-			name:                    "Failure - Non-Existent Round ID",
-			expectFinalizationError: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				dummyRoundData := roundtypes.Round{ID: nonExistentRoundID, Participants: []roundtypes.Participant{}}
-				payload := createValidRoundFinalizedPayload(nonExistentRoundID, dummyRoundData)
-				helper.PublishRoundFinalized(t, context.Background(), payload)
+			expectedOutgoingTopics: []string{roundevents.ProcessRoundScoresRequestedV1},
+			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+				msgs := receivedMsgs[roundevents.ProcessRoundScoresRequestedV1]
+				if len(msgs) == 0 {
+					t.Fatalf("expected process round scores request, got none")
+				}
 			},
-		},
-		{
-			name:             "Failure - Invalid JSON Message",
-			expectNoMessages: true,
-			setupAndRun: func(t *testing.T, helper *testutils.RoundTestHelper, deps *RoundHandlerTestDeps) {
-				helper.PublishInvalidJSON(t, context.Background(), roundevents.RoundFinalizedV1)
-			},
+			timeout: 2 * time.Second,
 		},
 	}
 
-	// Run all subtests with SHARED setup - no need to clear messages between tests!
-	// Each test uses unique IDs so messages won't interfere
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear message capture before each subtest
-			deps.MessageCapture.Clear()
-			// Create helper for each subtest
-			helper := testutils.NewRoundTestHelper(deps.EventBus, deps.MessageCapture)
-
-			// Run the test - no cleanup needed!
-			tc.setupAndRun(t, helper, &deps)
-
-			if tc.expectScoreProcessing {
-				if !helper.WaitForProcessRoundScoresRequest(1, testTimeout) {
-					t.Error("Timed out waiting for score processing message")
-				}
-			} else if tc.expectFinalizationError {
-				if !helper.WaitForRoundFinalizationError(1, testTimeout) {
-					t.Error("Timed out waiting for finalization error message")
-				}
-			} else if tc.expectNoMessages {
-				time.Sleep(testTimeout)
+			deps := SetupTestRoundHandler(t)
+			genericCase := testutils.TestCase{
+				Name: tc.name,
+				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {
+					return tc.setupFn(t, deps, env)
+				},
+				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
+					return tc.publishMsgFn(t, deps, env)
+				},
+				ExpectedTopics: tc.expectedOutgoingTopics,
+				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
+					tc.validateFn(t, deps, env, triggerMsg, receivedMsgs, initialState)
+				},
+				ExpectError:    false,
+				MessageTimeout: tc.timeout,
 			}
-
-			// Check results
-			scoreProcessingMsgs := helper.GetProcessRoundScoresRequestMessages()
-			finalizationErrorMsgs := helper.GetRoundFinalizationErrorMessages()
-
-			if tc.expectScoreProcessing {
-				if len(scoreProcessingMsgs) == 0 {
-					t.Error("Expected score processing message, got none")
-				}
-				if len(finalizationErrorMsgs) > 0 {
-					t.Errorf("Expected no finalization error messages, got %d", len(finalizationErrorMsgs))
-				}
-			} else if tc.expectFinalizationError {
-				if len(finalizationErrorMsgs) == 0 {
-					t.Error("Expected finalization error message, got none")
-				}
-				if len(scoreProcessingMsgs) > 0 {
-					t.Errorf("Expected no score processing messages, got %d", len(scoreProcessingMsgs))
-				}
-			} else if tc.expectNoMessages {
-				if len(scoreProcessingMsgs) > 0 {
-					t.Errorf("Expected no score processing messages, got %d", len(scoreProcessingMsgs))
-				}
-				if len(finalizationErrorMsgs) > 0 {
-					t.Errorf("Expected no finalization error messages, got %d", len(finalizationErrorMsgs))
-				}
-			}
+			testutils.RunTest(t, genericCase, deps.TestEnvironment)
 		})
 	}
 }

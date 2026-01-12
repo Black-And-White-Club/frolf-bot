@@ -2,8 +2,7 @@ package userservice
 
 import (
 	"context"
-	"errors"
-	"fmt" // Import fmt for error wrapping
+	"errors" // Import fmt for error wrapping
 	"testing"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -97,8 +96,8 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				},
 				Error: userdbtypes.ErrUserNotFound, // Error within the result
 			},
-			// Expect the wrapped error returned by the service function
-			expectedErr: fmt.Errorf("failed to update user role: %w", userdbtypes.ErrUserNotFound),
+			// Service now returns failure payload with Error populated but no top-level error
+			expectedErr: nil,
 		},
 		{
 			name: "Fails due to database error",
@@ -118,8 +117,8 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 				},
 				Error: dbErr, // Error within the result
 			},
-			// Expect the wrapped error returned by the service function
-			expectedErr: fmt.Errorf("failed to update user role: %w", dbErr),
+			// Service now returns failure payload with Error populated but no top-level error
+			expectedErr: nil,
 		},
 	}
 

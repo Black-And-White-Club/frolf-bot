@@ -2,76 +2,43 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/ThreeDotsLabs/watermill/message"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-// HandleDiscordMessageIDUpdate handles the event published after a round has been
+// HandleDiscordMessageIDUpdated handles the event published after a round has been
 // successfully updated with the Discord message ID and is ready for scheduling.
 // It calls the service method to schedule the reminder and start events.
-func (h *RoundHandlers) HandleDiscordMessageIDUpdated(msg *message.Message) ([]*message.Message, error) {
-	wrappedHandler := h.handlerWrapper(
-		"HandleDiscordMessageIDUpdate",
-		&roundevents.RoundScheduledPayloadV1{},
-		func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error) {
-			scheduledPayload := payload.(*roundevents.RoundScheduledPayloadV1)
+func (h *RoundHandlers) HandleDiscordMessageIDUpdated(
+	ctx context.Context,
+	payload *roundevents.RoundScheduledPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.roundService.ScheduleRoundEvents(ctx, payload.GuildID, *payload, payload.EventMessageID)
+	if err != nil {
+		return nil, err
+	}
 
-			h.logger.InfoContext(ctx, "Received RoundScheduled event",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", scheduledPayload.RoundID),
-				attr.String("discord_message_id", scheduledPayload.EventMessageID),
-			)
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "round events scheduling failed in service",
+			attr.RoundID("round_id", payload.RoundID),
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundScheduleFailedV1, Payload: result.Failure},
+		}, nil
+	}
 
-			result, err := h.roundService.ScheduleRoundEvents(ctx, scheduledPayload.GuildID, *scheduledPayload, scheduledPayload.EventMessageID)
-			if err != nil {
-				h.logger.ErrorContext(ctx, "Failed during ScheduleRoundEvents service call",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", scheduledPayload.RoundID),
-					attr.Error(err),
-				)
-				return nil, fmt.Errorf("failed to schedule round events: %w", err)
-			}
+	if result.Success != nil {
+		// Since this handler only schedules events and doesn't trigger downstream events,
+		// we return an empty result slice to indicate successful processing.
+		return []handlerwrapper.Result{}, nil
+	}
 
-			if result.Failure != nil {
-				h.logger.InfoContext(ctx, "Round events scheduling failed in service",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", scheduledPayload.RoundID),
-					attr.Any("failure_payload", result.Failure),
-				)
-
-				failureMsg, errMsg := h.helpers.CreateResultMessage(
-					msg,
-					result.Failure,
-					roundevents.RoundErrorV1,
-				)
-				if errMsg != nil {
-					return nil, fmt.Errorf("failed to create failure message: %w", errMsg)
-				}
-
-				return []*message.Message{failureMsg}, nil
-			}
-
-			if result.Success != nil {
-				h.logger.InfoContext(ctx, "Round events scheduling successful",
-					attr.CorrelationIDFromMsg(msg),
-					attr.RoundID("round_id", scheduledPayload.RoundID),
-				)
-
-				// Since this handler only schedules events and doesn't publish anything,
-				// we return an empty slice to indicate successful processing
-				return []*message.Message{}, nil
-			}
-
-			h.logger.ErrorContext(ctx, "Unexpected result from ScheduleRoundEvents service",
-				attr.CorrelationIDFromMsg(msg),
-				attr.RoundID("round_id", scheduledPayload.RoundID),
-			)
-			return nil, fmt.Errorf("service returned neither success nor failure")
-		},
+	h.logger.ErrorContext(ctx, "unexpected empty result from ScheduleRoundEvents service",
+		attr.RoundID("round_id", payload.RoundID),
 	)
-
-	return wrappedHandler(msg)
+	return nil, sharedtypes.ValidationError{Message: "service returned neither success nor failure"}
 }

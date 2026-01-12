@@ -10,9 +10,12 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
-	message "github.com/ThreeDotsLabs/watermill/message"
+	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
+	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,76 +44,76 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleCreateGuildConfig mocks base method.
-func (m *MockHandlers) HandleCreateGuildConfig(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleCreateGuildConfig(ctx context.Context, payload *guildevents.GuildConfigCreationRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleCreateGuildConfig", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleCreateGuildConfig", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleCreateGuildConfig indicates an expected call of HandleCreateGuildConfig.
-func (mr *MockHandlersMockRecorder) HandleCreateGuildConfig(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleCreateGuildConfig(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCreateGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleCreateGuildConfig), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCreateGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleCreateGuildConfig), ctx, payload)
 }
 
 // HandleDeleteGuildConfig mocks base method.
-func (m *MockHandlers) HandleDeleteGuildConfig(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleDeleteGuildConfig(ctx context.Context, payload *guildevents.GuildConfigDeletionRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleDeleteGuildConfig", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleDeleteGuildConfig", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleDeleteGuildConfig indicates an expected call of HandleDeleteGuildConfig.
-func (mr *MockHandlersMockRecorder) HandleDeleteGuildConfig(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleDeleteGuildConfig(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDeleteGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleDeleteGuildConfig), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDeleteGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleDeleteGuildConfig), ctx, payload)
 }
 
 // HandleGuildSetup mocks base method.
-func (m *MockHandlers) HandleGuildSetup(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleGuildSetup(ctx context.Context, payload *guildtypes.GuildConfig) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleGuildSetup", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleGuildSetup", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleGuildSetup indicates an expected call of HandleGuildSetup.
-func (mr *MockHandlersMockRecorder) HandleGuildSetup(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleGuildSetup(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildSetup", reflect.TypeOf((*MockHandlers)(nil).HandleGuildSetup), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleGuildSetup", reflect.TypeOf((*MockHandlers)(nil).HandleGuildSetup), ctx, payload)
 }
 
 // HandleRetrieveGuildConfig mocks base method.
-func (m *MockHandlers) HandleRetrieveGuildConfig(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleRetrieveGuildConfig(ctx context.Context, payload *guildevents.GuildConfigRetrievalRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRetrieveGuildConfig", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleRetrieveGuildConfig", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleRetrieveGuildConfig indicates an expected call of HandleRetrieveGuildConfig.
-func (mr *MockHandlersMockRecorder) HandleRetrieveGuildConfig(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleRetrieveGuildConfig(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRetrieveGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleRetrieveGuildConfig), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRetrieveGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleRetrieveGuildConfig), ctx, payload)
 }
 
 // HandleUpdateGuildConfig mocks base method.
-func (m *MockHandlers) HandleUpdateGuildConfig(msg *message.Message) ([]*message.Message, error) {
+func (m *MockHandlers) HandleUpdateGuildConfig(ctx context.Context, payload *guildevents.GuildConfigUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUpdateGuildConfig", msg)
-	ret0, _ := ret[0].([]*message.Message)
+	ret := m.ctrl.Call(m, "HandleUpdateGuildConfig", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleUpdateGuildConfig indicates an expected call of HandleUpdateGuildConfig.
-func (mr *MockHandlersMockRecorder) HandleUpdateGuildConfig(msg any) *gomock.Call {
+func (mr *MockHandlersMockRecorder) HandleUpdateGuildConfig(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateGuildConfig), msg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUpdateGuildConfig", reflect.TypeOf((*MockHandlers)(nil).HandleUpdateGuildConfig), ctx, payload)
 }

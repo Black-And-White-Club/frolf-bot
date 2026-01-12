@@ -209,6 +209,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	}
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("guild-123")
 
 	tests := []struct {
 		name    string
@@ -219,9 +220,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "valid update",
 			payload: roundevents.RoundUpdateValidatedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
+				GuildID: testGuildID,
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: sharedtypes.GuildID("guild-123"),
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -229,9 +230,11 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			},
 			want: RoundOperationResult{
 				Success: &roundevents.RoundEntityUpdatedPayloadV1{
+					GuildID: testGuildID, // Added this
 					Round: roundtypes.Round{
-						ID:    testRoundID,
-						Title: roundtypes.Title("New Title"),
+						ID:      testRoundID,
+						Title:   roundtypes.Title("New Title"),
+						GuildID: testGuildID, // Added this
 					},
 				},
 			},
@@ -240,9 +243,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "invalid update - round not found",
 			payload: roundevents.RoundUpdateValidatedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
+				GuildID: testGuildID,
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: sharedtypes.GuildID("guild-123"),
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -250,8 +253,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			},
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID: testGuildID, // Added this
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-123"),
+						GuildID: testGuildID,
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -264,9 +268,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		{
 			name: "invalid update - update failed",
 			payload: roundevents.RoundUpdateValidatedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
+				GuildID: testGuildID,
 				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: sharedtypes.GuildID("guild-123"),
+					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Title:   roundtypes.Title("New Title"),
 					UserID:  sharedtypes.DiscordID("user123"),
@@ -274,8 +278,9 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 			},
 			want: RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID: testGuildID, // Added this
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-123"),
+						GuildID: testGuildID,
 						RoundID: testRoundID,
 						Title:   roundtypes.Title("New Title"),
 						UserID:  sharedtypes.DiscordID("user123"),
@@ -291,20 +296,21 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			switch tt.name {
 			case "valid update":
-				// Updated: Implementation only calls UpdateRound, not GetRound first
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(&roundtypes.Round{
-					ID:    tt.payload.RoundUpdateRequestPayload.RoundID,
-					Title: tt.payload.RoundUpdateRequestPayload.Title,
-				}, nil)
+				mockDB.EXPECT().
+					UpdateRound(gomock.Any(), testGuildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).
+					Return(&roundtypes.Round{
+						ID:      tt.payload.RoundUpdateRequestPayload.RoundID,
+						Title:   tt.payload.RoundUpdateRequestPayload.Title,
+						GuildID: testGuildID, // Ensure mock returns GuildID as well
+					}, nil)
 			case "invalid update - round not found":
-				// Updated: Implementation calls UpdateRound which can return "round not found" error
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("round not found"))
+				mockDB.EXPECT().
+					UpdateRound(gomock.Any(), testGuildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).
+					Return(nil, errors.New("round not found"))
 			case "invalid update - update failed":
-				// Updated: Implementation calls UpdateRound which can return "update failed" error
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRound(gomock.Any(), guildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).Return(nil, errors.New("update failed"))
+				mockDB.EXPECT().
+					UpdateRound(gomock.Any(), testGuildID, tt.payload.RoundUpdateRequestPayload.RoundID, gomock.Any()).
+					Return(nil, errors.New("update failed"))
 			}
 
 			got, err := s.UpdateRoundEntity(context.Background(), tt.payload)

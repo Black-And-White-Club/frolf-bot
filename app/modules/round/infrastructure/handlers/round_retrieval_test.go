@@ -2,208 +2,209 @@ package roundhandlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
+	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
-	guildID := sharedtypes.GuildID("guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testTitle := roundtypes.Title("Test Round")
+	testDescription := roundtypes.Description("Test Description")
+	testLocation := roundtypes.Location("Test Location")
+	testStartTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
+	testUserID := sharedtypes.DiscordID("user-123")
 
 	testPayload := &roundevents.GetRoundRequestPayloadV1{
-		GuildID: guildID,
+		GuildID: testGuildID,
 		RoundID: testRoundID,
 	}
-
-	payloadBytes, _ := json.Marshal(testPayload)
-	testMsg := message.NewMessage("test-id", payloadBytes)
-
-	invalidMsg := message.NewMessage("test-id", []byte("invalid json"))
 
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		msg            *message.Message
-		want           []*message.Message
-		wantErr        bool
-		expectedErrMsg string
-		mockSetup      func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers)
+		name            string
+		mockSetup       func(*roundmocks.MockService)
+		payload         *roundevents.GetRoundRequestPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
-			name: "Successfully handle GetRoundRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			name: "Successfully retrieve round",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
-					guildID,
+					testGuildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundtypes.Round{
-							ID: testRoundID,
+							ID:          testRoundID,
+							Title:       testTitle,
+							Description: &testDescription,
+							Location:    &testLocation,
+							StartTime:   &testStartTime,
+							CreatedBy:   testUserID,
+							GuildID:     testGuildID,
 						},
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(),
-					roundevents.RoundRetrievedV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundRetrievedV1,
 		},
 		{
-			name: "Fail to unmarshal payload",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).Return(fmt.Errorf("invalid payload"))
-			},
-			msg:            invalidMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to unmarshal payload: invalid payload",
-		},
-		{
-			name: "Service failure in GetRound",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			name: "Service returns failure - round not found",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
-					guildID,
+					testGuildID,
+					testRoundID,
+				).Return(
+					roundservice.RoundOperationResult{
+						Failure: &roundevents.RoundRetrievalFailedPayloadV1{
+							GuildID: testGuildID,
+							RoundID: testRoundID,
+							Error:   "round not found",
+						},
+					},
+					nil,
+				)
+			},
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundRetrievalFailedV1,
+		},
+		{
+			name: "Service returns error",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
+				mockRoundService.EXPECT().GetRound(
+					gomock.Any(),
+					testGuildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{},
-					fmt.Errorf("internal service error"),
+					fmt.Errorf("database connection error"),
 				)
 			},
-			msg:            testMsg,
-			want:           nil,
+			payload:        testPayload,
 			wantErr:        true,
-			expectedErrMsg: "failed to handle GetRoundRequest event: internal service error",
+			expectedErrMsg: "database connection error",
 		},
 		{
-			name: "Service success but CreateResultMessage fails",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			name: "Service returns empty result",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
-					guildID,
+					testGuildID,
+					testRoundID,
+				).Return(
+					roundservice.RoundOperationResult{},
+					nil,
+				)
+			},
+			payload:       testPayload,
+			wantErr:       true,
+			wantResultLen: 0,
+		},
+		{
+			name: "Service returns unexpected payload type",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
+				mockRoundService.EXPECT().GetRound(
+					gomock.Any(),
+					testGuildID,
+					testRoundID,
+				).Return(
+					roundservice.RoundOperationResult{
+						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
+					},
+					nil,
+				)
+			},
+			payload: testPayload,
+			wantErr: true,
+		},
+		{
+			name: "Successfully retrieve minimal round data",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
+				mockRoundService.EXPECT().GetRound(
+					gomock.Any(),
+					testGuildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundtypes.Round{
-							ID: testRoundID,
+							ID:      testRoundID,
+							Title:   testTitle,
+							GuildID: testGuildID,
 						},
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(),
-					roundevents.RoundRetrievedV1,
-				).Return(nil, fmt.Errorf("failed to create result message"))
 			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "failed to create success message: failed to create result message",
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundRetrievedV1,
 		},
 		{
-			name: "Unknown result from GetRound",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
+			name: "Successfully retrieve round with participants",
+			mockSetup: func(mockRoundService *roundmocks.MockService) {
+				testScore := sharedtypes.Score(65)
 				mockRoundService.EXPECT().GetRound(
 					gomock.Any(),
-					guildID,
-					testRoundID,
-				).Return(
-					roundservice.RoundOperationResult{}, // Return empty result
-					nil,
-				)
-			},
-			msg:            testMsg,
-			want:           nil,
-			wantErr:        true,
-			expectedErrMsg: "unexpected result from service",
-		},
-		{
-			name: "Failure result from GetRound",
-			mockSetup: func(mockRoundService *roundmocks.MockService, mockHelpers *mocks.MockHelpers) {
-				mockHelpers.EXPECT().UnmarshalPayload(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(msg *message.Message, out interface{}) error {
-						*out.(*roundevents.GetRoundRequestPayloadV1) = *testPayload
-						return nil
-					},
-				)
-
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					guildID,
+					testGuildID,
 					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundErrorPayload{
-							RoundID: testRoundID,
+						Success: &roundtypes.Round{
+							ID:          testRoundID,
+							Title:       testTitle,
+							Description: &testDescription,
+							Location:    &testLocation,
+							StartTime:   &testStartTime,
+							CreatedBy:   testUserID,
+							GuildID:     testGuildID,
+							Participants: []roundtypes.Participant{
+								{
+									UserID:   sharedtypes.DiscordID("user1"),
+									Response: roundtypes.ResponseAccept,
+									Score:    &testScore,
+								},
+								{
+									UserID:   sharedtypes.DiscordID("user2"),
+									Response: roundtypes.ResponseDecline,
+								},
+							},
 						},
 					},
 					nil,
 				)
-
-				mockHelpers.EXPECT().CreateResultMessage(
-					gomock.Any(),
-					gomock.Any(),
-					roundevents.RoundErrorV1,
-				).Return(testMsg, nil)
 			},
-			msg:     testMsg,
-			want:    []*message.Message{testMsg},
-			wantErr: false,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundRetrievedV1,
 		},
 	}
 
@@ -213,32 +214,29 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			defer ctrl.Finish()
 
 			mockRoundService := roundmocks.NewMockService(ctrl)
-			mockHelpers := mocks.NewMockHelpers(ctrl)
-
-			tt.mockSetup(mockRoundService, mockHelpers)
+			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
 				roundService: mockRoundService,
 				logger:       logger,
 				tracer:       tracer,
 				metrics:      metrics,
-				helpers:      mockHelpers,
-				handlerWrapper: func(handlerName string, unmarshalTo interface{}, handlerFunc func(ctx context.Context, msg *message.Message, payload interface{}) ([]*message.Message, error)) message.HandlerFunc {
-					return handlerWrapper(handlerName, unmarshalTo, handlerFunc, logger, tracer, mockHelpers, metrics)
-				},
 			}
 
-			got, err := h.HandleGetRoundRequest(tt.msg)
+			ctx := context.Background()
+			results, err := h.HandleGetRoundRequest(ctx, tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleGetRoundRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleGetRoundRequest() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleGetRoundRequest() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
 			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("HandleGetRoundRequest() = %v, want %v", got, tt.want)
+			if len(results) != tt.wantResultLen {
+				t.Errorf("HandleGetRoundRequest() result length = %d, want %d", len(results), tt.wantResultLen)
+			}
+			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
+				t.Errorf("HandleGetRoundRequest() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
 		})
 	}
