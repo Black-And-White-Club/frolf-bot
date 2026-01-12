@@ -289,7 +289,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				if results[0].Topic != roundevents.RoundFinalizedDiscordV1 {
 					t.Errorf("First result should be Discord finalization, got %v", results[0].Topic)
 				}
-				if results[0].Metadata["discord_message_id"] != testEventMessageID {
+				if results[0].Metadata["message_id"] != testEventMessageID {
 					t.Errorf("Discord message ID metadata not set correctly")
 				}
 				if results[1].Topic != roundevents.RoundFinalizedV1 {

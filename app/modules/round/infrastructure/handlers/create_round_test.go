@@ -375,7 +375,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 				).Return(testRound, nil)
 			},
 			payload:         testPayload,
-			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			ctx:             context.WithValue(context.Background(), "message_id", "msg-123"),
 			wantErr:         false,
 			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundEventMessageIDUpdatedV1,
@@ -401,7 +401,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 				).Return(nil, fmt.Errorf("database error"))
 			},
 			payload:        testPayload,
-			ctx:            context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			ctx:            context.WithValue(context.Background(), "message_id", "msg-123"),
 			wantErr:        true,
 			expectedErrMsg: "database error",
 		},
@@ -416,7 +416,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 				).Return(nil, nil)
 			},
 			payload:        testPayload,
-			ctx:            context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			ctx:            context.WithValue(context.Background(), "message_id", "msg-123"),
 			wantErr:        true,
 			expectedErrMsg: "updated round object is nil",
 		},

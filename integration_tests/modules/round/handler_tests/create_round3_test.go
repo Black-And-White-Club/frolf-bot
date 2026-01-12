@@ -50,7 +50,7 @@ func TestHandleRoundEventMessageIDUpdate(t *testing.T) {
 
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("discord_message_id", discordMessageID)
+				msg.Metadata.Set("message_id", discordMessageID)
 
 				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundEventMessageIDUpdateV1, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)

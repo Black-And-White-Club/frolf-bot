@@ -70,7 +70,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 	payload *roundevents.RoundMessageIDUpdatePayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	// 1. Extract metadata injected into context by the wrapper
-	discordMessageID, ok := ctx.Value("discord_message_id").(string)
+	discordMessageID, ok := ctx.Value("message_id").(string)
 	if !ok || discordMessageID == "" {
 		return nil, errors.New("discord_message_id missing from context")
 	}
@@ -106,7 +106,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			Topic:   roundevents.RoundEventMessageIDUpdatedV1,
 			Payload: scheduledPayload,
 			Metadata: map[string]string{
-				"discord_message_id": discordMessageID,
+				"message_id": discordMessageID,
 			},
 		},
 	}, nil
