@@ -48,11 +48,11 @@ func TestHandleParticipantJoinValidationRequest(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{sharedevents.LeaderboardTagLookupRequestedV1},
+			expectedOutgoingTopics: []string{sharedevents.RoundTagLookupRequestedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[sharedevents.LeaderboardTagLookupRequestedV1]
+				msgs := receivedMsgs[sharedevents.RoundTagLookupRequestedV1]
 				if len(msgs) == 0 {
-					t.Fatalf("expected leaderboard tag lookup request, got none")
+					t.Fatalf("expected round tag lookup request, got none")
 				}
 			},
 			timeout: 1 * time.Second,
@@ -97,10 +97,10 @@ func createPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, re
 // Note: MessageCapture-dependent helpers removed during refactor. Tests use
 // testutils.RunTest and validate via receivedMsgs and deps.TestHelpers.UnmarshalPayload.
 
-func validateTagLookupRequest(t *testing.T, deps HandlerTestDeps, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.TagLookupRequestPayloadV1 {
+func validateTagLookupRequest(t *testing.T, deps HandlerTestDeps, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *sharedevents.RoundTagLookupRequestedPayloadV1 {
 	t.Helper()
 
-	var result roundevents.TagLookupRequestPayloadV1
+	var result sharedevents.RoundTagLookupRequestedPayloadV1
 	if err := deps.TestHelpers.UnmarshalPayload(msg, &result); err != nil {
 		t.Fatalf("Failed to unmarshal tag lookup request message: %v", err)
 	}

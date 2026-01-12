@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -168,9 +169,10 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 
 		switch payload.Response {
 		case roundtypes.ResponseAccept, roundtypes.ResponseTentative:
-			tagLookupPayload := &roundevents.TagLookupRequestPayloadV1{
-				RoundID:          payload.RoundID,
+			tagLookupPayload := &sharedevents.RoundTagLookupRequestedPayloadV1{
+				ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 				UserID:           payload.UserID,
+				RoundID:          payload.RoundID,
 				Response:         payload.Response,
 				OriginalResponse: payload.Response,
 				JoinedLate:       payload.JoinedLate,

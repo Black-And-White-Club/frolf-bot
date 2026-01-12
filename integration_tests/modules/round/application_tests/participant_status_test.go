@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
@@ -291,14 +292,14 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns TagLookupRequestPayload for Accept/Tentative
-				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayloadV1)
+				// ValidateParticipantJoinRequest returns shared RoundTagLookupRequestedPayloadV1 for Accept/Tentative
+				tagLookupPayloadPtr, ok := returnedResult.Success.(*sharedevents.RoundTagLookupRequestedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.TagLookupRequestPayloadV1, got %T", returnedResult.Success)
+					t.Errorf("Expected *sharedevents.RoundTagLookupRequestedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if tagLookupPayloadPtr == nil {
-					t.Fatalf("Expected non-nil TagLookupRequestPayload pointer")
+					t.Fatalf("Expected non-nil RoundTagLookupRequestedPayload pointer")
 				}
 
 				if tagLookupPayloadPtr.UserID != sharedtypes.DiscordID("new_participant_1") {
@@ -337,14 +338,14 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns TagLookupRequestPayload for Accept/Tentative
-				tagLookupPayloadPtr, ok := returnedResult.Success.(*roundevents.TagLookupRequestPayloadV1)
+				// ValidateParticipantJoinRequest returns shared RoundTagLookupRequestedPayloadV1 for Accept/Tentative
+				tagLookupPayloadPtr, ok := returnedResult.Success.(*sharedevents.RoundTagLookupRequestedPayloadV1)
 				if !ok {
-					t.Errorf("Expected *roundevents.TagLookupRequestPayloadV1, got %T", returnedResult.Success)
+					t.Errorf("Expected *sharedevents.RoundTagLookupRequestedPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if tagLookupPayloadPtr == nil {
-					t.Fatalf("Expected non-nil TagLookupRequestPayload pointer")
+					t.Fatalf("Expected non-nil RoundTagLookupRequestedPayload pointer")
 				}
 
 				if tagLookupPayloadPtr.UserID != sharedtypes.DiscordID("new_participant_2") {

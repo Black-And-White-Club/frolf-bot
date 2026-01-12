@@ -27,10 +27,10 @@ func (h *RoundHandlers) toJoinError(v any) (*roundevents.RoundParticipantJoinErr
 	return p, nil
 }
 
-func (h *RoundHandlers) toTagLookupRequest(v any) (*roundevents.TagLookupRequestPayloadV1, error) {
-	p, ok := v.(*roundevents.TagLookupRequestPayloadV1)
+func (h *RoundHandlers) toTagLookupRequest(v any) (*sharedevents.RoundTagLookupRequestedPayloadV1, error) {
+	p, ok := v.(*sharedevents.RoundTagLookupRequestedPayloadV1)
 	if !ok {
-		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected TagLookupRequestPayloadV1"}
+		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected RoundTagLookupRequestedPayloadV1 (shared payload)"}
 	}
 	return p, nil
 }
@@ -133,8 +133,9 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 		tagLookupRequest.GuildID = payload.GuildID
 	}
 
+	// Publish the shared payload directly (we already accept the shared shape in `toTagLookupRequest`).
 	return []handlerwrapper.Result{
-		{Topic: sharedevents.LeaderboardTagLookupRequestedV1, Payload: tagLookupRequest},
+		{Topic: sharedevents.RoundTagLookupRequestedV1, Payload: tagLookupRequest},
 	}, nil
 }
 

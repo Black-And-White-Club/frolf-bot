@@ -8,6 +8,7 @@ import (
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -951,10 +952,10 @@ func TestRoundService_UpdateParticipantStatus(t *testing.T) {
 							formatBoolPtr(successPayload.JoinedLate))
 					}
 
-				case *roundevents.TagLookupRequestPayloadV1:
-					successPayload, ok := result.Success.(*roundevents.TagLookupRequestPayloadV1)
-					if !ok {
-						t.Errorf("expected success payload of type *TagLookupRequestPayloadV1, got %T", result.Success)
+case *sharedevents.RoundTagLookupRequestedPayloadV1:
+			successPayload, ok := result.Success.(*sharedevents.RoundTagLookupRequestedPayloadV1)
+			if !ok {
+				t.Errorf("expected success payload of type *RoundTagLookupRequestedPayloadV1, got %T", result.Success)
 						return
 					}
 					if successPayload.RoundID != expectedSuccess.RoundID {
