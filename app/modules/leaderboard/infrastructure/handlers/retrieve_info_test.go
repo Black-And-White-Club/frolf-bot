@@ -159,7 +159,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     sharedevents.DiscordTagLookupSucceededV1,
+			wantTopic:     sharedevents.LeaderboardTagLookupSucceededV1,
 		},
 		{
 			name: "Successfully lookup tag - not found",
@@ -177,7 +177,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     sharedevents.DiscordTagLookupNotFoundV1,
+			wantTopic:     sharedevents.LeaderboardTagLookupNotFoundV1,
 		},
 		{
 			name: "Service error",

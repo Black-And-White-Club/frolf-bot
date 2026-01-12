@@ -78,9 +78,9 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupSucceededV1
-				unexpectedTopic := sharedevents.DiscordTagLookupNotFoundV1
-				unexpectedFailTopic := sharedevents.DiscordTagLookupFailedV1
+expectedTopic := sharedevents.LeaderboardTagLookupSucceededV1
+			unexpectedTopic := sharedevents.LeaderboardTagLookupNotFoundV1
+			unexpectedFailTopic := sharedevents.LeaderboardTagLookupFailedV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -126,7 +126,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 1, true)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupSucceededV1},
+			expectedOutgoingTopics: []string{sharedevents.LeaderboardTagLookupSucceededV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -154,9 +154,9 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupNotFoundV1
-				unexpectedTopic := sharedevents.DiscordTagLookupSucceededV1
-				unexpectedFailTopic := sharedevents.DiscordTagLookupFailedV1
+expectedTopic := sharedevents.LeaderboardTagLookupNotFoundV1
+			unexpectedTopic := sharedevents.LeaderboardTagLookupSucceededV1
+			unexpectedFailTopic := sharedevents.LeaderboardTagLookupFailedV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -202,7 +202,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 1, true)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupNotFoundV1},
+			expectedOutgoingTopics: []string{sharedevents.LeaderboardTagLookupNotFoundV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -224,9 +224,9 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				expectedTopic := sharedevents.DiscordTagLookupFailedV1
-				unexpectedTopic1 := sharedevents.DiscordTagLookupSucceededV1
-				unexpectedTopic2 := sharedevents.DiscordTagLookupNotFoundV1
+expectedTopic := sharedevents.LeaderboardTagLookupFailedV1
+			unexpectedTopic1 := sharedevents.LeaderboardTagLookupSucceededV1
+			unexpectedTopic2 := sharedevents.LeaderboardTagLookupNotFoundV1
 
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -266,7 +266,7 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 
 				assertLeaderboardState(t, deps, initialLeaderboard, 0, false)
 			},
-			expectedOutgoingTopics: []string{sharedevents.DiscordTagLookupFailedV1},
+			expectedOutgoingTopics: []string{sharedevents.LeaderboardTagLookupFailedV1},
 			expectHandlerError:     false,
 			timeout:                5 * time.Second,
 		},
@@ -288,9 +288,9 @@ func TestHandleGetTagByUserIDRequest(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
-				unexpectedTopic1 := sharedevents.DiscordTagLookupSucceededV1
-				unexpectedTopic2 := sharedevents.DiscordTagLookupNotFoundV1
-				unexpectedTopic3 := sharedevents.DiscordTagLookupFailedV1
+unexpectedTopic1 := sharedevents.LeaderboardTagLookupSucceededV1
+			unexpectedTopic2 := sharedevents.LeaderboardTagLookupNotFoundV1
+			unexpectedTopic3 := sharedevents.LeaderboardTagLookupFailedV1
 
 				if len(receivedMsgs[unexpectedTopic1]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic1, len(receivedMsgs[unexpectedTopic1]))

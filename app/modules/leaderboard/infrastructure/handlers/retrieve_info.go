@@ -7,8 +7,8 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
 // HandleGetLeaderboardRequest handles the GetLeaderboardRequest event.
@@ -84,9 +84,9 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 			return nil, errors.New("unexpected type for success payload")
 		}
 
-		eventType := sharedevents.DiscordTagLookupNotFoundV1
+		eventType := sharedevents.LeaderboardTagLookupNotFoundV1
 		if successPayload.Found && successPayload.TagNumber != nil {
-			eventType = sharedevents.DiscordTagLookupSucceededV1
+			eventType = sharedevents.LeaderboardTagLookupSucceededV1
 			h.logger.InfoContext(ctx, "Tag lookup successful: Tag found",
 				attr.ExtractCorrelationID(ctx),
 				attr.String("user_id", string(successPayload.UserID)),
@@ -115,7 +115,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 		)
 
 		return []handlerwrapper.Result{
-			{Topic: sharedevents.DiscordTagLookupFailedV1, Payload: failurePayload},
+			{Topic: sharedevents.LeaderboardTagLookupFailedV1, Payload: failurePayload},
 		}, nil
 
 	} else if result.Error != nil {
@@ -130,7 +130,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 		}
 
 		return []handlerwrapper.Result{
-			{Topic: sharedevents.DiscordTagLookupFailedV1, Payload: &handlerFailurePayload},
+			{Topic: sharedevents.LeaderboardTagLookupFailedV1, Payload: &handlerFailurePayload},
 		}, nil
 	}
 
