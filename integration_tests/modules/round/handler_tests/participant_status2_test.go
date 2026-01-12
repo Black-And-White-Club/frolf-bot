@@ -6,6 +6,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -47,9 +48,9 @@ func TestHandleParticipantJoinValidationRequest(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.LeaderboardGetTagNumberRequestedV1},
+			expectedOutgoingTopics: []string{sharedevents.LeaderboardTagLookupRequestedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.LeaderboardGetTagNumberRequestedV1]
+				msgs := receivedMsgs[sharedevents.LeaderboardTagLookupRequestedV1]
 				if len(msgs) == 0 {
 					t.Fatalf("expected leaderboard tag lookup request, got none")
 				}

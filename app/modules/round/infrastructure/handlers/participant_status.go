@@ -134,7 +134,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	}
 
 	return []handlerwrapper.Result{
-		{Topic: roundevents.LeaderboardGetTagNumberRequestedV1, Payload: tagLookupRequest},
+		{Topic: sharedevents.LeaderboardTagLookupRequestedV1, Payload: tagLookupRequest},
 	}, nil
 }
 
