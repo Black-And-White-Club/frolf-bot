@@ -32,36 +32,36 @@ func (w *RoundStartWorker) Work(ctx context.Context, job *river.Job[RoundStartJo
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
 		attr.String("guild_id", string(job.Args.GuildID)),
-		attr.String("round_id", job.Args.RoundID),
+		attr.String("round_id", job.Args.RoundID.String()),
 		attr.String("operation", "process_round_start_job"),
 	)
 
 	ctxLogger.Info("Processing round start job")
 
-	// SAFEGUARD: Defensive enrichment for older jobs
-	if job.Args.RoundData.GuildID == "" && job.Args.GuildID != "" {
-		job.Args.RoundData.GuildID = job.Args.GuildID
+	// Build a minimal backend request payload. The worker must not attempt to
+	// materialize the full domain payload; DB is the source of truth.
+	payload := roundevents.RoundStartRequestedPayloadV1{
+		GuildID: job.Args.GuildID,
+		RoundID: job.Args.RoundID,
 	}
 
-	// Create Watermill message using helpers to satisfy the EventBus interface
-	msg, err := w.helpers.CreateNewMessage(job.Args.RoundData, roundevents.RoundStartedV1)
+	msg, err := w.helpers.CreateNewMessage(payload, roundevents.RoundStartRequestedV1)
 	if err != nil {
-		ctxLogger.Error("Failed to create round started message", attr.Error(err))
-		return fmt.Errorf("failed to create round started message: %w", err)
+		ctxLogger.Error("Failed to create round start requested message", attr.Error(err))
+		return fmt.Errorf("failed to create round start requested message: %w", err)
 	}
 
-	// Ensure guild_id metadata is present for the router's middleware/routing logic
+	// Attach guild_id metadata to help routing/middleware
 	if msg.Metadata.Get("guild_id") == "" && job.Args.GuildID != "" {
 		msg.Metadata.Set("guild_id", string(job.Args.GuildID))
 	}
 
-	// Publish the raw message so the RoundRouter picks it up
-	if err := w.eventBus.Publish(roundevents.RoundStartedV1, msg); err != nil {
-		ctxLogger.Error("Failed to publish round started event", attr.Error(err))
-		return fmt.Errorf("failed to publish round started event: %w", err)
+	if err := w.eventBus.Publish(roundevents.RoundStartRequestedV1, msg); err != nil {
+		ctxLogger.Error("Failed to publish round start requested event", attr.Error(err))
+		return fmt.Errorf("failed to publish round start requested event: %w", err)
 	}
 
-	ctxLogger.Info("Round start job processed successfully - event published")
+	ctxLogger.Info("Round start job processed successfully - requested event published")
 	return nil
 }
 

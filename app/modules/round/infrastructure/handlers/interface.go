@@ -35,8 +35,8 @@ type Handlers interface {
 	HandleAllScoresSubmitted(ctx context.Context, payload *roundevents.AllScoresSubmittedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleRoundFinalized(ctx context.Context, payload *roundevents.RoundFinalizedPayloadV1) ([]handlerwrapper.Result, error)
 
-	// Round start handler
-	HandleRoundStarted(ctx context.Context, payload *roundevents.RoundStartedPayloadV1) ([]handlerwrapper.Result, error)
+	// Round start handler (request-style minimal payload)
+	HandleRoundStartRequested(ctx context.Context, payload *roundevents.RoundStartRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Participant status handlers
 	HandleParticipantJoinRequest(ctx context.Context, payload *roundevents.ParticipantJoinRequestPayloadV1) ([]handlerwrapper.Result, error)

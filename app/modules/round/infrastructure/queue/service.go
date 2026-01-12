@@ -158,9 +158,8 @@ func (s *Service) ScheduleRoundStart(ctx context.Context, guildID sharedtypes.Gu
 	}
 
 	job := RoundStartJob{
-		GuildID:   guildID,
-		RoundID:   roundID.String(),
-		RoundData: payload,
+		GuildID: guildID,
+		RoundID: roundID,
 	}
 
 	_, err := s.client.Insert(ctx, job, &river.InsertOpts{

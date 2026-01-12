@@ -242,18 +242,18 @@ func (mr *MockServiceMockRecorder) ProcessRoundReminder(ctx, payload any) *gomoc
 }
 
 // ProcessRoundStart mocks base method.
-func (m *MockService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (roundservice.RoundOperationResult, error) {
+func (m *MockService) ProcessRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessRoundStart", ctx, payload)
+	ret := m.ctrl.Call(m, "ProcessRoundStart", ctx, guildID, roundID)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ProcessRoundStart indicates an expected call of ProcessRoundStart.
-func (mr *MockServiceMockRecorder) ProcessRoundStart(ctx, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) ProcessRoundStart(ctx, guildID, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), ctx, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessRoundStart", reflect.TypeOf((*MockService)(nil).ProcessRoundStart), ctx, guildID, roundID)
 }
 
 // ScheduleRoundEvents mocks base method.

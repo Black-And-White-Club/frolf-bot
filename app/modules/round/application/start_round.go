@@ -11,44 +11,60 @@ import (
 
 // ProcessRoundStart handles the start of a round, updates participant data, updates DB, and notifies Discord.
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ProcessRoundStart", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+func (s *RoundService) ProcessRoundStart(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+) (RoundOperationResult, error) {
+
+	return s.serviceWrapper(ctx, "ProcessRoundStart", roundID, func(ctx context.Context) (RoundOperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round start",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.String("guild_id", string(payload.GuildID)),
+			attr.RoundID("round_id", roundID),
+			attr.String("guild_id", string(guildID)),
 		)
 
-		// Fetch the round from DB
-		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
+		// Fetch the round from DB (DB is the source of truth)
+		round, err := s.RoundDB.GetRound(ctx, guildID, roundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get round from database",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
+				attr.RoundID("round_id", roundID),
+				attr.String("guild_id", string(guildID)),
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
+					GuildID: guildID,
+					RoundID: roundID,
 					Error:   err.Error(),
 				},
 			}, nil
 		}
 
-		// Update the round state to "in progress" - call DB method directly
-		err = s.RoundDB.UpdateRoundState(ctx, payload.GuildID, payload.RoundID, roundtypes.RoundStateInProgress)
+		// Ensure we have an event message id to update/notify Discord
+		if round.EventMessageID == "" {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayloadV1{
+					GuildID: guildID,
+					RoundID: roundID,
+					Error:   "round missing event_message_id",
+				},
+			}, nil
+		}
+
+		// Update the round state to "in progress"
+		err = s.RoundDB.UpdateRoundState(ctx, guildID, roundID, roundtypes.RoundStateInProgress)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round state to in progress",
-				attr.RoundID("round_id", payload.RoundID),
-				attr.String("guild_id", string(payload.GuildID)),
+				attr.RoundID("round_id", roundID),
+				attr.String("guild_id", string(guildID)),
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRoundState")
 			return RoundOperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
+					GuildID: guildID,
+					RoundID: roundID,
 					Error:   err.Error(),
 				},
 			}, nil
@@ -65,25 +81,24 @@ func (s *RoundService) ProcessRoundStart(ctx context.Context, payload roundevent
 			}
 		}
 
-		// Use the payload data for the Discord event (not the DB data)
-		discordPayload := &roundevents.DiscordRoundStartPayloadV1{
-			GuildID:        payload.GuildID,
-			RoundID:        round.ID,
-			Title:          payload.Title,        // Use payload title
-			Location:       payload.Location,     // Use payload location
-			StartTime:      payload.StartTime,    // Use payload start time
-			Participants:   participants,         // Use DB participants (current state)
-			EventMessageID: round.EventMessageID, // Use DB event message ID
+		// Determine Discord channel to use. Prefer guild config if available.
+		discordChannelID := ""
+		if cfg := s.getGuildConfigForEnrichment(ctx, guildID); cfg != nil && cfg.EventChannelID != "" {
+			discordChannelID = cfg.EventChannelID
 		}
 
-		s.logger.InfoContext(ctx, "Round start processed",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.String("guild_id", string(payload.GuildID)),
-			attr.Int("participant_count", len(participants)),
-		)
-
+		// Build the Discord-specific payload from DB values (DB is authoritative)
 		return RoundOperationResult{
-			Success: discordPayload,
+			Success: &roundevents.DiscordRoundStartPayloadV1{
+				GuildID:          guildID,
+				RoundID:          roundID,
+				Title:            round.Title,
+				Location:         round.Location,
+				StartTime:        round.StartTime,
+				Participants:     participants,
+				EventMessageID:   round.EventMessageID,
+				DiscordChannelID: discordChannelID,
+			},
 		}, nil
 	})
 }

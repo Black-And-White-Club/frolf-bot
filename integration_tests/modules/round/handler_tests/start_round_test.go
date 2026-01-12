@@ -8,6 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -26,14 +27,8 @@ func TestHandleRoundStarted(t *testing.T) {
 		{
 			name: "Success - Start Round with Single Participant",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
-				data := NewTestData()
-				data2 := NewTestData()
-				// Create a round with one participant in UPCOMING state
-				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
-				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
-					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
-				})
-				return roundID
+				// Move creation into publish step so we can control the round title (DB is source of truth)
+				return nil
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -43,9 +38,16 @@ func TestHandleRoundStarted(t *testing.T) {
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
-				startTime := time.Now().Add(time.Hour)
-				location := roundtypes.Location("Test Course")
-				payload := createRoundStartedPayload(roundID, "Test Round", &startTime, &location)
+				// Ensure the round stored in DB has the title we expect the Discord payload to contain
+				if _, err := (&rounddb.RoundDBImpl{DB: env.DB}).UpdateRound(env.Ctx, sharedtypes.GuildID("test-guild"), roundID, &roundtypes.Round{Title: roundtypes.Title("Test Round")}); err != nil {
+					t.Fatalf("Failed to set round title in DB: %v", err)
+				}
+
+				// Publish identity-only start request (handler/service will read DB)
+				payload := roundevents.RoundStartRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
+					RoundID: roundID,
+				}
 
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -53,7 +55,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -104,9 +106,11 @@ func TestHandleRoundStarted(t *testing.T) {
 					{UserID: data4.UserID, Response: roundtypes.ResponseTentative, Score: nil},
 				})
 
-				startTime := time.Now().Add(30 * time.Minute)
-				location := roundtypes.Location("Multiple Player Course")
-				payload := createRoundStartedPayload(roundID, "Multi-Player Round", &startTime, &location)
+				// Publish identity-only start request
+				payload := roundevents.RoundStartRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
+					RoundID: roundID,
+				}
 
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -114,7 +118,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -156,9 +160,11 @@ func TestHandleRoundStarted(t *testing.T) {
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 
-				startTime := time.Now().Add(2 * time.Hour)
-				location := roundtypes.Location("Empty Course")
-				payload := createRoundStartedPayload(roundID, "Solo Round", &startTime, &location)
+				// Publish identity-only start request
+				payload := roundevents.RoundStartRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
+					RoundID: roundID,
+				}
 
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -166,7 +172,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -206,9 +212,11 @@ func TestHandleRoundStarted(t *testing.T) {
 					{UserID: data3.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
-				startTime := time.Now().Add(time.Hour)
-				location := roundtypes.Location("Tagged Course")
-				payload := createRoundStartedPayload(roundID, "Tagged Round", &startTime, &location)
+				// Publish identity-only start request
+				payload := roundevents.RoundStartRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
+					RoundID: roundID,
+				}
 
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -216,7 +224,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -254,9 +262,12 @@ func TestHandleRoundStarted(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				nonExistentRoundID := sharedtypes.RoundID(uuid.New())
-				startTime := time.Now().Add(time.Hour)
-				location := roundtypes.Location("Nonexistent Course")
-				payload := createRoundStartedPayload(nonExistentRoundID, "Nonexistent Round", &startTime, &location)
+
+				// Publish identity-only start request for a non-existent round
+				payload := roundevents.RoundStartRequestedPayloadV1{
+					GuildID: sharedtypes.GuildID("test-guild"),
+					RoundID: nonExistentRoundID,
+				}
 
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -264,7 +275,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -288,7 +299,7 @@ func TestHandleRoundStarted(t *testing.T) {
 				invalidJSON := []byte(`invalid json`)
 				msg := message.NewMessage(uuid.New().String(), invalidJSON)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundStartRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -348,4 +359,3 @@ func createRoundStartedPayload(roundID sharedtypes.RoundID, title string, startT
 		GuildID:   "test-guild",
 	}
 }
-

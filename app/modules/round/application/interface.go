@@ -29,7 +29,7 @@ type Service interface {
 	DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (RoundOperationResult, error)
 
 	// Start Round
-	ProcessRoundStart(ctx context.Context, payload roundevents.RoundStartedPayloadV1) (RoundOperationResult, error)
+	ProcessRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (RoundOperationResult, error)
 
 	// Join Round
 	ValidateParticipantJoinRequest(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (RoundOperationResult, error)

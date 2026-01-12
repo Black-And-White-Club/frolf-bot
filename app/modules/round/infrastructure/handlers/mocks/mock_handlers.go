@@ -345,19 +345,19 @@ func (mr *MockHandlersMockRecorder) HandleRoundScheduleUpdate(ctx, payload any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundScheduleUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleRoundScheduleUpdate), ctx, payload)
 }
 
-// HandleRoundStarted mocks base method.
-func (m *MockHandlers) HandleRoundStarted(ctx context.Context, payload *roundevents.RoundStartedPayloadV1) ([]handlerwrapper.Result, error) {
+// HandleRoundStartRequested mocks base method.
+func (m *MockHandlers) HandleRoundStartRequested(ctx context.Context, payload *roundevents.RoundStartRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRoundStarted", ctx, payload)
+	ret := m.ctrl.Call(m, "HandleRoundStartRequested", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// HandleRoundStarted indicates an expected call of HandleRoundStarted.
-func (mr *MockHandlersMockRecorder) HandleRoundStarted(ctx, payload any) *gomock.Call {
+// HandleRoundStartRequested indicates an expected call of HandleRoundStartRequested.
+func (mr *MockHandlersMockRecorder) HandleRoundStartRequested(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundStarted", reflect.TypeOf((*MockHandlers)(nil).HandleRoundStarted), ctx, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundStartRequested", reflect.TypeOf((*MockHandlers)(nil).HandleRoundStartRequested), ctx, payload)
 }
 
 // HandleRoundUpdateRequest mocks base method.

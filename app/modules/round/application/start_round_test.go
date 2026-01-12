@@ -88,13 +88,13 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				StartTime: &testStartRoundTime,
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.DiscordRoundStartPayload{
+				Success: &roundevents.DiscordRoundStartPayloadV1{
 					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testStartRoundID,
 					Title:     testRoundTitle,
 					Location:  &testStartLocation,
 					StartTime: &testStartRoundTime,
-					Participants: []roundevents.RoundParticipant{
+					Participants: []roundevents.RoundParticipantV1{
 						{
 							UserID:    sharedtypes.DiscordID("user1"),
 							TagNumber: nil,
@@ -124,7 +124,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testStartRoundID,
 					Error:   "database error",
@@ -155,7 +155,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				RoundID: testStartRoundID,
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testStartRoundID,
 					Error:   "database error",
@@ -181,7 +181,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				},
 			}
 
-			result, err := s.ProcessRoundStart(ctx, tt.payload)
+			result, err := s.ProcessRoundStart(ctx, tt.payload.GuildID, tt.payload.RoundID)
 
 			// Check error expectation
 			if tt.expectedError != nil {

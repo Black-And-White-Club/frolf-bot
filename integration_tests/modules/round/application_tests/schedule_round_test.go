@@ -46,21 +46,23 @@ func TestScheduleRoundEvents_Behavioral(t *testing.T) {
 				reminderNotReceived := make(chan bool, 1) // To verify reminder is NOT sent
 
 				go func() {
-					subStart, err := deps.EventBus.Subscribe(ctx, string(roundevents.RoundStartedV1))
+					// Since the test environment only starts the queue service (not the handler),
+					// listen for the identity-only start request the worker emits.
+					subStart, err := deps.EventBus.Subscribe(ctx, string(roundevents.RoundStartRequestedV1))
 					if err != nil {
-						t.Errorf("Failed to subscribe to start events: %v", err)
+						t.Errorf("Failed to subscribe to start request events: %v", err)
 						return
 					}
 					for msg := range subStart {
-						var startPayload roundevents.RoundStartedPayloadV1
+						var startPayload roundevents.RoundStartRequestedPayloadV1
 						if err := json.Unmarshal(msg.Payload, &startPayload); err == nil {
 							if startPayload.RoundID == payload.RoundID {
-								t.Logf("Start event received for RoundID: %s", payload.RoundID)
+								t.Logf("Start request received for RoundID: %s", payload.RoundID)
 								startReceived <- true
 								return
 							}
 						} else {
-							t.Logf("Failed to unmarshal start payload: %v", err)
+							t.Logf("Failed to unmarshal start request payload: %v", err)
 						}
 					}
 				}()

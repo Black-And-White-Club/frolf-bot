@@ -16,14 +16,15 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
+func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
 
-	testPayload := &roundevents.RoundStartedPayloadV1{
+	testPayload := &roundevents.RoundStartRequestedPayloadV1{
+		GuildID: testGuildID,
 		RoundID: testRoundID,
 	}
 
@@ -34,7 +35,7 @@ func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockSetup      func(mockRoundService *roundmocks.MockService)
-		payload        *roundevents.RoundStartedPayloadV1
+		payload        *roundevents.RoundStartRequestedPayloadV1
 		wantErr        bool
 		expectedErrMsg string
 	}{
@@ -43,13 +44,14 @@ func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ProcessRoundStart(
 					gomock.Any(),
-					gomock.Any(),
+					testGuildID,
+					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.DiscordRoundStartPayloadV1{
-							RoundID:     testRoundID,
-							GuildID:     testGuildID,
-							Title:       "Test Round",
+							RoundID:      testRoundID,
+							GuildID:      testGuildID,
+							Title:        "Test Round",
 							Participants: []roundevents.RoundParticipantV1{{UserID: "user1"}, {UserID: "user2"}},
 						},
 					},
@@ -64,7 +66,8 @@ func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ProcessRoundStart(
 					gomock.Any(),
-					gomock.Any(),
+					testGuildID,
+					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("database connection failed"),
@@ -79,7 +82,8 @@ func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ProcessRoundStart(
 					gomock.Any(),
-					gomock.Any(),
+					testGuildID,
+					testRoundID,
 				).Return(
 					roundservice.RoundOperationResult{},
 					nil,
@@ -102,15 +106,15 @@ func TestRoundHandlers_HandleRoundStarted_Basic(t *testing.T) {
 				metrics:      metrics,
 			}
 
-			_, err := h.HandleRoundStarted(context.Background(), tt.payload)
+			_, err := h.HandleRoundStartRequested(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleRoundStarted() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HandleRoundStartRequested() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleRoundStarted() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				t.Errorf("HandleRoundStartRequested() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 		})
 	}

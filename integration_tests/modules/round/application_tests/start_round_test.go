@@ -180,7 +180,7 @@ func TestProcessRoundStart(t *testing.T) {
 			}
 			// --- END NEW LOGIC ---
 
-			result, err := deps.Service.ProcessRoundStart(deps.Ctx, tt.payload)
+			result, err := deps.Service.ProcessRoundStart(deps.Ctx, tt.payload.GuildID, tt.payload.RoundID)
 
 			if tt.expectedError {
 				if err == nil {
