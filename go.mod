@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.66
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.67
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
