@@ -91,20 +91,24 @@ func TestValidateScoreUpdateRequest(t *testing.T) {
 		{
 			name: "Valid score update request",
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     sharedtypes.GuildID("test-guild"),
-				RoundID:     sharedtypes.RoundID(uuid.New()),
-				Participant: sharedtypes.DiscordID("123456789"),
-				Score:       func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   sharedtypes.RoundID(uuid.New()),
+				UserID:    sharedtypes.DiscordID("123456789"),
+				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			expectedError: false,
 		},
 		{
 			name: "Invalid request - zero round ID",
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     sharedtypes.GuildID("test-guild"),
-				RoundID:     sharedtypes.RoundID(uuid.Nil),
-				Participant: sharedtypes.DiscordID("123456789"),
-				Score:       func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   sharedtypes.RoundID(uuid.Nil),
+				UserID:    sharedtypes.DiscordID("123456789"),
+				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "round ID cannot be zero",
@@ -112,10 +116,12 @@ func TestValidateScoreUpdateRequest(t *testing.T) {
 		{
 			name: "Invalid request - empty participant",
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     sharedtypes.GuildID("test-guild"),
-				RoundID:     sharedtypes.RoundID(uuid.New()), // Fixed: use valid UUID instead of Nil
-				Participant: sharedtypes.DiscordID(""),
-				Score:       func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   sharedtypes.RoundID(uuid.New()), // Fixed: use valid UUID instead of Nil
+				UserID:    sharedtypes.DiscordID(""),
+				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "participant Discord ID cannot be empty",
@@ -123,10 +129,12 @@ func TestValidateScoreUpdateRequest(t *testing.T) {
 		{
 			name: "Invalid request - nil score",
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     sharedtypes.GuildID("test-guild"),
-				RoundID:     sharedtypes.RoundID(uuid.New()),
-				Participant: sharedtypes.DiscordID("123456789"),
-				Score:       nil,
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   sharedtypes.RoundID(uuid.New()),
+				UserID:    sharedtypes.DiscordID("123456789"),
+				Score:     nil,
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "score cannot be empty",
@@ -134,10 +142,12 @@ func TestValidateScoreUpdateRequest(t *testing.T) {
 		{
 			name: "Invalid request - multiple validation errors",
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     sharedtypes.GuildID("test-guild"),
-				RoundID:     sharedtypes.RoundID(uuid.Nil),
-				Participant: sharedtypes.DiscordID(""),
-				Score:       nil,
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   sharedtypes.RoundID(uuid.Nil),
+				UserID:    sharedtypes.DiscordID(""),
+				Score:     nil,
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "round ID cannot be zero; participant Discord ID cannot be empty; score cannot be empty",
@@ -246,10 +256,12 @@ func TestUpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: sharedtypes.GuildID("test-guild"),
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     sharedtypes.GuildID("test-guild"),
-					RoundID:     sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
-					Participant: sharedtypes.DiscordID("123456789"),
-					Score:       &score72,
+					GuildID:   sharedtypes.GuildID("test-guild"),
+					RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+					UserID:    sharedtypes.DiscordID("123456789"),
+					Score:     &score72,
+					ChannelID: "test-channel",
+					MessageID: "test-message",
 				},
 			},
 			expectedError: false,
@@ -264,8 +276,8 @@ func TestUpdateParticipantScore(t *testing.T) {
 				if !ok {
 					t.Fatalf("Expected ParticipantScoreUpdatedPayload pointer, got %T", result.Success)
 				}
-				if successPayload.Participant != sharedtypes.DiscordID("123456789") {
-					t.Errorf("Expected participant '123456789', got '%s'", successPayload.Participant)
+				if successPayload.UserID != sharedtypes.DiscordID("123456789") {
+					t.Errorf("Expected participant '123456789', got '%s'", successPayload.UserID)
 				}
 				if successPayload.Score != score72 {
 					t.Errorf("Expected score 72, got %d", successPayload.Score)
@@ -294,10 +306,12 @@ func TestUpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: sharedtypes.GuildID("test-guild"),
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     sharedtypes.GuildID("test-guild"),
-					RoundID:     sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
-					Participant: sharedtypes.DiscordID("nonexistent"),
-					Score:       &score72,
+					GuildID:   sharedtypes.GuildID("test-guild"),
+					RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
+					UserID:    sharedtypes.DiscordID("nonexistent"),
+					Score:     &score72,
+					ChannelID: "test-channel",
+					MessageID: "test-message",
 				},
 			},
 			expectedError: false, // Service uses failure payload instead of error
@@ -395,8 +409,9 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("test-guild"),
 				RoundID:        sharedtypes.RoundID(uuid.Nil), // Will be updated
-				Participant:    sharedtypes.DiscordID("user1"),
+				UserID:         sharedtypes.DiscordID("user1"),
 				Score:          score72,
+				ChannelID:      "test-channel",
 				EventMessageID: "msg123",
 				Participants: []roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user1"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: &score72},
@@ -438,8 +453,9 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("test-guild"),
 				RoundID:        sharedtypes.RoundID(uuid.Nil), // Will be updated
-				Participant:    sharedtypes.DiscordID("user1"),
+				UserID:         sharedtypes.DiscordID("user1"),
 				Score:          score72,
+				ChannelID:      "test-channel",
 				EventMessageID: "msg123",
 				Participants: []roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user1"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: &score72},
@@ -452,15 +468,15 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 				if result.Success == nil {
 					t.Fatalf("Expected success payload, but got nil")
 				}
-				successPayload, ok := result.Success.(*roundevents.NotAllScoresSubmittedPayload)
+				successPayload, ok := result.Success.(*roundevents.ScoresPartiallySubmittedPayloadV1)
 				if !ok {
-					t.Fatalf("Expected *NotAllScoresSubmittedPayload, got %T", result.Success)
+					t.Fatalf("Expected *ScoresPartiallySubmittedPayloadV1, got %T", result.Success)
 				}
 				if successPayload.RoundID != roundID {
 					t.Errorf("Expected RoundID %s, got %s", roundID, successPayload.RoundID)
 				}
-				if successPayload.Participant != sharedtypes.DiscordID("user1") {
-					t.Errorf("Expected Participant 'user1', got '%s'", successPayload.Participant)
+				if successPayload.UserID != sharedtypes.DiscordID("user1") {
+					t.Errorf("Expected Participant 'user1', got '%s'", successPayload.UserID)
 				}
 				if successPayload.Score != score72 {
 					t.Errorf("Expected Score 72, got %d", successPayload.Score)
@@ -482,8 +498,9 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("test-guild"),
 				RoundID:        sharedtypes.RoundID(uuid.Nil), // Will be updated
-				Participant:    sharedtypes.DiscordID("user1"),
+				UserID:         sharedtypes.DiscordID("user1"),
 				Score:          score72,
+				ChannelID:      "test-channel",
 				EventMessageID: "msg123",
 				Participants: []roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user1"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: &score72},

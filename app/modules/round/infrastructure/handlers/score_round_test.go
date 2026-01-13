@@ -22,9 +22,12 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 	testScore := sharedtypes.Score(42)
 
 	testPayload := &roundevents.ScoreUpdateRequestPayloadV1{
-		RoundID:     testRoundID,
-		Participant: testParticipant,
-		Score:       &testScore,
+		GuildID:   sharedtypes.GuildID("test-guild"),
+		RoundID:   testRoundID,
+		UserID:    testParticipant,
+		Score:     &testScore,
+		ChannelID: "test-channel",
+		MessageID: "test-message",
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
@@ -50,9 +53,12 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					roundservice.RoundOperationResult{
 						Success: &roundevents.ScoreUpdateValidatedPayloadV1{
 							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-								RoundID:     testRoundID,
-								Participant: testParticipant,
-								Score:       &testScore,
+								GuildID:   sharedtypes.GuildID("test-guild"),
+								RoundID:   testRoundID,
+								UserID:    testParticipant,
+								Score:     &testScore,
+								ChannelID: "test-channel",
+								MessageID: "test-message",
 							},
 						},
 					},
@@ -119,9 +125,12 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			name: "Score is nil",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				payloadWithoutScore := &roundevents.ScoreUpdateRequestPayloadV1{
-					RoundID:     testRoundID,
-					Participant: testParticipant,
-					Score:       nil,
+					GuildID:   sharedtypes.GuildID("test-guild"),
+					RoundID:   testRoundID,
+					UserID:    testParticipant,
+					Score:     nil,
+					ChannelID: "test-channel",
+					MessageID: "test-message",
 				}
 
 				mockRoundService.EXPECT().ValidateScoreUpdateRequest(
@@ -138,9 +147,12 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 				)
 			},
 			payload: &roundevents.ScoreUpdateRequestPayloadV1{
-				RoundID:     testRoundID,
-				Participant: testParticipant,
-				Score:       nil,
+				GuildID:   sharedtypes.GuildID("test-guild"),
+				RoundID:   testRoundID,
+				UserID:    testParticipant,
+				Score:     nil,
+				ChannelID: "test-channel",
+				MessageID: "test-message",
 			},
 			wantErr:         false,
 			wantResultLen:   1,
@@ -189,9 +201,12 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 
 	testPayload := &roundevents.ScoreUpdateValidatedPayloadV1{
 		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-			RoundID:     testRoundID,
-			Participant: testParticipant,
-			Score:       &testScore,
+			GuildID:   sharedtypes.GuildID("test-guild"),
+			RoundID:   testRoundID,
+			UserID:    testParticipant,
+			Score:     &testScore,
+			ChannelID: "test-channel",
+			MessageID: "test-message",
 		},
 	}
 
@@ -217,9 +232,9 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
-							RoundID:     testRoundID,
-							Participant: testParticipant,
-							Score:       testScore,
+							RoundID: testRoundID,
+							UserID:  testParticipant,
+							Score:   testScore,
 						},
 					},
 					nil,
@@ -343,8 +358,9 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 
 	testPayload := &roundevents.ParticipantScoreUpdatedPayloadV1{
 		RoundID:        testRoundID,
-		Participant:    testParticipant,
+		UserID:         testParticipant,
 		Score:          testScore,
+		ChannelID:      "test-channel",
 		EventMessageID: testEventMessageID,
 	}
 
@@ -389,7 +405,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.NotAllScoresSubmittedPayload{
+						Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
 							RoundID:              testRoundID,
 						},
 					},

@@ -155,8 +155,8 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
-				if payload.Participant == "" {
-					t.Error("Expected Participant to be set")
+				if payload.UserID == "" {
+					t.Error("Expected UserID to be set")
 				}
 			},
 			timeout: 500 * time.Millisecond,
@@ -347,9 +347,9 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 // Helper functions for creating payloads - UNIQUE TO PARTICIPANT SCORE UPDATED TESTS
 func createParticipantScoreUpdatedPayload(roundID sharedtypes.RoundID, participant sharedtypes.DiscordID, score sharedtypes.Score, participants []roundtypes.Participant) roundevents.ParticipantScoreUpdatedPayloadV1 {
 	return roundevents.ParticipantScoreUpdatedPayloadV1{
-		GuildID:        "test-guild",
+		GuildID:        sharedtypes.GuildID("test-guild"),
 		RoundID:        roundID,
-		Participant:    participant,
+		UserID:         participant,
 		Score:          score,
 		ChannelID:      "test_channel_123",
 		EventMessageID: "test-event-message-id",

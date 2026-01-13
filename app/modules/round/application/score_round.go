@@ -19,7 +19,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 			errs = append(errs, "round ID cannot be zero")
 		}
-		if payload.Participant == "" {
+		if payload.UserID == "" {
 			errs = append(errs, "participant Discord ID cannot be empty")
 		}
 		if payload.Score == nil {
@@ -34,7 +34,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 			s.logger.ErrorContext(ctx, "Score update request validation failed",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.String("guild_id", string(payload.GuildID)),
-				attr.String("participant", string(payload.Participant)),
+				attr.String("participant", string(payload.UserID)),
 				attr.Error(err),
 			)
 			return RoundOperationResult{
@@ -63,7 +63,7 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, payload r
 func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "UpdateParticipantScore", payload.ScoreUpdateRequestPayload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Update the participant's score in the database
-		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.GuildID, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.Participant, *payload.ScoreUpdateRequestPayload.Score)
+		err := s.RoundDB.UpdateParticipantScore(ctx, payload.ScoreUpdateRequestPayload.GuildID, payload.ScoreUpdateRequestPayload.RoundID, payload.ScoreUpdateRequestPayload.UserID, *payload.ScoreUpdateRequestPayload.Score)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update participant score in DB",
 				attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
@@ -116,7 +116,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 		s.logger.InfoContext(ctx, "Participant score updated in database and fetched updated participants",
 			attr.RoundID("round_id", payload.ScoreUpdateRequestPayload.RoundID),
 			attr.String("guild_id", string(payload.ScoreUpdateRequestPayload.GuildID)),
-			attr.String("participant_id", string(payload.ScoreUpdateRequestPayload.Participant)),
+			attr.String("participant_id", string(payload.ScoreUpdateRequestPayload.UserID)),
 			attr.Int("score", int(*payload.ScoreUpdateRequestPayload.Score)),
 			attr.Int("updated_participant_count", len(updatedParticipants)),
 		)
@@ -126,7 +126,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 			Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        payload.ScoreUpdateRequestPayload.GuildID,
 				RoundID:        payload.ScoreUpdateRequestPayload.RoundID,
-				Participant:    payload.ScoreUpdateRequestPayload.Participant,
+				UserID:         payload.ScoreUpdateRequestPayload.UserID,
 				Score:          *payload.ScoreUpdateRequestPayload.Score,
 				EventMessageID: round.EventMessageID,
 				Participants:   updatedParticipants,
@@ -138,7 +138,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 // CheckAllScoresSubmittedResult is a custom struct to return data from CheckAllScoresSubmitted.
 type CheckAllScoresSubmittedResult struct {
 	AllScoresSubmitted bool
-	PayloadData        interface{} // Will hold AllScoresSubmittedPayload or NotAllScoresSubmittedPayload data
+	PayloadData        interface{} // Will hold AllScoresSubmittedPayload or ScoresPartiallySubmittedPayloadV1 data
 }
 
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
@@ -150,10 +150,10 @@ func (s *RoundService) CheckAllScoresSubmitted(
 		for _, p := range payload.Participants {
 			if p.Score == nil {
 				return RoundOperationResult{
-					Success: &roundevents.NotAllScoresSubmittedPayload{
+					Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
 						GuildID:        payload.GuildID,
 						RoundID:        payload.RoundID,
-						Participant:    payload.Participant,
+						UserID:         payload.UserID,
 						Score:          payload.Score,
 						EventMessageID: payload.EventMessageID,
 						Participants:   payload.Participants,
