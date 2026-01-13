@@ -70,8 +70,14 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	ctx context.Context,
 	payload *roundevents.ParticipantScoreUpdatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	h.logger.InfoContext(ctx, "HandleParticipantScoreUpdated called",
+		attr.String("round_id", payload.RoundID.String()),
+		attr.String("user_id", string(payload.UserID)),
+	)
+
 	result, err := h.roundService.CheckAllScoresSubmitted(ctx, *payload)
 	if err != nil {
+		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed", attr.Error(err))
 		return nil, err
 	}
 

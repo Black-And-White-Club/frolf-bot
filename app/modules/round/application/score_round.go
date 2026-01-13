@@ -128,6 +128,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 				RoundID:        payload.ScoreUpdateRequestPayload.RoundID,
 				UserID:         payload.ScoreUpdateRequestPayload.UserID,
 				Score:          *payload.ScoreUpdateRequestPayload.Score,
+				ChannelID:      payload.ScoreUpdateRequestPayload.ChannelID,
 				EventMessageID: round.EventMessageID,
 				Participants:   updatedParticipants,
 			},
