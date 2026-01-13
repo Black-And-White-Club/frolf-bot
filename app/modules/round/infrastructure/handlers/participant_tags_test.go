@@ -9,9 +9,9 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -59,7 +59,6 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 									RoundID:             testRoundID,
 									Title:               "Test Round",
 									EventMessageID:      "msg-123",
-									State:               roundtypes.RoundStateUpcoming,
 									UpdatedParticipants: []roundtypes.Participant{},
 									ParticipantsChanged: 2,
 								},

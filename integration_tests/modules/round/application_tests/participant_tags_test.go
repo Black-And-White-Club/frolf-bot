@@ -165,7 +165,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				}
 
 				// Verify the rounds were actually updated in the database
-				rounds, err := deps.DB.GetNonFinalizedRounds(ctx, sharedtypes.GuildID("test-guild"))
+				rounds, err := deps.DB.GetUpcomingRounds(ctx, sharedtypes.GuildID("test-guild"))
 				if err != nil {
 					t.Fatalf("Failed to get upcoming rounds from DB: %v", err)
 				}

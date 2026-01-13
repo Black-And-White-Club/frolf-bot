@@ -15,7 +15,7 @@ type RoundDB interface {
 	DeleteRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) error
 	UpdateParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, participant roundtypes.Participant) ([]roundtypes.Participant, error)
 	UpdateRoundState(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, state roundtypes.RoundState) error
-	GetNonFinalizedRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
+	GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
 	UpdateParticipantScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, participantID sharedtypes.DiscordID, score sharedtypes.Score) error
 	GetParticipantsWithResponses(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, responses ...string) ([]roundtypes.Participant, error)
 	GetRoundState(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (roundtypes.RoundState, error)

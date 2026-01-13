@@ -85,21 +85,6 @@ func (mr *MockRoundDBMockRecorder) GetEventMessageID(ctx, guildID, roundID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventMessageID", reflect.TypeOf((*MockRoundDB)(nil).GetEventMessageID), ctx, guildID, roundID)
 }
 
-// GetNonFinalizedRounds mocks base method.
-func (m *MockRoundDB) GetNonFinalizedRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNonFinalizedRounds", ctx, guildID)
-	ret0, _ := ret[0].([]*roundtypes.Round)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNonFinalizedRounds indicates an expected call of GetNonFinalizedRounds.
-func (mr *MockRoundDBMockRecorder) GetNonFinalizedRounds(ctx, guildID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNonFinalizedRounds", reflect.TypeOf((*MockRoundDB)(nil).GetNonFinalizedRounds), ctx, guildID)
-}
-
 // GetParticipant mocks base method.
 func (m *MockRoundDB) GetParticipant(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID) (*roundtypes.Participant, error) {
 	m.ctrl.T.Helper()
@@ -178,6 +163,21 @@ func (m *MockRoundDB) GetRoundState(ctx context.Context, guildID sharedtypes.Gui
 func (mr *MockRoundDBMockRecorder) GetRoundState(ctx, guildID, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRoundState", reflect.TypeOf((*MockRoundDB)(nil).GetRoundState), ctx, guildID, roundID)
+}
+
+// GetUpcomingRounds mocks base method.
+func (m *MockRoundDB) GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpcomingRounds", ctx, guildID)
+	ret0, _ := ret[0].([]*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUpcomingRounds indicates an expected call of GetUpcomingRounds.
+func (mr *MockRoundDBMockRecorder) GetUpcomingRounds(ctx, guildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpcomingRounds", reflect.TypeOf((*MockRoundDB)(nil).GetUpcomingRounds), ctx, guildID)
 }
 
 // RemoveParticipant mocks base method.
