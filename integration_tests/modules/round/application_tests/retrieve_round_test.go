@@ -105,8 +105,8 @@ func TestGetRound(t *testing.T) {
 				}
 
 				// Retrieve the original round from the DB to compare
-				// Assumed deps.DB.GetUpcomingRounds returns []*roundtypes.Round based on observed compiler error
-								rounds, err := deps.DB.GetUpcomingRounds(ctx, sharedtypes.GuildID("test-guild"))
+				// Assumed deps.DB.GetNonFinalizedRounds returns []*roundtypes.Round based on observed compiler error
+				rounds, err := deps.DB.GetNonFinalizedRounds(ctx, sharedtypes.GuildID("test-guild"))
 				if err != nil {
 					t.Fatalf("Failed to get rounds from DB for validation: %v", err)
 				}

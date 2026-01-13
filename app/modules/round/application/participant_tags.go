@@ -75,7 +75,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(ctx context.Co
 	return updates
 }
 
-// UpdateScheduledRoundsWithNewTags updates ALL upcoming rounds that have affected participants
+// UpdateScheduledRoundsWithNewTags updates ALL non-finalized rounds (upcoming and in-progress) that have affected participants
 func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (RoundOperationResult, error) {
 	// Use RoundID(uuid.Nil) for serviceWrapper, but propagate GuildID everywhere else
 	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
@@ -97,24 +97,24 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			}, nil
 		}
 
-		// Get all upcoming rounds first
-		allUpcomingRounds, err := s.RoundDB.GetUpcomingRounds(ctx, payload.GuildID)
+		// Get all non-finalized rounds (upcoming and in-progress)
+		allNonFinalizedRounds, err := s.RoundDB.GetNonFinalizedRounds(ctx, payload.GuildID)
 		if err != nil {
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: payload.GuildID,
-					Error:   fmt.Sprintf("failed to get upcoming rounds: %v", err),
+					Error:   fmt.Sprintf("failed to get non-finalized rounds: %v", err),
 				},
 			}, nil
 		}
-		totalUpcomingRounds := len(allUpcomingRounds)
+		totalRoundsProcessed := len(allNonFinalizedRounds)
 
 		// Get rounds that need updates
-		updates := s.getRoundsAndParticipantsToUpdateFromRounds(ctx, allUpcomingRounds, payload.ChangedTags)
+		updates := s.getRoundsAndParticipantsToUpdateFromRounds(ctx, allNonFinalizedRounds, payload.ChangedTags)
 
 		if len(updates) == 0 {
-			s.logger.InfoContext(ctx, "No upcoming rounds have affected participants",
-				attr.Int("total_upcoming_rounds", totalUpcomingRounds),
+			s.logger.InfoContext(ctx, "No non-finalized rounds have affected participants",
+				attr.Int("total_rounds_processed", totalRoundsProcessed),
 				attr.Int("changed_tags_count", len(payload.ChangedTags)),
 			)
 			return RoundOperationResult{
@@ -122,7 +122,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 					GuildID:       payload.GuildID,
 					UpdatedRounds: []roundevents.RoundUpdateInfoV1{},
 					Summary: roundevents.UpdateSummaryV1{
-						TotalRoundsProcessed: totalUpcomingRounds,
+						TotalRoundsProcessed: totalRoundsProcessed,
 						RoundsUpdated:        0,
 						ParticipantsUpdated:  0,
 					},
@@ -164,6 +164,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 				Title:               update.Round.Title,
 				StartTime:           update.Round.StartTime,
 				Location:            update.Round.Location,
+				State:               update.Round.State,
 				UpdatedParticipants: update.Participants, // ALL participants (with updates applied)
 				ParticipantsChanged: participantsWithChanges,
 			}
@@ -173,14 +174,14 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, pay
 			GuildID:       payload.GuildID,
 			UpdatedRounds: updatedRounds,
 			Summary: roundevents.UpdateSummaryV1{
-				TotalRoundsProcessed: totalUpcomingRounds,
+				TotalRoundsProcessed: totalRoundsProcessed,
 				RoundsUpdated:        len(updates),
 				ParticipantsUpdated:  totalParticipantsUpdated,
 			},
 		}
 
-		s.logger.InfoContext(ctx, "Successfully updated scheduled rounds with new tags",
-			attr.Int("total_upcoming_rounds", totalUpcomingRounds),
+		s.logger.InfoContext(ctx, "Successfully updated non-finalized rounds with new tags",
+			attr.Int("total_rounds_processed", totalRoundsProcessed),
 			attr.Int("rounds_updated", len(updates)),
 			attr.Int("participants_updated", totalParticipantsUpdated),
 		)

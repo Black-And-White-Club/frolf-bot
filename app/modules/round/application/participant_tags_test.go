@@ -90,7 +90,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 			name: "successful update with valid tags",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
+				mockDB.EXPECT().GetNonFinalizedRounds(ctx, guildID).Return(upcomingRounds, nil)
 				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(nil)
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
@@ -117,7 +117,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 			name: "error fetching rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(nil, errors.New("database error"))
+				mockDB.EXPECT().GetNonFinalizedRounds(ctx, guildID).Return(nil, errors.New("database error"))
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
@@ -133,7 +133,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if !ok {
 					return false
 				}
-				return errorPayload.Error == "failed to get upcoming rounds: database error"
+				return errorPayload.Error == "failed to get non-finalized rounds: database error"
 			},
 			expectError: false, // Error is in the result, not returned
 		},
@@ -141,7 +141,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 			name: "error updating rounds",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
+				mockDB.EXPECT().GetNonFinalizedRounds(ctx, guildID).Return(upcomingRounds, nil)
 				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(errors.New("update failed"))
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
@@ -165,7 +165,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 		{
 			name: "no updates needed - empty changedTags",
 			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
-				// No GetUpcomingRounds call expected for empty changedTags - early return
+				// No GetNonFinalizedRounds call expected for empty changedTags - early return
 				// No UpdateRoundsAndParticipants call expected when no updates
 			},
 			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{

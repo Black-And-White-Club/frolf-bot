@@ -539,15 +539,15 @@ func (db *RoundDBImpl) UpdateRoundState(ctx context.Context, guildID sharedtypes
 	return nil
 }
 
-// GetUpcomingRounds retrieves rounds that are upcoming
-func (db *RoundDBImpl) GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+// GetNonFinalizedRounds retrieves rounds that are upcoming or in progress
+func (db *RoundDBImpl) GetNonFinalizedRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
 	var localRounds []*Round
 	err := db.DB.NewSelect().
 		Model(&localRounds).
-		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
+		Where("guild_id = ?", guildID).
 		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get upcoming rounds: %w", err)
+		return nil, fmt.Errorf("failed to get non-finalized rounds: %w", err)
 	}
 
 	rounds := make([]*roundtypes.Round, len(localRounds))
