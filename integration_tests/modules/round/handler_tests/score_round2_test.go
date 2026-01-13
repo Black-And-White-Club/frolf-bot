@@ -266,12 +266,14 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 // Helper functions for creating payloads - UNIQUE TO SCORE UPDATE VALIDATED TESTS
 func createScoreUpdateValidatedPayload(roundID sharedtypes.RoundID, participant sharedtypes.DiscordID, score *sharedtypes.Score) roundevents.ScoreUpdateValidatedPayloadV1 {
 	return roundevents.ScoreUpdateValidatedPayloadV1{
-		GuildID: "test-guild",
+		GuildID: sharedtypes.GuildID("test-guild"),
 		ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-			GuildID:     "test-guild",
-			RoundID:     roundID,
-			Participant: participant,
-			Score:       score,
+			GuildID:   sharedtypes.GuildID("test-guild"),
+			RoundID:   roundID,
+			UserID:    participant,
+			Score:     score,
+			ChannelID: "test-channel",
+			MessageID: "test-message",
 		},
 	}
 }

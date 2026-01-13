@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.73
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.74
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -13,8 +13,8 @@ require (
 	github.com/nats-io/nats.go v1.48.0
 	github.com/olebedev/when v1.1.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/riverqueue/river v0.29.0
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.29.0
+	github.com/riverqueue/river v0.30.0
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.30.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/nats v0.40.0
@@ -90,8 +90,8 @@ require (
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/richardlehane/mscfb v1.0.6 // indirect
 	github.com/richardlehane/msoleps v1.0.5 // indirect
-	github.com/riverqueue/river/riverdriver v0.29.0 // indirect
-	github.com/riverqueue/river/rivershared v0.29.0 // indirect
+	github.com/riverqueue/river/riverdriver v0.30.0 // indirect
+	github.com/riverqueue/river/rivershared v0.30.0 // indirect
 	github.com/riverqueue/river/rivertype v0.30.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.12 // indirect

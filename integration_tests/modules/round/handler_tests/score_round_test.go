@@ -315,10 +315,11 @@ func TestHandleScoreUpdateRequest(t *testing.T) {
 // Helper functions for creating payloads - UNIQUE TO SCORE UPDATE TESTS
 func createScoreUpdateRequestPayload(roundID sharedtypes.RoundID, participant sharedtypes.DiscordID, score *sharedtypes.Score) roundevents.ScoreUpdateRequestPayloadV1 {
 	return roundevents.ScoreUpdateRequestPayloadV1{
-		GuildID:     "test-guild",
-		RoundID:     roundID,
-		Participant: participant,
-		Score:       score,
+		GuildID:   sharedtypes.GuildID("test-guild"),
+		RoundID:   roundID,
+		UserID:    participant,
+		Score:     score,
+		ChannelID: "test-channel",
+		MessageID: "test-message",
 	}
 }
-

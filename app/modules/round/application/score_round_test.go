@@ -52,19 +52,19 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     guildID,
-				RoundID:     testScoreRoundID,
-				Participant: testParticipant,
-				Score:       &testScore,
+				GuildID: guildID,
+				RoundID: testScoreRoundID,
+				UserID:  testParticipant,
+				Score:   &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.ScoreUpdateValidatedPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     testScoreRoundID,
-						Participant: testParticipant,
-						Score:       &testScore,
+						GuildID: guildID,
+						RoundID: testScoreRoundID,
+						UserID:  testParticipant,
+						Score:   &testScore,
 					},
 				},
 			},
@@ -76,19 +76,19 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     guildID,
-				RoundID:     sharedtypes.RoundID(uuid.Nil),
-				Participant: testParticipant,
-				Score:       &testScore,
+				GuildID: guildID,
+				RoundID: sharedtypes.RoundID(uuid.Nil),
+				UserID:  testParticipant,
+				Score:   &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     sharedtypes.RoundID(uuid.Nil),
-						Participant: testParticipant,
-						Score:       &testScore,
+						GuildID: guildID,
+						RoundID: sharedtypes.RoundID(uuid.Nil),
+						UserID:  testParticipant,
+						Score:   &testScore,
 					},
 					Error: "validation errors: round ID cannot be zero",
 				},
@@ -101,19 +101,19 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     guildID,
-				RoundID:     testScoreRoundID,
-				Participant: "",
-				Score:       &testScore,
+				GuildID: guildID,
+				RoundID: testScoreRoundID,
+				UserID:  "",
+				Score:   &testScore,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     testScoreRoundID,
-						Participant: "",
-						Score:       &testScore,
+						GuildID: guildID,
+						RoundID: testScoreRoundID,
+						UserID:  "",
+						Score:   &testScore,
 					},
 					Error: "validation errors: participant Discord ID cannot be empty",
 				},
@@ -126,19 +126,19 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     guildID,
-				RoundID:     testScoreRoundID,
-				Participant: testParticipant,
-				Score:       nil,
+				GuildID: guildID,
+				RoundID: testScoreRoundID,
+				UserID:  testParticipant,
+				Score:   nil,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     testScoreRoundID,
-						Participant: testParticipant,
-						Score:       nil,
+						GuildID: guildID,
+						RoundID: testScoreRoundID,
+						UserID:  testParticipant,
+						Score:   nil,
 					},
 					Error: "validation errors: score cannot be empty",
 				},
@@ -151,19 +151,19 @@ func TestRoundService_ValidateScoreUpdateRequest(t *testing.T) {
 				// No DB interactions expected for validation
 			},
 			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:     guildID,
-				RoundID:     sharedtypes.RoundID(uuid.Nil),
-				Participant: "",
-				Score:       nil,
+				GuildID: guildID,
+				RoundID: sharedtypes.RoundID(uuid.Nil),
+				UserID:  "",
+				Score:   nil,
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     sharedtypes.RoundID(uuid.Nil),
-						Participant: "",
-						Score:       nil,
+						GuildID: guildID,
+						RoundID: sharedtypes.RoundID(uuid.Nil),
+						UserID:  "",
+						Score:   nil,
 					},
 					Error: "validation errors: round ID cannot be zero; participant Discord ID cannot be empty; score cannot be empty",
 				},
@@ -270,17 +270,17 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: guildID,
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     guildID,
-					RoundID:     testScoreRoundID,
-					Participant: testParticipant,
-					Score:       &testScore,
+					GuildID: guildID,
+					RoundID: testScoreRoundID,
+					UserID:  testParticipant,
+					Score:   &testScore,
 				},
 			},
 			expectedResult: RoundOperationResult{
 				Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 					GuildID:        guildID,
 					RoundID:        testScoreRoundID,
-					Participant:    testParticipant,
+					UserID:         testParticipant,
 					Score:          testScore,
 					EventMessageID: testDiscordMessageID,
 					Participants: []roundtypes.Participant{
@@ -298,20 +298,20 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: guildID,
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     guildID,
-					RoundID:     testScoreRoundID,
-					Participant: testParticipant,
-					Score:       &testScore,
+					GuildID: guildID,
+					RoundID: testScoreRoundID,
+					UserID:  testParticipant,
+					Score:   &testScore,
 				},
 			},
 			expectedResult: RoundOperationResult{
 				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 					GuildID: guildID,
 					ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
-						GuildID:     guildID,
-						RoundID:     testScoreRoundID,
-						Participant: testParticipant,
-						Score:       &testScore,
+						GuildID: guildID,
+						RoundID: testScoreRoundID,
+						UserID:  testParticipant,
+						Score:   &testScore,
 					},
 					Error: "Failed to update score in database: database error",
 				},
@@ -327,10 +327,12 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: guildID,
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     guildID,
-					RoundID:     testScoreRoundID,
-					Participant: testParticipant,
-					Score:       &testScore,
+					GuildID:   guildID,
+					RoundID:   testScoreRoundID,
+					UserID:    testParticipant,
+					Score:     &testScore,
+					ChannelID: "test-channel",
+					MessageID: "test-message",
 				},
 			},
 			expectedResult: RoundOperationResult{
@@ -354,10 +356,12 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			payload: roundevents.ScoreUpdateValidatedPayloadV1{
 				GuildID: guildID,
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:     guildID,
-					RoundID:     testScoreRoundID,
-					Participant: testParticipant,
-					Score:       &testScore,
+					GuildID:   guildID,
+					RoundID:   testScoreRoundID,
+					UserID:    testParticipant,
+					Score:     &testScore,
+					ChannelID: "test-channel",
+					MessageID: "test-message",
 				},
 			},
 			expectedResult: RoundOperationResult{
@@ -441,8 +445,9 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundID:        testScoreRoundID,
-				Participant:    testParticipant,
+				UserID:         testParticipant,
 				Score:          testScore,
+				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants: []roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
@@ -478,8 +483,9 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundID:        testScoreRoundID,
-				Participant:    testParticipant,
+				UserID:         testParticipant,
 				Score:          testScore,
+				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants: []roundtypes.Participant{
 					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
@@ -487,10 +493,10 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.NotAllScoresSubmittedPayload{ // Changed to pointer
+				Success: &roundevents.ScoresPartiallySubmittedPayloadV1{ // Changed to pointer
 					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        testScoreRoundID,
-					Participant:    testParticipant,
+					UserID:         testParticipant,
 					Score:          testScore,
 					EventMessageID: testDiscordMessageID,
 					Participants: []roundtypes.Participant{
@@ -511,8 +517,9 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundID:        testScoreRoundID,
-				Participant:    testParticipant,
+				UserID:         testParticipant,
 				Score:          testScore,
+				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},
@@ -535,8 +542,9 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundID:        testScoreRoundID,
-				Participant:    testParticipant,
+				UserID:         testParticipant,
 				Score:          testScore,
+				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},

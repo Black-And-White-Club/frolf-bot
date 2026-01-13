@@ -91,7 +91,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 			}, nil
 		}
 
-		if notAllScoresData, ok := result.Success.(*roundevents.NotAllScoresSubmittedPayload); ok {
+		if notAllScoresData, ok := result.Success.(*roundevents.ScoresPartiallySubmittedPayloadV1); ok {
 			return []handlerwrapper.Result{
 				{Topic: roundevents.RoundScoresPartiallySubmittedV1, Payload: notAllScoresData},
 			}, nil
