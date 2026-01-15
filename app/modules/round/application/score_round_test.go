@@ -437,8 +437,8 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 					ID:      testScoreRoundID,
 					GuildID: guildID,
 					Participants: []roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-						{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: &testScore},
 					},
 				}, nil)
 			},
@@ -450,8 +450,8 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants: []roundtypes.Participant{
-					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-					{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: &testScore},
 				},
 			},
 			expectedResult: RoundOperationResult{
@@ -463,13 +463,13 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 						ID:      testScoreRoundID,
 						GuildID: sharedtypes.GuildID("guild-123"),
 						Participants: []roundtypes.Participant{
-							{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-							{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+							{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+							{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: &testScore},
 						},
 					},
 					Participants: []roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-						{UserID: sharedtypes.DiscordID("user2"), Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: &testScore},
 					},
 				},
 			},
@@ -488,8 +488,8 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				ChannelID:      "test-channel",
 				EventMessageID: testDiscordMessageID,
 				Participants: []roundtypes.Participant{
-					{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-					{UserID: sharedtypes.DiscordID("user2"), Score: nil},
+					{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: nil},
 				},
 			},
 			expectedResult: RoundOperationResult{
@@ -500,8 +500,84 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 					Score:          testScore,
 					EventMessageID: testDiscordMessageID,
 					Participants: []roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("user1"), Score: &testScore},
-						{UserID: sharedtypes.DiscordID("user2"), Score: nil},
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseAccept, Score: nil},
+					},
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "declined participant without score does not block finalization",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+				guildID := sharedtypes.GuildID("guild-123")
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testScoreRoundID).Return(&roundtypes.Round{
+					ID:      testScoreRoundID,
+					GuildID: guildID,
+					Participants: []roundtypes.Participant{
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseDecline, Score: nil},
+					},
+				}, nil)
+			},
+			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
+				GuildID:        sharedtypes.GuildID("guild-123"),
+				RoundID:        testScoreRoundID,
+				UserID:         testParticipant,
+				Score:          testScore,
+				ChannelID:      "test-channel",
+				EventMessageID: testDiscordMessageID,
+				Participants: []roundtypes.Participant{
+					{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseDecline, Score: nil},
+				},
+			},
+			expectedResult: RoundOperationResult{
+				Success: &roundevents.AllScoresSubmittedPayloadV1{
+					GuildID:        sharedtypes.GuildID("guild-123"),
+					RoundID:        testScoreRoundID,
+					EventMessageID: testDiscordMessageID,
+					RoundData: roundtypes.Round{
+						ID:      testScoreRoundID,
+						GuildID: sharedtypes.GuildID("guild-123"),
+						Participants: []roundtypes.Participant{
+							{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+							{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseDecline, Score: nil},
+						},
+					},
+					Participants: []roundtypes.Participant{
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseDecline, Score: nil},
+					},
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "tentative participant without score blocks finalization",
+			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {},
+			payload: roundevents.ParticipantScoreUpdatedPayloadV1{
+				GuildID:        sharedtypes.GuildID("guild-123"),
+				RoundID:        testScoreRoundID,
+				UserID:         testParticipant,
+				Score:          testScore,
+				ChannelID:      "test-channel",
+				EventMessageID: testDiscordMessageID,
+				Participants: []roundtypes.Participant{
+					{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+					{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseTentative, Score: nil},
+				},
+			},
+			expectedResult: RoundOperationResult{
+				Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
+					GuildID:        sharedtypes.GuildID("guild-123"),
+					RoundID:        testScoreRoundID,
+					UserID:         testParticipant,
+					Score:          testScore,
+					EventMessageID: testDiscordMessageID,
+					Participants: []roundtypes.Participant{
+						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: &testScore},
+						{UserID: sharedtypes.DiscordID("user2"), Response: roundtypes.ResponseTentative, Score: nil},
 					},
 				},
 			},

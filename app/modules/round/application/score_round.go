@@ -7,6 +7,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr" // Ensure roundtypes is imported for RoundParticipant
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
 )
@@ -149,6 +150,9 @@ func (s *RoundService) CheckAllScoresSubmitted(
 ) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		for _, p := range payload.Participants {
+			if p.Response == roundtypes.ResponseDecline {
+				continue
+			}
 			if p.Score == nil {
 				return RoundOperationResult{
 					Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
