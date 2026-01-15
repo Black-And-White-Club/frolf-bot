@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
@@ -29,7 +30,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *userevents.TagAvailablePayloadV1
+		payload   *sharedevents.TagAvailablePayloadV1
 		mockSetup func()
 		wantLen   int
 		wantTopic string
@@ -37,7 +38,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle TagAvailable event",
-			payload: &userevents.TagAvailablePayloadV1{
+			payload: &sharedevents.TagAvailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
@@ -58,7 +59,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 		},
 		{
 			name: "Fail to create user",
-			payload: &userevents.TagAvailablePayloadV1{
+			payload: &sharedevents.TagAvailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
@@ -84,7 +85,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 		},
 		{
 			name: "Service failure in CreateUser",
-			payload: &userevents.TagAvailablePayloadV1{
+			payload: &sharedevents.TagAvailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
@@ -140,7 +141,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *userevents.TagUnavailablePayloadV1
+		payload   *sharedevents.TagUnavailablePayloadV1
 		mockSetup func()
 		wantLen   int
 		wantTopic string
@@ -148,7 +149,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle TagUnavailable event",
-			payload: &userevents.TagUnavailablePayloadV1{
+			payload: &sharedevents.TagUnavailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
@@ -163,7 +164,7 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 		},
 		{
 			name: "Handle empty reason",
-			payload: &userevents.TagUnavailablePayloadV1{
+			payload: &sharedevents.TagUnavailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,

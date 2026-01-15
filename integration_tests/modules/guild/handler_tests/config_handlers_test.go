@@ -76,7 +76,7 @@ func TestHandleRetrieveGuildConfig(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var successPayload guildevents.GuildConfigRetrievedPayload
+				var successPayload guildevents.GuildConfigRetrievedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
 					t.Fatalf("Failed to unmarshal success payload: %v", err)
 				}
@@ -132,7 +132,7 @@ func TestHandleRetrieveGuildConfig(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var failurePayload guildevents.GuildConfigRetrievalFailedPayload
+				var failurePayload guildevents.GuildConfigRetrievalFailedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &failurePayload); err != nil {
 					t.Fatalf("Failed to unmarshal failure payload: %v", err)
 				}
@@ -241,9 +241,9 @@ func TestHandleUpdateGuildConfig(t *testing.T) {
 						return errors.New("config not found yet or success payload is nil")
 					}
 
-					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayload)
+					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
 					if !ok {
-						return errors.New("success payload is not of type GuildConfigRetrievedPayload")
+						return errors.New("success payload is not of type GuildConfigRetrievedPayloadV1")
 					}
 
 					updatedConfig = &successPayload.Config
@@ -267,7 +267,7 @@ func TestHandleUpdateGuildConfig(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var successPayload guildevents.GuildConfigUpdatedPayload
+				var successPayload guildevents.GuildConfigUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
 					t.Fatalf("Failed to unmarshal success payload: %v", err)
 				}

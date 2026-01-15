@@ -43,14 +43,12 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Successfully get leaderboard",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.GetLeaderboardResponsePayloadV1{
+					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
+						leaderboardservice.LeaderboardOperationResult{
 							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
-					},
-					nil,
-				)
+						nil,
+					)
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -72,19 +70,17 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Service failure - no active leaderboard",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.GetLeaderboardFailedPayloadV1{
-							Reason: "no active leaderboard",
+					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
+						leaderboardservice.LeaderboardOperationResult{
+							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 						},
-					},
-					nil,
-				)
+						nil,
+					)
 			},
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     leaderboardevents.GetLeaderboardFailedV1,
+			wantTopic:     leaderboardevents.GetLeaderboardResponseV1,
 		},
 	}
 
@@ -146,13 +142,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			name: "Successfully lookup tag - found",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.DiscordTagLookupResultPayloadV1{
-							UserID:    testUserID,
-							Found:     true,
-							TagNumber: &testTagNumber,
-						},
-					},
+					testTagNumber,
 					nil,
 				)
 			},
@@ -165,13 +155,8 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			name: "Successfully lookup tag - not found",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.DiscordTagLookupResultPayloadV1{
-							UserID: testUserID,
-							Found:  false,
-						},
-					},
-					nil,
+					sharedtypes.TagNumber(0),
+					fmt.Errorf("not found"),
 				)
 			},
 			payload:       testPayload,
@@ -183,13 +168,15 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			name: "Service error",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					leaderboardservice.LeaderboardOperationResult{},
+					sharedtypes.TagNumber(0),
 					fmt.Errorf("service error"),
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
+			// Handler treats service errors as "not found" for this lookup and returns a not-found event
+			wantErr:       false,
+			wantResultLen: 1,
+			wantTopic:     sharedevents.LeaderboardTagLookupNotFoundV1,
 		},
 	}
 
@@ -257,12 +244,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayloadV1{
-							UserID:    testUserID,
-							RoundID:   testRoundID,
-							Found:     true,
-							TagNumber: &testTagNumber,
-						},
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{{UserID: testUserID, TagNumber: testTagNumber}},
 					},
 					nil,
 				)
@@ -277,11 +259,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &sharedevents.RoundTagLookupResultPayloadV1{
-							UserID:  testUserID,
-							RoundID: testRoundID,
-							Found:   false,
-						},
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
 					},
 					nil,
 				)

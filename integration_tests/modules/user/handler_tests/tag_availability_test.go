@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time" // Import time for timeout field
 
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared" // Import sharedtypes for UserRoleEnum
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -34,7 +35,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagAvailablePayloadV1{
+				payload := sharedevents.TagAvailablePayloadV1{
 					GuildID:   "test-guild",
 					UserID:    "test-tag-user-available",
 					TagNumber: 21,
@@ -46,7 +47,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage as RunTest does not publish the message
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailableV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.TagAvailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
@@ -87,7 +88,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagAvailablePayloadV1{
+				payload := sharedevents.TagAvailablePayloadV1{
 					GuildID:   "test-guild",
 					UserID:    "existing-tag-user",
 					TagNumber: 22,
@@ -99,7 +100,7 @@ func TestHandleTagAvailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagAvailableV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.TagAvailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg
@@ -181,7 +182,7 @@ func TestHandleTagUnavailable(t *testing.T) {
 				return nil // Return initial state if any
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				payload := userevents.TagUnavailablePayloadV1{
+				payload := sharedevents.TagUnavailablePayloadV1{
 					UserID:    "tag-unavail-user",
 					TagNumber: 77,
 				}
@@ -192,7 +193,7 @@ func TestHandleTagUnavailable(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), data)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 				// RETAINED: Use testutils.PublishMessage
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.TagUnavailableV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.TagUnavailableV1, msg); err != nil {
 					t.Fatalf("Publish error: %v", err)
 				}
 				return msg

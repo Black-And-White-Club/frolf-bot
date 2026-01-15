@@ -42,7 +42,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-1",
 			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigDeletedPayload{
+				Success: &guildevents.GuildConfigDeletedPayloadV1{
 					GuildID: "guild-1",
 				},
 			},
@@ -55,7 +55,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-2",
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: "guild-2",
 					Reason:  "guild config not found",
 				},
@@ -69,7 +69,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-3",
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: "guild-3",
 					Reason:  "db error",
 				},
@@ -84,7 +84,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-4",
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: "guild-4",
 					Reason:  "delete error",
 				},
@@ -149,8 +149,8 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 					t.Errorf("expected success, got nil")
 					return
 				}
-				exp := tt.wantResult.Success.(*guildevents.GuildConfigDeletedPayload)
-				actual := got.Success.(*guildevents.GuildConfigDeletedPayload)
+				exp := tt.wantResult.Success.(*guildevents.GuildConfigDeletedPayloadV1)
+				actual := got.Success.(*guildevents.GuildConfigDeletedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}
@@ -160,8 +160,8 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 					t.Errorf("expected failure, got nil")
 					return
 				}
-				exp := tt.wantResult.Failure.(*guildevents.GuildConfigDeletionFailedPayload)
-				actual := got.Failure.(*guildevents.GuildConfigDeletionFailedPayload)
+				exp := tt.wantResult.Failure.(*guildevents.GuildConfigDeletionFailedPayloadV1)
+				actual := got.Failure.(*guildevents.GuildConfigDeletionFailedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected failure GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}

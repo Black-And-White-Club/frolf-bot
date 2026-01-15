@@ -49,7 +49,7 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 			},
 			config: validConfig,
 			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigUpdatedPayload{
+				Success: &guildevents.GuildConfigUpdatedPayloadV1{
 					GuildID: "guild-1",
 					Config:  *validConfig,
 				},
@@ -65,7 +65,7 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 				GuildID: "guild-2",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: "guild-2",
 					Reason:  "guild config not found",
 				},
@@ -81,7 +81,7 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 				GuildID: "guild-3",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: "guild-3",
 					Reason:  "could not fetch existing config: db error",
 				},
@@ -103,7 +103,7 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 				SignupEmoji:          ":frolf:",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: "guild-4",
 					Reason:  "update error",
 				},
@@ -177,8 +177,8 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 					t.Errorf("expected success, got nil")
 					return
 				}
-				exp := tt.wantResult.Success.(*guildevents.GuildConfigUpdatedPayload)
-				actual := got.Success.(*guildevents.GuildConfigUpdatedPayload)
+				exp := tt.wantResult.Success.(*guildevents.GuildConfigUpdatedPayloadV1)
+				actual := got.Success.(*guildevents.GuildConfigUpdatedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}
@@ -213,8 +213,8 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 					t.Errorf("expected failure, got nil")
 					return
 				}
-				exp := tt.wantResult.Failure.(*guildevents.GuildConfigUpdateFailedPayload)
-				actual := got.Failure.(*guildevents.GuildConfigUpdateFailedPayload)
+				exp := tt.wantResult.Failure.(*guildevents.GuildConfigUpdateFailedPayloadV1)
+				actual := got.Failure.(*guildevents.GuildConfigUpdateFailedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected failure GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}

@@ -26,7 +26,7 @@ func (s *GuildService) GetGuildConfig(ctx context.Context, guildID sharedtypes.G
 		config, err := s.GuildDB.GetConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigRetrievalFailedPayload{
+				Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  err.Error(),
 				},
@@ -37,7 +37,7 @@ func (s *GuildService) GetGuildConfig(ctx context.Context, guildID sharedtypes.G
 			// Wrap sentinel so higher-level wrappers still produce enriched context while errors.Is matches.
 			notFoundErr := fmt.Errorf("%w", ErrGuildConfigNotFound)
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigRetrievalFailedPayload{
+				Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  ErrGuildConfigNotFound.Error(),
 				},
@@ -46,7 +46,7 @@ func (s *GuildService) GetGuildConfig(ctx context.Context, guildID sharedtypes.G
 		}
 
 		return GuildOperationResult{
-			Success: &guildevents.GuildConfigRetrievedPayload{
+			Success: &guildevents.GuildConfigRetrievedPayloadV1{
 				GuildID: guildID,
 				Config:  *config,
 			},

@@ -59,9 +59,9 @@ func TestUpdateGuildConfig(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*guildevents.GuildConfigUpdatedPayload)
+				successPayload, ok := result.Success.(*guildevents.GuildConfigUpdatedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigUpdatedPayload")
+					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigUpdatedPayloadV1")
 				}
 
 				if successPayload.GuildID != guildID {
@@ -115,7 +115,7 @@ func TestUpdateGuildConfig(t *testing.T) {
 					t.Fatalf("Expected failure payload but got nil")
 				}
 
-				failurePayload, ok := result.Failure.(*guildevents.GuildConfigUpdateFailedPayload)
+				failurePayload, ok := result.Failure.(*guildevents.GuildConfigUpdateFailedPayloadV1)
 				if !ok {
 					t.Fatalf("Failure payload was not of expected type")
 				}

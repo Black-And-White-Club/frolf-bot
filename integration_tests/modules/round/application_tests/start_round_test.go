@@ -105,7 +105,7 @@ func TestProcessRoundStart(t *testing.T) {
 				// Fix: Expect pointer type instead of value type
 				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
-					t.Fatalf("Expected *RoundErrorPayload, got %T", result.Failure)
+					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
 				if !strings.Contains(failurePayload.Error, "round with ID") {
 					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)
@@ -140,7 +140,7 @@ func TestProcessRoundStart(t *testing.T) {
 				// Fix: Expect pointer type instead of value type
 				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
-					t.Fatalf("Expected *RoundErrorPayload, got %T", result.Failure)
+					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
 				if !strings.Contains(failurePayload.Error, "round with ID") { // Updated string check
 					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)

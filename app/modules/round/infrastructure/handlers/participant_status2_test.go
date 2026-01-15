@@ -25,7 +25,7 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 	testOriginalResponse := roundtypes.ResponseAccept
 	testOriginalJoinedLate := true
 
-	testPayload := &sharedevents.RoundTagLookupResultPayload{
+	testPayload := &sharedevents.RoundTagLookupResultPayloadV1{
 		RoundID:            testRoundID,
 		UserID:             testUserID,
 		TagNumber:          &testTagNumber,
@@ -39,7 +39,7 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		payload         *sharedevents.RoundTagLookupResultPayload
+		payload         *sharedevents.RoundTagLookupResultPayloadV1
 		wantErr         bool
 		wantResultLen   int
 		wantResultTopic string

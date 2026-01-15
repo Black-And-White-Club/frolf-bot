@@ -31,7 +31,7 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 		existing, err := s.GuildDB.GetConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  "could not fetch existing config: " + err.Error(),
 				},
@@ -40,7 +40,7 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 		}
 		if existing == nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  "guild config not found",
 				},
@@ -67,7 +67,7 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 		err = s.GuildDB.UpdateConfig(ctx, guildID, updates)
 		if err != nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayload{
+				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  err.Error(),
 				},
@@ -76,7 +76,7 @@ func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes
 		}
 
 		return GuildOperationResult{
-			Success: &guildevents.GuildConfigUpdatedPayload{
+			Success: &guildevents.GuildConfigUpdatedPayloadV1{
 				GuildID: guildID,
 				Config:  *config,
 			},

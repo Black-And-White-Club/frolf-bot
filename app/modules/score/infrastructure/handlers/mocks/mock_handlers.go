@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,7 +43,7 @@ func (m *MockHandlers) EXPECT() *MockHandlersMockRecorder {
 }
 
 // HandleBulkCorrectScoreRequest mocks base method.
-func (m *MockHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreBulkUpdateRequestPayload) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreBulkUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleBulkCorrectScoreRequest", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -58,7 +58,7 @@ func (mr *MockHandlersMockRecorder) HandleBulkCorrectScoreRequest(ctx, payload a
 }
 
 // HandleCorrectScoreRequest mocks base method.
-func (m *MockHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleCorrectScoreRequest", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -73,7 +73,7 @@ func (mr *MockHandlersMockRecorder) HandleCorrectScoreRequest(ctx, payload any) 
 }
 
 // HandleProcessRoundScoresRequest mocks base method.
-func (m *MockHandlers) HandleProcessRoundScoresRequest(ctx context.Context, payload *scoreevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleProcessRoundScoresRequest(ctx context.Context, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleProcessRoundScoresRequest", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)

@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
 // HandleCorrectScoreRequest processes a ScoreUpdateRequest.
 // It calls the ScoreService to correct a score and returns either a success or failure event.
-func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
+func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
 	}
@@ -33,14 +33,14 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 
 	// 3. Handle Business-Level Failures (Handled by the service)
 	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+		failurePayload, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
 		if !ok {
 			return nil, errors.New("unexpected failure payload type from service")
 		}
 
 		return []handlerwrapper.Result{
 			{
-				Topic:   scoreevents.ScoreUpdateFailedV1,
+				Topic:   sharedevents.ScoreUpdateFailedV1,
 				Payload: failurePayload,
 			},
 		}, nil
@@ -48,14 +48,14 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 
 	// 4. Handle Success Case
 	if result.Success != nil {
-		successPayload, ok := result.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+		successPayload, ok := result.Success.(*sharedevents.ScoreUpdatedPayloadV1)
 		if !ok {
 			return nil, errors.New("unexpected success payload type from service")
 		}
 
 		results := []handlerwrapper.Result{
 			{
-				Topic:   scoreevents.ScoreUpdatedV1,
+				Topic:   sharedevents.ScoreUpdatedV1,
 				Payload: successPayload,
 			},
 		}
@@ -74,13 +74,13 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 		}
 
 		if len(scores) > 0 {
-			reprocessPayload := &scoreevents.ProcessRoundScoresRequestedPayloadV1{
+			reprocessPayload := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 				GuildID: successPayload.GuildID,
 				RoundID: successPayload.RoundID,
 				Scores:  scores,
 			}
 			results = append(results, handlerwrapper.Result{
-				Topic:   scoreevents.ProcessRoundScoresRequestedV1,
+				Topic:   sharedevents.ProcessRoundScoresRequestedV1,
 				Payload: reprocessPayload,
 			})
 		}

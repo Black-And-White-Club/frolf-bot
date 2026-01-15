@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/google/uuid"
 )
 
 // HandleProcessRoundScoresRequest handles the incoming message for processing round scores.
-func (h *ScoreHandlers) HandleProcessRoundScoresRequest(ctx context.Context, payload *scoreevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error) {
+func (h *ScoreHandlers) HandleProcessRoundScoresRequest(ctx context.Context, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
 	}
@@ -32,30 +31,30 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(ctx context.Context, pay
 
 	// Handle business-level failures returned by the service via result.Failure.
 	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailedPayloadV1)
+		failurePayload, ok := result.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
 		if !ok {
 			return nil, errors.New("unexpected failure payload type from service")
 		}
 
 		return []handlerwrapper.Result{
 			{
-				Topic:   scoreevents.ProcessRoundScoresFailedV1,
+				Topic:   sharedevents.ProcessRoundScoresFailedV1,
 				Payload: failurePayload,
 			},
 		}, nil
 	}
 
 	// Process success case
-	successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSucceededPayloadV1)
+	successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
 	if !ok {
 		return nil, errors.New("unexpected result from service: expected ProcessRoundScoresSucceededPayloadV1")
 	}
 
 	tagMappings := successPayload.TagMappings
 
-	batchAssignments := make([]sharedevents.TagAssignmentInfo, 0, len(tagMappings))
+	batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(tagMappings))
 	for _, tm := range tagMappings {
-		batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfo{
+		batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfoV1{
 			UserID:    tm.DiscordID,
 			TagNumber: tm.TagNumber,
 		})
@@ -63,7 +62,8 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(ctx context.Context, pay
 
 	batchID := uuid.New().String()
 
-	batchPayload := &sharedevents.BatchTagAssignmentRequestedPayload{
+	batchPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+		ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 		RequestingUserID: "score-service",
 		BatchID:          batchID,
 		Assignments:      batchAssignments,

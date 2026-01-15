@@ -9,9 +9,9 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -51,6 +51,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
 					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
 						Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
@@ -84,10 +85,11 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
 					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundErrorPayload{
-							RoundID: testRoundID,
+						Failure: &roundevents.RoundUpdateErrorPayloadV1{
+							GuildID: testGuildID,
 							Error:   "tag update failed",
 						},
 					},
@@ -105,6 +107,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
 					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
 					fmt.Errorf("database error"),
@@ -120,19 +123,28 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
 					gomock.Any(),
 					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					roundservice.RoundOperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
 			name: "Payload with no changed tags returns nil",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				// No service call expected when no tags changed
+				// Service is called by handler; return empty result
+				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
+				).Return(
+					roundservice.RoundOperationResult{},
+					nil,
+				)
 			},
 			payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
 				GuildID:     testGuildID,
@@ -145,6 +157,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			name: "Success with no affected rounds returns nil",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
+					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
@@ -161,14 +174,16 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					nil,
 				)
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 0,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.TagsUpdatedForScheduledRoundsV1,
 		},
 		{
 			name: "Service returns unexpected payload type",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
+					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
@@ -178,8 +193,10 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					nil,
 				)
 			},
-			payload: testPayload,
-			wantErr: true,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.TagsUpdatedForScheduledRoundsV1,
 		},
 	}
 

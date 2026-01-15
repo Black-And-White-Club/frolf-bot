@@ -654,7 +654,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 					// Continue anyway, maybe they can be added later or it's a transient error
 				} else {
 					playersAutoAdded++
-					autoAddedPayload := &roundevents.RoundParticipantAutoAddedPayload{
+					autoAddedPayload := &roundevents.RoundParticipantAutoAddedPayloadV1{
 						RoundID:   payload.RoundID,
 						GuildID:   payload.GuildID,
 						UserID:    payload.UserID, // The user who initiated the import
@@ -672,7 +672,7 @@ func (s *RoundService) IngestParsedScorecard(ctx context.Context, payload rounde
 						)
 					} else {
 						msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-						if err := s.EventBus.Publish(roundevents.RoundParticipantAutoAddedTopic, msg); err != nil {
+						if err := s.EventBus.Publish(roundevents.RoundParticipantAutoAddedV1, msg); err != nil {
 							s.logger.ErrorContext(ctx, "Failed to publish ParticipantAutoAdded event",
 								attr.Error(err),
 							)

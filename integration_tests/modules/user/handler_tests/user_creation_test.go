@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
@@ -143,7 +143,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagAvailabilityCheckRequestedV1},
+			expectedOutgoingTopics: []string{sharedevents.TagAvailabilityCheckRequestedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				userID := sharedtypes.DiscordID("testuser-withtag-456")
 				tagNumber := sharedtypes.TagNumber(24)
@@ -170,7 +170,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				// Verify the TagAvailabilityCheckRequested event was published
-				expectedTopic := leaderboardevents.TagAvailabilityCheckRequestedV1
+				expectedTopic := sharedevents.TagAvailabilityCheckRequestedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -180,13 +180,13 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				}
 
 				receivedMsg := msgs[0]
-				var checkPayload userevents.TagAvailabilityCheckRequestedPayloadV1
+				var checkPayload sharedevents.TagAvailabilityCheckRequestedPayloadV1
 				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &checkPayload); err != nil { // Use deps.UserModule.Helper
 					t.Fatalf("Failed to unmarshal TagAvailabilityCheckRequestedPayload: %v", err)
 				}
 
-				if checkPayload.TagNumber != tagNumber {
-					t.Errorf("TagAvailabilityCheckRequestedPayload TagNumber mismatch: expected %d, got %d", tagNumber, checkPayload.TagNumber)
+				if checkPayload.TagNumber == nil || *checkPayload.TagNumber != tagNumber {
+					t.Errorf("TagAvailabilityCheckRequestedPayload TagNumber mismatch: expected %d, got %v", tagNumber, checkPayload.TagNumber)
 				}
 				if checkPayload.UserID != userID {
 					t.Errorf("TagAvailabilityCheckRequestedPayload UserID mismatch: expected %q, got %q", userID, checkPayload.UserID)

@@ -15,7 +15,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// createValidParticipantJoinRequestPayload creates a valid ParticipantJoinRequestPayload for testing
+// createValidParticipantJoinRequestPayload creates a valid ParticipantJoinRequestPayloadV1 for testing
 func createValidParticipantJoinRequestPayload(roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, response roundtypes.Response) roundevents.ParticipantJoinRequestPayloadV1 {
 	return roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:  roundID,

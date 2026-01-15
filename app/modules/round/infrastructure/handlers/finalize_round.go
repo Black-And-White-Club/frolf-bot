@@ -4,6 +4,7 @@ import (
 	"context"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -99,13 +100,13 @@ func (h *RoundHandlers) HandleRoundFinalized(
 	}
 
 	if result.Success != nil {
-		successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
+		successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
 		if !ok {
 			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from NotifyScoreModule"}
 		}
 
 		return []handlerwrapper.Result{
-			{Topic: roundevents.ProcessRoundScoresRequestedV1, Payload: successPayload},
+			{Topic: sharedevents.ProcessRoundScoresRequestedV1, Payload: successPayload},
 		}, nil
 	}
 

@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
@@ -89,7 +90,7 @@ func (mr *MockHandlersMockRecorder) HandleScorecardParsed(ctx, payload any) *gom
 }
 
 // HandleTagAvailable mocks base method.
-func (m *MockHandlers) HandleTagAvailable(ctx context.Context, payload *userevents.TagAvailablePayloadV1) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagAvailable(ctx context.Context, payload *sharedevents.TagAvailablePayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAvailable", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -104,7 +105,7 @@ func (mr *MockHandlersMockRecorder) HandleTagAvailable(ctx, payload any) *gomock
 }
 
 // HandleTagUnavailable mocks base method.
-func (m *MockHandlers) HandleTagUnavailable(ctx context.Context, payload *userevents.TagUnavailablePayloadV1) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagUnavailable(ctx context.Context, payload *sharedevents.TagUnavailablePayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagUnavailable", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)

@@ -184,7 +184,7 @@ func (s *RoundService) ValidateParticipantJoinRequest(ctx context.Context, paylo
 			return RoundOperationResult{Success: tagLookupPayload}, nil
 
 		case roundtypes.ResponseDecline:
-			s.logger.InfoContext(ctx, "Validation successful for Decline - Returning ParticipantJoinRequestPayload (pointer)",
+			s.logger.InfoContext(ctx, "Validation successful for Decline - Returning ParticipantJoinRequestPayloadV1 (pointer)",
 				attr.ExtractCorrelationID(ctx),
 				attr.Any("returning_payload", payload),
 			)

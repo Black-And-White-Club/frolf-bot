@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
@@ -138,6 +139,12 @@ type RoundOperationResult struct {
 	Success interface{}
 	Failure interface{}
 	Error   error
+}
+
+// RoundTagUpdateResult represents the result of updating scheduled rounds for a tag change
+type RoundTagUpdateResult struct {
+	UpdatedRounds []roundtypes.Round
+	Err           error
 }
 
 // getGuildConfigForEnrichment attempts to retrieve a guild config for adding config fragments

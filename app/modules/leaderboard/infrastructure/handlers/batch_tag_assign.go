@@ -3,13 +3,14 @@ package leaderboardhandlers
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	"github.com/google/uuid"
 )
 
@@ -17,96 +18,48 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 	ctx context.Context,
 	payload *sharedevents.BatchTagAssignmentRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Received BatchTagAssignmentRequested event",
+	h.logger.InfoContext(ctx, "Handling batch tag assignment",
 		attr.ExtractCorrelationID(ctx),
-		attr.String("batch_id", payload.BatchID),
-		attr.String("requesting_user", string(payload.RequestingUserID)),
-		attr.Int("assignment_count", len(payload.Assignments)),
-	)
+		attr.String("batch_id", payload.BatchID))
 
-	// Convert assignments to the expected format
-	assignments := make([]sharedtypes.TagAssignmentRequest, len(payload.Assignments))
-	for i, assignment := range payload.Assignments {
-		assignments[i] = sharedtypes.TagAssignmentRequest{
-			UserID:    assignment.UserID,
-			TagNumber: assignment.TagNumber,
+	requests := make([]sharedtypes.TagAssignmentRequest, len(payload.Assignments))
+	for i, a := range payload.Assignments {
+		requests[i] = sharedtypes.TagAssignmentRequest{
+			UserID:    a.UserID,
+			TagNumber: a.TagNumber,
 		}
 	}
 
-	batchID, err := uuid.Parse(payload.BatchID)
+	batchUUID, err := uuid.Parse(payload.BatchID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Invalid batch ID format", attr.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("invalid batch_id format: %w", err)
 	}
 
-	// Call service with payload as source context
-	result, err := h.leaderboardService.ProcessTagAssignments(
+	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
-		payload, // Pass the entire payload for source determination
-		assignments,
-		&payload.RequestingUserID,
-		uuid.New(),
-		batchID,
+		requests,
+		sharedtypes.RoundID(batchUUID),
+		sharedtypes.ServiceUpdateSourceAdminBatch,
 	)
+
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Service failed to handle batch assignment", attr.Error(err))
+		var swapErr *leaderboardservice.TagSwapNeededError
+		if errors.As(err, &swapErr) {
+			h.logger.InfoContext(ctx, "Conflict detected, recording intent in Saga",
+				attr.String("requestor", string(swapErr.RequestorID)),
+				attr.Int("target_tag", int(swapErr.TargetTag)))
+
+			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
+				UserID:     swapErr.RequestorID,
+				CurrentTag: swapErr.CurrentTag,
+				TargetTag:  swapErr.TargetTag,
+				GuildID:    payload.GuildID,
+			})
+			return []handlerwrapper.Result{}, intentErr
+		}
 		return nil, err
 	}
 
-	// Handle failure response
-	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for failure payload")
-		}
-		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.LeaderboardBatchTagAssignmentFailedV1, Payload: failurePayload},
-		}, nil
-	}
-
-	// Handle success response
-	if result.Success != nil {
-		successPayload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for success payload")
-		}
-
-		h.logger.InfoContext(ctx, "Batch tag assignment successful",
-			attr.ExtractCorrelationID(ctx),
-			attr.String("batch_id", payload.BatchID),
-		)
-
-		results := []handlerwrapper.Result{
-			{Topic: leaderboardevents.LeaderboardBatchTagAssignedV1, Payload: successPayload},
-		}
-
-		// Publish scheduled round updates for batch assignments
-		changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-		for _, assignment := range assignments {
-			changedTags[assignment.UserID] = assignment.TagNumber
-		}
-
-		tagUpdatePayload := &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
-			GuildID:     payload.GuildID,
-			ChangedTags: changedTags,
-			UpdatedAt:   time.Now().UTC(),
-			Source:      "batch_assignment",
-		}
-
-		h.logger.InfoContext(ctx, "Publishing tag updates to scheduled rounds",
-			attr.ExtractCorrelationID(ctx),
-			attr.String("batch_id", payload.BatchID),
-			attr.Int("changed_tags", len(assignments)),
-		)
-
-		results = append(results, handlerwrapper.Result{
-			Topic:   sharedevents.TagUpdateForScheduledRoundsV1,
-			Payload: tagUpdatePayload,
-		})
-
-		return results, nil
-	}
-
-	return nil, errors.New("batch tag assignment service returned unexpected result")
+	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, result, "batch_assignment"), nil
 }

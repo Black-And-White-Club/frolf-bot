@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -59,7 +59,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+				Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					TagMappings: []sharedtypes.TagMapping{
@@ -99,7 +99,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ProcessRoundScoresSuccessPayload{
+				Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					TagMappings: []sharedtypes.TagMapping{
@@ -131,10 +131,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "database connection failed",
+					Reason:  "database connection failed",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -158,10 +158,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "invalid round ID",
+					Reason:  "invalid round ID",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -174,10 +174,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			scores:    []sharedtypes.ScoreInfo{},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID, // RoundID will be passed through to the failure payload
-					Error:   "cannot process empty score list",
+					Reason:  "cannot process empty score list",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -204,10 +204,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
 				// Expect a failure payload matching the one returned by ProcessScoresForStorage.
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID, // RoundID will be passed through to the failure payload
-					Error:   "invalid score value: 150 for user user1. Score must be between -36 and 72",
+					Reason:  "invalid score value: 150 for user user1. Score must be between -36 and 72",
 				},
 			},
 			expectedError: nil, // Corrected: The service returns nil error for this case
@@ -226,10 +226,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: true,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "failed to check existing scores",
+					Reason:  "failed to check existing scores",
 				},
 			},
 			expectedError: nil,
@@ -254,10 +254,10 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			},
 			overwrite: false,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailurePayload{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
-					Error:   "SCORES_ALREADY_EXIST",
+					Reason:  "SCORES_ALREADY_EXIST",
 				},
 			},
 			expectedError: nil,
@@ -294,8 +294,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
 				t.Errorf("Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
 			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
-				successGot, okGot := gotResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
-				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ProcessRoundScoresSuccessPayload)
+				successGot, okGot := gotResult.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
+				successExpected, okExpected := tt.expectedResult.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
 				if okGot && okExpected {
 					if successGot.GuildID != successExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
@@ -321,8 +321,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
 				t.Errorf("Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
 			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
-				failureGot, okGot := gotResult.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
-				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ProcessRoundScoresFailurePayload)
+				failureGot, okGot := gotResult.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
+				failureExpected, okExpected := tt.expectedResult.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
 				if okGot && okExpected {
 					if failureGot.GuildID != failureExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)
@@ -330,8 +330,8 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 					if failureGot.RoundID != failureExpected.RoundID {
 						t.Errorf("Mismatched RoundID, got: %v, expected: %v", failureGot.RoundID, failureExpected.RoundID)
 					}
-					if failureGot.Error != failureExpected.Error {
-						t.Errorf("Mismatched error message in failure payload, got: %v, expected: %v", failureGot.Error, failureExpected.Error)
+					if failureGot.Reason != failureExpected.Reason {
+						t.Errorf("Mismatched error message in failure payload, got: %v, expected: %v", failureGot.Reason, failureExpected.Reason)
 					}
 				}
 			}

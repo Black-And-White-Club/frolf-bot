@@ -2,75 +2,71 @@ package leaderboardservice
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // LeaderboardService handles leaderboard-related logic.
 type LeaderboardService struct {
-	LeaderboardDB       leaderboarddb.LeaderboardDB
-	eventBus            eventbus.EventBus
-	logger              *slog.Logger
-	metrics             leaderboardmetrics.LeaderboardMetrics
-	tracer              trace.Tracer
-	serviceWrapper      func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
-	guildConfigProvider GuildConfigProvider
-}
-
-// GuildConfigProvider supplies guild config for enrichment.
-type GuildConfigProvider interface {
-	GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	db             *bun.DB
+	LeaderboardDB  leaderboarddb.LeaderboardDB
+	logger         *slog.Logger
+	metrics        leaderboardmetrics.LeaderboardMetrics
+	tracer         trace.Tracer
+	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
 func NewLeaderboardService(
-	db leaderboarddb.LeaderboardDB,
-	eventBus eventbus.EventBus,
+	db *bun.DB, // Pass the DB connection here
+	repo leaderboarddb.LeaderboardDB,
 	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
 	tracer trace.Tracer,
-) Service {
+) *LeaderboardService {
 	return &LeaderboardService{
-		LeaderboardDB: db,
-		eventBus:      eventBus,
+		db:            db,
+		LeaderboardDB: repo,
 		logger:        logger,
 		metrics:       metrics,
 		tracer:        tracer,
-		// Assign the serviceWrapper method
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (result LeaderboardOperationResult, err error) {
+		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
 			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
 		},
 	}
 }
 
-// WithGuildConfigProvider injects provider (fluent style)
-func (s *LeaderboardService) WithGuildConfigProvider(p GuildConfigProvider) *LeaderboardService {
-	s.guildConfigProvider = p
-	return s
-}
+// runInTx is a 2026 best-practice helper to ensure service operations are atomic.
+func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Context, db bun.IDB) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
+	var result LeaderboardOperationResult
+	// If no DB provided (e.g., in unit tests that mock the repository layer),
+	// execute the function without a transaction and allow the repositories to
+	// accept a nil bun.IDB (they should handle it or the mocks will match gomock.Any()).
+	if s.db == nil {
+		var err error
+		result, err = fn(ctx, nil)
+		return result, err
+	}
 
-func (s *LeaderboardService) getGuildConfigForEnrichment(ctx context.Context, guildID sharedtypes.GuildID) *guildtypes.GuildConfig {
-	if s.guildConfigProvider == nil || guildID == "" {
-		return nil
-	}
-	cfg, err := s.guildConfigProvider.GetConfig(ctx, guildID)
-	if err != nil {
-		s.logger.DebugContext(ctx, "Leaderboard enrichment config fetch failed", attr.String("guild_id", string(guildID)), attr.Error(err))
-		return nil
-	}
-	return cfg
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		// bun.Tx implements bun.IDB so we can pass it to the provided function
+		result, err = fn(ctx, tx)
+		return err
+	})
+	return result, err
 }
 
 // EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
@@ -83,19 +79,27 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 		return err
 	}
 
-	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
+	s.logInfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
 
-	// Create empty active leaderboard
 	empty := &leaderboarddb.Leaderboard{
 		LeaderboardData: leaderboardtypes.LeaderboardData{},
 		IsActive:        true,
 		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 		GuildID:         guildID,
 	}
-	if _, err := s.LeaderboardDB.CreateLeaderboard(ctx, guildID, empty); err != nil {
+
+	// Pass s.db as the bun.IDB argument here
+	if _, err := s.LeaderboardDB.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
 		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
 	}
 	return nil
+}
+
+// logInfoContext is a nil-safe wrapper around s.logger.InfoContext for tests
+func (s *LeaderboardService) logInfoContext(ctx context.Context, msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.InfoContext(ctx, msg, args...)
+	}
 }
 
 // serviceWrapper handles common tracing, logging, and metrics for service operations.
@@ -181,14 +185,3 @@ func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(
 
 	return result, nil
 }
-
-// LeaderboardOperationResult represents a generic result from a leaderboard operation
-type LeaderboardOperationResult struct {
-	Success interface{}
-	Failure interface{}
-	Error   error
-}
-
-// func ptrTag(t sharedtypes.TagNumber) *sharedtypes.TagNumber {
-// 	return &t
-// }

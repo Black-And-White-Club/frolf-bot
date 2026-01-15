@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
@@ -62,18 +64,17 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				}
 
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					gomock.Any(), // GuildID
-					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
-					gomock.Any(), // requesting user
-					gomock.Any(), // round ID
-					gomock.Any(), // operation ID
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.LeaderboardUpdatedPayloadV1{
-							RoundID: testRoundID,
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{
+							{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(1)},
+							{UserID: sharedtypes.DiscordID("12345678901234568"), TagNumber: sharedtypes.TagNumber(2)},
 						},
 					},
 					nil,
@@ -87,7 +88,14 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Invalid tag format - missing colon",
 			mockSetup: func() {
-				// No service mock needed - validation happens before service call
+				// Handler will call ExecuteBatchTagAssignment with empty requests; return an error to simulate validation
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
+					gomock.Any(),
+					gomock.Any(),
+					[]sharedtypes.TagAssignmentRequest{},
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("invalid tags"))
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 				RoundID:               testRoundID,
@@ -101,7 +109,14 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Invalid tag number format",
 			mockSetup: func() {
-				// No service mock needed - validation happens before service call
+				// Handler will parse tag number into 0 on invalid format and call service with that request
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
+					gomock.Any(),
+					gomock.Any(),
+					[]sharedtypes.TagAssignmentRequest{{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(0)}},
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
+				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("invalid tag number"))
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 				RoundID:               testRoundID,
@@ -126,14 +141,12 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				}
 
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					gomock.Any(), // GuildID
-					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
-					gomock.Any(), // requesting user
-					gomock.Any(), // round ID
-					gomock.Any(), // operation ID
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					fmt.Errorf("internal service error"),
@@ -157,28 +170,23 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				}
 
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					gomock.Any(), // GuildID
-					sharedtypes.ServiceUpdateSourceProcessScores,
 					expectedRequests,
-					gomock.Any(), // requesting user
-					gomock.Any(), // round ID
-					gomock.Any(), // operation ID
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
-							RoundID: testRoundID,
-							Reason:  "tag assignment validation failed",
-						},
+						Err: fmt.Errorf("tag assignment validation failed"),
 					},
 					nil,
 				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 1,
-			wantTopics:    []string{leaderboardevents.LeaderboardUpdateFailedV1},
+			wantResultLen: 2,
+			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.TagUpdateForScheduledRoundsV1},
 		},
 		{
 			name: "Unexpected service result - neither success nor failure",
@@ -194,22 +202,21 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					},
 				}
 
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
-					sharedtypes.GuildID(""),
-					sharedtypes.ServiceUpdateSourceProcessScores,
+					gomock.Any(),
 					expectedRequests,
-					(*sharedtypes.DiscordID)(nil),
-					uuid.UUID(testRoundID),
-					gomock.Any(),
+					testRoundID,
+					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
+			wantErr:       false,
+			wantResultLen: 2,
+			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.TagUpdateForScheduledRoundsV1},
 		},
 	}
 

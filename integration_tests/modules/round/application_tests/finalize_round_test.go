@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
@@ -296,7 +297,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
+				processScoresPayload, ok := returnedResult.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
@@ -488,7 +489,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				processScoresPayload, ok := returnedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1)
+				processScoresPayload, ok := returnedResult.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *ProcessRoundScoresRequestPayload, got %T", returnedResult.Success)
 					return
@@ -500,7 +501,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				}
 
 				// Create a map to verify specific user data
-				scoresByUser := make(map[sharedtypes.DiscordID]roundevents.ParticipantScoreV1)
+				scoresByUser := make(map[sharedtypes.DiscordID]sharedtypes.ScoreInfo)
 				for _, score := range processScoresPayload.Scores {
 					scoresByUser[score.UserID] = score
 				}

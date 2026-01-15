@@ -69,9 +69,9 @@ func TestHandleGuildSetup(t *testing.T) {
 						return errors.New("config not found yet or success payload is nil")
 					}
 
-					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayload)
+					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
 					if !ok {
-						return errors.New("success payload is not of type GuildConfigRetrievedPayload")
+						return errors.New("success payload is not of type GuildConfigRetrievedPayloadV1")
 					}
 
 					config = &successPayload.Config
@@ -95,7 +95,7 @@ func TestHandleGuildSetup(t *testing.T) {
 				// Find a message with matching GuildID and correlation ID
 				var matched bool
 				for _, m := range msgs {
-					var successPayload guildevents.GuildConfigCreatedPayload
+					var successPayload guildevents.GuildConfigCreatedPayloadV1
 					if err := deps.TestHelpers.UnmarshalPayload(m, &successPayload); err != nil {
 						// ignore unmarshal errors for non-matching messages
 						continue
@@ -166,7 +166,7 @@ func TestHandleGuildSetup(t *testing.T) {
 
 				var matched bool
 				for _, m := range msgs {
-					var failurePayload guildevents.GuildConfigCreationFailedPayload
+					var failurePayload guildevents.GuildConfigCreationFailedPayloadV1
 					if err := deps.TestHelpers.UnmarshalPayload(m, &failurePayload); err != nil {
 						continue
 					}
@@ -188,9 +188,9 @@ func TestHandleGuildSetup(t *testing.T) {
 					t.Fatalf("Expected GetGuildConfig to return success payload, but got nil. Failure: %+v", getResult.Failure)
 				}
 
-				successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayload)
+				successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload is not of type GuildConfigRetrievedPayload")
+					t.Fatalf("Success payload is not of type GuildConfigRetrievedPayloadV1")
 				}
 
 				existingConfig := &successPayload.Config
@@ -203,7 +203,7 @@ func TestHandleGuildSetup(t *testing.T) {
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					// it's okay to have unrelated messages, but ensure none match the guildID
 					for _, m := range receivedMsgs[unexpectedTopic] {
-						var successPayload guildevents.GuildConfigCreatedPayload
+						var successPayload guildevents.GuildConfigCreatedPayloadV1
 						if err := deps.TestHelpers.UnmarshalPayload(m, &successPayload); err != nil {
 							continue
 						}

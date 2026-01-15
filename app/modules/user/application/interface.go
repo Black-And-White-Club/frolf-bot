@@ -24,5 +24,5 @@ type Service interface {
 	FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (UserOperationResult, error)
 
 	// UDisc Matching
-	MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (UserOperationResult, error)
+	MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (UserOperationResult, error)
 }

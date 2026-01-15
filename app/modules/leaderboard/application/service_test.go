@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"reflect"
+
 	"strings"
 	"testing"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -30,25 +30,21 @@ func TestNewLeaderboardService(t *testing.T) {
 
 				// Create mock dependencies
 				mockDB := leaderboarddb.NewMockLeaderboardDB(ctrl)
-				mockEventBus := eventbus.NewMockEventBus(ctrl)
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
 				mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
 				tracer := noop.NewTracerProvider().Tracer("test")
 
-				// Call the function being tested
-				service := NewLeaderboardService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+				// Call the function being tested (pass nil for *bun.DB)
+				service := NewLeaderboardService(nil, mockDB, logger, mockMetrics, tracer)
 
 				// Ensure service is correctly created
 				if service == nil {
 					t.Fatalf("NewLeaderboardService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				leaderboardServiceImpl, ok := service.(*LeaderboardService)
-				if !ok {
-					t.Fatalf("service is not of type *LeaderboardService")
-				}
+				// service is already a *LeaderboardService
+				leaderboardServiceImpl := service
 
 				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
 				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
@@ -58,9 +54,6 @@ func TestNewLeaderboardService(t *testing.T) {
 				// Check that all dependencies were correctly assigned
 				if leaderboardServiceImpl.LeaderboardDB != mockDB {
 					t.Errorf("Leaderboard DB not correctly assigned")
-				}
-				if leaderboardServiceImpl.eventBus != mockEventBus {
-					t.Errorf("eventBus not correctly assigned")
 				}
 				if leaderboardServiceImpl.logger != logger {
 					t.Errorf("logger not correctly assigned")
@@ -84,7 +77,7 @@ func TestNewLeaderboardService(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				// Call with nil dependencies
+				// Call with nil dependencies (pass nil for *bun.DB)
 				service := NewLeaderboardService(nil, nil, nil, nil, nil)
 
 				// Ensure service is correctly created
@@ -92,11 +85,8 @@ func TestNewLeaderboardService(t *testing.T) {
 					t.Fatalf("NewLeaderboardService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				leaderboardServiceImpl, ok := service.(*LeaderboardService)
-				if !ok {
-					t.Fatalf("service is not of type *LeaderboardService")
-				}
+				// service is already a *LeaderboardService
+				leaderboardServiceImpl := service
 
 				// Override serviceWrapper to avoid nil tracing/logger issues
 				leaderboardServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
@@ -106,9 +96,6 @@ func TestNewLeaderboardService(t *testing.T) {
 				// Check nil fields
 				if leaderboardServiceImpl.LeaderboardDB != nil {
 					t.Errorf("Leaderboard DB should be nil")
-				}
-				if leaderboardServiceImpl.eventBus != nil {
-					t.Errorf("eventBus should be nil")
 				}
 				if leaderboardServiceImpl.logger != nil {
 					t.Errorf("logger should be nil")
@@ -127,7 +114,11 @@ func TestNewLeaderboardService(t *testing.T) {
 
 				// Test serviceWrapper runs correctly with nil dependencies
 				_, err := leaderboardServiceImpl.serviceWrapper(context.Background(), "TestOp", func(ctx context.Context) (LeaderboardOperationResult, error) {
-					return LeaderboardOperationResult{Success: "test"}, nil
+					return LeaderboardOperationResult{
+						Leaderboard: leaderboardtypes.LeaderboardData{},
+						TagChanges:  []TagChange{},
+						Err:         nil,
+					}, nil
 				})
 				if err != nil {
 					t.Errorf("serviceWrapper should execute the provided function without error, got: %v", err)
@@ -165,11 +156,15 @@ func Test_serviceWrapper(t *testing.T) {
 			operation: "test_operation",
 			serviceFunc: func(ctx context.Context) (LeaderboardOperationResult, error) {
 				return LeaderboardOperationResult{
-					Success: "test_success",
+					Leaderboard: leaderboardtypes.LeaderboardData{{UserID: "test", TagNumber: 1}},
+					TagChanges:  []TagChange{},
+					Err:         nil,
 				}, nil
 			},
 			wantResult: LeaderboardOperationResult{
-				Success: "test_success",
+				Leaderboard: leaderboardtypes.LeaderboardData{{UserID: "test", TagNumber: 1}},
+				TagChanges:  []TagChange{},
+				Err:         nil,
 			},
 			wantErr: nil,
 		},
@@ -230,12 +225,46 @@ func Test_serviceWrapper(t *testing.T) {
 					t.Errorf("serviceWrapper() error message = %q, want to contain %q", err.Error(), tt.wantErr.Error())
 				}
 			}
-			if !reflect.DeepEqual(gotResult.Success, tt.wantResult.Success) {
-				t.Errorf("serviceWrapper() Success = %v, want %v", gotResult.Success, tt.wantResult.Success)
+			if !leaderboardsEqual(gotResult.Leaderboard, tt.wantResult.Leaderboard) {
+				t.Errorf("serviceWrapper() Leaderboard = %v, want %v", gotResult.Leaderboard, tt.wantResult.Leaderboard)
 			}
-			if !reflect.DeepEqual(gotResult.Failure, tt.wantResult.Failure) {
-				t.Errorf("serviceWrapper() Failure = %v, want %v", gotResult.Failure, tt.wantResult.Failure)
+			if !tagChangesEqual(gotResult.TagChanges, tt.wantResult.TagChanges) {
+				t.Errorf("serviceWrapper() TagChanges = %v, want %v", gotResult.TagChanges, tt.wantResult.TagChanges)
+			}
+			// Compare Err by nil-ness and message
+			if (gotResult.Err == nil) != (tt.wantResult.Err == nil) {
+				t.Errorf("serviceWrapper() Err = %v, want %v", gotResult.Err, tt.wantResult.Err)
+			} else if gotResult.Err != nil && tt.wantResult.Err != nil {
+				if gotResult.Err.Error() != tt.wantResult.Err.Error() {
+					t.Errorf("serviceWrapper() Err = %v, want %v", gotResult.Err, tt.wantResult.Err)
+				}
 			}
 		})
 	}
+}
+
+// Helper to compare leaderboards without reflect
+func leaderboardsEqual(a, b leaderboardtypes.LeaderboardData) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].UserID != b[i].UserID || a[i].TagNumber != b[i].TagNumber {
+			return false
+		}
+	}
+	return true
+}
+
+// Helper to compare tag changes without reflect
+func tagChangesEqual(a, b []TagChange) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].UserID != b[i].UserID || a[i].OldTag != b[i].OldTag || a[i].NewTag != b[i].NewTag {
+			return false
+		}
+	}
+	return true
 }

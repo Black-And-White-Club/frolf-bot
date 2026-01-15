@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -17,65 +15,133 @@ import (
 )
 
 func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testUserID := sharedtypes.DiscordID("user-456")
-	testTagNum := sharedtypes.TagNumber(1)
-	testTagNumber := &testTagNum
-	testPayload := &leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
-		GuildID:   testGuildID,
-		UserID:    testUserID,
-		TagNumber: testTagNumber,
-	}
+	testTagNumber := sharedtypes.TagNumber(7)
 
 	tests := []struct {
-		name          string
-		mockSetup     func()
-		payload       *leaderboardevents.TagAvailabilityCheckRequestedPayloadV1
-		wantErr       bool
-		wantResultLen int
+		name       string
+		payload    *sharedevents.TagAvailabilityCheckRequestedPayloadV1
+		mockSetup  func(*leaderboardmocks.MockService)
+		wantErr    bool
+		wantTopic  string
+		validateFn func(t *testing.T, payload any)
 	}{
 		{
-			name: "Tag is available",
-			mockSetup: func() {
+			name: "tag number missing",
+			payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: nil,
+			},
+			mockSetup: func(mockLeaderboardService *leaderboardmocks.MockService) {
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
 					testGuildID,
-					*testPayload,
+					testUserID,
+					(*sharedtypes.TagNumber)(nil),
 				).Return(
-					&leaderboardevents.TagAvailabilityCheckResultPayloadV1{
+					sharedevents.TagAvailabilityCheckResultPayloadV1{},
+					&sharedevents.TagAvailabilityCheckFailedPayloadV1{
 						GuildID:   testGuildID,
 						UserID:    testUserID,
-						TagNumber: testTagNumber,
+						TagNumber: nil,
+						Reason:    "tag number is required",
+					},
+					nil,
+				)
+			},
+			wantErr:   false,
+			wantTopic: sharedevents.TagAvailabilityCheckFailedV1,
+			validateFn: func(t *testing.T, payload any) {
+				failed, ok := payload.(*sharedevents.TagAvailabilityCheckFailedPayloadV1)
+				if !ok {
+					t.Fatalf("expected failure payload type, got %T", payload)
+				}
+				if failed.Reason != "tag number is required" {
+					t.Errorf("expected reason %q, got %q", "tag number is required", failed.Reason)
+				}
+			},
+		},
+		{
+			name: "service error",
+			payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: &testTagNumber,
+			},
+			mockSetup: func(mockLeaderboardService *leaderboardmocks.MockService) {
+				mockLeaderboardService.EXPECT().CheckTagAvailability(
+					gomock.Any(),
+					testGuildID,
+					testUserID,
+					&testTagNumber,
+				).Return(
+					sharedevents.TagAvailabilityCheckResultPayloadV1{},
+					nil,
+					fmt.Errorf("db error"),
+				)
+			},
+			wantErr: true,
+		},
+		{
+			name: "tag available",
+			payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: &testTagNumber,
+			},
+			mockSetup: func(mockLeaderboardService *leaderboardmocks.MockService) {
+				mockLeaderboardService.EXPECT().CheckTagAvailability(
+					gomock.Any(),
+					testGuildID,
+					testUserID,
+					&testTagNumber,
+				).Return(
+					sharedevents.TagAvailabilityCheckResultPayloadV1{
+						GuildID:   testGuildID,
+						UserID:    testUserID,
+						TagNumber: &testTagNumber,
 						Available: true,
 					},
 					nil,
 					nil,
 				)
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 2, // TagAvailable + BatchTagAssignmentRequested
+			wantErr:   false,
+			wantTopic: sharedevents.TagAvailableV1,
+			validateFn: func(t *testing.T, payload any) {
+				available, ok := payload.(*sharedevents.TagAvailablePayloadV1)
+				if !ok {
+					t.Fatalf("expected available payload type, got %T", payload)
+				}
+				if available.TagNumber != testTagNumber {
+					t.Errorf("expected tag %d, got %d", testTagNumber, available.TagNumber)
+				}
+			},
 		},
 		{
-			name: "Tag is unavailable",
-			mockSetup: func() {
+			name: "tag unavailable",
+			payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: &testTagNumber,
+			},
+			mockSetup: func(mockLeaderboardService *leaderboardmocks.MockService) {
 				mockLeaderboardService.EXPECT().CheckTagAvailability(
 					gomock.Any(),
 					testGuildID,
-					*testPayload,
+					testUserID,
+					&testTagNumber,
 				).Return(
-					&leaderboardevents.TagAvailabilityCheckResultPayloadV1{
+					sharedevents.TagAvailabilityCheckResultPayloadV1{
 						GuildID:   testGuildID,
 						UserID:    testUserID,
-						TagNumber: testTagNumber,
+						TagNumber: &testTagNumber,
 						Available: false,
 						Reason:    "tag already taken",
 					},
@@ -83,52 +149,32 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 					nil,
 				)
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1, // TagUnavailable only
-		},
-		{
-			name: "Availability check failed",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().CheckTagAvailability(
-					gomock.Any(),
-					testGuildID,
-					*testPayload,
-				).Return(
-					nil,
-					&leaderboardevents.TagAvailabilityCheckFailedPayloadV1{
-						GuildID: testGuildID,
-						Reason:  "database error",
-					},
-					nil,
-				)
+			wantErr:   false,
+			wantTopic: sharedevents.TagUnavailableV1,
+			validateFn: func(t *testing.T, payload any) {
+				unavailable, ok := payload.(*sharedevents.TagUnavailablePayloadV1)
+				if !ok {
+					t.Fatalf("expected unavailable payload type, got %T", payload)
+				}
+				if unavailable.Reason != "tag already taken" {
+					t.Errorf("expected reason %q, got %q", "tag already taken", unavailable.Reason)
+				}
+				if unavailable.TagNumber != testTagNumber {
+					t.Errorf("expected tag %d, got %d", testTagNumber, unavailable.TagNumber)
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1, // TagAvailabilityCheckFailed only
-		},
-		{
-			name: "Service error",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().CheckTagAvailability(
-					gomock.Any(),
-					testGuildID,
-					*testPayload,
-				).Return(
-					nil,
-					nil,
-					fmt.Errorf("service error"),
-				)
-			},
-			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
+
+			if tt.mockSetup != nil {
+				tt.mockSetup(mockLeaderboardService)
+			}
 
 			h := &LeaderboardHandlers{
 				leaderboardService: mockLeaderboardService,
@@ -144,30 +190,20 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				t.Errorf("HandleTagAvailabilityCheckRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleTagAvailabilityCheckRequested() result length = %d, want %d", len(results), tt.wantResultLen)
+			if tt.wantErr {
+				return
 			}
 
-			// Verify result topics
-			if !tt.wantErr && tt.wantResultLen > 0 {
-				expectedTopics := []string{}
-				if tt.name == "Tag is available" {
-					expectedTopics = []string{userevents.TagAvailableV1, sharedevents.LeaderboardBatchTagAssignmentRequestedV1}
-				} else if tt.name == "Tag is unavailable" {
-					expectedTopics = []string{userevents.TagUnavailableV1}
-				} else if tt.name == "Availability check failed" {
-					expectedTopics = []string{leaderboardevents.TagAvailabilityCheckFailedV1}
-				}
+			if len(results) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(results))
+			}
 
-				for i, expectedTopic := range expectedTopics {
-					if i >= len(results) {
-						t.Errorf("HandleTagAvailabilityCheckRequested() missing result at index %d", i)
-						continue
-					}
-					if results[i].Topic != expectedTopic {
-						t.Errorf("HandleTagAvailabilityCheckRequested() result[%d].Topic = %s, want %s", i, results[i].Topic, expectedTopic)
-					}
-				}
+			if results[0].Topic != tt.wantTopic {
+				t.Errorf("expected topic %s, got %s", tt.wantTopic, results[0].Topic)
+			}
+
+			if tt.validateFn != nil {
+				tt.validateFn(t, results[0].Payload)
 			}
 		})
 	}

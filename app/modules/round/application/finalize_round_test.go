@@ -8,6 +8,7 @@ import (
 
 	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -215,9 +216,9 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.ProcessRoundScoresRequestPayloadV1{
+				Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 					RoundID: testRoundID,
-					Scores: []roundevents.ParticipantScoreV1{
+					Scores: []sharedtypes.ScoreInfo{
 						// ✅ Only participants with scores are included
 						{UserID: user1ID, TagNumber: &tag1, Score: score1},
 						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Zero tag becomes 0
@@ -336,10 +337,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			if tt.expectedResult.Success != nil {
 				if result.Success == nil {
 					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.ProcessRoundScoresRequestPayloadV1, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.ProcessRoundScoresRequestPayloadV1); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.ProcessRoundScoresRequestPayloadV1, got %T", tt.expectedResult.Success)
+				} else if successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1); !ok {
+					t.Errorf("expected result.Success to be of type *sharedevents.ProcessRoundScoresRequestedPayloadV1, got %T", result.Success)
+				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1); !ok {
+					t.Errorf("expected tt.expectedResult.Success to be of type *sharedevents.ProcessRoundScoresRequestedPayloadV1, got %T", tt.expectedResult.Success)
 				} else {
 					// Validate RoundID
 					if successPayload.RoundID != expectedSuccessPayload.RoundID {

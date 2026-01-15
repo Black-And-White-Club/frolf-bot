@@ -59,7 +59,7 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 	}
 	if existing != nil {
 		if guildConfigsEqual(existing, config) {
-			successPayload := &guildevents.GuildConfigCreatedPayload{
+			successPayload := &guildevents.GuildConfigCreatedPayloadV1{
 				GuildID: guildID,
 				Config:  *existing,
 			}
@@ -78,7 +78,7 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 	}
 
 	// Success payload (return the canonical config)
-	successPayload := &guildevents.GuildConfigCreatedPayload{
+	successPayload := &guildevents.GuildConfigCreatedPayloadV1{
 		GuildID: guildID,
 		Config:  *config,
 	}
@@ -91,7 +91,7 @@ func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes
 func createGuildConfigFailureResult(guildID sharedtypes.GuildID, config *guildtypes.GuildConfig, err error) GuildOperationResult {
 	return GuildOperationResult{
 		Success: nil,
-		Failure: &guildevents.GuildConfigCreationFailedPayload{
+		Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 			GuildID: guildID,
 			Reason:  err.Error(),
 		},

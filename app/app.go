@@ -120,7 +120,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: User module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing leaderboard module...")
-	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.GetDB(), app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.EventBus.GetJetStream()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize leaderboard module", attr.Error(err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}

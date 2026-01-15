@@ -8,6 +8,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -484,7 +485,7 @@ func (h *RoundTestHelper) GetRoundFinalizedMessages() []*message.Message {
 
 // GetProcessRoundScoresRequestMessages returns captured process round scores request messages
 func (h *RoundTestHelper) GetProcessRoundScoresRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.ProcessRoundScoresRequestedV1)
+	return h.capture.GetMessages(sharedevents.ProcessRoundScoresRequestedV1)
 }
 
 // GetRoundFinalizationErrorMessages returns captured round finalization error messages
@@ -499,7 +500,7 @@ func (h *RoundTestHelper) WaitForRoundFinalized(expectedCount int, timeout time.
 
 // WaitForProcessRoundScoresRequest waits for process round scores request messages
 func (h *RoundTestHelper) WaitForProcessRoundScoresRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.ProcessRoundScoresRequestedV1, expectedCount, timeout)
+	return h.capture.WaitForMessages(sharedevents.ProcessRoundScoresRequestedV1, expectedCount, timeout)
 }
 
 // WaitForRoundFinalizationError waits for round finalization error messages
@@ -524,10 +525,10 @@ func (h *RoundTestHelper) ValidateRoundFinalized(t *testing.T, msg *message.Mess
 }
 
 // ValidateProcessRoundScoresRequest parses and validates a process round scores request message
-func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *roundevents.ProcessRoundScoresRequestPayloadV1 {
+func (h *RoundTestHelper) ValidateProcessRoundScoresRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID) *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ProcessRoundScoresRequestPayloadV1](msg)
+	result, err := ParsePayload[sharedevents.ProcessRoundScoresRequestedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse process round scores request message: %v", err)
 	}

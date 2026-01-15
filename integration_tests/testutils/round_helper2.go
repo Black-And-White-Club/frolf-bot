@@ -7,6 +7,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
@@ -119,10 +120,10 @@ func (h *RoundTestHelper) GetParticipantJoinRequestMessages() []*message.Message
 }
 
 // ValidateParticipantJoinRequest parses and validates a participant join request message
-func (h *RoundTestHelper) ValidateParticipantJoinRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantJoinRequestPayload {
+func (h *RoundTestHelper) ValidateParticipantJoinRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID) *roundevents.ParticipantJoinRequestPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantJoinRequestPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantJoinRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant join request message: %v", err)
 	}
@@ -295,7 +296,7 @@ func (h *RoundTestHelper) CreateRoundInDBWithState(t *testing.T, db bun.IDB, use
 }
 
 // PublishParticipantStatusUpdateRequest publishes a ParticipantStatusUpdateRequest event and returns the message
-func (h *RoundTestHelper) PublishParticipantStatusUpdateRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantJoinRequestPayload) *message.Message {
+func (h *RoundTestHelper) PublishParticipantStatusUpdateRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -306,7 +307,7 @@ func (h *RoundTestHelper) PublishParticipantStatusUpdateRequest(t *testing.T, ct
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantStatusUpdateRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantStatusUpdateRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -314,7 +315,7 @@ func (h *RoundTestHelper) PublishParticipantStatusUpdateRequest(t *testing.T, ct
 }
 
 // PublishParticipantRemovalRequest publishes a ParticipantRemovalRequest event and returns the message
-func (h *RoundTestHelper) PublishParticipantRemovalRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantRemovalRequestPayload) *message.Message {
+func (h *RoundTestHelper) PublishParticipantRemovalRequest(t *testing.T, ctx context.Context, payload roundevents.ParticipantRemovalRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -325,7 +326,7 @@ func (h *RoundTestHelper) PublishParticipantRemovalRequest(t *testing.T, ctx con
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantRemovalRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantRemovalRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -333,7 +334,7 @@ func (h *RoundTestHelper) PublishParticipantRemovalRequest(t *testing.T, ctx con
 }
 
 // PublishTagNumberFound publishes a TagNumberFound event and returns the message
-func (h *RoundTestHelper) PublishTagNumberFound(t *testing.T, ctx context.Context, payload roundevents.RoundTagNumberFoundPayload) *message.Message {
+func (h *RoundTestHelper) PublishTagNumberFound(t *testing.T, ctx context.Context, payload sharedevents.RoundTagLookupResultPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -344,7 +345,7 @@ func (h *RoundTestHelper) PublishTagNumberFound(t *testing.T, ctx context.Contex
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundTagNumberFound, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, sharedevents.RoundTagLookupFoundV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -352,7 +353,7 @@ func (h *RoundTestHelper) PublishTagNumberFound(t *testing.T, ctx context.Contex
 }
 
 // PublishTagNumberNotFound publishes a TagNumberNotFound event and returns the message
-func (h *RoundTestHelper) PublishTagNumberNotFound(t *testing.T, ctx context.Context, payload roundevents.RoundTagNumberNotFoundPayload) *message.Message {
+func (h *RoundTestHelper) PublishTagNumberNotFound(t *testing.T, ctx context.Context, payload sharedevents.RoundTagLookupResultPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -363,7 +364,7 @@ func (h *RoundTestHelper) PublishTagNumberNotFound(t *testing.T, ctx context.Con
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundTagNumberNotFound, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, sharedevents.RoundTagLookupNotFoundV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -372,7 +373,7 @@ func (h *RoundTestHelper) PublishTagNumberNotFound(t *testing.T, ctx context.Con
 
 // WaitForParticipantJoinValidationRequest waits for participant join validation request messages
 func (h *RoundTestHelper) WaitForParticipantJoinValidationRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinValidationRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinValidationRequestedV1, expectedCount, timeout)
 }
 
 // WaitForParticipantStatusUpdateRequest waits for participant status update request messages
@@ -435,19 +436,19 @@ func (h *RoundTestHelper) ValidateParticipantJoined(t *testing.T, msg *message.M
 
 // WaitForLeaderboardTagLookup waits for leaderboard tag lookup request messages
 func (h *RoundTestHelper) WaitForLeaderboardTagLookup(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.LeaderboardGetTagNumberRequest, expectedCount, timeout)
+	return h.capture.WaitForMessages(sharedevents.RoundTagLookupRequestedV1, expectedCount, timeout)
 }
 
 // GetLeaderboardTagLookupMessages returns captured leaderboard tag lookup request messages
 func (h *RoundTestHelper) GetLeaderboardTagLookupMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.LeaderboardGetTagNumberRequest)
+	return h.capture.GetMessages(sharedevents.RoundTagLookupRequestedV1)
 }
 
 // ValidateLeaderboardTagLookup parses and validates a leaderboard tag lookup request message
-func (h *RoundTestHelper) ValidateLeaderboardTagLookup(t *testing.T, msg *message.Message) *roundevents.TagLookupRequestPayload {
+func (h *RoundTestHelper) ValidateLeaderboardTagLookup(t *testing.T, msg *message.Message) *sharedevents.RoundTagLookupRequestedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.TagLookupRequestPayload](msg)
+	result, err := ParsePayload[sharedevents.RoundTagLookupRequestedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse leaderboard tag lookup request message: %v", err)
 	}
@@ -455,8 +456,8 @@ func (h *RoundTestHelper) ValidateLeaderboardTagLookup(t *testing.T, msg *messag
 	return result
 }
 
-// PublishLeaderboardTagLookupRequest publishes a LeaderboardGetTagNumberRequest event and returns the message
-func (h *RoundTestHelper) PublishLeaderboardTagLookupRequest(t *testing.T, ctx context.Context, payload roundevents.TagLookupRequestPayload) *message.Message {
+// PublishLeaderboardTagLookupRequest publishes a RoundTagLookupRequestedV1 event and returns the message
+func (h *RoundTestHelper) PublishLeaderboardTagLookupRequest(t *testing.T, ctx context.Context, payload sharedevents.RoundTagLookupRequestedPayloadV1) *message.Message {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -467,14 +468,14 @@ func (h *RoundTestHelper) PublishLeaderboardTagLookupRequest(t *testing.T, ctx c
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.LeaderboardGetTagNumberRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, sharedevents.RoundTagLookupRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
 	return msg
 }
 
-func (h *RoundTestHelper) PublishParticipantJoinValidationRequest(t *testing.T, ctx context.Context, payload *roundevents.ParticipantJoinValidationRequestPayload) *message.Message {
+func (h *RoundTestHelper) PublishParticipantJoinValidationRequest(t *testing.T, ctx context.Context, payload *roundevents.ParticipantJoinValidationRequestPayloadV1) *message.Message {
 	t.Helper()
 
 	t.Logf("PublishParticipantJoinValidationRequest: payload=%+v", payload)
@@ -491,26 +492,26 @@ func (h *RoundTestHelper) PublishParticipantJoinValidationRequest(t *testing.T, 
 
 	t.Logf("Created message: UUID=%s, CorrelationID=%s", msg.UUID, msg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinValidationRequest, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinValidationRequestedV1, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
-	t.Logf("Successfully published to topic: %s", roundevents.RoundParticipantJoinValidationRequest)
+	t.Logf("Successfully published to topic: %s", roundevents.RoundParticipantJoinValidationRequestedV1)
 	return msg
 }
 
 func (h *RoundTestHelper) WaitForTagLookupRequest(count int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.LeaderboardGetTagNumberRequest, count, timeout)
+	return h.capture.WaitForMessages(sharedevents.RoundTagLookupRequestedV1, count, timeout)
 }
 
 func (h *RoundTestHelper) GetTagLookupRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.LeaderboardGetTagNumberRequest)
+	return h.capture.GetMessages(sharedevents.RoundTagLookupRequestedV1)
 }
 
-func (h *RoundTestHelper) ValidateTagLookupRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.TagLookupRequestPayload {
+func (h *RoundTestHelper) ValidateTagLookupRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *sharedevents.RoundTagLookupRequestedPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.TagLookupRequestPayload](msg)
+	result, err := ParsePayload[sharedevents.RoundTagLookupRequestedPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse tag lookup request message: %v", err)
 	}
@@ -530,10 +531,10 @@ func (h *RoundTestHelper) ValidateTagLookupRequest(t *testing.T, msg *message.Me
 	return result
 }
 
-func (h *RoundTestHelper) ValidateParticipantStatusUpdateRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.ParticipantJoinRequestPayload {
+func (h *RoundTestHelper) ValidateParticipantStatusUpdateRequest(t *testing.T, msg *message.Message, expectedRoundID sharedtypes.RoundID, expectedUserID sharedtypes.DiscordID, expectedResponse roundtypes.Response) *roundevents.ParticipantJoinRequestPayloadV1 {
 	t.Helper()
 
-	result, err := ParsePayload[roundevents.ParticipantJoinRequestPayload](msg)
+	result, err := ParsePayload[roundevents.ParticipantJoinRequestPayloadV1](msg)
 	if err != nil {
 		t.Fatalf("Failed to parse participant status update request message: %v", err)
 	}

@@ -45,9 +45,9 @@ func TestCreateGuildConfig(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*guildevents.GuildConfigCreatedPayload)
+				successPayload, ok := result.Success.(*guildevents.GuildConfigCreatedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigCreatedPayload")
+					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigCreatedPayloadV1")
 				}
 
 				// Verify the config was saved to the database
@@ -139,7 +139,7 @@ func TestCreateGuildConfig(t *testing.T) {
 					t.Fatalf("Expected failure payload but got nil")
 				}
 
-				failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayload)
+				failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
 				if !ok {
 					t.Fatalf("Failure payload was not of expected type")
 				}
@@ -283,7 +283,7 @@ func TestCreateGuildConfig_AlreadyExists(t *testing.T) {
 		t.Fatalf("Expected failure payload but got nil")
 	}
 
-	failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayload)
+	failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
 	if !ok {
 		t.Fatalf("Failure payload was not of expected type")
 	}

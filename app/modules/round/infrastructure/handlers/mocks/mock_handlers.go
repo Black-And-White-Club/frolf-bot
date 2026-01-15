@@ -466,7 +466,7 @@ func (mr *MockHandlersMockRecorder) HandleScorecardUploaded(ctx, payload any) *g
 }
 
 // HandleTagNumberFound mocks base method.
-func (m *MockHandlers) HandleTagNumberFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayload) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagNumberFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagNumberFound", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -481,7 +481,7 @@ func (mr *MockHandlersMockRecorder) HandleTagNumberFound(ctx, payload any) *gomo
 }
 
 // HandleTagNumberLookupFailed mocks base method.
-func (m *MockHandlers) HandleTagNumberLookupFailed(ctx context.Context, payload *sharedevents.RoundTagLookupFailedPayload) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagNumberLookupFailed(ctx context.Context, payload *sharedevents.RoundTagLookupFailedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagNumberLookupFailed", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -496,7 +496,7 @@ func (mr *MockHandlersMockRecorder) HandleTagNumberLookupFailed(ctx, payload any
 }
 
 // HandleTagNumberNotFound mocks base method.
-func (m *MockHandlers) HandleTagNumberNotFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayload) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagNumberNotFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagNumberNotFound", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
@@ -511,7 +511,7 @@ func (mr *MockHandlersMockRecorder) HandleTagNumberNotFound(ctx, payload any) *g
 }
 
 // HandleUserMatchConfirmedForIngest mocks base method.
-func (m *MockHandlers) HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayload) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleUserMatchConfirmedForIngest", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)

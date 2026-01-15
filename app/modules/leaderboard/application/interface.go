@@ -3,25 +3,56 @@ package leaderboardservice
 import (
 	"context"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/google/uuid"
 )
 
-// Service handles leaderboard logic.
+// Service defines the contract for leaderboard operations.
+// All state mutations flow through ExecuteBatchTagAssignment (The Funnel).
 type Service interface {
-	// Single unified tag assignment method
-	ProcessTagAssignments(ctx context.Context, guildID sharedtypes.GuildID, source interface{}, requests []sharedtypes.TagAssignmentRequest, requestingUserID *sharedtypes.DiscordID, operationID uuid.UUID, batchID uuid.UUID) (LeaderboardOperationResult, error)
+	// --- MUTATIONS (The Funnel) ---
 
-	// Tag Swapping
-	TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagSwapRequestedPayloadV1) (LeaderboardOperationResult, error)
+	// ExecuteBatchTagAssignment is the consolidated funnel.
+	// All other mutation methods eventually call this internally.
+	ExecuteBatchTagAssignment(
+		ctx context.Context,
+		guildID sharedtypes.GuildID,
+		requests []sharedtypes.TagAssignmentRequest,
+		updateID sharedtypes.RoundID,
+		source sharedtypes.ServiceUpdateSource,
+	) (LeaderboardOperationResult, error)
 
-	// Other Operations
+	// TagSwapRequested now uses domain types.
+	// It attempts an assignment and allows the TagSwapNeededError to bubble up.
+	TagSwapRequested(
+		ctx context.Context,
+		guildID sharedtypes.GuildID,
+		userID sharedtypes.DiscordID,
+		targetTag sharedtypes.TagNumber,
+	) (LeaderboardOperationResult, error)
+
+	// --- READS ---
+
 	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (LeaderboardOperationResult, error)
-	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (LeaderboardOperationResult, error)
-	RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (LeaderboardOperationResult, error)
-	CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, payload leaderboardevents.TagAvailabilityCheckRequestedPayloadV1) (*leaderboardevents.TagAvailabilityCheckResultPayloadV1, *leaderboardevents.TagAvailabilityCheckFailedPayloadV1, error)
-	// Ensure an active leaderboard exists for the guild
+
+	// Simplified lookup: returns the tag or an error (e.g., ErrUserTagNotFound)
+	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error)
+
+	// RoundGetTagByUserID can stay as-is if it needs to return metadata for round events
+	RoundGetTagByUserID(
+		ctx context.Context,
+		guildID sharedtypes.GuildID,
+		payload sharedevents.RoundTagLookupRequestedPayloadV1,
+	) (LeaderboardOperationResult, error)
+
+	// CheckTagAvailability validates whether a tag can be assigned to a user.
+	CheckTagAvailability(
+		ctx context.Context,
+		guildID sharedtypes.GuildID,
+		userID sharedtypes.DiscordID,
+		tagNumber *sharedtypes.TagNumber,
+	) (sharedevents.TagAvailabilityCheckResultPayloadV1, *sharedevents.TagAvailabilityCheckFailedPayloadV1, error)
+
+	// --- INFRASTRUCTURE ---
 	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error
 }

@@ -268,7 +268,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
 	}{
 		{
-			name: "Valid Accept request, round Created (not late join) - Expecting TagLookupRequestPayload",
+			name: "Valid Accept request, round Created (not late join) - Expecting RoundTagLookupRequestedPayloadV1",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -314,7 +314,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Valid Tentative request, round InProgress (late join) - Expecting TagLookupRequestPayload",
+			name: "Valid Tentative request, round InProgress (late join) - Expecting RoundTagLookupRequestedPayloadV1",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -360,7 +360,7 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Valid Decline request, round Finalized (late join) - Expecting ParticipantJoinRequestPayload",
+			name: "Valid Decline request, round Finalized (late join) - Expecting ParticipantJoinRequestPayloadV1",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1) {
 				generator := testutils.NewTestDataGenerator()
 				roundForDBInsertion := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
@@ -384,14 +384,14 @@ func TestValidateParticipantJoinRequest(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// ValidateParticipantJoinRequest returns ParticipantJoinRequestPayload for Decline
+				// ValidateParticipantJoinRequest returns ParticipantJoinRequestPayloadV1 for Decline
 				joinRequestPayloadPtr, ok := returnedResult.Success.(*roundevents.ParticipantJoinRequestPayloadV1)
 				if !ok {
 					t.Errorf("Expected *roundevents.ParticipantJoinRequestPayloadV1, got %T", returnedResult.Success)
 					return
 				}
 				if joinRequestPayloadPtr == nil {
-					t.Fatalf("Expected non-nil ParticipantJoinRequestPayload pointer")
+					t.Fatalf("Expected non-nil ParticipantJoinRequestPayloadV1 pointer")
 				}
 
 				if joinRequestPayloadPtr.UserID != sharedtypes.DiscordID("new_participant_3") {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
@@ -99,7 +99,7 @@ func TestProcessRoundScores(t *testing.T) {
 				}
 
 				// Declare and assign successPayload here, where it's used
-				successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSucceededPayloadV1)
+				successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
 				if !ok {
 					t.Fatalf("Invalid success payload type, expected *ProcessRoundScoresSuccessPayload, got %T", result.Success)
 				}
@@ -175,7 +175,7 @@ func TestProcessRoundScores(t *testing.T) {
 					t.Fatalf("Expected success payload, got nil")
 				}
 
-				successPayload, ok := result.Success.(*scoreevents.ProcessRoundScoresSucceededPayloadV1)
+				successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
 				if !ok {
 					t.Fatalf("Invalid success payload type, expected *ProcessRoundScoresSuccessPayload, got %T", result.Success)
 				}
@@ -223,7 +223,7 @@ func TestProcessRoundScores(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
 				} else {
-					failurePayload, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailedPayloadV1)
+					failurePayload, ok := result.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
 					if !ok {
 						t.Errorf("Expected *ProcessRoundScoresFailurePayload, got %T", result.Failure)
 					} else if failurePayload.Reason != "cannot process empty score list" {
@@ -384,7 +384,7 @@ func runConcurrentScoreTest(t *testing.T, deps TestDeps, generator *testutils.Te
 			}
 			if result.Failure != nil {
 				// Convert business logic failure to an error for the channel
-				if failureErr, ok := result.Failure.(*scoreevents.ProcessRoundScoresFailedPayloadV1); ok {
+				if failureErr, ok := result.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1); ok {
 					errChan <- fmt.Errorf("business failure: %s", failureErr.Reason)
 				} else {
 					errChan <- fmt.Errorf("concurrent test: unexpected failure result type: %T", result.Failure)

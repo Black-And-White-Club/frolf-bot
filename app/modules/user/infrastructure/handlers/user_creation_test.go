@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
@@ -47,7 +47,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				// No service call when tag is present
 			},
 			wantLen:   1,
-			wantTopic: leaderboardevents.TagAvailabilityCheckRequestedV1,
+			wantTopic: sharedevents.TagAvailabilityCheckRequestedV1,
 			wantErr:   false,
 		},
 		{

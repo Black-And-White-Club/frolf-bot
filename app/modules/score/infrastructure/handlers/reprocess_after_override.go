@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -26,7 +26,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(ctx context.Context, pay
 	var shouldSkip bool
 
 	// Try to unmarshal as bulk first
-	if bulk, ok := payload.(*scoreevents.ScoreBulkUpdatedPayloadV1); ok {
+	if bulk, ok := payload.(*sharedevents.ScoreBulkUpdatedPayloadV1); ok {
 		// Skip reprocess if nothing actually applied
 		if bulk.AppliedCount == 0 {
 			h.logger.InfoContext(ctx, "Skipping reprocess; bulk override applied zero updates",
@@ -35,7 +35,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(ctx context.Context, pay
 		}
 		guildID = bulk.GuildID
 		roundID = bulk.RoundID
-	} else if single, ok := payload.(*scoreevents.ScoreUpdatedPayloadV1); ok {
+	} else if single, ok := payload.(*sharedevents.ScoreUpdatedPayloadV1); ok {
 		guildID = single.GuildID
 		roundID = single.RoundID
 		// Skip if this is part of a bulk override (to prevent double-run)
@@ -64,7 +64,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(ctx context.Context, pay
 	}
 
 	// Build and return a ProcessRoundScoresRequest with existing scores
-	req := &scoreevents.ProcessRoundScoresRequestedPayloadV1{
+	req := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 		GuildID: guildID,
 		RoundID: roundID,
 		Scores:  scores,
@@ -75,7 +75,7 @@ func (h *ScoreHandlers) HandleReprocessAfterScoreUpdate(ctx context.Context, pay
 
 	return []handlerwrapper.Result{
 		{
-			Topic:   scoreevents.ProcessRoundScoresRequestedV1,
+			Topic:   sharedevents.ProcessRoundScoresRequestedV1,
 			Payload: req,
 		},
 	}, nil

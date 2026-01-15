@@ -557,6 +557,25 @@ func (db *RoundDBImpl) GetUpcomingRounds(ctx context.Context, guildID sharedtype
 	return rounds, nil
 }
 
+// GetUpcomingRoundsByParticipant retrieves upcoming rounds that contain a specific participant
+func (db *RoundDBImpl) GetUpcomingRoundsByParticipant(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) ([]*roundtypes.Round, error) {
+	var localRounds []*Round
+	err := db.DB.NewSelect().
+		Model(&localRounds).
+		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
+		Where("participants @> ?", fmt.Sprintf(`[{"user_id": "%s"}]`, userID)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get upcoming rounds by participant: %w", err)
+	}
+
+	rounds := make([]*roundtypes.Round, len(localRounds))
+	for i, r := range localRounds {
+		rounds[i] = toSharedRound(r)
+	}
+	return rounds, nil
+}
+
 // UpdateParticipantScore updates the score for a participant in a round.
 func (db *RoundDBImpl) UpdateParticipantScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, participantID sharedtypes.DiscordID, score sharedtypes.Score) error {
 	var localRound Round
@@ -631,7 +650,6 @@ func (db *RoundDBImpl) GetRoundState(ctx context.Context, guildID sharedtypes.Gu
 	}
 	return round.State, nil
 }
-
 
 // GetParticipants retrieves all participants from a round.
 func (db *RoundDBImpl) GetParticipants(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
@@ -735,4 +753,3 @@ func (db *RoundDBImpl) UpdateRoundsAndParticipants(ctx context.Context, guildID 
 		return nil
 	})
 }
-

@@ -500,9 +500,9 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		mockDB.EXPECT().UpdateImportStatus(gomock.Any(), payload.GuildID, payload.RoundID, payload.ImportID, "ingesting", "", "").Return(nil)
 		mockDB.EXPECT().GetRound(gomock.Any(), payload.GuildID, payload.RoundID).Return(&roundtypes.Round{}, nil)
 		mockDB.EXPECT().UpdateParticipant(gomock.Any(), payload.GuildID, payload.RoundID, newParticipantMatcher).Return(nil, nil)
-		mockEventBus.EXPECT().Publish(roundevents.RoundParticipantAutoAddedTopic, gomock.Any()).DoAndReturn(func(topic string, msgs ...*message.Message) error {
+		mockEventBus.EXPECT().Publish(roundevents.RoundParticipantAutoAddedV1, gomock.Any()).DoAndReturn(func(topic string, msgs ...*message.Message) error {
 			require.Len(t, msgs, 1)
-			var added roundevents.RoundParticipantAutoAddedPayload
+			var added roundevents.RoundParticipantAutoAddedPayloadV1
 			require.NoError(t, json.Unmarshal(msgs[0].Payload, &added))
 			require.Equal(t, matchedID, added.AddedUser)
 			return nil
@@ -584,7 +584,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		res, err := service.ApplyImportedScores(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, res.Failure)
-		// Expect RoundErrorPayload
+		// Expect RoundErrorPayloadV1
 		_, ok := res.Failure.(*roundevents.RoundErrorPayloadV1)
 		require.True(t, ok)
 	})

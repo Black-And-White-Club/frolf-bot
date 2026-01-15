@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
@@ -158,21 +158,21 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 	// Register ProcessRoundScoresRequest handler
 	registerHandler(
 		deps,
-		scoreevents.ProcessRoundScoresRequestedV1,
+		sharedevents.ProcessRoundScoresRequestedV1,
 		handlers.HandleProcessRoundScoresRequest,
 	)
 
 	// Register CorrectScoreRequest handler
 	registerHandler(
 		deps,
-		scoreevents.ScoreUpdateRequestedV1,
+		sharedevents.ScoreUpdateRequestedV1,
 		handlers.HandleCorrectScoreRequest,
 	)
 
 	// Register BulkCorrectScoreRequest handler
 	registerHandler(
 		deps,
-		scoreevents.ScoreBulkUpdateRequestedV1,
+		sharedevents.ScoreBulkUpdateRequestedV1,
 		handlers.HandleBulkCorrectScoreRequest,
 	)
 

@@ -139,7 +139,7 @@ type UserOperationResult struct {
 // MatchParsedScorecard performs exact matching of parsed scorecard player names to Discord users.
 // It first attempts normalized username, then normalized display name, and always returns a confirmed payload.
 // Unmatched players are skipped (no admin confirmation round-trip) and capped to a reasonable limit to guard against abuse.
-func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (UserOperationResult, error) {
+func (s *UserServiceImpl) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (UserOperationResult, error) {
 	const (
 		maxPlayers  = 512 // guardrail against oversized payloads
 		maxNameRune = 128 // avoid pathological player-name sizes

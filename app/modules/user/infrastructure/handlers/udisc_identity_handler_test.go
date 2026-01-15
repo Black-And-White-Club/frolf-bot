@@ -47,7 +47,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, &testUsername, &testName).
 					Return(userservice.UserOperationResult{
-						Success: &userevents.UDiscIdentityUpdatedPayload{
+						Success: &userevents.UDiscIdentityUpdatedPayloadV1{
 							UserID: testUserID,
 						},
 					}, nil)
@@ -67,7 +67,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, &testUsername, &testName).
 					Return(userservice.UserOperationResult{
-						Failure: &userevents.UDiscIdentityUpdateFailedPayload{
+						Failure: &userevents.UDiscIdentityUpdateFailedPayloadV1{
 							GuildID: testGuildID,
 							UserID:  testUserID,
 							Reason:  "some error",

@@ -184,7 +184,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 // HandleTagNumberFound processes a successful tag lookup and proceeds to update status.
 func (h *RoundHandlers) HandleTagNumberFound(
 	ctx context.Context,
-	payload *sharedevents.RoundTagLookupResultPayload,
+	payload *sharedevents.RoundTagLookupResultPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:    payload.RoundID,
@@ -200,7 +200,7 @@ func (h *RoundHandlers) HandleTagNumberFound(
 // HandleTagNumberNotFound processes a lookup where no tag was found and proceeds to update status.
 func (h *RoundHandlers) HandleTagNumberNotFound(
 	ctx context.Context,
-	payload *sharedevents.RoundTagLookupResultPayload,
+	payload *sharedevents.RoundTagLookupResultPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	updatePayload := &roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:    payload.RoundID,
@@ -232,7 +232,7 @@ func (h *RoundHandlers) HandleParticipantDeclined(
 // HandleTagNumberLookupFailed handles technical failures in tag lookup.
 func (h *RoundHandlers) HandleTagNumberLookupFailed(
 	ctx context.Context,
-	payload *sharedevents.RoundTagLookupFailedPayload,
+	payload *sharedevents.RoundTagLookupFailedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	if (payload.RoundID == sharedtypes.RoundID{}) || payload.UserID == "" {
 		return []handlerwrapper.Result{}, nil

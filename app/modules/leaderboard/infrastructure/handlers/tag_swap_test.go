@@ -8,6 +8,7 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
@@ -48,37 +49,42 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 		{
 			name: "Successfully handle TagSwapRequested",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().TagSwapRequested(
+				// Target currently holds a tag 2
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
+				// Requestor currently holds tag 1
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(1), nil)
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					testGuildID,
-					*testPayload,
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.TagSwapProcessedPayloadV1{
-							GuildID:     testGuildID,
-							RequestorID: testRequestorID,
-							TargetID:    testTargetID,
-						},
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{{UserID: testRequestorID, TagNumber: 2}, {UserID: testTargetID, TagNumber: 1}},
+						TagChanges: []leaderboardservice.TagChange{{GuildID: testGuildID, UserID: testRequestorID, OldTag: &[]sharedtypes.TagNumber{1}[0], NewTag: &[]sharedtypes.TagNumber{2}[0], Reason: sharedtypes.ServiceUpdateSourceTagSwap}},
 					},
 					nil,
 				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     leaderboardevents.TagSwapProcessedV1,
+			wantResultLen: 2,
+			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
 		},
 		{
 			name: "Service error in TagSwapRequested",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().TagSwapRequested(
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
+				// Requestor tag lookup (handler collects but ignores error) - provide a value
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(1), nil)
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					testGuildID,
-					*testPayload,
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{},
-					fmt.Errorf("internal service error"),
-				)
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
+				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("internal service error"))
 			},
 			payload:       testPayload,
 			wantErr:       true,
@@ -87,21 +93,8 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 		{
 			name: "Service failure with non-error result",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().TagSwapRequested(
-					gomock.Any(),
-					testGuildID,
-					*testPayload,
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Failure: &leaderboardevents.TagSwapFailedPayloadV1{
-							GuildID:     testGuildID,
-							RequestorID: testRequestorID,
-							TargetID:    testTargetID,
-							Reason:      "cannot swap tag with self",
-						},
-					},
-					nil,
-				)
+				// Target has no tag
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(0), fmt.Errorf("not found"))
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -111,18 +104,20 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 		{
 			name: "Unknown result from TagSwapRequested",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().TagSwapRequested(
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
+				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(0), fmt.Errorf("not found"))
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					testGuildID,
-					*testPayload,
-				).Return(
-					leaderboardservice.LeaderboardOperationResult{},
-					nil,
-				)
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
+				).Return(leaderboardservice.LeaderboardOperationResult{}, nil)
 			},
 			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
+			wantErr:       false,
+			wantResultLen: 2,
+			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
 		},
 	}
 

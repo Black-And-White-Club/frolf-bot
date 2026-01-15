@@ -7,6 +7,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -347,9 +348,9 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ProcessRoundScoresRequestPayloadV1{
+						Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 							RoundID: testRoundID,
-							Scores: []roundevents.ParticipantScoreV1{
+							Scores: []sharedtypes.ScoreInfo{
 								{UserID: sharedtypes.DiscordID("user1"), Score: sharedtypes.Score(60)},
 								{UserID: sharedtypes.DiscordID("user2"), Score: sharedtypes.Score(65)},
 							},
@@ -361,7 +362,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.ProcessRoundScoresRequestedV1,
+			wantResultTopic: sharedevents.ProcessRoundScoresRequestedV1,
 		},
 		{
 			name: "Service returns finalization error",
@@ -490,9 +491,9 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					*payloadMany,
 				).Return(
 					roundservice.RoundOperationResult{
-						Success: &roundevents.ProcessRoundScoresRequestPayloadV1{
+						Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 							RoundID: testRoundID,
-							Scores: []roundevents.ParticipantScoreV1{
+							Scores: []sharedtypes.ScoreInfo{
 								{UserID: sharedtypes.DiscordID("user1"), Score: sharedtypes.Score(60)},
 								{UserID: sharedtypes.DiscordID("user2"), Score: sharedtypes.Score(65)},
 								{UserID: sharedtypes.DiscordID("user3"), Score: sharedtypes.Score(55)},
@@ -516,7 +517,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			},
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.ProcessRoundScoresRequestedV1,
+			wantResultTopic: sharedevents.ProcessRoundScoresRequestedV1,
 		},
 	}
 

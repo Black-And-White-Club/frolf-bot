@@ -27,7 +27,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 		existing, err := s.GuildDB.GetConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  err.Error(),
 				},
@@ -36,7 +36,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 		}
 		if existing == nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  "guild config not found",
 				},
@@ -60,7 +60,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 		err = s.GuildDB.DeleteConfig(ctx, guildID)
 		if err != nil {
 			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayload{
+				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
 					GuildID: guildID,
 					Reason:  err.Error(),
 				},
@@ -70,7 +70,7 @@ func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtype
 
 		// Success payload includes the resource snapshot so consumers can act.
 		return GuildOperationResult{
-			Success: &guildevents.GuildConfigDeletedPayload{
+			Success: &guildevents.GuildConfigDeletedPayloadV1{
 				GuildID:       guildID,
 				ResourceState: rs,
 			},

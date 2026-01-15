@@ -51,9 +51,9 @@ func TestDeleteGuildConfig(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*guildevents.GuildConfigDeletedPayload)
+				successPayload, ok := result.Success.(*guildevents.GuildConfigDeletedPayloadV1)
 				if !ok {
-					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigDeletedPayload")
+					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigDeletedPayloadV1")
 				}
 
 				if successPayload.GuildID != guildID {

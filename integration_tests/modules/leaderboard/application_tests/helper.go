@@ -1,13 +1,13 @@
 package leaderboardintegrationtests
 
 import (
-	"time"
 	"context"
 	"io"
 	"log"
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -81,9 +81,10 @@ func SetupTestLeaderboardService(t *testing.T) TestDeps {
 	noOpTracer := noop.NewTracerProvider().Tracer("test_leaderboard_service")
 
 	// Create the LeaderboardService with no-op dependencies
+	// NewLeaderboardService signature: NewLeaderboardService(db *bun.DB, repo leaderboarddb.LeaderboardDB, logger *slog.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer trace.Tracer)
 	service := leaderboardservice.NewLeaderboardService(
+		env.DB,
 		realDB,
-		nil, // No EventBus needed for leaderboard service
 		testLogger,
 		noOpMetrics,
 		noOpTracer,
