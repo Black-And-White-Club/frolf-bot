@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -27,7 +27,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	testScore := sharedtypes.Score(10)
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testPayload := &scoreevents.ScoreUpdateRequestedPayloadV1{
+	testPayload := &sharedevents.ScoreUpdateRequestedPayloadV1{
 		GuildID:   testGuildID,
 		RoundID:   testRoundID,
 		UserID:    testUserID,
@@ -45,7 +45,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockSetup      func()
-		payload        *scoreevents.ScoreUpdateRequestedPayloadV1
+		payload        *sharedevents.ScoreUpdateRequestedPayloadV1
 		wantErr        bool
 		expectedErrMsg string
 		checkResults   func(t *testing.T, results []handlerwrapper.Result)
@@ -53,7 +53,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		{
 			name: "Successfully handle CorrectScoreRequest",
 			mockSetup: func() {
-				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
+				successPayload := &sharedevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -92,10 +92,10 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					t.Fatalf("expected 2 results, got %d", len(results))
 				}
 				// First result: ScoreUpdated
-				if results[0].Topic != scoreevents.ScoreUpdatedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdatedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
 				}
-				successPayload, ok := results[0].Payload.(*scoreevents.ScoreUpdatedPayloadV1)
+				successPayload, ok := results[0].Payload.(*sharedevents.ScoreUpdatedPayloadV1)
 				if !ok {
 					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
 				}
@@ -103,8 +103,8 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 					t.Errorf("expected UserID %s, got %s", testUserID, successPayload.UserID)
 				}
 				// Second result: Reprocess request
-				if results[1].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[1].Topic)
+				if results[1].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[1].Topic)
 				}
 			},
 		},
@@ -120,7 +120,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		{
 			name: "Service failure in CorrectScore",
 			mockSetup: func() {
-				failurePayload := &scoreevents.ScoreUpdateFailedPayloadV1{
+				failurePayload := &sharedevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -149,10 +149,10 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				if len(results) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(results))
 				}
-				if results[0].Topic != scoreevents.ScoreUpdateFailedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdateFailedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ScoreUpdateFailedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdateFailedV1, results[0].Topic)
 				}
-				failurePayload, ok := results[0].Payload.(*scoreevents.ScoreUpdateFailedPayloadV1)
+				failurePayload, ok := results[0].Payload.(*sharedevents.ScoreUpdateFailedPayloadV1)
 				if !ok {
 					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
 				}
@@ -183,7 +183,7 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		{
 			name: "GetScoresForRound fails - returns only success result",
 			mockSetup: func() {
-				successPayload := &scoreevents.ScoreUpdatedPayloadV1{
+				successPayload := &sharedevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -218,8 +218,8 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				if len(results) != 1 {
 					t.Fatalf("expected 1 result (no reprocess due to error), got %d", len(results))
 				}
-				if results[0].Topic != scoreevents.ScoreUpdatedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ScoreUpdatedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
 				}
 			},
 		},

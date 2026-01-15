@@ -135,7 +135,7 @@ func (mr *MockHandlersMockRecorder) HandleRoundGetTagRequest(ctx, payload any) *
 }
 
 // HandleTagAvailabilityCheckRequested mocks base method.
-func (m *MockHandlers) HandleTagAvailabilityCheckRequested(ctx context.Context, payload *leaderboardevents.TagAvailabilityCheckRequestedPayloadV1) ([]handlerwrapper.Result, error) {
+func (m *MockHandlers) HandleTagAvailabilityCheckRequested(ctx context.Context, payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleTagAvailabilityCheckRequested", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)

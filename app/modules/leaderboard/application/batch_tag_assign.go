@@ -4,553 +4,205 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"slices"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
-// ProcessTagAssignments handles tag assignments from different sources with optimized validation
-// utilizing utils methods for consistent validation and error handling
-// Accepts both string, enum, and payload types for source determination
-func (s *LeaderboardService) ProcessTagAssignments(
+// ExecuteBatchTagAssignment is the public entry point for batch changes.
+// It opens its own transaction.
+func (s *LeaderboardService) ExecuteBatchTagAssignment(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
-	source interface{}, // Accept string, enum, or payload for source determination
 	requests []sharedtypes.TagAssignmentRequest,
-	requestingUserID *sharedtypes.DiscordID,
-	operationID uuid.UUID,
-	batchID uuid.UUID,
+	updateID sharedtypes.RoundID,
+	source sharedtypes.ServiceUpdateSource,
 ) (LeaderboardOperationResult, error) {
-	// Map source to enum type with intelligent determination
-	var sourceType sharedtypes.ServiceUpdateSource
-	switch src := source.(type) {
-	case string:
-		switch src {
-		case "user_creation":
-			sourceType = sharedtypes.ServiceUpdateSourceCreateUser
-		default:
-			sourceType = sharedtypes.ServiceUpdateSourceManual
-		}
-	case sharedtypes.ServiceUpdateSource:
-		sourceType = src
-	case *sharedevents.BatchTagAssignmentRequestedPayloadV1:
-		// Intelligent source determination based on payload context
-		if len(src.Assignments) == 1 && src.RequestingUserID == "system" {
-			// Single assignment from system is likely user creation
-			sourceType = sharedtypes.ServiceUpdateSourceCreateUser
-		} else {
-			// Multiple assignments or non-system requests are admin batch operations
-			sourceType = sharedtypes.ServiceUpdateSourceAdminBatch
-		}
-	case *leaderboardevents.LeaderboardBatchTagAssignmentRequestedPayloadV1:
-		// Intelligent source determination based on payload context
-		if len(src.Assignments) == 1 && src.RequestingUserID == "system" {
-			// Single assignment from system is likely user creation
-			sourceType = sharedtypes.ServiceUpdateSourceCreateUser
-		} else {
-			// Multiple assignments or non-system requests are admin batch operations
-			sourceType = sharedtypes.ServiceUpdateSourceAdminBatch
-		}
-	default:
-		return LeaderboardOperationResult{}, fmt.Errorf("invalid source type: %T", source)
-	}
 
-	s.logger.InfoContext(ctx, "Processing tag assignments",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("source", string(sourceType)),
-		attr.UUIDValue("batch_id", batchID),
-		attr.UUIDValue("operation_id", operationID),
-		attr.String("requesting_user", getRequestingUserDisplayName(requestingUserID)),
-		attr.Int("request_count", len(requests)),
-	)
-
-	return s.serviceWrapper(ctx, "ProcessTagAssignments", func(ctx context.Context) (LeaderboardOperationResult, error) {
-		// Get current leaderboard for validation
-		currentLeaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
-		if err != nil {
-			// If no active leaderboard exists and this is for user creation, create an empty one
-			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) && sourceType == sharedtypes.ServiceUpdateSourceCreateUser {
-				s.logger.InfoContext(ctx, "No active leaderboard found for user creation, creating empty leaderboard",
-					attr.String("guild_id", string(guildID)),
-				)
-
-				// Create an empty leaderboard
-				emptyLeaderboard := &leaderboarddb.Leaderboard{
-					LeaderboardData: leaderboardtypes.LeaderboardData{},
-					IsActive:        true,
-					UpdateSource:    sharedtypes.ServiceUpdateSourceCreateUser,
-					UpdateID:        sharedtypes.RoundID(operationID),
-					GuildID:         guildID,
-				}
-
-				_, createErr := s.LeaderboardDB.CreateLeaderboard(ctx, guildID, emptyLeaderboard)
-				if createErr != nil {
-					s.logger.ErrorContext(ctx, "Failed to create initial leaderboard",
-						attr.String("guild_id", string(guildID)),
-						attr.Error(createErr),
-					)
-					return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to create initial leaderboard"), nil
-				}
-
-				// Use the newly created empty leaderboard
-				currentLeaderboard = emptyLeaderboard
-			} else {
-				return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, "failed to get leaderboard"), nil
-			}
-		}
-
-		// Early return for empty requests - return current leaderboard state
-		if len(requests) == 0 {
-			s.logger.InfoContext(ctx, "No requests to process, completing successfully")
-
-			// Get current complete leaderboard for empty requests case
-			allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
-			for i, entry := range currentLeaderboard.LeaderboardData {
-				allRequests[i] = sharedtypes.TagAssignmentRequest{
-					UserID:    entry.UserID,
-					TagNumber: entry.TagNumber,
-				}
-			}
-
-			return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
-		}
-
-		// For single assignments, use utils methods for proper validation and swap detection
-		if len(requests) == 1 {
-			return s.processSingleAssignment(ctx, guildID, currentLeaderboard, requests[0], sourceType, requestingUserID, operationID, batchID)
-		}
-
-		// Handle score processing differently - it's a complete leaderboard replacement
-		if sourceType == sharedtypes.ServiceUpdateSourceProcessScores {
-			return s.processScoreUpdate(ctx, guildID, currentLeaderboard, requests, sourceType, requestingUserID, operationID, batchID)
-		}
-
-		// For other batch operations, validate each request using utils methods
-		validRequests, swapNeeded := s.validateBatchRequests(ctx, guildID, currentLeaderboard, requests)
-		if swapNeeded != nil {
-			return *swapNeeded, nil
-		}
-
-		if len(validRequests) == 0 {
-			s.logger.InfoContext(ctx, "No valid requests after validation, completing successfully")
-
-			// Get current complete leaderboard for no valid requests case
-			allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
-			for i, entry := range currentLeaderboard.LeaderboardData {
-				allRequests[i] = sharedtypes.TagAssignmentRequest{
-					UserID:    entry.UserID,
-					TagNumber: entry.TagNumber,
-				}
-			}
-
-			return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
-		}
-
-		// Convert to tag:user format and use GenerateUpdatedLeaderboard
-		tagUserPairs := make([]string, len(validRequests))
-		for i, request := range validRequests {
-			tagUserPairs[i] = fmt.Sprintf("%d:%s", request.TagNumber, request.UserID)
-		}
-
-		newLeaderboardData, err := s.GenerateUpdatedLeaderboard(currentLeaderboard.LeaderboardData, tagUserPairs)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to generate updated leaderboard", attr.Any("error", err))
-			// Business logic error - return failure response with nil error
-			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), nil
-		}
-
-		// Atomic leaderboard update
-		startTime := time.Now()
-		updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
-		s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
-
-		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to update leaderboard",
-				attr.Any("error", err),
-				attr.String("source", string(sourceType)),
-			)
-			// Infrastructure error - return failure response with nil error
-			return s.buildFailureResponse(guildID, sourceType, requestingUserID, operationID, batchID, err.Error()), nil
-		}
-
-		// Convert complete leaderboard to requests format for Discord client
-		allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
-		for i, entry := range updatedLeaderboard.LeaderboardData {
-			allRequests[i] = sharedtypes.TagAssignmentRequest{
-				UserID:    entry.UserID,
-				TagNumber: entry.TagNumber,
-			}
-		}
-
-		s.logger.InfoContext(ctx, "Tag assignments completed successfully",
-			attr.Int("assignment_count", len(validRequests)),
-			attr.Int("total_leaderboard_entries", len(allRequests)),
-			attr.String("source", string(sourceType)),
-		)
-
-		return s.buildSuccessResponse(guildID, sourceType, requestingUserID, operationID, batchID, allRequests), nil
+	return s.serviceWrapper(ctx, "ExecuteBatchTagAssignment", func(ctx context.Context) (LeaderboardOperationResult, error) {
+		// 1. Transactional Execution
+		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (LeaderboardOperationResult, error) {
+			// 2. Call the internal logic helper
+			return s.executeBatchLogic(ctx, db, guildID, requests, updateID, source)
+		})
 	})
 }
 
-// processScoreUpdate handles score processing updates which are complete leaderboard replacements
-// and don't need individual validation since they represent the authoritative final state
-func (s *LeaderboardService) processScoreUpdate(
+// executeBatchLogic contains the core "Funnel" logic.
+// It takes a bun.IDB so it can run inside or outside an existing transaction.
+func (s *LeaderboardService) executeBatchLogic(
 	ctx context.Context,
+	db bun.IDB,
 	guildID sharedtypes.GuildID,
-	currentLeaderboard *leaderboarddb.Leaderboard,
 	requests []sharedtypes.TagAssignmentRequest,
+	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-	requestingUserID *sharedtypes.DiscordID,
-	operationID uuid.UUID,
-	batchID uuid.UUID,
 ) (LeaderboardOperationResult, error) {
-	s.logger.InfoContext(ctx, "Processing score update - complete leaderboard replacement",
+
+	s.logInfoContext(ctx, "Executing funnel logic",
+		attr.String("source", string(source)),
+		attr.String("update_id", updateID.String()),
 		attr.Int("request_count", len(requests)),
 	)
 
-	// Convert to tag:user format and use GenerateUpdatedLeaderboard
-	// Score processing is authoritative - no individual validation needed
-	tagUserPairs := make([]string, len(requests))
-	for i, request := range requests {
-		tagUserPairs[i] = fmt.Sprintf("%d:%s", request.TagNumber, request.UserID)
-	}
-
-	newLeaderboardData, err := s.GenerateUpdatedLeaderboard(currentLeaderboard.LeaderboardData, tagUserPairs)
+	// 1. Get current state (IDB aware)
+	current, err := s.LeaderboardDB.GetActiveLeaderboardIDB(ctx, db, guildID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to generate updated leaderboard for score processing", attr.Any("error", err))
-		// Business logic error - return failure response with nil error
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
-	}
-
-	// Atomic leaderboard update
-	startTime := time.Now()
-	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
-	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessScoreUpdate", time.Since(startTime))
-
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to update leaderboard for score processing",
-			attr.Any("error", err),
-		)
-		// Infrastructure error - return failure response with nil error
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
-	}
-
-	// Convert complete leaderboard to requests format
-	allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
-	for i, entry := range updatedLeaderboard.LeaderboardData {
-		allRequests[i] = sharedtypes.TagAssignmentRequest{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
+		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+			current = &leaderboarddb.Leaderboard{
+				LeaderboardData: leaderboardtypes.LeaderboardData{},
+			}
+		} else {
+			return LeaderboardOperationResult{}, fmt.Errorf("failed to fetch current leaderboard: %w", err)
 		}
 	}
+	beforeData := current.LeaderboardData
 
-	s.logger.InfoContext(ctx, "Score processing leaderboard update completed successfully",
-		attr.Int("updated_users", len(requests)),
-		attr.Int("total_leaderboard_entries", len(allRequests)),
-	)
+	// --- 2. CONFLICT DETECTION ---
+	// Map existing tags to users for ownership lookup
+	tagToUserMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
+	// Map users to their current tags for error metadata
+	userToTagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 
-	return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
-}
-
-// processSingleAssignment uses utils methods for proper validation and error handling
-func (s *LeaderboardService) processSingleAssignment(
-	ctx context.Context,
-	guildID sharedtypes.GuildID,
-	currentLeaderboard *leaderboarddb.Leaderboard,
-	request sharedtypes.TagAssignmentRequest,
-	source sharedtypes.ServiceUpdateSource,
-	requestingUserID *sharedtypes.DiscordID,
-	operationID uuid.UUID,
-	batchID uuid.UUID,
-) (LeaderboardOperationResult, error) {
-	// Early validation for invalid tag numbers
-	if request.TagNumber <= 0 {
-		s.logger.ErrorContext(ctx, "Invalid tag number",
-			attr.String("user_id", string(request.UserID)),
-			attr.Int("tag_number", int(request.TagNumber)),
-		)
-		// Return failure response for invalid tag numbers
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, fmt.Sprintf("invalid tag number: %d", request.TagNumber)), nil
+	for _, entry := range beforeData {
+		tagToUserMap[entry.TagNumber] = entry.UserID
+		userToTagMap[entry.UserID] = entry.TagNumber
 	}
 
-	// Check if user exists in leaderboard
-	userExists := s.userExistsInLeaderboard(currentLeaderboard, request.UserID)
-
-	// Prevent duplicate signups: if this is user creation and user already has a tag, fail
-	if source == sharedtypes.ServiceUpdateSourceCreateUser && userExists {
-		s.logger.WarnContext(ctx, "User signup blocked - user already has a tag",
-			attr.String("user_id", string(request.UserID)),
-			attr.String("source", string(source)),
-		)
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, "user already has a tag, cannot sign up again"), nil
+	// Identify who is in the current batch to allow internal swaps
+	requestingUsers := make(map[sharedtypes.DiscordID]bool)
+	for _, req := range requests {
+		requestingUsers[req.UserID] = true
 	}
 
-	var newLeaderboardData leaderboardtypes.LeaderboardData
-	var err error
+	for _, req := range requests {
+		// Does someone currently hold the tag we want?
+		if holderID, occupied := tagToUserMap[req.TagNumber]; occupied {
+			// CONFLICT: Tag held by someone NOT in this update batch
+			if !requestingUsers[holderID] {
+				s.logInfoContext(ctx, "Tag conflict detected, redirection to Saga required",
+					attr.Int("tag", int(req.TagNumber)),
+					attr.String("requestor", string(req.UserID)),
+					attr.String("current_holder", string(holderID)),
+				)
 
-	// Use appropriate utils method based on user existence
-	if userExists {
-		newLeaderboardData, err = s.PrepareTagUpdateForExistingUser(guildID, currentLeaderboard, request.UserID, request.TagNumber)
-	} else {
-		newLeaderboardData, err = s.PrepareTagAssignment(guildID, currentLeaderboard, request.UserID, request.TagNumber)
-	}
+				// Find the requestor's current tag to help the Saga map the chain
+				currentTag := userToTagMap[req.UserID]
 
-	// Handle specific error types
-	if err != nil {
-		if swapErr, ok := err.(*TagSwapNeededError); ok {
-			s.logger.InfoContext(ctx, "Tag assignment requires swap",
-				attr.String("requesting_user", string(swapErr.RequestorID)),
-				attr.String("current_holder", string(swapErr.TargetID)),
-				attr.Int("tag_number", int(swapErr.TagNumber)),
-			)
-			return LeaderboardOperationResult{
-				Success: &leaderboardevents.TagSwapRequestedPayload{
-					RequestorID: swapErr.RequestorID,
-					TargetID:    swapErr.TargetID,
-				},
-			}, nil
-		}
-
-		s.logger.ErrorContext(ctx, "Failed to prepare tag assignment",
-			attr.Any("error", err),
-			attr.String("user_id", string(request.UserID)),
-			attr.Int("tag_number", int(request.TagNumber)),
-		)
-		// Return failure response for other validation errors
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
-	}
-
-	// No-op case (user already has the tag)
-	if newLeaderboardData == nil {
-		s.logger.InfoContext(ctx, "User already has requested tag, no update needed",
-			attr.String("user_id", string(request.UserID)),
-			attr.Int("tag_number", int(request.TagNumber)),
-		)
-
-		// Get current complete leaderboard for no-op case
-		allRequests := make([]sharedtypes.TagAssignmentRequest, len(currentLeaderboard.LeaderboardData))
-		for i, entry := range currentLeaderboard.LeaderboardData {
-			allRequests[i] = sharedtypes.TagAssignmentRequest{
-				UserID:    entry.UserID,
-				TagNumber: entry.TagNumber,
+				return LeaderboardOperationResult{}, &TagSwapNeededError{
+					RequestorID:  req.UserID,
+					TargetUserID: holderID,
+					TargetTag:    req.TagNumber,
+					CurrentTag:   currentTag,
+				}
 			}
 		}
-
-		return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
 	}
 
-	// Update leaderboard with the new data
-	startTime := time.Now()
-	updatedLeaderboard, err := s.LeaderboardDB.UpdateLeaderboard(ctx, guildID, newLeaderboardData, sharedtypes.RoundID(operationID))
-	s.metrics.RecordOperationDuration(ctx, "UpdateCompleteLeaderboard", "ProcessTagAssignments", time.Since(startTime))
+	// --- 3. EXECUTION ---
+	// Generate updated snapshot (pure logic)
+	newData := s.GenerateUpdatedSnapshot(beforeData, requests)
 
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to update leaderboard for single assignment",
-			attr.Any("error", err),
-			attr.String("user_id", string(request.UserID)),
-		)
-		// Infrastructure error - return failure response with nil error
-		return s.buildFailureResponse(guildID, source, requestingUserID, operationID, batchID, err.Error()), nil
-	}
-
-	// Convert complete leaderboard to requests format
-	allRequests := make([]sharedtypes.TagAssignmentRequest, len(updatedLeaderboard.LeaderboardData))
-	for i, entry := range updatedLeaderboard.LeaderboardData {
-		allRequests[i] = sharedtypes.TagAssignmentRequest{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
-		}
-	}
-
-	s.logger.InfoContext(ctx, "Single tag assignment completed successfully",
-		attr.String("user_id", string(request.UserID)),
-		attr.Int("tag_number", int(request.TagNumber)),
-		attr.Int("total_leaderboard_entries", len(allRequests)),
+	// Atomic DB Write
+	updatedLB, err := s.LeaderboardDB.UpdateLeaderboard(
+		ctx,
+		db,
+		guildID,
+		newData,
+		updateID,
+		source,
 	)
+	if err != nil {
+		return LeaderboardOperationResult{}, fmt.Errorf("failed to commit update: %w", err)
+	}
 
-	return s.buildSuccessResponse(guildID, source, requestingUserID, operationID, batchID, allRequests), nil
+	// 4. Compute Diffs for events
+	changes := computeTagChanges(beforeData, updatedLB.LeaderboardData, guildID, source)
+
+	return LeaderboardOperationResult{
+		Leaderboard: updatedLB.LeaderboardData,
+		TagChanges:  changes,
+	}, nil
 }
 
-// validateBatchRequests validates all requests using utils methods and skips any that would require swaps
-func (s *LeaderboardService) validateBatchRequests(
-	ctx context.Context,
-	guildID sharedtypes.GuildID,
-	currentLeaderboard *leaderboarddb.Leaderboard,
+// GenerateUpdatedSnapshot remains public as it's a useful pure function for testing.
+func (s *LeaderboardService) GenerateUpdatedSnapshot(
+	currentData leaderboardtypes.LeaderboardData,
 	requests []sharedtypes.TagAssignmentRequest,
-) ([]sharedtypes.TagAssignmentRequest, *LeaderboardOperationResult) {
-	validRequests := make([]sharedtypes.TagAssignmentRequest, 0, len(requests))
+) leaderboardtypes.LeaderboardData {
+	tagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+	for _, entry := range currentData {
+		tagMap[entry.UserID] = entry.TagNumber
+	}
 
-	for i, request := range requests {
-		// Use utils methods for validation
-		userExists := s.userExistsInLeaderboard(currentLeaderboard, request.UserID)
+	for _, req := range requests {
+		tagMap[req.UserID] = req.TagNumber
+	}
 
-		var err error
-		if userExists {
-			_, err = s.PrepareTagUpdateForExistingUser(guildID, currentLeaderboard, request.UserID, request.TagNumber)
-		} else {
-			_, err = s.PrepareTagAssignment(guildID, currentLeaderboard, request.UserID, request.TagNumber)
+	newData := make(leaderboardtypes.LeaderboardData, 0, len(tagMap))
+	for uid, tag := range tagMap {
+		if tag == 0 {
+			continue
 		}
+		newData = append(newData, leaderboardtypes.LeaderboardEntry{
+			UserID:    uid,
+			TagNumber: tag,
+		})
+	}
 
-		if err != nil {
-			// For batch operations, skip ALL errors (including swaps)
-			// Batch operations don't trigger swaps - they just skip problematic assignments
-			s.logger.WarnContext(ctx, "Skipping invalid request in batch",
-				attr.String("user_id", string(request.UserID)),
-				attr.Int("tag_number", int(request.TagNumber)),
-				attr.String("error", err.Error()),
-				attr.Int("request_index", i),
-			)
+	slices.SortFunc(newData, func(a, b leaderboardtypes.LeaderboardEntry) int {
+		return int(a.TagNumber - b.TagNumber)
+	})
+
+	return newData
+}
+
+// computeTagChanges determines granular moves.
+func computeTagChanges(
+	before, after leaderboardtypes.LeaderboardData,
+	guildID sharedtypes.GuildID,
+	reason sharedtypes.ServiceUpdateSource,
+) []TagChange {
+	beforeMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+	for _, e := range before {
+		beforeMap[e.UserID] = e.TagNumber
+	}
+
+	var changes []TagChange
+	for _, entry := range after {
+		oldTag, exists := beforeMap[entry.UserID]
+		if exists && oldTag == entry.TagNumber {
 			continue
 		}
 
-		validRequests = append(validRequests, request)
-	}
+		var oldTagPtr *sharedtypes.TagNumber
+		if exists {
+			oldVal := oldTag
+			oldTagPtr = &oldVal
+		}
 
-	return validRequests, nil
+		newVal := entry.TagNumber
+		changes = append(changes, TagChange{
+			GuildID: guildID,
+			UserID:  entry.UserID,
+			OldTag:  oldTagPtr,
+			NewTag:  &newVal,
+			Reason:  reason,
+		})
+	}
+	return changes
 }
 
-// userExistsInLeaderboard checks if a user exists in the current leaderboard
-func (s *LeaderboardService) userExistsInLeaderboard(leaderboard *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID) bool {
-	for _, entry := range leaderboard.LeaderboardData {
+// FindTagByUserID helper.
+func (s *LeaderboardService) FindTagByUserID(leaderboardData leaderboardtypes.LeaderboardData, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, bool) {
+	for _, entry := range leaderboardData {
 		if entry.UserID == userID {
-			return true
+			return entry.TagNumber, true
 		}
 	}
-	return false
-}
-
-// resolveRequestingUser returns the requesting user or system default
-func resolveRequestingUser(userID *sharedtypes.DiscordID) sharedtypes.DiscordID {
-	if userID == nil {
-		return sharedtypes.DiscordID("system")
-	}
-	return *userID
-}
-
-// getRequestingUserDisplayName returns the requesting user as a string for logging
-func getRequestingUserDisplayName(userID *sharedtypes.DiscordID) string {
-	if userID == nil {
-		return "system"
-	}
-	return string(*userID)
-}
-
-// buildSuccessResponse creates the appropriate success response based on the source
-func (s *LeaderboardService) buildSuccessResponse(
-	guildID sharedtypes.GuildID,
-	source sharedtypes.ServiceUpdateSource,
-	requestingUserID *sharedtypes.DiscordID,
-	operationID uuid.UUID,
-	batchID uuid.UUID,
-	completedRequests []sharedtypes.TagAssignmentRequest,
-) LeaderboardOperationResult {
-	switch source {
-	case sharedtypes.ServiceUpdateSourceProcessScores:
-		// Score processing updates return leaderboard updated event (V1)
-		return LeaderboardOperationResult{
-			Success: &leaderboardevents.LeaderboardUpdatedPayloadV1{
-				GuildID: guildID,
-				RoundID: sharedtypes.RoundID(operationID),
-				// LeaderboardID and LeaderboardData will be populated by DB consumers; include empty defaults
-				LeaderboardID:   0,
-				LeaderboardData: map[sharedtypes.TagNumber]sharedtypes.DiscordID{},
-			},
-		}
-
-	case sharedtypes.ServiceUpdateSourceCreateUser:
-		// Emit batch response (even for single assignment) so downstream
-		// Discord handler receives a consistent payload with assignments.
-		return LeaderboardOperationResult{Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID)}
-
-	case sharedtypes.ServiceUpdateSourceAdminBatch, sharedtypes.ServiceUpdateSourceManual:
-		// Admin operations return batch assigned event
-		return LeaderboardOperationResult{
-			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
-		}
-
-	default:
-		// Fallback to batch response for unknown sources
-		return LeaderboardOperationResult{
-			Success: s.createBatchAssignedPayload(completedRequests, resolveRequestingUser(requestingUserID), batchID, guildID),
-		}
-	}
-}
-
-// buildFailureResponse creates the appropriate failure response based on the source
-func (s *LeaderboardService) buildFailureResponse(
-	guildID sharedtypes.GuildID,
-	source sharedtypes.ServiceUpdateSource,
-	requestingUserID *sharedtypes.DiscordID,
-	operationID uuid.UUID,
-	batchID uuid.UUID,
-	errorReason string,
-) LeaderboardOperationResult {
-	switch source {
-	case sharedtypes.ServiceUpdateSourceProcessScores:
-		// Score processing failures return leaderboard update failed event (V1)
-		return LeaderboardOperationResult{
-			Failure: &leaderboardevents.LeaderboardUpdateFailedPayloadV1{
-				RoundID: sharedtypes.RoundID(operationID),
-				Reason:  errorReason,
-			},
-		}
-
-	default:
-		// All other failures return batch assignment failed event
-		return LeaderboardOperationResult{
-			Failure: &leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
-				RequestingUserID: resolveRequestingUser(requestingUserID),
-				BatchID:          batchID.String(),
-				Reason:           errorReason,
-			},
-		}
-	}
-}
-
-// createBatchAssignedPayload creates a batch assigned payload from requests
-func (s *LeaderboardService) createBatchAssignedPayload(
-	requests []sharedtypes.TagAssignmentRequest,
-	requestingUser sharedtypes.DiscordID,
-	batchID uuid.UUID,
-	guildID sharedtypes.GuildID,
-) *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1 {
-	if len(requests) == 0 {
-		payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-			GuildID:          guildID,
-			RequestingUserID: requestingUser,
-			BatchID:          batchID.String(),
-			AssignmentCount:  0,
-			Assignments:      []leaderboardevents.TagAssignmentInfoV1{},
-		}
-		if cfg := s.getGuildConfigForEnrichment(context.Background(), guildID); cfg != nil {
-			payload.Config = sharedevents.NewGuildConfigFragment(cfg)
-		}
-		return payload
-	}
-
-	assignments := make([]leaderboardevents.TagAssignmentInfoV1, len(requests))
-	for i, request := range requests {
-		assignments[i] = leaderboardevents.TagAssignmentInfoV1{
-			UserID:    request.UserID,
-			TagNumber: request.TagNumber,
-		}
-	}
-
-	payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-		GuildID:          guildID,
-		RequestingUserID: requestingUser,
-		BatchID:          batchID.String(),
-		AssignmentCount:  len(requests),
-		Assignments:      assignments,
-	}
-	if cfg := s.getGuildConfigForEnrichment(context.Background(), guildID); cfg != nil {
-		payload.Config = sharedevents.NewGuildConfigFragment(cfg)
-	}
-	return payload
+	return 0, false
 }

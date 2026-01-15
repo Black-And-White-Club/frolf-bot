@@ -299,14 +299,14 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   roundevents.ParsedScorecardPayload
+		payload   roundevents.ParsedScorecardPayloadV1
 		mockSetup func()
 		want      UserOperationResult
 		wantErr   bool
 	}{
 		{
 			name: "Successful match by username",
-			payload: roundevents.ParsedScorecardPayload{
+			payload: roundevents.ParsedScorecardPayloadV1{
 				ImportID: testImportID,
 				GuildID:  testGuildID,
 				RoundID:  testRoundID,
@@ -343,7 +343,7 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 		},
 		{
 			name: "Successful match by name (fallback)",
-			payload: roundevents.ParsedScorecardPayload{
+			payload: roundevents.ParsedScorecardPayloadV1{
 				ImportID: testImportID,
 				GuildID:  testGuildID,
 				RoundID:  testRoundID,
@@ -382,7 +382,7 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 		},
 		{
 			name: "No match found (skipped)",
-			payload: roundevents.ParsedScorecardPayload{
+			payload: roundevents.ParsedScorecardPayloadV1{
 				ImportID: testImportID,
 				GuildID:  testGuildID,
 				RoundID:  testRoundID,
@@ -416,7 +416,7 @@ func TestUserServiceImpl_MatchParsedScorecard(t *testing.T) {
 		},
 		{
 			name: "Parsed data is nil",
-			payload: roundevents.ParsedScorecardPayload{
+			payload: roundevents.ParsedScorecardPayloadV1{
 				ImportID:   testImportID,
 				GuildID:    testGuildID,
 				RoundID:    testRoundID,

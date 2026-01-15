@@ -336,7 +336,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: testScoreRoundID,
 					Error:   "Failed to retrieve updated participants list after score update: participants fetch error",
@@ -365,7 +365,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: testScoreRoundID,
 					Error:   "Failed to retrieve round details for event payload: database error",
@@ -455,7 +455,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				},
 			},
 			expectedResult: RoundOperationResult{
-				Success: &roundevents.AllScoresSubmittedPayload{
+				Success: &roundevents.AllScoresSubmittedPayloadV1{
 					GuildID:        sharedtypes.GuildID("guild-123"),
 					RoundID:        testScoreRoundID,
 					EventMessageID: testDiscordMessageID,
@@ -524,7 +524,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testScoreRoundID,
 					Error:   "database error from checkIfAllScoresSubmitted",
@@ -549,7 +549,7 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 				Participants:   []roundtypes.Participant{{UserID: sharedtypes.DiscordID("user1"), Score: &testScore}},
 			},
 			expectedResult: RoundOperationResult{
-				Failure: &roundevents.RoundErrorPayload{ // Changed to pointer
+				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: sharedtypes.GuildID("guild-123"),
 					RoundID: testScoreRoundID,
 					Error:   "database error from main func GetRound",

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
@@ -17,7 +18,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// createValidAllScoresSubmittedPayload creates a valid AllScoresSubmittedPayload for testing
+// createValidAllScoresSubmittedPayload creates a valid AllScoresSubmittedPayloadV1 for testing
 func createValidAllScoresSubmittedPayload(roundID sharedtypes.RoundID, participants []roundtypes.Participant, round roundtypes.Round) roundevents.AllScoresSubmittedPayloadV1 {
 	return roundevents.AllScoresSubmittedPayloadV1{
 		GuildID:        "test-guild",
@@ -203,9 +204,9 @@ func TestHandleRoundFinalized(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.ProcessRoundScoresRequestedV1},
+			expectedOutgoingTopics: []string{sharedevents.ProcessRoundScoresRequestedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.ProcessRoundScoresRequestedV1]
+				msgs := receivedMsgs[sharedevents.ProcessRoundScoresRequestedV1]
 				if len(msgs) == 0 {
 					t.Fatalf("expected process round scores request, got none")
 				}

@@ -154,11 +154,13 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		env.Ctx,
 		env.Config,
 		testObservability,
+		env.DB,
 		leaderboardDB,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,
 		routerRunCtx,
+		eventBusImpl.GetJetStream(),
 	)
 	if err != nil {
 		eventBusImpl.Close()

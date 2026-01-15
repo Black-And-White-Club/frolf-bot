@@ -82,7 +82,8 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockDBSetup    func(*rounddb.MockRoundDB)
-		payload        roundevents.ScheduledRoundTagUpdatePayloadV1
+		guildID        sharedtypes.GuildID
+		changedTags    map[sharedtypes.DiscordID]sharedtypes.TagNumber
 		expectedResult func(result RoundOperationResult) bool
 		expectError    bool
 	}{
@@ -93,12 +94,10 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
 				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(nil)
 			},
-			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-					user1ID: &newTag1,
-					user2ID: &newTag2,
-				},
+			guildID: sharedtypes.GuildID("guild-123"),
+			changedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				user1ID: newTag1,
+				user2ID: newTag2,
 			},
 			expectedResult: func(result RoundOperationResult) bool {
 				if result.Success == nil {
@@ -119,11 +118,9 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(nil, errors.New("database error"))
 			},
-			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-					user1ID: &newTag1,
-				},
+			guildID: sharedtypes.GuildID("guild-123"),
+			changedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				user1ID: newTag1,
 			},
 			expectedResult: func(result RoundOperationResult) bool {
 				if result.Failure == nil {
@@ -144,11 +141,9 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				mockDB.EXPECT().GetUpcomingRounds(ctx, guildID).Return(upcomingRounds, nil)
 				mockDB.EXPECT().UpdateRoundsAndParticipants(ctx, guildID, gomock.Any()).Return(errors.New("update failed"))
 			},
-			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-					user1ID: &newTag1,
-				},
+			guildID: sharedtypes.GuildID("guild-123"),
+			changedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				user1ID: newTag1,
 			},
 			expectedResult: func(result RoundOperationResult) bool {
 				if result.Failure == nil {
@@ -168,9 +163,8 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				// No GetUpcomingRounds call expected for empty changedTags - early return
 				// No UpdateRoundsAndParticipants call expected when no updates
 			},
-			payload: roundevents.ScheduledRoundTagUpdatePayloadV1{
-				ChangedTags: map[sharedtypes.DiscordID]*sharedtypes.TagNumber{}, // Empty map
-			},
+			guildID:     sharedtypes.GuildID("guild-123"),
+			changedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{},
 			expectedResult: func(result RoundOperationResult) bool {
 				if result.Success == nil {
 					return false
@@ -204,7 +198,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				},
 			}
 
-			result, err := s.UpdateScheduledRoundsWithNewTags(ctx, tt.payload)
+			result, err := s.UpdateScheduledRoundsWithNewTags(ctx, tt.guildID, tt.changedTags)
 
 			// Check error expectation
 			if tt.expectError && err == nil {

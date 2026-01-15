@@ -56,7 +56,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			},
 			config: validConfig,
 			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigCreatedPayload{
+				Success: &guildevents.GuildConfigCreatedPayloadV1{
 					GuildID: "guild-1",
 					Config:  *validConfig,
 				},
@@ -78,7 +78,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				SignupEmoji:          ":frolf:",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-2",
 					Reason:  "db error",
 				},
@@ -93,7 +93,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			},
 			config: validConfig,
 			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigCreatedPayload{
+				Success: &guildevents.GuildConfigCreatedPayloadV1{
 					GuildID: "guild-1",
 					Config:  *validConfig,
 				},
@@ -118,7 +118,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				SetupCompletedAt:     &setupTime,
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-3",
 					Reason:  ErrGuildConfigConflict.Error(),
 				},
@@ -133,7 +133,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				// Missing SignupChannelID, etc.
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-4",
 					Reason:  "signup channel ID required",
 				},
@@ -149,7 +149,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				// Missing EventChannelID
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-5",
 					Reason:  "event channel ID required",
 				},
@@ -166,7 +166,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				// Missing LeaderboardChannelID
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-6",
 					Reason:  "leaderboard channel ID required",
 				},
@@ -184,7 +184,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				// Missing UserRoleID
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-7",
 					Reason:  "user role ID required",
 				},
@@ -203,7 +203,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				// Missing SignupEmoji
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-8",
 					Reason:  "signup emoji required",
 				},
@@ -224,7 +224,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			mockDBSetup: func(m *guilddb.MockGuildDB) {},
 			config:      nil,
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "",
 					Reason:  "config payload is nil",
 				},
@@ -243,7 +243,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				SignupEmoji:          ":frolf:",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "",
 					Reason:  ErrInvalidGuildID.Error(),
 				},
@@ -264,7 +264,7 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 				SignupEmoji:          ":frolf:",
 			},
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigCreationFailedPayload{
+				Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
 					GuildID: "guild-9",
 					Reason:  "db lookup error",
 				},
@@ -316,8 +316,8 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 					return
 				}
 				// Compare payloads
-				exp := tt.wantResult.Success.(*guildevents.GuildConfigCreatedPayload)
-				actual := got.Success.(*guildevents.GuildConfigCreatedPayload)
+				exp := tt.wantResult.Success.(*guildevents.GuildConfigCreatedPayloadV1)
+				actual := got.Success.(*guildevents.GuildConfigCreatedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}
@@ -352,8 +352,8 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 					t.Errorf("expected failure, got nil")
 					return
 				}
-				exp := tt.wantResult.Failure.(*guildevents.GuildConfigCreationFailedPayload)
-				actual := got.Failure.(*guildevents.GuildConfigCreationFailedPayload)
+				exp := tt.wantResult.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
+				actual := got.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected failure GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}

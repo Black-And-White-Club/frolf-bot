@@ -28,7 +28,7 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				mockMetrics := &leaderboardmetrics.NoOpMetrics{}
 
 				// Call the function being tested
-				handlers := NewLeaderboardHandlers(mockLeaderboardService, logger, tracer, nil, mockMetrics)
+				handlers := NewLeaderboardHandlers(mockLeaderboardService, nil, logger, tracer, nil, mockMetrics)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -60,7 +60,7 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				defer ctrl.Finish()
 
 				// Call with nil dependencies
-				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil)
+				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil, nil)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {

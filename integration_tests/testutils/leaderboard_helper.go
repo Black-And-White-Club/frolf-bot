@@ -123,7 +123,7 @@ func DebugLeaderboardData(t *testing.T, label string, data leaderboardtypes.Lead
 }
 
 // ValidateSuccessResponse checks that a response has the expected properties
-func ValidateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTagAssignmentRequestedPayload, responsePayload *leaderboardevents.BatchTagAssignedPayload) {
+func ValidateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTagAssignmentRequestedPayloadV1, responsePayload *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1) {
 	t.Helper() // Mark this as a helper function
 	if responsePayload.RequestingUserID != requestPayload.RequestingUserID {
 		t.Errorf("Success payload RequestingUserID mismatch: expected %q, got %q",

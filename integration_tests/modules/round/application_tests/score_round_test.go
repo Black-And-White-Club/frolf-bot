@@ -391,7 +391,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 		initialSetup          func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID)
 		payload               roundevents.ParticipantScoreUpdatedPayloadV1
 		expectedError         bool
-		expectedAllDone       bool   // true if expecting AllScoresSubmittedPayload
+		expectedAllDone       bool   // true if expecting AllScoresSubmittedPayloadV1
 		expectedErrorContains string // Added for more specific error checking
 		validateResponse      func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID)
 	}{
@@ -426,7 +426,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 				}
 				successPayload, ok := result.Success.(*roundevents.AllScoresSubmittedPayloadV1)
 				if !ok {
-					t.Fatalf("Expected *AllScoresSubmittedPayload, got %T", result.Success)
+					t.Fatalf("Expected *AllScoresSubmittedPayloadV1, got %T", result.Success)
 				}
 				if successPayload.RoundID != roundID {
 					t.Errorf("Expected RoundID %s, got %s", roundID, successPayload.RoundID)
@@ -515,7 +515,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 				}
 				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
 				if !ok {
-					t.Fatalf("Expected *RoundErrorPayload, got %T", result.Failure)
+					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
 				if !strings.Contains(failurePayload.Error, "round with ID") {
 					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)

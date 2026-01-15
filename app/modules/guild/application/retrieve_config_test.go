@@ -48,7 +48,7 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-1",
 			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigRetrievedPayload{
+				Success: &guildevents.GuildConfigRetrievedPayloadV1{
 					GuildID: "guild-1",
 					Config:  *validConfig,
 				},
@@ -62,7 +62,7 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-2",
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigRetrievalFailedPayload{
+				Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
 					GuildID: "guild-2",
 					Reason:  "guild config not found",
 				},
@@ -76,7 +76,7 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 			},
 			guildID: "guild-3",
 			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigRetrievalFailedPayload{
+				Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
 					GuildID: "guild-3",
 					Reason:  "db error",
 				},
@@ -141,8 +141,8 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 					t.Errorf("expected success, got nil")
 					return
 				}
-				exp := tt.wantResult.Success.(*guildevents.GuildConfigRetrievedPayload)
-				actual := got.Success.(*guildevents.GuildConfigRetrievedPayload)
+				exp := tt.wantResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
+				actual := got.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}
@@ -177,8 +177,8 @@ func TestGuildService_GetGuildConfig(t *testing.T) {
 					t.Errorf("expected failure, got nil")
 					return
 				}
-				exp := tt.wantResult.Failure.(*guildevents.GuildConfigRetrievalFailedPayload)
-				actual := got.Failure.(*guildevents.GuildConfigRetrievalFailedPayload)
+				exp := tt.wantResult.Failure.(*guildevents.GuildConfigRetrievalFailedPayloadV1)
+				actual := got.Failure.(*guildevents.GuildConfigRetrievalFailedPayloadV1)
 				if exp.GuildID != actual.GuildID {
 					t.Errorf("expected failure GuildID %q, got %q", exp.GuildID, actual.GuildID)
 				}

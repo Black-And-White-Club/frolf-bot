@@ -56,7 +56,7 @@ type Service interface {
 	ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (RoundOperationResult, error)
 
 	// Update Participant Tags
-	UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (RoundOperationResult, error)
+	UpdateScheduledRoundsWithNewTags(ctx context.Context, guildID sharedtypes.GuildID, changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber) (RoundOperationResult, error)
 
 	// Scorecard Import
 	CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (RoundOperationResult, error)

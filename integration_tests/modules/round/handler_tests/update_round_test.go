@@ -73,9 +73,13 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 				return testutils.NewRoundTestHelper(env.EventBus, nil).CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{})
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, roundID sharedtypes.RoundID) *message.Message {
-				st := sharedtypes.StartTime(time.Now().Add(168 * time.Hour))
-				payload := createRoundUpdateRequestPayload(roundID, "user-1", nil, nil, nil, &st)
-				futureStr := "January 15, 2026 at 3:00pm"
+				payload := createRoundUpdateRequestPayload(roundID, "user-1", nil, nil, nil, nil)
+				loc, err := time.LoadLocation("America/Chicago")
+				if err != nil {
+					t.Fatalf("Failed to load timezone: %v", err)
+				}
+				future := time.Now().In(loc).Add(48 * time.Hour)
+				futureStr := future.Format("January 2, 2006 at 3:04pm")
 				payload.StartTime = &futureStr
 				return publishUpdateMsg(t, env, payload)
 			},

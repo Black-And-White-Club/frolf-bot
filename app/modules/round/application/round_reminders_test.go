@@ -110,8 +110,15 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				EventMessageID: testDiscordMessageID,
 			},
 			expectedResult: RoundOperationResult{
-				Success: roundevents.RoundReminderProcessedPayload{
-					RoundID: testReminderRoundID,
+				Success: roundevents.DiscordReminderPayloadV1{
+					RoundID:        testReminderRoundID,
+					GuildID:        sharedtypes.GuildID("guild-123"),
+					RoundTitle:     testReminderRoundTitle,
+					StartTime:      &testReminderStartTime,
+					Location:       &testReminderLocation,
+					UserIDs:        []sharedtypes.DiscordID{},
+					ReminderType:   testReminderType,
+					EventMessageID: testDiscordMessageID,
 				},
 			},
 			expectedError: nil,

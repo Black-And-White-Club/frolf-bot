@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -56,7 +56,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 					{UserID: userID2, Score: score2, TagNumber: &tag2},
 				}, nil)
 			},
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
+			payload: &sharedevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
 				AppliedCount:   2,
@@ -69,10 +69,10 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				if len(results) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(results))
 				}
-				if results[0].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[0].Topic)
 				}
-				reprocessPayload, ok := results[0].Payload.(*scoreevents.ProcessRoundScoresRequestedPayloadV1)
+				reprocessPayload, ok := results[0].Payload.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
 				if !ok {
 					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
 				}
@@ -86,7 +86,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 			mockSetup: func() {
 				// No service calls expected
 			},
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
+			payload: &sharedevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
 				AppliedCount:   0,
@@ -112,7 +112,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 					{UserID: userID1, Score: score1, TagNumber: &tag1},
 				}, nil)
 			},
-			payload: &scoreevents.ScoreUpdatedPayloadV1{
+			payload: &sharedevents.ScoreUpdatedPayloadV1{
 				GuildID: testGuildID,
 				RoundID: testRoundID,
 				UserID:  userID1,
@@ -123,8 +123,8 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				if len(results) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(results))
 				}
-				if results[0].Topic != scoreevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresRequestedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[0].Topic)
 				}
 			},
 		},
@@ -146,7 +146,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 					testRoundID,
 				).Return(nil, fmt.Errorf("db error"))
 			},
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
+			payload: &sharedevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
 				AppliedCount:   1,
@@ -166,7 +166,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 					testRoundID,
 				).Return([]sharedtypes.ScoreInfo{}, nil)
 			},
-			payload: &scoreevents.ScoreBulkUpdatedPayloadV1{
+			payload: &sharedevents.ScoreBulkUpdatedPayloadV1{
 				GuildID:        testGuildID,
 				RoundID:        testRoundID,
 				AppliedCount:   1,

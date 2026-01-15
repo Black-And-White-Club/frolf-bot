@@ -8,6 +8,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
@@ -173,11 +174,11 @@ func registerHandler[T any](
 // This centralizes routing logic in the router (not in handlers or helpers).
 func (r *UserRouter) getPublishTopic(handlerName string, msg *message.Message) string {
 	switch {
-	case handlerName == "user."+userevents.TagAvailableV1:
+	case handlerName == "user."+sharedevents.TagAvailableV1:
 		// HandleTagAvailable always returns UserCreatedV1
 		return userevents.UserCreatedV1
 
-	case handlerName == "user."+userevents.TagUnavailableV1:
+	case handlerName == "user."+sharedevents.TagUnavailableV1:
 		// HandleTagUnavailable always returns UserCreationFailedV1
 		return userevents.UserCreationFailedV1
 
@@ -212,8 +213,8 @@ func (r *UserRouter) registerHandlers(handlers userhandlers.Handlers, userMetric
 	registerHandler(deps, userevents.UserRoleUpdateRequestedV1, handlers.HandleUserRoleUpdateRequest)
 	registerHandler(deps, userevents.GetUserRequestedV1, handlers.HandleGetUserRequest)
 	registerHandler(deps, userevents.GetUserRoleRequestedV1, handlers.HandleGetUserRoleRequest)
-	registerHandler(deps, userevents.TagUnavailableV1, handlers.HandleTagUnavailable)
-	registerHandler(deps, userevents.TagAvailableV1, handlers.HandleTagAvailable)
+	registerHandler(deps, sharedevents.TagUnavailableV1, handlers.HandleTagUnavailable)
+	registerHandler(deps, sharedevents.TagAvailableV1, handlers.HandleTagAvailable)
 	registerHandler(deps, userevents.UpdateUDiscIdentityRequestedV1, handlers.HandleUpdateUDiscIdentityRequest)
 	registerHandler(deps, roundevents.ScorecardParsedV1, handlers.HandleScorecardParsed)
 

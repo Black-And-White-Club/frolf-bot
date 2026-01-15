@@ -13,18 +13,7 @@ func (h *UserHandlers) HandleScorecardParsed(
 	ctx context.Context,
 	payload *roundevents.ParsedScorecardPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	// Convert V1 payload to service payload format
-	servicePayload := roundevents.ParsedScorecardPayload{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		ImportID:       payload.ImportID,
-		EventMessageID: payload.EventMessageID,
-		UserID:         payload.UserID,
-		ChannelID:      payload.ChannelID,
-		ParsedData:     payload.ParsedData,
-		Timestamp:      payload.Timestamp,
-	}
-	result, err := h.userService.MatchParsedScorecard(ctx, servicePayload)
+	result, err := h.userService.MatchParsedScorecard(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}

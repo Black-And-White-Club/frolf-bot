@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
@@ -17,7 +17,7 @@ func (h *UserHandlers) HandleUserSignupRequest(
 	// Check for tag availability
 	if payload.TagNumber != nil {
 		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.TagAvailabilityCheckRequestedV1, Payload: &leaderboardevents.TagAvailabilityCheckRequestedPayloadV1{
+			{Topic: sharedevents.TagAvailabilityCheckRequestedV1, Payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
 				GuildID:   payload.GuildID,
 				TagNumber: payload.TagNumber,
 				UserID:    payload.UserID,

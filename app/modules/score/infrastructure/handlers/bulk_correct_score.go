@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -12,7 +12,7 @@ import (
 
 // HandleBulkCorrectScoreRequest processes a ScoreBulkUpdateRequest by iterating each update
 // and invoking the existing CorrectScore service call. It emits success/failure events per user.
-func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *scoreevents.ScoreBulkUpdateRequestPayload) ([]handlerwrapper.Result, error) {
+func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreBulkUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
 	}
@@ -29,20 +29,20 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		}
 		if res.Failure != nil {
 			failed++
-			fail, ok := res.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+			fail, ok := res.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
 			if ok {
 				results = append(results, handlerwrapper.Result{
-					Topic:   scoreevents.ScoreUpdateFailedV1,
+					Topic:   sharedevents.ScoreUpdateFailedV1,
 					Payload: fail,
 				})
 			}
 			continue
 		}
 		if res.Success != nil {
-			succ, ok := res.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+			succ, ok := res.Success.(*sharedevents.ScoreUpdatedPayloadV1)
 			if ok {
 				results = append(results, handlerwrapper.Result{
-					Topic:   scoreevents.ScoreUpdatedV1,
+					Topic:   sharedevents.ScoreUpdatedV1,
 					Payload: succ,
 				})
 				applied++
@@ -52,7 +52,7 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 	}
 
 	// Add aggregate summary event
-	agg := &scoreevents.ScoreBulkUpdateSuccessPayload{
+	agg := &sharedevents.ScoreBulkUpdatedPayloadV1{
 		GuildID:        payload.GuildID,
 		RoundID:        payload.RoundID,
 		AppliedCount:   applied,
@@ -61,7 +61,7 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		UserIDsApplied: appliedUsers,
 	}
 	results = append(results, handlerwrapper.Result{
-		Topic:   scoreevents.ScoreBulkUpdatedV1,
+		Topic:   sharedevents.ScoreBulkUpdatedV1,
 		Payload: agg,
 	})
 
@@ -74,13 +74,13 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 				"error", err,
 			)
 		} else if len(scores) > 0 {
-			reprocessPayload := &scoreevents.ProcessRoundScoresRequestedPayloadV1{
+			reprocessPayload := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 				GuildID: payload.GuildID,
 				RoundID: payload.RoundID,
 				Scores:  scores,
 			}
 			results = append(results, handlerwrapper.Result{
-				Topic:   scoreevents.ProcessRoundScoresRequestedV1,
+				Topic:   sharedevents.ProcessRoundScoresRequestedV1,
 				Payload: reprocessPayload,
 			})
 		}

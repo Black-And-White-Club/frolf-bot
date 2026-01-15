@@ -46,9 +46,9 @@ type Handlers interface {
 	HandleParticipantDeclined(ctx context.Context, payload *roundevents.ParticipantDeclinedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Tag lookup handlers
-	HandleTagNumberFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayload) ([]handlerwrapper.Result, error)
-	HandleTagNumberNotFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayload) ([]handlerwrapper.Result, error)
-	HandleTagNumberLookupFailed(ctx context.Context, payload *sharedevents.RoundTagLookupFailedPayload) ([]handlerwrapper.Result, error)
+	HandleTagNumberFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayloadV1) ([]handlerwrapper.Result, error)
+	HandleTagNumberNotFound(ctx context.Context, payload *sharedevents.RoundTagLookupResultPayloadV1) ([]handlerwrapper.Result, error)
+	HandleTagNumberLookupFailed(ctx context.Context, payload *sharedevents.RoundTagLookupFailedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Tag update handler
 	HandleScheduledRoundTagUpdate(ctx context.Context, payload *leaderboardevents.TagUpdateForScheduledRoundsPayloadV1) ([]handlerwrapper.Result, error)
@@ -66,6 +66,6 @@ type Handlers interface {
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleParseScorecardRequest(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
-	HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayload) ([]handlerwrapper.Result, error)
+	HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleImportCompleted(ctx context.Context, payload *roundevents.ImportCompletedPayloadV1) ([]handlerwrapper.Result, error)
 }

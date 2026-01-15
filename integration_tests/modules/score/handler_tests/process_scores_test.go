@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -18,7 +17,7 @@ import (
 )
 
 // publishProcessRoundScoresRequest helper to publish a ProcessRoundScoresRequest message.
-func publishProcessRoundScoresRequest(t *testing.T, deps ScoreHandlerTestDeps, payload scoreevents.ProcessRoundScoresRequestedPayloadV1) *message.Message {
+func publishProcessRoundScoresRequest(t *testing.T, deps ScoreHandlerTestDeps, payload sharedevents.ProcessRoundScoresRequestedPayloadV1) *message.Message {
 	t.Helper()
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -27,9 +26,9 @@ func publishProcessRoundScoresRequest(t *testing.T, deps ScoreHandlerTestDeps, p
 
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-	msg.Metadata.Set("topic", scoreevents.ProcessRoundScoresRequestedV1)
+	msg.Metadata.Set("topic", sharedevents.ProcessRoundScoresRequestedV1)
 
-	inputTopic := scoreevents.ProcessRoundScoresRequestedV1
+	inputTopic := sharedevents.ProcessRoundScoresRequestedV1
 	if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), inputTopic, msg); err != nil {
 		t.Fatalf("Failed to publish message to handler input topic %q: %v", inputTopic, err)
 	}
@@ -39,7 +38,7 @@ func publishProcessRoundScoresRequest(t *testing.T, deps ScoreHandlerTestDeps, p
 // validateProcessRoundScoresSuccess helper to validate a LeaderboardBatchTagAssignmentRequested message.
 func validateProcessRoundScoresSuccess(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message) {
 	t.Helper()
-	var requestPayload scoreevents.ProcessRoundScoresRequestedPayloadV1
+	var requestPayload sharedevents.ProcessRoundScoresRequestedPayloadV1
 	if err := json.Unmarshal(incomingMsg.Payload, &requestPayload); err != nil {
 		t.Fatalf("Failed to unmarshal request payload: %v", err)
 	}
@@ -106,7 +105,7 @@ func validateProcessRoundScoresSuccess(t *testing.T, deps ScoreHandlerTestDeps, 
 			receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 	}
 
-	unexpectedTopic := scoreevents.ProcessRoundScoresFailedV1
+	unexpectedTopic := sharedevents.ProcessRoundScoresFailedV1
 	if len(receivedMsgs[unexpectedTopic]) > 0 {
 		t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 	}
@@ -115,18 +114,18 @@ func validateProcessRoundScoresSuccess(t *testing.T, deps ScoreHandlerTestDeps, 
 // validateProcessRoundScoresFailure helper to validate a ProcessRoundScoresFailure message.
 func validateProcessRoundScoresFailure(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, expectedErrorSubstring string) {
 	t.Helper()
-	var requestPayload scoreevents.ProcessRoundScoresRequestedPayloadV1
+	var requestPayload sharedevents.ProcessRoundScoresRequestedPayloadV1
 	// Attempt to unmarshal incoming payload, it might be invalid JSON for some failure cases
 	_ = json.Unmarshal(incomingMsg.Payload, &requestPayload)
 
-	expectedTopic := scoreevents.ProcessRoundScoresFailedV1
+	expectedTopic := sharedevents.ProcessRoundScoresFailedV1
 	msgs := receivedMsgs[expectedTopic]
 	if len(msgs) != 1 {
 		t.Fatalf("Expected 1 message on topic %q, got %d", expectedTopic, len(msgs))
 	}
 	receivedMsg := msgs[0]
 
-	var failurePayload scoreevents.ProcessRoundScoresFailedPayloadV1
+	var failurePayload sharedevents.ProcessRoundScoresFailedPayloadV1
 	if err := deps.ScoreModule.Helper.UnmarshalPayload(receivedMsg, &failurePayload); err != nil {
 		t.Fatalf("Failed to unmarshal ProcessRoundScoresFailurePayload: %v", err)
 	}
@@ -187,7 +186,7 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 				}
 
 				roundID := sharedtypes.RoundID(uuid.New())
-				payload := scoreevents.ProcessRoundScoresRequestedPayloadV1{GuildID: sharedtypes.GuildID("test-guild"), RoundID: roundID, Scores: scores}
+				payload := sharedevents.ProcessRoundScoresRequestedPayloadV1{GuildID: sharedtypes.GuildID("test-guild"), RoundID: roundID, Scores: scores}
 				return publishProcessRoundScoresRequest(t, deps, payload)
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
@@ -204,13 +203,13 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, initialState interface{}, generator *testutils.TestDataGenerator) *message.Message {
 				roundID := sharedtypes.RoundID(uuid.New())
-				payload := scoreevents.ProcessRoundScoresRequestedPayloadV1{GuildID: sharedtypes.GuildID("test-guild"), RoundID: roundID, Scores: []sharedtypes.ScoreInfo{}}
+				payload := sharedevents.ProcessRoundScoresRequestedPayloadV1{GuildID: sharedtypes.GuildID("test-guild"), RoundID: roundID, Scores: []sharedtypes.ScoreInfo{}}
 				return publishProcessRoundScoresRequest(t, deps, payload)
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				validateProcessRoundScoresFailure(t, deps, incomingMsg, receivedMsgs, "empty")
 			},
-			expectedOutgoingTopics: []string{scoreevents.ProcessRoundScoresFailedV1},
+			expectedOutgoingTopics: []string{sharedevents.ProcessRoundScoresFailedV1},
 			expectHandlerError:     false, // The handler should publish a failure message and acknowledge
 			timeout:                5 * time.Second,
 		},
@@ -222,9 +221,9 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps ScoreHandlerTestDeps, initialState interface{}, generator *testutils.TestDataGenerator) *message.Message {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				msg.Metadata.Set("topic", scoreevents.ProcessRoundScoresRequestedV1)
+				msg.Metadata.Set("topic", sharedevents.ProcessRoundScoresRequestedV1)
 
-				inputTopic := scoreevents.ProcessRoundScoresRequestedV1
+				inputTopic := sharedevents.ProcessRoundScoresRequestedV1
 				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), inputTopic, msg); err != nil {
 					t.Fatalf("Failed to publish message to handler input topic %q: %v", inputTopic, err)
 				}

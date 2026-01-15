@@ -6,58 +6,79 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
+	"github.com/google/uuid"
 )
 
-// HandleTagSwapRequested handles the TagSwapRequested event.
+// HandleTagSwapRequested handles manual intent to swap tags between two users.
 func (h *LeaderboardHandlers) HandleTagSwapRequested(
 	ctx context.Context,
 	payload *leaderboardevents.TagSwapRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Received TagSwapRequested event",
+	h.logger.InfoContext(ctx, "Manual tag swap requested",
 		attr.ExtractCorrelationID(ctx),
 		attr.String("requestor_id", string(payload.RequestorID)),
-		attr.String("target_id", string(payload.TargetID)),
+		attr.String("target_id", string(payload.TargetID)))
+
+	// 1. We still need to know WHAT tag the Target currently holds.
+	// The service helper 'GetTagByUserID' is perfect for this.
+	targetTag, err := h.leaderboardService.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
+	if err != nil {
+		// If Target has no tag, we can't swap.
+		return []handlerwrapper.Result{{
+			Topic: leaderboardevents.TagSwapFailedV1,
+			Payload: &leaderboardevents.TagSwapFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  "target_user_has_no_tag",
+			},
+		}}, nil
+	}
+
+	// 2. Identify the requestor's current tag for the Saga record.
+	// We ignore the error here; if they don't have a tag, CurrentTag is just 0.
+	requestorTag, _ := h.leaderboardService.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
+
+	// 3. Attempt the Funnel
+	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
+		ctx,
+		payload.GuildID,
+		[]sharedtypes.TagAssignmentRequest{
+			{UserID: payload.RequestorID, TagNumber: targetTag},
+		},
+		sharedtypes.RoundID(uuid.New()),
+		sharedtypes.ServiceUpdateSourceTagSwap,
 	)
 
-	// Call the service function to handle the event
-	result, err := h.leaderboardService.TagSwapRequested(ctx, payload.GuildID, *payload)
+	// 4. Traffic Cop: Handle Saga Redirection
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed to handle TagSwapRequested event",
-			attr.ExtractCorrelationID(ctx),
-			attr.Error(err),
-		)
+		var swapErr *leaderboardservice.TagSwapNeededError
+		if errors.As(err, &swapErr) {
+			// This is a "Partial Success" - the intent is recorded.
+			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
+				UserID:     payload.RequestorID,
+				CurrentTag: requestorTag,
+				TargetTag:  targetTag,
+				GuildID:    payload.GuildID,
+			})
+			if intentErr != nil {
+				return nil, intentErr
+			}
+
+			return []handlerwrapper.Result{{
+				Topic: leaderboardevents.TagSwapProcessedV1,
+				Payload: &leaderboardevents.TagSwapProcessedPayloadV1{
+					GuildID:     payload.GuildID,
+					RequestorID: payload.RequestorID,
+					TargetID:    payload.TargetID,
+				},
+			}}, nil
+		}
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		failedPayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for failure payload")
-		}
-		h.logger.InfoContext(ctx, "Tag swap failed",
-			attr.ExtractCorrelationID(ctx),
-			attr.Any("failure_payload", failedPayload),
-		)
-
-		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.TagSwapFailedV1, Payload: failedPayload},
-		}, nil
-	}
-
-	if result.Success != nil {
-		successPayload, ok := result.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for success payload")
-		}
-		h.logger.InfoContext(ctx, "Tag swap successful",
-			attr.ExtractCorrelationID(ctx),
-		)
-
-		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.TagSwapProcessedV1, Payload: successPayload},
-		}, nil
-	}
-
-	return nil, errors.New("tag swap service returned unexpected result")
+	// 5. Success Path (Immediate Swap)
+	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", result, "tag_swap"), nil
 }

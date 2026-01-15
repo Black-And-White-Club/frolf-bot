@@ -184,9 +184,9 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	// Subscribe to both the legacy leaderboard-prefixed not-found topic and the
 	// canonical shared not-found topic so we handle replies regardless of which
 	// subject the leaderboard service publishes under during the migration.
-	registerHandler(deps, roundevents.RoundTagNumberNotFoundV1, h.HandleTagNumberNotFound)
+	registerHandler(deps, sharedevents.RoundTagNumberNotFoundV1, h.HandleTagNumberNotFound)
 	registerHandler(deps, sharedevents.RoundTagLookupNotFoundV1, h.HandleTagNumberNotFound)
-	registerHandler(deps, leaderboardevents.GetTagNumberFailedV1, h.HandleTagNumberLookupFailed)
+	registerHandler(deps, sharedevents.GetTagNumberFailedV1, h.HandleTagNumberLookupFailed)
 	// Listen for leaderboard tag update events for scheduled rounds. The leaderboard
 	// service publishes TagUpdateForScheduledRoundsV1 when player tag numbers change;
 	// the round service should consume that topic to update upcoming rounds.

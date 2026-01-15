@@ -3,16 +3,17 @@ package leaderboardhandlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/google/uuid"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 )
 
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
@@ -21,107 +22,71 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 	ctx context.Context,
 	payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Received LeaderboardUpdateRequested event",
+	h.logger.InfoContext(ctx, "Processing leaderboard update from scores",
 		attr.ExtractCorrelationID(ctx),
-		attr.RoundID("round_id", payload.RoundID),
-		attr.Int("participant_count", len(payload.SortedParticipantTags)),
-	)
+		attr.String("round_id", payload.RoundID.String()))
 
-	// Parse tag:user pairs into assignments
-	assignments := make([]sharedtypes.TagAssignmentRequest, len(payload.SortedParticipantTags))
-	for i, tagUserPair := range payload.SortedParticipantTags {
+	requests := make([]sharedtypes.TagAssignmentRequest, 0, len(payload.SortedParticipantTags))
+	for _, tagUserPair := range payload.SortedParticipantTags {
 		parts := strings.Split(tagUserPair, ":")
 		if len(parts) != 2 {
-			h.logger.ErrorContext(ctx, "Invalid tag format",
-				attr.ExtractCorrelationID(ctx),
-				attr.String("tag_pair", tagUserPair),
-			)
-			return nil, fmt.Errorf("invalid tag format: %s", tagUserPair)
+			continue
 		}
-
-		tagNumber, err := strconv.Atoi(parts[0])
-		if err != nil {
-			h.logger.ErrorContext(ctx, "Invalid tag number",
-				attr.ExtractCorrelationID(ctx),
-				attr.String("tag_number_str", parts[0]),
-				attr.Error(err),
-			)
-			return nil, fmt.Errorf("invalid tag number: %w", err)
-		}
-
-		assignments[i] = sharedtypes.TagAssignmentRequest{
+		tagNum, _ := strconv.Atoi(parts[0])
+		requests = append(requests, sharedtypes.TagAssignmentRequest{
 			UserID:    sharedtypes.DiscordID(parts[1]),
-			TagNumber: sharedtypes.TagNumber(tagNumber),
-		}
+			TagNumber: sharedtypes.TagNumber(tagNum),
+		})
 	}
 
-	// Call service to process tag assignments
-	result, err := h.leaderboardService.ProcessTagAssignments(
+	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
+		requests,
+		payload.RoundID,
 		sharedtypes.ServiceUpdateSourceProcessScores,
-		assignments,
-		nil,
-		uuid.UUID(payload.RoundID),
-		uuid.New(),
 	)
+
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed to process tag assignments",
-			attr.ExtractCorrelationID(ctx),
-			attr.Error(err),
-		)
+		var swapErr *leaderboardservice.TagSwapNeededError
+		if errors.As(err, &swapErr) {
+			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
+				UserID:     swapErr.RequestorID,
+				CurrentTag: swapErr.CurrentTag,
+				TargetTag:  swapErr.TargetTag,
+				GuildID:    payload.GuildID,
+			})
+			return []handlerwrapper.Result{}, intentErr
+		}
 		return nil, err
 	}
 
-	// Handle failure outcome
-	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*leaderboardevents.LeaderboardUpdateFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for failure payload")
-		}
-		h.logger.InfoContext(ctx, "Leaderboard update failed",
-			attr.ExtractCorrelationID(ctx),
-			attr.Any("failure_payload", failurePayload),
-		)
-
-		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.LeaderboardUpdateFailedV1, Payload: failurePayload},
-		}, nil
+	// Build success events
+	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(result.Leaderboard))
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(result.Leaderboard))
+	for _, entry := range result.Leaderboard {
+		leaderboardData[entry.TagNumber] = entry.UserID
+		changedTags[entry.UserID] = entry.TagNumber
 	}
 
-	// Handle success outcome - returns multiple results
-	if result.Success != nil {
-		successPayload, ok := result.Success.(*leaderboardevents.LeaderboardUpdatedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for success payload")
-		}
-		h.logger.InfoContext(ctx, "Leaderboard updated successfully",
-			attr.ExtractCorrelationID(ctx),
-		)
-
-		// Create tag update notification payload
-		tagPayload := leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
-			GuildID:     payload.GuildID,
-			RoundID:     payload.RoundID,
-			Source:      "leaderboard_update",
-			UpdatedAt:   time.Now().UTC(),
-			ChangedTags: extractChangedTags(assignments),
-		}
-
-		return []handlerwrapper.Result{
-			{Topic: leaderboardevents.LeaderboardUpdatedV1, Payload: successPayload},
-			{Topic: leaderboardevents.TagUpdateForScheduledRoundsV1, Payload: tagPayload},
-		}, nil
-	}
-
-	return nil, errors.New("leaderboard update service returned unexpected result")
-}
-
-// extractChangedTags converts tag assignments to a map for tag update notifications
-func extractChangedTags(assignments []sharedtypes.TagAssignmentRequest) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
-	out := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(assignments))
-	for _, a := range assignments {
-		out[a.UserID] = a.TagNumber
-	}
-	return out
+	return []handlerwrapper.Result{
+		{
+			Topic: leaderboardevents.LeaderboardUpdatedV1,
+			Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
+				GuildID:         payload.GuildID,
+				RoundID:         payload.RoundID,
+				LeaderboardData: leaderboardData,
+			},
+		},
+		{
+			Topic: sharedevents.TagUpdateForScheduledRoundsV1,
+			Payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
+				GuildID:     payload.GuildID,
+				RoundID:     payload.RoundID,
+				Source:      "leaderboard_update",
+				UpdatedAt:   time.Now().UTC(),
+				ChangedTags: changedTags,
+			},
+		},
+	}, nil
 }

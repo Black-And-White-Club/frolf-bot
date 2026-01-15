@@ -4,7 +4,7 @@ import (
 	"fmt" // Added fmt import for Sprintf
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
@@ -120,7 +120,7 @@ func TestCorrectScore(t *testing.T) {
 				if result.Failure == nil {
 					t.Errorf("Expected non-nil failure payload, got nil")
 				} else {
-					failurePayload, ok := result.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+					failurePayload, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
 					if !ok {
 						t.Errorf("Expected *ScoreUpdateFailurePayload, got %T", result.Failure)
 					} else {
@@ -139,7 +139,7 @@ func TestCorrectScore(t *testing.T) {
 				t.Fatalf("CorrectScore returned unexpected error: %v", err)
 			}
 
-			successPayload, ok := result.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+			successPayload, ok := result.Success.(*sharedevents.ScoreUpdatedPayloadV1)
 			if !ok {
 				t.Fatalf("Expected *ScoreUpdateSuccessPayload, got %T", result.Success)
 			}

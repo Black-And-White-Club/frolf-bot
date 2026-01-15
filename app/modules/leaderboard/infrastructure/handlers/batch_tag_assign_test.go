@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
@@ -29,12 +29,12 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testBatchID := uuid.New().String()
 	testPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
-		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
+		ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: testGuildID},
 		RequestingUserID: sharedtypes.DiscordID("user-123"),
-		BatchID: testBatchID,
+		BatchID:          testBatchID,
 		Assignments: []sharedevents.TagAssignmentInfoV1{
 			{
-				UserID: sharedtypes.DiscordID("user-456"),
+				UserID:    sharedtypes.DiscordID("user-456"),
 				TagNumber: sharedtypes.TagNumber(1),
 			},
 		},
@@ -50,18 +50,25 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Successfully assign batch tags",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					testGuildID,
-					testPayload,
-					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
 					leaderboardservice.LeaderboardOperationResult{
-						Success: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-							GuildID: testGuildID,
+						Leaderboard: leaderboardtypes.LeaderboardData{
+							{UserID: sharedtypes.DiscordID("user-456"), TagNumber: sharedtypes.TagNumber(1)},
+						},
+						TagChanges: []leaderboardservice.TagChange{
+							{
+								GuildID: testGuildID,
+								UserID:  sharedtypes.DiscordID("user-456"),
+								OldTag:  nil,
+								NewTag:  &[]sharedtypes.TagNumber{sharedtypes.TagNumber(1)}[0],
+								Reason:  sharedtypes.ServiceUpdateSourceAdminBatch,
+							},
 						},
 					},
 					nil,
@@ -74,11 +81,9 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Service error",
 			mockSetup: func() {
-				mockLeaderboardService.EXPECT().ProcessTagAssignments(
+				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
 					gomock.Any(),
 					testGuildID,
-					testPayload,
-					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),

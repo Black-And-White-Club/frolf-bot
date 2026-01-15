@@ -78,9 +78,10 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundErrorPayload{
-							RoundID: testRoundID,
-							Error:   "validation failed",
+						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+							GuildID:            testPayload.GuildID,
+							ScoreUpdateRequest: testPayload,
+							Error:              "validation failed",
 						},
 					},
 					nil,
@@ -138,9 +139,10 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					*payloadWithoutScore,
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundErrorPayload{
-							RoundID: testRoundID,
-							Error:   "score cannot be nil",
+						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+							GuildID:            payloadWithoutScore.GuildID,
+							ScoreUpdateRequest: payloadWithoutScore,
+							Error:              "score cannot be nil",
 						},
 					},
 					nil,
@@ -253,9 +255,10 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					*testPayload,
 				).Return(
 					roundservice.RoundOperationResult{
-						Failure: &roundevents.RoundErrorPayload{
-							RoundID: testRoundID,
-							Error:   "database error",
+						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+							GuildID:            testPayload.GuildID,
+							ScoreUpdateRequest: &testPayload.ScoreUpdateRequestPayload,
+							Error:              "database error",
 						},
 					},
 					nil,

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
@@ -32,7 +32,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 				attr.Error(err),
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  "failed to check existing scores",
@@ -46,7 +46,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 				roundIDAttr,
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  "SCORES_ALREADY_EXIST",
@@ -68,7 +68,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 			)
 			// Return a failure payload for business logic errors from ProcessScoresForStorage
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  err.Error(),
@@ -104,7 +104,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 			)
 			// Return a failure payload for business logic errors from LogScores
 			return ScoreOperationResult{
-				Failure: &scoreevents.ProcessRoundScoresFailedPayloadV1{
+				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  err.Error(),
@@ -129,7 +129,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		)
 		// Wrap the tagMappingPayload in the expected success struct
 		return ScoreOperationResult{
-			Success: &scoreevents.ProcessRoundScoresSucceededPayloadV1{
+			Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
 				GuildID:     guildID,
 				RoundID:     roundID,
 				TagMappings: tagMappingPayload,

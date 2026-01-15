@@ -84,7 +84,7 @@ func TestUDiscIntegration(t *testing.T) {
 		// User 1 has username "testuser1"
 		// User 2 has name "test name 2"
 
-		payload := roundevents.ParsedScorecardPayload{
+		payload := roundevents.ParsedScorecardPayloadV1{
 			ImportID: "import-1",
 			GuildID:  guildID,
 			RoundID:  sharedtypes.RoundID(uuid.New()),
@@ -105,7 +105,7 @@ func TestUDiscIntegration(t *testing.T) {
 
 		matchPayload, ok := result.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
 		if !ok {
-			t.Fatalf("Expected UDiscMatchConfirmedPayload, got %T", result.Success)
+			t.Fatalf("Expected UDiscMatchConfirmedPayloadV1, got %T", result.Success)
 		}
 
 		if len(matchPayload.Mappings) != 2 {

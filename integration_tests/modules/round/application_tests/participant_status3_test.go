@@ -143,7 +143,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
-				// Fixed: the implementation actually returns ParticipantJoinedPayload, not TagLookupRequestPayload
+				// Fixed: the implementation actually returns ParticipantJoinedPayload, not RoundTagLookupRequestedPayloadV1
 				joinedPayload, ok := returnedResult.Success.(*roundevents.ParticipantJoinedPayloadV1)
 				if !ok {
 					t.Errorf("Expected *roundevents.ParticipantJoinedPayloadV1, got %T", returnedResult.Success)

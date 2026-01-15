@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -58,7 +58,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdatedPayloadV1{
+				Success: &sharedevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -86,7 +86,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdatedPayloadV1{
+				Success: &sharedevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -110,7 +110,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: &testTag,
 			expectedResult: ScoreOperationResult{
-				Success: &scoreevents.ScoreUpdatedPayloadV1{
+				Success: &sharedevents.ScoreUpdatedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -137,7 +137,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: nil,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
+				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -161,7 +161,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			score:     testScore,
 			tagNumber: &invalidTag,
 			expectedResult: ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
+				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					UserID:  testUserID,
@@ -200,8 +200,8 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
 				t.Errorf("Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
 			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
-				successGot, okGot := gotResult.Success.(*scoreevents.ScoreUpdatedPayloadV1)
-				successExpected, okExpected := tt.expectedResult.Success.(*scoreevents.ScoreUpdatedPayloadV1)
+				successGot, okGot := gotResult.Success.(*sharedevents.ScoreUpdatedPayloadV1)
+				successExpected, okExpected := tt.expectedResult.Success.(*sharedevents.ScoreUpdatedPayloadV1)
 				if okGot && okExpected {
 					if successGot.GuildID != successExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
@@ -221,8 +221,8 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
 				t.Errorf("Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
 			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
-				failureGot, okGot := gotResult.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
-				failureExpected, okExpected := tt.expectedResult.Failure.(*scoreevents.ScoreUpdateFailedPayloadV1)
+				failureGot, okGot := gotResult.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
+				failureExpected, okExpected := tt.expectedResult.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
 				if okGot && okExpected {
 					if failureGot.GuildID != failureExpected.GuildID {
 						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)

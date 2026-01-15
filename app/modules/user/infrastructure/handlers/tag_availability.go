@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
@@ -12,7 +13,7 @@ import (
 // HandleTagAvailable handles the TagAvailable event.
 func (h *UserHandlers) HandleTagAvailable(
 	ctx context.Context,
-	payload *userevents.TagAvailablePayloadV1,
+	payload *sharedevents.TagAvailablePayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	result, err := h.userService.CreateUser(ctx, payload.GuildID, payload.UserID, &payload.TagNumber, nil, nil)
 	if err != nil {
@@ -45,7 +46,7 @@ func (h *UserHandlers) HandleTagAvailable(
 // HandleTagUnavailable handles the TagUnavailable event.
 func (h *UserHandlers) HandleTagUnavailable(
 	ctx context.Context,
-	payload *userevents.TagUnavailablePayloadV1,
+	payload *sharedevents.TagUnavailablePayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	// Ensure a default reason when none is provided
 	reason := strings.TrimSpace(payload.Reason)

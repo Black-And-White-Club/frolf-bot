@@ -362,18 +362,18 @@ func (mr *MockServiceMockRecorder) UpdateScheduledRoundEvents(ctx, payload any) 
 }
 
 // UpdateScheduledRoundsWithNewTags mocks base method.
-func (m *MockService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (roundservice.RoundOperationResult, error) {
+func (m *MockService) UpdateScheduledRoundsWithNewTags(ctx context.Context, guildID sharedtypes.GuildID, changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScheduledRoundsWithNewTags", ctx, payload)
+	ret := m.ctrl.Call(m, "UpdateScheduledRoundsWithNewTags", ctx, guildID, changedTags)
 	ret0, _ := ret[0].(roundservice.RoundOperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateScheduledRoundsWithNewTags indicates an expected call of UpdateScheduledRoundsWithNewTags.
-func (mr *MockServiceMockRecorder) UpdateScheduledRoundsWithNewTags(ctx, payload any) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdateScheduledRoundsWithNewTags(ctx, guildID, changedTags any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundsWithNewTags", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundsWithNewTags), ctx, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledRoundsWithNewTags", reflect.TypeOf((*MockService)(nil).UpdateScheduledRoundsWithNewTags), ctx, guildID, changedTags)
 }
 
 // ValidateAndProcessRound mocks base method.

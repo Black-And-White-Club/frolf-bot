@@ -85,19 +85,19 @@ func (h *RoundHandlers) HandleParseScorecardRequest(
 // HandleUserMatchConfirmedForIngest transforms matched user data into a final ingestion request.
 func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(
 	ctx context.Context,
-	payload *userevents.UDiscMatchConfirmedPayload,
+	payload *userevents.UDiscMatchConfirmedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	if payload.ParsedScores == nil {
 		return nil, sharedtypes.ValidationError{Message: "no parsed scorecard data in match confirmed payload"}
 	}
 
 	// Type assert the ParsedScores interface field from the shared user events.
-	parsed, ok := payload.ParsedScores.(roundevents.ParsedScorecardPayloadV1)
+	parsed, ok := payload.ParsedScores.(*roundevents.ParsedScorecardPayloadV1)
 	if !ok {
 		return nil, sharedtypes.ValidationError{Message: "invalid parsed scorecard payload type"}
 	}
 
-	result, err := h.roundService.IngestParsedScorecard(ctx, parsed)
+	result, err := h.roundService.IngestParsedScorecard(ctx, *parsed)
 	if err != nil {
 		return nil, err
 	}

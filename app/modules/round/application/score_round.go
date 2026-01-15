@@ -139,7 +139,7 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 // CheckAllScoresSubmittedResult is a custom struct to return data from CheckAllScoresSubmitted.
 type CheckAllScoresSubmittedResult struct {
 	AllScoresSubmitted bool
-	PayloadData        interface{} // Will hold AllScoresSubmittedPayload or ScoresPartiallySubmittedPayloadV1 data
+	PayloadData        interface{} // Will hold AllScoresSubmittedPayloadV1 or ScoresPartiallySubmittedPayloadV1 data
 }
 
 // CheckAllScoresSubmitted checks if all participants in the round have submitted scores.

@@ -119,7 +119,7 @@ func (mr *MockServiceMockRecorder) GetUserRole(ctx, guildID, userID any) *gomock
 }
 
 // MatchParsedScorecard mocks base method.
-func (m *MockService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayload) (userservice.UserOperationResult, error) {
+func (m *MockService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (userservice.UserOperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MatchParsedScorecard", ctx, payload)
 	ret0, _ := ret[0].(userservice.UserOperationResult)

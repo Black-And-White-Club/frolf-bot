@@ -11,182 +11,166 @@ import (
 	"github.com/google/uuid"
 )
 
-// getRoundsAndParticipantsToUpdateFromRounds returns ALL participants for rounds that have ANY tag changes
-func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(ctx context.Context, rounds []*roundtypes.Round, changedTags map[sharedtypes.DiscordID]*sharedtypes.TagNumber) []roundtypes.RoundUpdate {
+// getRoundsAndParticipantsToUpdateFromRounds returns ALL participants for rounds that have ANY tag changes.
+// It uses a map of [UserID]TagNumber to identify which participants need synchronization.
+func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(
+	ctx context.Context,
+	rounds []*roundtypes.Round,
+	changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber,
+) []roundtypes.RoundUpdate {
 	updates := make([]roundtypes.RoundUpdate, 0)
-	affectedUserIDs := make([]sharedtypes.DiscordID, 0, len(changedTags))
 
-	// Extract user IDs for logging
-	for userID := range changedTags {
-		affectedUserIDs = append(affectedUserIDs, userID)
-	}
-
-	s.logger.InfoContext(ctx, "Processing tag updates for upcoming rounds",
-		attr.Int("upcoming_rounds_count", len(rounds)),
-		attr.Int("changed_tags_count", len(changedTags)),
-		attr.Any("affected_users", affectedUserIDs),
-	)
-
-	// Check each round for affected participants
+	// Check each upcoming round for affected participants
 	for _, round := range rounds {
 		hasChanges := false
 		updatedParticipants := make([]roundtypes.Participant, len(round.Participants))
 
-		// Process ALL participants in the round
+		// Process ALL participants in the round to maintain a complete participant set
 		for i, participant := range round.Participants {
-			updatedParticipants[i] = participant // Copy the participant
+			updatedParticipants[i] = participant
 
-			// Update tag if this user has a tag change
+			// If this specific user has a new tag from the Funnel/Saga, update it
 			if newTag, exists := changedTags[participant.UserID]; exists {
-				s.logger.InfoContext(ctx, "Updating participant tag",
+				s.logger.DebugContext(ctx, "Syncing participant tag for upcoming round",
 					attr.RoundID("round_id", round.ID),
 					attr.String("user_id", string(participant.UserID)),
 					attr.Any("old_tag", participant.TagNumber),
 					attr.Any("new_tag", newTag),
 				)
-				updatedParticipants[i].TagNumber = newTag
+				// take the address of a copy so we assign a *sharedtypes.TagNumber
+				t := newTag
+				updatedParticipants[i].TagNumber = &t
 				hasChanges = true
 			}
 		}
 
-		// Only include rounds that actually have changes
+		// Only include rounds that actually required a state change
 		if hasChanges {
-			update := roundtypes.RoundUpdate{
+			updates = append(updates, roundtypes.RoundUpdate{
 				RoundID:        round.ID,
 				EventMessageID: round.EventMessageID,
 				Participants:   updatedParticipants,
 				Round:          round,
-			}
-			updates = append(updates, update)
-
-			s.logger.InfoContext(ctx, "Round marked for update",
-				attr.RoundID("round_id", round.ID),
-				attr.String("round_title", string(round.Title)),
-				attr.Int("total_participants", len(updatedParticipants)),
-				attr.String("event_message_id", round.EventMessageID),
-			)
+			})
 		}
 	}
-
-	s.logger.InfoContext(ctx, "Rounds requiring updates determined",
-		attr.Int("rounds_to_update", len(updates)),
-	)
 
 	return updates
 }
 
-// UpdateScheduledRoundsWithNewTags updates ALL upcoming rounds that have affected participants
-func (s *RoundService) UpdateScheduledRoundsWithNewTags(ctx context.Context, payload roundevents.ScheduledRoundTagUpdatePayloadV1) (RoundOperationResult, error) {
-	// Use RoundID(uuid.Nil) for serviceWrapper, but propagate GuildID everywhere else
-	result, err := s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
-		if payload.GuildID == "" {
-			s.logger.WarnContext(ctx, "UpdateScheduledRoundsWithNewTags invoked without guild_id; will not retrieve rounds")
-		}
-		if len(payload.ChangedTags) == 0 {
-			s.logger.InfoContext(ctx, "No tag changes received - operation completed")
+// UpdateScheduledRoundsWithNewTags is the primary entry point for syncing the Round module
+// with Leaderboard mutations (Manual Swaps, Batch Updates, or Round Results).
+func (s *RoundService) UpdateScheduledRoundsWithNewTags(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber,
+) (RoundOperationResult, error) {
+	// Wrap in service logic for tracing/metrics.
+	// Use uuid.Nil because this affects multiple potential rounds.
+	return s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
+
+		if guildID == "" {
 			return RoundOperationResult{
-				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
-					GuildID:       payload.GuildID,
-					UpdatedRounds: []roundevents.RoundUpdateInfoV1{},
-					Summary: roundevents.UpdateSummaryV1{
-						TotalRoundsProcessed: 0,
-						RoundsUpdated:        0,
-						ParticipantsUpdated:  0,
-					},
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					Error: "missing guild_id in update request",
 				},
 			}, nil
 		}
 
-		// Get all upcoming rounds first
-		allUpcomingRounds, err := s.RoundDB.GetUpcomingRounds(ctx, payload.GuildID)
+		if len(changedTags) == 0 {
+			s.logger.InfoContext(ctx, "No tag changes to sync; skipping round updates")
+			return RoundOperationResult{
+				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+					GuildID: guildID,
+					Summary: roundevents.UpdateSummaryV1{GuildID: guildID},
+				},
+			}, nil
+		}
+
+		// 1. Fetch all upcoming rounds for this guild.
+		// This ensures we catch any future events the users are signed up for.
+		allUpcomingRounds, err := s.RoundDB.GetUpcomingRounds(ctx, guildID)
 		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to retrieve upcoming rounds for tag sync", attr.Error(err))
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID: payload.GuildID,
+					GuildID: guildID,
 					Error:   fmt.Sprintf("failed to get upcoming rounds: %v", err),
 				},
 			}, nil
 		}
-		totalUpcomingRounds := len(allUpcomingRounds)
 
-		// Get rounds that need updates
-		updates := s.getRoundsAndParticipantsToUpdateFromRounds(ctx, allUpcomingRounds, payload.ChangedTags)
+		// 2. Determine which rounds need the atomic update
+		updates := s.getRoundsAndParticipantsToUpdateFromRounds(ctx, allUpcomingRounds, changedTags)
 
 		if len(updates) == 0 {
-			s.logger.InfoContext(ctx, "No upcoming rounds have affected participants",
-				attr.Int("total_upcoming_rounds", totalUpcomingRounds),
-				attr.Int("changed_tags_count", len(payload.ChangedTags)),
-			)
+			s.logger.InfoContext(ctx, "No upcoming rounds affected by tag changes",
+				attr.String("guild_id", string(guildID)),
+				attr.Int("total_upcoming", len(allUpcomingRounds)))
+
 			return RoundOperationResult{
 				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
-					GuildID:       payload.GuildID,
-					UpdatedRounds: []roundevents.RoundUpdateInfoV1{},
+					GuildID: guildID,
 					Summary: roundevents.UpdateSummaryV1{
-						TotalRoundsProcessed: totalUpcomingRounds,
+						GuildID:              guildID,
+						TotalRoundsProcessed: len(allUpcomingRounds),
 						RoundsUpdated:        0,
-						ParticipantsUpdated:  0,
 					},
 				},
 			}, nil
 		}
 
-		// Perform database updates efficiently
-		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to update rounds in database", attr.Error(err))
+		// 3. Batch persist the changes to the Database
+		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, guildID, updates); err != nil {
+			s.logger.ErrorContext(ctx, "Database failure during round tag synchronization", attr.Error(err))
 			return RoundOperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID: payload.GuildID,
+					GuildID: guildID,
 					Error:   fmt.Sprintf("database update failed: %v", err),
 				},
 			}, nil
 		}
 
-		// Build response payload with detailed information for Discord
+		// 4. Construct the success event payload
 		updatedRounds := make([]roundevents.RoundUpdateInfoV1, len(updates))
 		totalParticipantsUpdated := 0
 
 		for i, update := range updates {
-			// Count participants that actually had tag changes
 			participantsWithChanges := 0
 			for _, participant := range update.Participants {
-				if _, hasChange := payload.ChangedTags[participant.UserID]; hasChange {
+				if _, hasChange := changedTags[participant.UserID]; hasChange {
 					participantsWithChanges++
 				}
 			}
 			totalParticipantsUpdated += participantsWithChanges
 
 			updatedRounds[i] = roundevents.RoundUpdateInfoV1{
-				// BUGFIX: GuildID was previously omitted, causing downstream Discord tag update logic
-				// to fail resolving guild configuration (empty guild ID) and silently skip updates.
-				GuildID:             payload.GuildID,
+				GuildID:             guildID,
 				RoundID:             update.RoundID,
 				EventMessageID:      update.EventMessageID,
 				Title:               update.Round.Title,
 				StartTime:           update.Round.StartTime,
 				Location:            update.Round.Location,
-				UpdatedParticipants: update.Participants, // ALL participants (with updates applied)
+				UpdatedParticipants: update.Participants,
 				ParticipantsChanged: participantsWithChanges,
 			}
 		}
 
-		successPayload := &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
-			GuildID:       payload.GuildID,
-			UpdatedRounds: updatedRounds,
-			Summary: roundevents.UpdateSummaryV1{
-				TotalRoundsProcessed: totalUpcomingRounds,
-				RoundsUpdated:        len(updates),
-				ParticipantsUpdated:  totalParticipantsUpdated,
-			},
-		}
-
-		s.logger.InfoContext(ctx, "Successfully updated scheduled rounds with new tags",
-			attr.Int("total_upcoming_rounds", totalUpcomingRounds),
+		s.logger.InfoContext(ctx, "Successfully synchronized rounds with new leaderboard state",
 			attr.Int("rounds_updated", len(updates)),
-			attr.Int("participants_updated", totalParticipantsUpdated),
-		)
+			attr.Int("total_users_synced", totalParticipantsUpdated))
 
-		return RoundOperationResult{Success: successPayload}, nil
+		return RoundOperationResult{
+			Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+				GuildID:       guildID,
+				UpdatedRounds: updatedRounds,
+				Summary: roundevents.UpdateSummaryV1{
+					GuildID:              guildID,
+					TotalRoundsProcessed: len(allUpcomingRounds),
+					RoundsUpdated:        len(updates),
+					ParticipantsUpdated:  totalParticipantsUpdated,
+				},
+			},
+		}, nil
 	})
-
-	return result, err
 }

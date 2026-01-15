@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -64,12 +65,12 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) (RoundOperationResult, error) {
 	return s.serviceWrapper(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
 		// Use the round data directly from the payload
-		// The payload.RoundData is populated by AllScoresSubmittedPayload which has verified participants with scores
+		// The payload.RoundData is populated by AllScoresSubmittedPayloadV1 which has verified participants with scores
 		round := payload.RoundData
 
 		// Prepare the participant score data for the Score Module
 		// ONLY include participants who have actually submitted scores
-		scores := make([]roundevents.ParticipantScoreV1, 0, len(round.Participants))
+		scores := make([]sharedtypes.ScoreInfo, 0, len(round.Participants))
 		for _, p := range round.Participants {
 			// Skip participants without scores
 			if p.Score == nil {
@@ -88,7 +89,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 			score := int(*p.Score) // We know p.Score is not nil here
 
 			tagNumberPtr := sharedtypes.TagNumber(tagNumber)
-			scores = append(scores, roundevents.ParticipantScoreV1{
+			scores = append(scores, sharedtypes.ScoreInfo{
 				UserID:    sharedtypes.DiscordID(p.UserID),
 				TagNumber: &tagNumberPtr,
 				Score:     sharedtypes.Score(score),
@@ -116,7 +117,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevent
 		}
 
 		// Prepare the success payload containing the request for the Score Module
-		processScoresPayload := roundevents.ProcessRoundScoresRequestPayloadV1{
+		processScoresPayload := sharedevents.ProcessRoundScoresRequestedPayloadV1{
 			GuildID: payload.GuildID,
 			// Use the authoritative RoundID from the event payload to avoid zero UUID writes
 			RoundID: payload.RoundID,

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
@@ -26,7 +26,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 				attr.Error(validationError),
 			)
 			return ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
+				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
@@ -69,7 +69,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			// This signals that the business logic handled the error,
 			// and it's not a system error to be propagated further as an 'error'.
 			return ScoreOperationResult{
-				Failure: &scoreevents.ScoreUpdateFailedPayloadV1{
+				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					UserID:  userID,
@@ -84,7 +84,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			attr.String("user_id", string(userID)),
 		)
 		return ScoreOperationResult{
-			Success: &scoreevents.ScoreUpdatedPayloadV1{
+			Success: &sharedevents.ScoreUpdatedPayloadV1{
 				GuildID: guildID,
 				RoundID: roundID,
 				UserID:  userID,

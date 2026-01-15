@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	scoreevents "github.com/Black-And-White-Club/frolf-bot-shared/events/score"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
@@ -28,7 +27,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	testScore := sharedtypes.Score(72)
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testProcessRoundScoresRequestedPayloadV1 := &scoreevents.ProcessRoundScoresRequestedPayloadV1{
+	testProcessRoundScoresRequestedPayloadV1 := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 		GuildID: testGuildID,
 		RoundID: testRoundID,
 		Scores: []sharedtypes.ScoreInfo{
@@ -46,7 +45,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	tests := []struct {
 		name           string
 		mockSetup      func()
-		payload        *scoreevents.ProcessRoundScoresRequestedPayloadV1
+		payload        *sharedevents.ProcessRoundScoresRequestedPayloadV1
 		wantErr        bool
 		expectedErrMsg string
 		checkResults   func(t *testing.T, results []handlerwrapper.Result)
@@ -62,7 +61,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					scoreservice.ScoreOperationResult{
-						Success: &scoreevents.ProcessRoundScoresSucceededPayloadV1{
+						Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
 							TagMappings: []sharedtypes.TagMapping{
@@ -82,7 +81,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				if results[0].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV1 {
 					t.Errorf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV1, results[0].Topic)
 				}
-				batchPayload, ok := results[0].Payload.(*sharedevents.BatchTagAssignmentRequestedPayload)
+				batchPayload, ok := results[0].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
 				if !ok {
 					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
 				}
@@ -112,7 +111,7 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 		{
 			name: "Service failure in ProcessRoundScores",
 			mockSetup: func() {
-				failurePayload := &scoreevents.ProcessRoundScoresFailedPayloadV1{
+				failurePayload := &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: testGuildID,
 					RoundID: testRoundID,
 					Reason:  "internal service error",
@@ -137,10 +136,10 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				if len(results) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(results))
 				}
-				if results[0].Topic != scoreevents.ProcessRoundScoresFailedV1 {
-					t.Errorf("expected topic %s, got %s", scoreevents.ProcessRoundScoresFailedV1, results[0].Topic)
+				if results[0].Topic != sharedevents.ProcessRoundScoresFailedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresFailedV1, results[0].Topic)
 				}
-				failurePayload, ok := results[0].Payload.(*scoreevents.ProcessRoundScoresFailedPayloadV1)
+				failurePayload, ok := results[0].Payload.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
 				if !ok {
 					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
 				}

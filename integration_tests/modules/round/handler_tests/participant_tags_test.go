@@ -153,8 +153,8 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 	}
 }
 
-func createScheduledRoundTagUpdatePayload(changedTags map[sharedtypes.DiscordID]*sharedtypes.TagNumber) roundevents.ScheduledRoundTagUpdatePayloadV1 {
-	return roundevents.ScheduledRoundTagUpdatePayloadV1{
+func createScheduledRoundTagUpdatePayload(changedTags map[sharedtypes.DiscordID]*sharedtypes.TagNumber) sharedevents.ScheduledRoundTagUpdatePayloadV1 {
+	return sharedevents.ScheduledRoundTagUpdatePayloadV1{
 		GuildID:     "test-guild",
 		ChangedTags: changedTags,
 	}
