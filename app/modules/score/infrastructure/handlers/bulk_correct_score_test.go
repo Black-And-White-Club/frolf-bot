@@ -2,14 +2,13 @@ package scorehandlers
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/google/uuid"
@@ -24,424 +23,164 @@ func TestScoreHandlers_HandleBulkCorrectScoreRequest(t *testing.T) {
 	userID2 := sharedtypes.DiscordID("user-2")
 	score1 := sharedtypes.Score(10)
 	score2 := sharedtypes.Score(12)
-	tag1 := sharedtypes.TagNumber(1)
-	tag2 := sharedtypes.TagNumber(2)
 
-	testBulkPayload := &sharedevents.ScoreBulkUpdateRequestedPayloadV1{
+	bulkPayload := &sharedevents.ScoreBulkUpdateRequestedPayloadV1{
 		GuildID: testGuildID,
 		RoundID: testRoundID,
 		Updates: []sharedevents.ScoreUpdateRequestedPayloadV1{
 			{
-				GuildID:   testGuildID,
-				RoundID:   testRoundID,
-				UserID:    userID1,
-				Score:     score1,
-				TagNumber: &tag1,
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+				UserID:  userID1,
+				Score:   score1,
 			},
 			{
-				GuildID:   testGuildID,
-				RoundID:   testRoundID,
-				UserID:    userID2,
-				Score:     score2,
-				TagNumber: &tag2,
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+				UserID:  userID2,
+				Score:   score2,
 			},
 		},
 	}
 
-	tests := []struct {
-		name           string
-		mockSetup      func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService
-		payload        *sharedevents.ScoreBulkUpdateRequestedPayloadV1
-		wantErr        bool
-		expectedErrMsg string
-		checkResults   func(t *testing.T, results []handlerwrapper.Result)
-	}{
-		{
-			name: "Successfully handle bulk score updates with all succeeding",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				mockSvc := scoremocks.NewMockService(ctrl)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-				successPayload1 := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Score:   score1,
-				}
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &scoremetrics.NoOpMetrics{}
 
-				successPayload2 := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID2,
-					Score:   score2,
-				}
+	mockSvc := scoremocks.NewMockService(ctrl)
+	mockSvc.EXPECT().CorrectScore(gomock.Any(), testGuildID, testRoundID, userID1, score1, nil).
+		Return(scoreservice.ScoreOperationResult{Success: &sharedevents.ScoreUpdatedPayloadV1{GuildID: testGuildID, RoundID: testRoundID, UserID: userID1, Score: score1}}, nil)
+	mockSvc.EXPECT().CorrectScore(gomock.Any(), testGuildID, testRoundID, userID2, score2, nil).
+		Return(scoreservice.ScoreOperationResult{Success: &sharedevents.ScoreUpdatedPayloadV1{GuildID: testGuildID, RoundID: testRoundID, UserID: userID2, Score: score2}}, nil)
 
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID1,
-					score1,
-					&tag1,
-				).Return(
-					scoreservice.ScoreOperationResult{Success: successPayload1},
-					nil,
-				)
+	h := &ScoreHandlers{
+		scoreService: mockSvc,
+		logger:       logger,
+		tracer:       tracer,
+		metrics:      metrics,
+	}
 
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID2,
-					score2,
-					&tag2,
-				).Return(
-					scoreservice.ScoreOperationResult{Success: successPayload2},
-					nil,
-				)
+	ctx := context.WithValue(context.Background(), "channel_id", "channel-1")
+	ctx = context.WithValue(ctx, "message_id", "message-1")
 
-				mockSvc.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					[]sharedtypes.ScoreInfo{
-						{UserID: userID1, Score: score1, TagNumber: &tag1},
-						{UserID: userID2, Score: score2, TagNumber: &tag2},
-					},
-					nil,
-				)
+	results, err := h.HandleBulkCorrectScoreRequest(ctx, bulkPayload)
+	if err != nil {
+		t.Fatalf("HandleBulkCorrectScoreRequest() unexpected error: %v", err)
+	}
 
-				return mockSvc
-			},
-			payload: testBulkPayload,
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 4 {
-					t.Fatalf("expected 4 results, got %d", len(results))
-				}
-				// First two: individual success events
-				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected first topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
-				}
-				if results[1].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected second topic %s, got %s", sharedevents.ScoreUpdatedV1, results[1].Topic)
-				}
-				// Third: aggregate event
-				if results[2].Topic != sharedevents.ScoreBulkUpdatedV1 {
-					t.Errorf("expected third topic %s, got %s", sharedevents.ScoreBulkUpdatedV1, results[2].Topic)
-				}
-				aggPayload, ok := results[2].Payload.(*sharedevents.ScoreBulkUpdatedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected aggregate payload type: got %T", results[2].Payload)
-				}
-				if aggPayload.AppliedCount != 2 {
-					t.Errorf("expected AppliedCount 2, got %d", aggPayload.AppliedCount)
-				}
-				if aggPayload.FailedCount != 0 {
-					t.Errorf("expected FailedCount 0, got %d", aggPayload.FailedCount)
-				}
-				// Fourth: reprocess request
-				if results[3].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected fourth topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[3].Topic)
-				}
-			},
-		},
-		{
-			name: "Nil payload",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				return scoremocks.NewMockService(ctrl)
-			},
-			payload:        nil,
-			wantErr:        true,
-			expectedErrMsg: "payload is nil",
-		},
-		{
-			name: "Service returns system error on first update",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				mockSvc := scoremocks.NewMockService(ctrl)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
 
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID1,
-					score1,
-					&tag1,
-				).Return(
-					scoreservice.ScoreOperationResult{},
-					fmt.Errorf("system error"),
-				)
+	if results[0].Topic != roundevents.RoundScoreBulkUpdateRequestedV1 {
+		t.Fatalf("expected topic %s, got %s", roundevents.RoundScoreBulkUpdateRequestedV1, results[0].Topic)
+	}
 
-				return mockSvc
-			},
-			payload:        testBulkPayload,
-			wantErr:        true,
-			expectedErrMsg: "system error during bulk score update",
-		},
-		{
-			name: "All updates fail - no reprocessing",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				mockSvc := scoremocks.NewMockService(ctrl)
+	bulk, ok := results[0].Payload.(*roundevents.ScoreBulkUpdateRequestPayloadV1)
+	if !ok {
+		t.Fatalf("expected payload *ScoreBulkUpdateRequestPayloadV1, got %T", results[0].Payload)
+	}
+	if bulk.GuildID != testGuildID {
+		t.Errorf("expected guild_id %s, got %s", testGuildID, bulk.GuildID)
+	}
+	if bulk.RoundID != testRoundID {
+		t.Errorf("expected round_id %s, got %s", testRoundID, bulk.RoundID)
+	}
+	if bulk.ChannelID != "channel-1" {
+		t.Errorf("expected channel_id channel-1, got %s", bulk.ChannelID)
+	}
+	if bulk.MessageID != "message-1" {
+		t.Errorf("expected message_id message-1, got %s", bulk.MessageID)
+	}
+	if len(bulk.Updates) != 2 {
+		t.Fatalf("expected 2 updates, got %d", len(bulk.Updates))
+	}
+	if bulk.Updates[0].UserID != userID1 {
+		t.Errorf("expected first update user_id %s, got %s", userID1, bulk.Updates[0].UserID)
+	}
+	if bulk.Updates[0].Score == nil || *bulk.Updates[0].Score != score1 {
+		t.Errorf("expected first update score %d", score1)
+	}
+	if bulk.Updates[1].UserID != userID2 {
+		t.Errorf("expected second update user_id %s, got %s", userID2, bulk.Updates[1].UserID)
+	}
+	if bulk.Updates[1].Score == nil || *bulk.Updates[1].Score != score2 {
+		t.Errorf("expected second update score %d", score2)
+	}
+}
 
-				failurePayload1 := &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Reason:  "score not found",
-				}
+func TestScoreHandlers_HandleBulkCorrectScoreRequest_UsesDiscordMessageID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-				failurePayload2 := &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID2,
-					Reason:  "score not found",
-				}
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &scoremetrics.NoOpMetrics{}
 
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID1,
-					score1,
-					&tag1,
-				).Return(
-					scoreservice.ScoreOperationResult{Failure: failurePayload1},
-					nil,
-				)
+	mockSvc := scoremocks.NewMockService(ctrl)
+	mockSvc.EXPECT().CorrectScore(gomock.Any(), sharedtypes.GuildID("guild-1"), gomock.Any(), sharedtypes.DiscordID("user-1"), sharedtypes.Score(5), nil).
+		Return(scoreservice.ScoreOperationResult{Success: &sharedevents.ScoreUpdatedPayloadV1{GuildID: sharedtypes.GuildID("guild-1"), UserID: sharedtypes.DiscordID("user-1"), Score: sharedtypes.Score(5)}}, nil)
 
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID2,
-					score2,
-					&tag2,
-				).Return(
-					scoreservice.ScoreOperationResult{Failure: failurePayload2},
-					nil,
-				)
+	h := &ScoreHandlers{
+		scoreService: mockSvc,
+		logger:       logger,
+		tracer:       tracer,
+		metrics:      metrics,
+	}
 
-				return mockSvc
-			},
-			payload: testBulkPayload,
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 3 {
-					t.Fatalf("expected 3 results, got %d", len(results))
-				}
-				// Two failure events
-				if results[0].Topic != sharedevents.ScoreUpdateFailedV1 {
-					t.Errorf("expected first topic %s, got %s", sharedevents.ScoreUpdateFailedV1, results[0].Topic)
-				}
-				if results[1].Topic != sharedevents.ScoreUpdateFailedV1 {
-					t.Errorf("expected second topic %s, got %s", sharedevents.ScoreUpdateFailedV1, results[1].Topic)
-				}
-				// Aggregate message only (no reprocess since applied = 0)
-				if results[2].Topic != sharedevents.ScoreBulkUpdatedV1 {
-					t.Errorf("expected third topic %s, got %s", sharedevents.ScoreBulkUpdatedV1, results[2].Topic)
-				}
-				aggPayload, ok := results[2].Payload.(*sharedevents.ScoreBulkUpdatedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected aggregate payload type: got %T", results[2].Payload)
-				}
-				if aggPayload.AppliedCount != 0 {
-					t.Errorf("expected AppliedCount 0, got %d", aggPayload.AppliedCount)
-				}
-				if aggPayload.FailedCount != 2 {
-					t.Errorf("expected FailedCount 2, got %d", aggPayload.FailedCount)
-				}
-			},
-		},
-		{
-			name: "GetScoresForRound fails after successful updates",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				mockSvc := scoremocks.NewMockService(ctrl)
+	ctx := context.WithValue(context.Background(), "discord_message_id", "discord-msg-1")
 
-				successPayload1 := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Score:   score1,
-				}
-
-				successPayload2 := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID2,
-					Score:   score2,
-				}
-
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID1,
-					score1,
-					&tag1,
-				).Return(
-					scoreservice.ScoreOperationResult{Success: successPayload1},
-					nil,
-				)
-
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID2,
-					score2,
-					&tag2,
-				).Return(
-					scoreservice.ScoreOperationResult{Success: successPayload2},
-					nil,
-				)
-
-				mockSvc.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					nil, fmt.Errorf("db error"),
-				)
-
-				return mockSvc
-			},
-			payload: testBulkPayload,
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 3 {
-					t.Fatalf("expected 3 results (no reprocess due to error), got %d", len(results))
-				}
-				// Two success events + aggregate (no reprocess message since GetScoresForRound failed)
-				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected first topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
-				}
-				if results[1].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected second topic %s, got %s", sharedevents.ScoreUpdatedV1, results[1].Topic)
-				}
-				if results[2].Topic != sharedevents.ScoreBulkUpdatedV1 {
-					t.Errorf("expected third topic %s, got %s", sharedevents.ScoreBulkUpdatedV1, results[2].Topic)
-				}
-			},
-		},
-		{
-			name: "Mixed success and failure",
-			mockSetup: func(t *testing.T, ctrl *gomock.Controller) *scoremocks.MockService {
-				mockSvc := scoremocks.NewMockService(ctrl)
-
-				successPayload1 := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID1,
-					Score:   score1,
-				}
-
-				failurePayload2 := &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  userID2,
-					Reason:  "score not found",
-				}
-
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID1,
-					score1,
-					&tag1,
-				).Return(
-					scoreservice.ScoreOperationResult{Success: successPayload1},
-					nil,
-				)
-
-				mockSvc.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					userID2,
-					score2,
-					&tag2,
-				).Return(
-					scoreservice.ScoreOperationResult{Failure: failurePayload2},
-					nil,
-				)
-
-				mockSvc.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					[]sharedtypes.ScoreInfo{
-						{UserID: userID1, Score: score1, TagNumber: &tag1},
-					},
-					nil,
-				)
-
-				return mockSvc
-			},
-			payload: testBulkPayload,
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 4 {
-					t.Fatalf("expected 4 results, got %d", len(results))
-				}
-				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected first topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
-				}
-				if results[1].Topic != sharedevents.ScoreUpdateFailedV1 {
-					t.Errorf("expected second topic %s, got %s", sharedevents.ScoreUpdateFailedV1, results[1].Topic)
-				}
-				if results[2].Topic != sharedevents.ScoreBulkUpdatedV1 {
-					t.Errorf("expected third topic %s, got %s", sharedevents.ScoreBulkUpdatedV1, results[2].Topic)
-				}
-				aggPayload, ok := results[2].Payload.(*sharedevents.ScoreBulkUpdatedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected aggregate payload type: got %T", results[2].Payload)
-				}
-				if aggPayload.AppliedCount != 1 {
-					t.Errorf("expected AppliedCount 1, got %d", aggPayload.AppliedCount)
-				}
-				if aggPayload.FailedCount != 1 {
-					t.Errorf("expected FailedCount 1, got %d", aggPayload.FailedCount)
-				}
-				if results[3].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected fourth topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[3].Topic)
-				}
+	payload := &sharedevents.ScoreBulkUpdateRequestedPayloadV1{
+		GuildID: sharedtypes.GuildID("guild-1"),
+		RoundID: sharedtypes.RoundID(uuid.New()),
+		Updates: []sharedevents.ScoreUpdateRequestedPayloadV1{
+			{
+				GuildID: sharedtypes.GuildID("guild-1"),
+				RoundID: sharedtypes.RoundID(uuid.New()),
+				UserID:  sharedtypes.DiscordID("user-1"),
+				Score:   sharedtypes.Score(5),
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	results, err := h.HandleBulkCorrectScoreRequest(ctx, payload)
+	if err != nil {
+		t.Fatalf("HandleBulkCorrectScoreRequest() unexpected error: %v", err)
+	}
 
-			mockSvc := tt.mockSetup(t, ctrl)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
 
-			logger := loggerfrolfbot.NoOpLogger
-			tracer := noop.NewTracerProvider().Tracer("test")
-			metrics := &scoremetrics.NoOpMetrics{}
+	resPayload, ok := results[0].Payload.(*roundevents.ScoreBulkUpdateRequestPayloadV1)
+	if !ok {
+		t.Fatalf("expected payload *ScoreBulkUpdateRequestPayloadV1, got %T", results[0].Payload)
+	}
+	if resPayload.MessageID != "discord-msg-1" {
+		t.Errorf("expected message_id discord-msg-1, got %s", resPayload.MessageID)
+	}
+}
 
-			h := &ScoreHandlers{
-				scoreService: mockSvc,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
-			}
+func TestScoreHandlers_HandleBulkCorrectScoreRequest_NilPayload(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			ctx := context.Background()
-			got, err := h.HandleBulkCorrectScoreRequest(ctx, tt.payload)
+	logger := loggerfrolfbot.NoOpLogger
+	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &scoremetrics.NoOpMetrics{}
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleBulkCorrectScoreRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleBulkCorrectScoreRequest() error = %v, expected %v", err, tt.expectedErrMsg)
-			}
+	h := &ScoreHandlers{
+		scoreService: scoremocks.NewMockService(ctrl),
+		logger:       logger,
+		tracer:       tracer,
+		metrics:      metrics,
+	}
 
-			if !tt.wantErr && tt.checkResults != nil {
-				tt.checkResults(t, got)
-			}
-		})
+	_, err := h.HandleBulkCorrectScoreRequest(context.Background(), nil)
+	if err == nil {
+		t.Fatalf("expected error for nil payload")
 	}
 }

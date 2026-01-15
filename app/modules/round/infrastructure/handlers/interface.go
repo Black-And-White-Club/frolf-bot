@@ -28,6 +28,7 @@ type Handlers interface {
 
 	// Score update handlers
 	HandleScoreUpdateRequest(ctx context.Context, payload *roundevents.ScoreUpdateRequestPayloadV1) ([]handlerwrapper.Result, error)
+	HandleScoreBulkUpdateRequest(ctx context.Context, payload *roundevents.ScoreBulkUpdateRequestPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScoreUpdateValidated(ctx context.Context, payload *roundevents.ScoreUpdateValidatedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleParticipantScoreUpdated(ctx context.Context, payload *roundevents.ParticipantScoreUpdatedPayloadV1) ([]handlerwrapper.Result, error)
 

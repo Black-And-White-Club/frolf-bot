@@ -65,6 +65,38 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from UpdateParticipantScore service"}
 }
 
+// HandleScoreBulkUpdateRequest handles bulk score overrides for a round.
+func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
+	ctx context.Context,
+	payload *roundevents.ScoreBulkUpdateRequestPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	if payload == nil {
+		return nil, sharedtypes.ValidationError{Message: "bulk score update payload is nil"}
+	}
+
+	result, err := h.roundService.UpdateParticipantScoresBulk(ctx, *payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "bulk participant score update failed",
+			attr.Any("failure", result.Failure),
+		)
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundScoreUpdateErrorV1, Payload: result.Failure},
+		}, nil
+	}
+
+	if result.Success != nil {
+		return []handlerwrapper.Result{
+			{Topic: roundevents.RoundScoresBulkUpdatedV1, Payload: result.Success},
+		}, nil
+	}
+
+	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from UpdateParticipantScoresBulk service"}
+}
+
 // HandleParticipantScoreUpdated checks if all scores have been submitted after an update.
 func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	ctx context.Context,

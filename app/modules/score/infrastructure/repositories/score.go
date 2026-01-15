@@ -100,8 +100,41 @@ func (db *ScoreDBImpl) UpdateOrAddScore(ctx context.Context, guildID sharedtypes
 						}
 					}
 				}
+				if anyRound.GuildID != "" && anyRound.GuildID != guildID {
+					return fmt.Errorf("score record for round %s belongs to different guild %s", roundID, anyRound.GuildID)
+				}
+				score = anyRound
+				goto SCORE_LOADED
 			}
-			return fmt.Errorf("score record not found for round %s (guild %s)", roundID, guildID)
+			if !errors.Is(errByID, sql.ErrNoRows) {
+				return fmt.Errorf("failed to fetch score record by round id: %w", errByID)
+			}
+
+			// No existing row: create a new score record for manual updates
+			scoreToInsert := Score{
+				GuildID:   guildID,
+				RoundID:   roundID,
+				RoundData: []sharedtypes.ScoreInfo{scoreInfo},
+				Source:    "manual",
+			}
+			if _, insertErr := db.DB.NewInsert().
+				Model(&scoreToInsert).
+				On("CONFLICT (id) DO NOTHING").
+				Exec(ctx); insertErr != nil {
+				return fmt.Errorf("failed to insert score record for round %s (guild %s): %w", roundID, guildID, insertErr)
+			}
+
+			errRetry := db.DB.NewSelect().
+				Model(&score).
+				Where("id = ? AND guild_id = ?", roundID, guildID).
+				Scan(ctx)
+			if errRetry != nil {
+				if errors.Is(errRetry, sql.ErrNoRows) {
+					return fmt.Errorf("score record not found for round %s (guild %s)", roundID, guildID)
+				}
+				return fmt.Errorf("failed to fetch score record after insert: %w", errRetry)
+			}
+			goto SCORE_LOADED
 		}
 		return fmt.Errorf("failed to fetch score record for add/update: %w", err)
 	}
