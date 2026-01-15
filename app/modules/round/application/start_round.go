@@ -4,6 +4,7 @@ import (
 	"context"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -82,23 +83,28 @@ func (s *RoundService) ProcessRoundStart(
 		}
 
 		// Determine Discord channel to use. Prefer guild config if available.
+		cfg := s.getGuildConfigForEnrichment(ctx, guildID)
 		discordChannelID := ""
-		if cfg := s.getGuildConfigForEnrichment(ctx, guildID); cfg != nil && cfg.EventChannelID != "" {
+		if cfg != nil && cfg.EventChannelID != "" {
 			discordChannelID = cfg.EventChannelID
 		}
 
 		// Build the Discord-specific payload from DB values (DB is authoritative)
-		return RoundOperationResult{
-			Success: &roundevents.DiscordRoundStartPayloadV1{
-				GuildID:          guildID,
-				RoundID:          roundID,
-				Title:            round.Title,
-				Location:         round.Location,
-				StartTime:        round.StartTime,
-				Participants:     participants,
-				EventMessageID:   round.EventMessageID,
-				DiscordChannelID: discordChannelID,
-			},
-		}, nil
+		payload := &roundevents.DiscordRoundStartPayloadV1{
+			GuildID:          guildID,
+			RoundID:          roundID,
+			Title:            round.Title,
+			Location:         round.Location,
+			StartTime:        round.StartTime,
+			Participants:     participants,
+			EventMessageID:   round.EventMessageID,
+			DiscordChannelID: discordChannelID,
+		}
+
+		if cfg != nil {
+			payload.Config = sharedevents.NewGuildConfigFragment(cfg)
+		}
+
+		return RoundOperationResult{Success: payload}, nil
 	})
 }
