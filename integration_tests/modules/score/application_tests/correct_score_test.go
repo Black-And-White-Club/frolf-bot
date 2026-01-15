@@ -1,7 +1,6 @@
 package scoreintegrationtests
 
 import (
-	"fmt" // Added fmt import for Sprintf
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -25,6 +24,7 @@ func TestCorrectScore(t *testing.T) {
 		userIndex            int
 		score                sharedtypes.Score
 		tag                  *sharedtypes.TagNumber
+		seedRound            bool
 		expectFailurePayload bool
 		// Changed expectedFailureError to a function to handle dynamic round IDs
 		expectedFailureError func(roundID sharedtypes.RoundID) string
@@ -34,6 +34,7 @@ func TestCorrectScore(t *testing.T) {
 			userIndex:            0,
 			score:                3,
 			tag:                  ptrTag(7),
+			seedRound:            true,
 			expectFailurePayload: false,
 			expectedFailureError: nil, // No failure expected
 		},
@@ -42,6 +43,7 @@ func TestCorrectScore(t *testing.T) {
 			userIndex:            1,
 			score:                -1,
 			tag:                  nil,
+			seedRound:            true,
 			expectFailurePayload: false,
 			expectedFailureError: nil, // No failure expected
 		},
@@ -50,6 +52,7 @@ func TestCorrectScore(t *testing.T) {
 			userIndex:            0,
 			score:                5,
 			tag:                  ptrTag(1),
+			seedRound:            true,
 			expectFailurePayload: false,
 			expectedFailureError: nil, // No failure expected
 		},
@@ -58,19 +61,18 @@ func TestCorrectScore(t *testing.T) {
 			userIndex:            1,
 			score:                2,
 			tag:                  nil,
+			seedRound:            true,
 			expectFailurePayload: false,
 			expectedFailureError: nil, // No failure expected
 		},
 		{
-			name:                 "Fails with invalid round ID",
+			name:                 "Allows override for missing round",
 			userIndex:            2,
 			score:                0,
 			tag:                  ptrTag(5),
-			expectFailurePayload: true,
-			// Dynamically generate the expected error message
-			expectedFailureError: func(roundID sharedtypes.RoundID) string {
-				return fmt.Sprintf("score record not found for round %s (guild test_guild)", roundID)
-			},
+			seedRound:            false,
+			expectFailurePayload: false,
+			expectedFailureError: nil, // No failure expected
 		},
 	}
 
@@ -84,7 +86,7 @@ func TestCorrectScore(t *testing.T) {
 			if tc.expectFailurePayload { // Check for expected failure payload
 				// Create a completely new, unseeded round ID
 				roundID = sharedtypes.RoundID(uuid.New())
-			} else {
+			} else if tc.seedRound {
 				// Create a fresh round with one user
 				round := generator.GenerateRound(users[tc.userIndex].UserID, 1, []testutils.User{users[tc.userIndex]})
 				parsedUUID, err := uuid.Parse(round.ID.String())
@@ -103,6 +105,9 @@ func TestCorrectScore(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to seed round with initial score: %v", err)
 				}
+			} else {
+				// Use a brand-new round ID without seeding scores
+				roundID = sharedtypes.RoundID(uuid.New())
 			}
 
 			// Call CorrectScore

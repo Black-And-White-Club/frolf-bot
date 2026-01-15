@@ -137,6 +137,122 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, payload round
 	})
 }
 
+// UpdateParticipantScoresBulk updates multiple participant scores in a single operation.
+func (s *RoundService) UpdateParticipantScoresBulk(ctx context.Context, payload roundevents.ScoreBulkUpdateRequestPayloadV1) (RoundOperationResult, error) {
+	return s.serviceWrapper(ctx, "UpdateParticipantScoresBulk", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+		if len(payload.Updates) == 0 {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
+					ScoreUpdateRequest: nil,
+					Error:              "bulk score update contains no updates",
+				},
+			}, nil
+		}
+
+		updatesByUser := make(map[sharedtypes.DiscordID]sharedtypes.Score, len(payload.Updates))
+		for _, update := range payload.Updates {
+			if update.Score == nil {
+				return RoundOperationResult{
+					Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+						GuildID:            payload.GuildID,
+						ScoreUpdateRequest: &update,
+						Error:              "bulk score update contains empty score",
+					},
+				}, nil
+			}
+			updatesByUser[update.UserID] = *update.Score
+		}
+
+		participants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+		if err != nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
+					ScoreUpdateRequest: &payload.Updates[0],
+					Error:              "failed to fetch participants: " + err.Error(),
+				},
+			}, nil
+		}
+
+		updatedParticipants := make([]roundtypes.Participant, 0, len(participants))
+		applied := 0
+		for _, participant := range participants {
+			if score, ok := updatesByUser[participant.UserID]; ok {
+				s := score
+				participant.Score = &s
+				applied++
+			}
+			updatedParticipants = append(updatedParticipants, participant)
+		}
+
+		if applied != len(updatesByUser) {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
+					ScoreUpdateRequest: &payload.Updates[0],
+					Error:              "bulk score update includes users not in round",
+				},
+			}, nil
+		}
+
+		updates := []roundtypes.RoundUpdate{{
+			RoundID:      payload.RoundID,
+			Participants: updatedParticipants,
+		}}
+		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
+					ScoreUpdateRequest: &payload.Updates[0],
+					Error:              "failed to update participant scores: " + err.Error(),
+				},
+			}, nil
+		}
+
+		round, err := s.RoundDB.GetRound(ctx, payload.GuildID, payload.RoundID)
+		if err != nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundErrorPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					Error:   "failed to fetch round details for bulk update: " + err.Error(),
+				},
+			}, nil
+		}
+
+		firstUpdate := payload.Updates[0]
+		if firstUpdate.Score == nil {
+			return RoundOperationResult{
+				Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
+					GuildID:            payload.GuildID,
+					ScoreUpdateRequest: &firstUpdate,
+					Error:              "bulk score update missing score",
+				},
+			}, nil
+		}
+
+		channelID := payload.ChannelID
+		messageID := payload.MessageID
+		if channelID == "" {
+			channelID = firstUpdate.ChannelID
+		}
+		if messageID == "" {
+			messageID = firstUpdate.MessageID
+		}
+
+		return RoundOperationResult{
+			Success: &roundevents.RoundScoresBulkUpdatedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ChannelID:      channelID,
+				EventMessageID: round.EventMessageID,
+				Participants:   updatedParticipants,
+			},
+		}, nil
+	})
+}
+
 // CheckAllScoresSubmittedResult is a custom struct to return data from CheckAllScoresSubmitted.
 type CheckAllScoresSubmittedResult struct {
 	AllScoresSubmitted bool

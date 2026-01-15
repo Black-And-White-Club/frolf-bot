@@ -3,10 +3,11 @@ package scorehandlers
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -17,81 +18,58 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		return nil, errors.New("payload is nil")
 	}
 
-	var results []handlerwrapper.Result
-	var applied, failed int
-	var appliedUsers []sharedtypes.DiscordID
+	channelID, _ := ctx.Value("channel_id").(string)
+	messageID, _ := ctx.Value("message_id").(string)
+	if messageID == "" {
+		if discordMessageID, ok := ctx.Value("discord_message_id").(string); ok {
+			messageID = discordMessageID
+		}
+	}
 
 	for _, upd := range payload.Updates {
-		res, err := h.scoreService.CorrectScore(ctx, sharedtypes.GuildID(upd.GuildID), upd.RoundID, upd.UserID, upd.Score, upd.TagNumber)
-		if err != nil && res.Failure == nil {
-			// system error; abort entire batch so it can be retried
-			return nil, errors.New("system error during bulk score update")
-		}
-		if res.Failure != nil {
-			failed++
-			fail, ok := res.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
-			if ok {
-				results = append(results, handlerwrapper.Result{
-					Topic:   sharedevents.ScoreUpdateFailedV1,
-					Payload: fail,
-				})
-			}
-			continue
-		}
-		if res.Success != nil {
-			succ, ok := res.Success.(*sharedevents.ScoreUpdatedPayloadV1)
-			if ok {
-				results = append(results, handlerwrapper.Result{
-					Topic:   sharedevents.ScoreUpdatedV1,
-					Payload: succ,
-				})
-				applied++
-				appliedUsers = append(appliedUsers, succ.UserID)
-			}
-		}
-	}
-
-	// Add aggregate summary event
-	agg := &sharedevents.ScoreBulkUpdatedPayloadV1{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		AppliedCount:   applied,
-		FailedCount:    failed,
-		TotalRequested: len(payload.Updates),
-		UserIDsApplied: appliedUsers,
-	}
-	results = append(results, handlerwrapper.Result{
-		Topic:   sharedevents.ScoreBulkUpdatedV1,
-		Payload: agg,
-	})
-
-	// Trigger reprocessing if any updates were applied
-	if applied > 0 {
-		scores, err := h.scoreService.GetScoresForRound(ctx, sharedtypes.GuildID(payload.GuildID), payload.RoundID)
+		result, err := h.scoreService.CorrectScore(ctx, payload.GuildID, payload.RoundID, upd.UserID, upd.Score, upd.TagNumber)
 		if err != nil {
-			h.logger.WarnContext(ctx, "Failed to get scores for reprocessing after bulk score update",
-				"round_id", payload.RoundID,
-				"error", err,
-			)
-		} else if len(scores) > 0 {
-			reprocessPayload := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
-				GuildID: payload.GuildID,
-				RoundID: payload.RoundID,
-				Scores:  scores,
+			return nil, err
+		}
+		if result.Failure != nil {
+			if failure, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1); ok {
+				return nil, fmt.Errorf("bulk score update failed for user %s: %s", failure.UserID, failure.Reason)
 			}
-			results = append(results, handlerwrapper.Result{
-				Topic:   sharedevents.ProcessRoundScoresRequestedV1,
-				Payload: reprocessPayload,
-			})
+			return nil, fmt.Errorf("bulk score update failed for user %s", upd.UserID)
 		}
 	}
 
-	h.logger.InfoContext(ctx, "Processed bulk score override",
+	updates := make([]roundevents.ScoreUpdateRequestPayloadV1, 0, len(payload.Updates))
+	for _, upd := range payload.Updates {
+		score := upd.Score
+		updates = append(updates, roundevents.ScoreUpdateRequestPayloadV1{
+			GuildID:   payload.GuildID,
+			RoundID:   payload.RoundID,
+			UserID:    upd.UserID,
+			Score:     &score,
+			ChannelID: channelID,
+			MessageID: messageID,
+		})
+	}
+
+	bulk := &roundevents.ScoreBulkUpdateRequestPayloadV1{
+		GuildID:   payload.GuildID,
+		RoundID:   payload.RoundID,
+		ChannelID: channelID,
+		MessageID: messageID,
+		Updates:   updates,
+	}
+
+	results := []handlerwrapper.Result{{
+		Topic:   roundevents.RoundScoreBulkUpdateRequestedV1,
+		Payload: bulk,
+	}}
+
+	h.logger.InfoContext(ctx, "Applied bulk score overrides and forwarded to round bulk score update flow",
 		attr.RoundID("round_id", payload.RoundID),
 		attr.Int("updates_requested", len(payload.Updates)),
-		attr.Int("applied", applied),
-		attr.Int("failed", failed),
 		attr.Int("emitted_messages", len(results)),
 	)
+
 	return results, nil
 }

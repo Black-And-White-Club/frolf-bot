@@ -55,8 +55,18 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
+				var triggerPayload roundevents.ScoreUpdateValidatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(triggerMsg, &triggerPayload); err != nil {
+					t.Fatalf("Failed to unmarshal trigger payload: %v", err)
+				}
 				if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Error("Expected RoundID to be set")
+				}
+				if result.UserID == "" {
+					t.Error("Expected UserID to be set")
+				}
+				if triggerPayload.ScoreUpdateRequestPayload.Score != nil && result.Score != *triggerPayload.ScoreUpdateRequestPayload.Score {
+					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
 			timeout: 500 * time.Millisecond,
@@ -99,8 +109,18 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
+				var triggerPayload roundevents.ScoreUpdateValidatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(triggerMsg, &triggerPayload); err != nil {
+					t.Fatalf("Failed to unmarshal trigger payload: %v", err)
+				}
 				if result.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Error("Expected RoundID to be set")
+				}
+				if result.UserID == "" {
+					t.Error("Expected UserID to be set")
+				}
+				if triggerPayload.ScoreUpdateRequestPayload.Score != nil && result.Score != *triggerPayload.ScoreUpdateRequestPayload.Score {
+					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
 			timeout: 500 * time.Millisecond,
@@ -138,8 +158,15 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
-				if result.Score == 0 && result.Participants == nil {
-					t.Error("Expected updated score and participants to be set")
+				var triggerPayload roundevents.ScoreUpdateValidatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(triggerMsg, &triggerPayload); err != nil {
+					t.Fatalf("Failed to unmarshal trigger payload: %v", err)
+				}
+				if result.UserID == "" {
+					t.Error("Expected UserID to be set")
+				}
+				if triggerPayload.ScoreUpdateRequestPayload.Score != nil && result.Score != *triggerPayload.ScoreUpdateRequestPayload.Score {
+					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
 			timeout: 500 * time.Millisecond,

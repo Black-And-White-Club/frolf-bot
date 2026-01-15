@@ -40,6 +40,7 @@ type Service interface {
 	// Score Round
 	ValidateScoreUpdateRequest(ctx context.Context, payload roundevents.ScoreUpdateRequestPayloadV1) (RoundOperationResult, error)
 	UpdateParticipantScore(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (RoundOperationResult, error)
+	UpdateParticipantScoresBulk(ctx context.Context, payload roundevents.ScoreBulkUpdateRequestPayloadV1) (RoundOperationResult, error)
 	CheckAllScoresSubmitted(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayloadV1) (RoundOperationResult, error)
 
 	// Finalize Round

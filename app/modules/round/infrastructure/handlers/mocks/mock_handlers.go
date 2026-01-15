@@ -405,6 +405,21 @@ func (mr *MockHandlersMockRecorder) HandleScheduledRoundTagUpdate(ctx, payload a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScheduledRoundTagUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleScheduledRoundTagUpdate), ctx, payload)
 }
 
+// HandleScoreBulkUpdateRequest mocks base method.
+func (m *MockHandlers) HandleScoreBulkUpdateRequest(ctx context.Context, payload *roundevents.ScoreBulkUpdateRequestPayloadV1) ([]handlerwrapper.Result, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleScoreBulkUpdateRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleScoreBulkUpdateRequest indicates an expected call of HandleScoreBulkUpdateRequest.
+func (mr *MockHandlersMockRecorder) HandleScoreBulkUpdateRequest(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScoreBulkUpdateRequest", reflect.TypeOf((*MockHandlers)(nil).HandleScoreBulkUpdateRequest), ctx, payload)
+}
+
 // HandleScoreUpdateRequest mocks base method.
 func (m *MockHandlers) HandleScoreUpdateRequest(ctx context.Context, payload *roundevents.ScoreUpdateRequestPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()

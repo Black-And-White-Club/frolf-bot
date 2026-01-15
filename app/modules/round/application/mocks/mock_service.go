@@ -301,6 +301,21 @@ func (mr *MockServiceMockRecorder) UpdateParticipantScore(ctx, payload any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateParticipantScore", reflect.TypeOf((*MockService)(nil).UpdateParticipantScore), ctx, payload)
 }
 
+// UpdateParticipantScoresBulk mocks base method.
+func (m *MockService) UpdateParticipantScoresBulk(ctx context.Context, payload roundevents.ScoreBulkUpdateRequestPayloadV1) (roundservice.RoundOperationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateParticipantScoresBulk", ctx, payload)
+	ret0, _ := ret[0].(roundservice.RoundOperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateParticipantScoresBulk indicates an expected call of UpdateParticipantScoresBulk.
+func (mr *MockServiceMockRecorder) UpdateParticipantScoresBulk(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateParticipantScoresBulk", reflect.TypeOf((*MockService)(nil).UpdateParticipantScoresBulk), ctx, payload)
+}
+
 // UpdateParticipantStatus mocks base method.
 func (m *MockService) UpdateParticipantStatus(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (roundservice.RoundOperationResult, error) {
 	m.ctrl.T.Helper()

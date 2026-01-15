@@ -165,6 +165,7 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.RoundScheduleUpdatedV1, h.HandleRoundScheduleUpdate)
 
 	registerHandler(deps, roundevents.RoundScoreUpdateRequestedV1, h.HandleScoreUpdateRequest)
+	registerHandler(deps, roundevents.RoundScoreBulkUpdateRequestedV1, h.HandleScoreBulkUpdateRequest)
 	registerHandler(deps, roundevents.RoundScoreUpdateValidatedV1, h.HandleScoreUpdateValidated)
 	registerHandler(deps, roundevents.RoundParticipantScoreUpdatedV1, h.HandleParticipantScoreUpdated)
 
