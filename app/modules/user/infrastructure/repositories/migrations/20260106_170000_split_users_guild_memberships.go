@@ -3,13 +3,15 @@ package usermigrations
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/uptrace/bun"
 )
 
 func init() {
 	if err := Migrations.DiscoverCaller(); err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "warning: migration caller discovery failed: %v\n", err)
+		// proceed without DiscoverCaller
 	}
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Splitting users table into users + guild_memberships...")
