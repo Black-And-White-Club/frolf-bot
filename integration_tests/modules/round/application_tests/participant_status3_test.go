@@ -8,7 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -19,7 +19,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantJoinRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Internal update: Participant status and tag number set after lookup", // Renamed test case
@@ -60,7 +60,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -139,7 +139,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 			},
 			expectedFailure: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -236,7 +236,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -310,7 +310,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 			},
 			expectedFailure:          true,                            // Changed from expectedError
 			expectedErrorMessagePart: "failed to fetch round details", // Updated to match implementation
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
@@ -346,7 +346,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 			},
 			expectedFailure:          true,                            // Changed from expectedError
 			expectedErrorMessagePart: "failed to fetch round details", // Updated to match implementation
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
@@ -392,7 +392,7 @@ func TestUpdateParticipantStatus(t *testing.T) {
 			},
 			expectedFailure:          true, // Changed from expectedError
 			expectedErrorMessagePart: "unknown response type: INVALID_RESPONSE",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}

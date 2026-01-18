@@ -29,7 +29,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(
 
 	clock := h.extractAnchorClock(ctx)
 
-	result, err := h.roundService.ValidateAndProcessRoundUpdateWithClock(ctx, *payload, roundtime.NewTimeParser(), clock)
+	result, err := h.service.ValidateAndProcessRoundUpdateWithClock(ctx, *payload, roundtime.NewTimeParser(), clock)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "ValidateAndProcessRoundUpdateWithClock returned error",
 			attr.RoundID("round_id", payload.RoundID),
@@ -84,7 +84,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 		}()),
 	)
 
-	result, err := h.roundService.UpdateRoundEntity(ctx, *payload)
+	result, err := h.service.UpdateRoundEntity(ctx, *payload)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "UpdateRoundEntity returned error",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
@@ -161,7 +161,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(
 		Location:  payload.Round.Location,
 	}
 
-	result, err := h.roundService.UpdateScheduledRoundEvents(ctx, schedulePayload)
+	result, err := h.service.UpdateScheduledRoundEvents(ctx, schedulePayload)
 	if err != nil {
 		return nil, err
 	}

@@ -2,9 +2,10 @@ package leaderboardservice
 
 import (
 	"context"
-	"errors"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -15,20 +16,20 @@ func (s *LeaderboardService) TagSwapRequested(
 	guildID sharedtypes.GuildID,
 	userID sharedtypes.DiscordID,
 	targetTag sharedtypes.TagNumber,
-) (LeaderboardOperationResult, error) {
-	return s.serviceWrapper(ctx, "TagSwapRequested", func(ctx context.Context) (LeaderboardOperationResult, error) {
+) (results.OperationResult, error) {
+	return s.withTelemetry(ctx, "TagSwapRequested", guildID, func(ctx context.Context) (results.OperationResult, error) {
 
-		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (LeaderboardOperationResult, error) {
+		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (results.OperationResult, error) {
 			// 1. Get current leaderboard state inside transaction
-			current, err := s.LeaderboardDB.GetActiveLeaderboardIDB(ctx, db, guildID)
+			current, err := s.repo.GetActiveLeaderboardIDB(ctx, db, guildID)
 			if err != nil {
-				return LeaderboardOperationResult{}, err
+				return results.FailureResult(&leaderboardevents.TagSwapFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
 			}
 
 			// 2. Find the requestor's current tag
 			requestorTag, found := s.FindTagByUserID(current.LeaderboardData, userID)
 			if !found {
-				return LeaderboardOperationResult{Err: errors.New("requesting user not on leaderboard")}, nil
+				return results.FailureResult(&leaderboardevents.TagSwapFailedPayloadV1{GuildID: guildID, Reason: "requesting user not on leaderboard"}), nil
 			}
 
 			// 3. Identify who currently holds the target tag
@@ -43,11 +44,11 @@ func (s *LeaderboardService) TagSwapRequested(
 			}
 
 			if !targetFound {
-				return LeaderboardOperationResult{Err: errors.New("target tag not currently assigned")}, nil
+				return results.FailureResult(&leaderboardevents.TagSwapFailedPayloadV1{GuildID: guildID, Reason: "target tag not currently assigned"}), nil
 			}
 
 			if userID == targetUserID {
-				return LeaderboardOperationResult{Err: errors.New("cannot swap tag with self")}, nil
+				return results.FailureResult(&leaderboardevents.TagSwapFailedPayloadV1{GuildID: guildID, Reason: "cannot swap tag with self"}), nil
 			}
 
 			// 4. Construct the batch request for the swap
@@ -62,7 +63,7 @@ func (s *LeaderboardService) TagSwapRequested(
 			newData := s.GenerateUpdatedSnapshot(current.LeaderboardData, requests)
 
 			// Atomic DB Write
-			updatedLB, err := s.LeaderboardDB.UpdateLeaderboard(
+			_, err = s.repo.UpdateLeaderboard(
 				ctx,
 				db,
 				guildID,
@@ -71,15 +72,17 @@ func (s *LeaderboardService) TagSwapRequested(
 				sharedtypes.ServiceUpdateSourceTagSwap,
 			)
 			if err != nil {
-				return LeaderboardOperationResult{}, err
+				return results.FailureResult(&leaderboardevents.TagSwapFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
 			}
 
-			changes := computeTagChanges(current.LeaderboardData, updatedLB.LeaderboardData, guildID, sharedtypes.ServiceUpdateSourceTagSwap)
+			// Build success payload (use processed payload defined in shared events)
+			payload := &leaderboardevents.TagSwapProcessedPayloadV1{
+				GuildID:     guildID,
+				RequestorID: userID,
+				TargetID:    targetUserID,
+			}
 
-			return LeaderboardOperationResult{
-				Leaderboard: updatedLB.LeaderboardData,
-				TagChanges:  changes,
-			}, nil
+			return results.SuccessResult(payload), nil
 		})
 	})
 }

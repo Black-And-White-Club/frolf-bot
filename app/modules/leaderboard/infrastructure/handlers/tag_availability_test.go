@@ -6,19 +6,12 @@ import (
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
-
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testUserID := sharedtypes.DiscordID("user-456")
 	testTagNumber := sharedtypes.TagNumber(7)
@@ -177,10 +170,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 			}
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()

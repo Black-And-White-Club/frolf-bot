@@ -91,7 +91,7 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 	os.Setenv("APP_ENV", "test")
 	log.Println("Truncated 'users' table before test")
 
-	userDB := &userdb.UserDBImpl{DB: env.DB}
+	userDB := userdb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -175,8 +175,13 @@ func SetupTestUserHandler(t *testing.T) HandlerTestDeps {
 		}
 	}()
 
-	// Wait a moment for the router to initialize
-	time.Sleep(500 * time.Millisecond)
+	// Wait for router to be running
+	select {
+	case <-watermillRouter.Running():
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatal("router failed to start")
+	}
 
 	// Add comprehensive cleanup function to test context
 	cleanup := func() {

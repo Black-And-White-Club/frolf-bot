@@ -11,6 +11,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
@@ -30,7 +31,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock dependencies
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl)
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
@@ -42,16 +43,16 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 
 	tests := []struct {
 		name                    string
-		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockDBSetup             func(*rounddb.MockRepository)
 		mockTimeParserSetup     func(*roundutil.MockTimeParserInterface)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
 		payload                 roundevents.CreateRoundRequestedPayloadV1
-		expectedResult          RoundOperationResult
+		expectedResult          results.OperationResult
 		expectedError           error
 	}{
 		{
 			name: "valid round",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 			},
 			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1884312000), nil) // 2029-09-16T12:00:00Z
@@ -68,7 +69,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				ChannelID:   "Test Channel",
 				Timezone:    roundtypes.Timezone("America/New_York"),
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: &roundevents.RoundEntityCreatedPayloadV1{
 					Round: roundtypes.Round{
 						Title:        roundtypes.Title("Test Round"),
@@ -87,7 +88,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 		},
 		{
 			name: "invalid round",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 			},
 			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				// mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1672531200), nil)
@@ -103,7 +104,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				UserID:      "",
 				ChannelID:   "",
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        "",
 					ErrorMessages: []string{"Title is required", "Description is required", "Location is required", "Start time is required", "User ID is required"},
@@ -113,7 +114,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 		},
 		{
 			name: "invalid timezone",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 			},
 			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), errors.New("invalid timezone"))
@@ -130,7 +131,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				ChannelID:   "Test Channel",
 				Timezone:    roundtypes.Timezone("Invalid/Timezone"),
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        "Test User",
 					ErrorMessages: []string{"invalid timezone"},
@@ -140,7 +141,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 		},
 		{
 			name: "start time in the past",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 			},
 			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
 				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), nil)
@@ -157,7 +158,7 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 				ChannelID:   "Test Channel",
 				Timezone:    roundtypes.Timezone("America/New_York"),
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        "Test User",
 					ErrorMessages: []string{"start time is in the past"},
@@ -176,14 +177,11 @@ func TestRoundService_ValidateAndProcessRound(t *testing.T) {
 
 			// Initialize service with No-Op implementations
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        metrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
 			}
 
 			result, err := s.ValidateAndProcessRound(ctx, tt.payload, mockTimeParser) // ← Capture result
@@ -302,7 +300,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock dependencies
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 
 	// No-Op implementations for logging, metrics, and tracing
 	logger := loggerfrolfbot.NoOpLogger
@@ -312,14 +310,14 @@ func TestRoundService_StoreRound(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRoundDB)
+		mockDBSetup    func(*rounddb.MockRepository)
 		payload        roundevents.RoundEntityCreatedPayloadV1
-		expectedResult RoundOperationResult
+		expectedResult results.OperationResult
 		expectedError  error
 	}{
 		{
 			name: "store round successfully",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("test-guild")
 				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(nil)
 			},
@@ -337,7 +335,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 				DiscordChannelID: "Test Channel",
 				DiscordGuildID:   "test-guild",
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: &roundevents.RoundCreatedPayloadV1{
 					BaseRoundPayload: roundtypes.BaseRoundPayload{
 						RoundID:     sharedtypes.RoundID(uuid.New()),
@@ -355,7 +353,7 @@ func TestRoundService_StoreRound(t *testing.T) {
 		},
 		{
 			name: "store round fails",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("test-guild")
 				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
 			},
@@ -373,17 +371,17 @@ func TestRoundService_StoreRound(t *testing.T) {
 				DiscordChannelID: "Test Channel",
 				DiscordGuildID:   "test-guild",
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       "12345678",
 					ErrorMessage: "failed to store round",
 				},
 			},
-			expectedError: errors.New("failed to store round: database error"),
+			expectedError: errors.New("StoreRound: failed to store round: database error"),
 		},
 		{
 			name: "database error",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("test-guild")
 				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
 			},
@@ -401,17 +399,17 @@ func TestRoundService_StoreRound(t *testing.T) {
 				DiscordChannelID: "Test Channel",
 				DiscordGuildID:   "test-guild",
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       "Test User",
 					ErrorMessage: "failed to store round",
 				},
 			},
-			expectedError: errors.New("failed to store round: database error"),
+			expectedError: errors.New("StoreRound: failed to store round: database error"),
 		},
 		{
 			name: "invalid round data",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 			},
 			payload: roundevents.RoundEntityCreatedPayloadV1{
 				Round: roundtypes.Round{
@@ -427,13 +425,13 @@ func TestRoundService_StoreRound(t *testing.T) {
 				DiscordChannelID: "Test Channel",
 				DiscordGuildID:   "",
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       "",
 					ErrorMessage: "invalid round data",
 				},
 			},
-			expectedError: errors.New("invalid round data"),
+			expectedError: errors.New("StoreRound: invalid round data"),
 		},
 	}
 
@@ -444,13 +442,10 @@ func TestRoundService_StoreRound(t *testing.T) {
 
 			// Initialize service with No-Op implementations
 			s := &RoundService{
-				RoundDB: mockDB,
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
 			}
 
 			// Use a dummy guildID for testing

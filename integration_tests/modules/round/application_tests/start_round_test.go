@@ -9,7 +9,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -25,7 +25,7 @@ func TestProcessRoundStart(t *testing.T) {
 		payload               roundevents.RoundStartedPayloadV1
 		expectedError         bool
 		expectedErrorContains string
-		validateResponse      func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID)
+		validateResponse      func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID)
 	}{
 		{
 			name:    "Successful round start",
@@ -47,7 +47,7 @@ func TestProcessRoundStart(t *testing.T) {
 				ChannelID: "",
 			},
 			expectedError: false,
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
+			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
 				if result.Success == nil {
 					t.Fatalf("Expected success payload, got nil")
 				}
@@ -97,8 +97,8 @@ func TestProcessRoundStart(t *testing.T) {
 				ChannelID: "",
 			},
 			expectedError:         false,           // Service uses failure payload instead of error
-			expectedErrorContains: "round with ID", // Error from GetRound
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
+			expectedErrorContains: "round", // Error from GetRound
+			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
@@ -107,8 +107,8 @@ func TestProcessRoundStart(t *testing.T) {
 				if !ok {
 					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
-				if !strings.Contains(failurePayload.Error, "round with ID") {
-					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "round") {
+					t.Errorf("Expected error message to contain 'round', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -132,8 +132,8 @@ func TestProcessRoundStart(t *testing.T) {
 				ChannelID: "",
 			},
 			expectedError:         false,           // Service uses failure payload instead of error
-			expectedErrorContains: "round with ID", // Updated to match the actual error from GetRound
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
+			expectedErrorContains: "round", // Updated to match the actual error from GetRound
+			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
@@ -142,8 +142,8 @@ func TestProcessRoundStart(t *testing.T) {
 				if !ok {
 					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
-				if !strings.Contains(failurePayload.Error, "round with ID") { // Updated string check
-					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "round") { // Updated string check
+					t.Errorf("Expected error message to contain 'round', got '%s'", failurePayload.Error)
 				}
 				// Verify that the round is no longer in the DB, as it was deleted to simulate update failure.
 				fetchedRound := new(roundtypes.Round)

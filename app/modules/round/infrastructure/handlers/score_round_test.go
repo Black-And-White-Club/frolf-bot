@@ -7,12 +7,10 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -31,8 +29,6 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -50,7 +46,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ScoreUpdateValidatedPayloadV1{
 							ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 								GuildID:   sharedtypes.GuildID("test-guild"),
@@ -77,7 +73,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 							GuildID:            testPayload.GuildID,
 							ScoreUpdateRequest: testPayload,
@@ -99,7 +95,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("internal service error"),
 				)
 			},
@@ -114,12 +110,12 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
@@ -138,7 +134,7 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					*payloadWithoutScore,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 							GuildID:            payloadWithoutScore.GuildID,
 							ScoreUpdateRequest: payloadWithoutScore,
@@ -171,10 +167,8 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()
@@ -213,8 +207,6 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -232,7 +224,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ParticipantScoreUpdatedPayloadV1{
 							RoundID: testRoundID,
 							UserID:  testParticipant,
@@ -254,7 +246,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundScoreUpdateErrorPayloadV1{
 							GuildID:            testPayload.GuildID,
 							ScoreUpdateRequest: &testPayload.ScoreUpdateRequestPayload,
@@ -276,7 +268,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("connection failed"),
 				)
 			},
@@ -291,12 +283,12 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
@@ -306,15 +298,15 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
 				)
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundParticipantScoreUpdatedV1,
 		},
 	}
@@ -328,10 +320,8 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()
@@ -368,8 +358,6 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -387,7 +375,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.AllScoresSubmittedPayloadV1{
 							RoundID: testRoundID,
 						},
@@ -407,9 +395,9 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
-							RoundID:              testRoundID,
+							RoundID: testRoundID,
 						},
 					},
 					nil,
@@ -427,7 +415,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundFinalizationFailedPayloadV1{
 							RoundID: testRoundID,
 							Error:   "round not found",
@@ -448,7 +436,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database connection lost"),
 				)
 			},
@@ -463,7 +451,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -478,7 +466,7 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
@@ -498,10 +486,8 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()

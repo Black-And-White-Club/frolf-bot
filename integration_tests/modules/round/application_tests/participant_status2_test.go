@@ -8,7 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -19,7 +19,7 @@ func TestParticipantRemoval(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, roundevents.ParticipantRemovalRequestPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Valid removal of existing participant - Expecting ParticipantRemovedPayload",
@@ -68,7 +68,7 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -138,7 +138,7 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -214,7 +214,7 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -261,7 +261,7 @@ func TestParticipantRemoval(t *testing.T) {
 			},
 			expectedFailure:          true,                            // Changed from expectedError
 			expectedErrorMessagePart: "failed to fetch round details", // Updated to match implementation
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
@@ -313,7 +313,7 @@ func TestParticipantRemoval(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}

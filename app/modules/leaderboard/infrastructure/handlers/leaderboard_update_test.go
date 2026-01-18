@@ -7,14 +7,10 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -36,11 +32,6 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 	}
 
 	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name          string
@@ -71,12 +62,12 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{
+					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+						Assignments: []leaderboardevents.TagAssignmentInfoV1{
 							{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(1)},
 							{UserID: sharedtypes.DiscordID("12345678901234568"), TagNumber: sharedtypes.TagNumber(2)},
 						},
-					},
+					}),
 					nil,
 				)
 			},
@@ -95,7 +86,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					[]sharedtypes.TagAssignmentRequest{},
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("invalid tags"))
+				).Return(results.OperationResult{}, fmt.Errorf("invalid tags"))
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 				RoundID:               testRoundID,
@@ -116,7 +107,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					[]sharedtypes.TagAssignmentRequest{{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(0)}},
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("invalid tag number"))
+				).Return(results.OperationResult{}, fmt.Errorf("invalid tag number"))
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
 				RoundID:               testRoundID,
@@ -148,7 +139,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("internal service error"),
 				)
 			},
@@ -177,16 +168,16 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Err: fmt.Errorf("tag assignment validation failed"),
-					},
+					results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
+						Reason: "tag assignment validation failed",
+					}),
 					nil,
 				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 2,
-			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.TagUpdateForScheduledRoundsV1},
+			wantResultLen: 0, // Handler returns empty array for domain failures
+			wantTopics:    []string{},
 		},
 		{
 			name: "Unexpected service result - neither success nor failure",
@@ -209,7 +200,12 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 					testRoundID,
 					sharedtypes.ServiceUpdateSourceProcessScores,
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{},
+					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+						Assignments: []leaderboardevents.TagAssignmentInfoV1{
+							{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(1)},
+							{UserID: sharedtypes.DiscordID("12345678901234568"), TagNumber: sharedtypes.TagNumber(2)},
+						},
+					}),
 					nil,
 				)
 			},
@@ -225,10 +221,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			tt.mockSetup()
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()

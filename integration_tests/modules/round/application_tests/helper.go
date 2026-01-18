@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +24,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+var (
+	testEnv               *testutils.TestEnvironment
+	testEnvErr            error
+	testEnvOnce           sync.Once
+	standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+)
 
 type RoundTestDeps struct {
 	Ctx              context.Context
@@ -75,7 +81,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-	realDB := &rounddb.RoundDBImpl{DB: env.DB}
+	realDB := rounddb.NewRepository(env.DB)
 
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	noOpMetrics := &roundmetrics.NoOpMetrics{}

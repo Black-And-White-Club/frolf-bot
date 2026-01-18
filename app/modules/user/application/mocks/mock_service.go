@@ -15,7 +15,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -44,10 +44,10 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername, udiscName *string) (userservice.UserOperationResult, error) {
+func (m *MockService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername, udiscName *string) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, guildID, userID, tag, udiscUsername, udiscName)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -59,10 +59,10 @@ func (mr *MockServiceMockRecorder) CreateUser(ctx, guildID, userID, tag, udiscUs
 }
 
 // FindByUDiscName mocks base method.
-func (m *MockService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserOperationResult, error) {
+func (m *MockService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByUDiscName", ctx, guildID, name)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,10 +74,10 @@ func (mr *MockServiceMockRecorder) FindByUDiscName(ctx, guildID, name any) *gomo
 }
 
 // FindByUDiscUsername mocks base method.
-func (m *MockService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserOperationResult, error) {
+func (m *MockService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByUDiscUsername", ctx, guildID, username)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (mr *MockServiceMockRecorder) FindByUDiscUsername(ctx, guildID, username an
 }
 
 // GetUser mocks base method.
-func (m *MockService) GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserOperationResult, error) {
+func (m *MockService) GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUser", ctx, guildID, userID)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -104,10 +104,10 @@ func (mr *MockServiceMockRecorder) GetUser(ctx, guildID, userID any) *gomock.Cal
 }
 
 // GetUserRole mocks base method.
-func (m *MockService) GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserOperationResult, error) {
+func (m *MockService) GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserRole", ctx, guildID, userID)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -119,10 +119,10 @@ func (mr *MockServiceMockRecorder) GetUserRole(ctx, guildID, userID any) *gomock
 }
 
 // MatchParsedScorecard mocks base method.
-func (m *MockService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (userservice.UserOperationResult, error) {
+func (m *MockService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MatchParsedScorecard", ctx, payload)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -134,10 +134,10 @@ func (mr *MockServiceMockRecorder) MatchParsedScorecard(ctx, payload any) *gomoc
 }
 
 // UpdateUDiscIdentity mocks base method.
-func (m *MockService) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username, name *string) (userservice.UserOperationResult, error) {
+func (m *MockService) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username, name *string) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUDiscIdentity", ctx, guildID, userID, username, name)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -149,10 +149,10 @@ func (mr *MockServiceMockRecorder) UpdateUDiscIdentity(ctx, guildID, userID, use
 }
 
 // UpdateUserRoleInDatabase mocks base method.
-func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (userservice.UserOperationResult, error) {
+func (m *MockService) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserRoleInDatabase", ctx, guildID, userID, newRole)
-	ret0, _ := ret[0].(userservice.UserOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

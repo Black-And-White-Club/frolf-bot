@@ -15,7 +15,7 @@ import (
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -74,10 +74,10 @@ func (mr *MockServiceMockRecorder) EnsureGuildLeaderboard(ctx, guildID any) *gom
 }
 
 // ExecuteBatchTagAssignment mocks base method.
-func (m *MockService) ExecuteBatchTagAssignment(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) ExecuteBatchTagAssignment(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecuteBatchTagAssignment", ctx, guildID, requests, updateID, source)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (mr *MockServiceMockRecorder) ExecuteBatchTagAssignment(ctx, guildID, reque
 }
 
 // GetLeaderboard mocks base method.
-func (m *MockService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLeaderboard", ctx, guildID)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -119,10 +119,10 @@ func (mr *MockServiceMockRecorder) GetTagByUserID(ctx, guildID, userID any) *gom
 }
 
 // RoundGetTagByUserID mocks base method.
-func (m *MockService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RoundGetTagByUserID", ctx, guildID, payload)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -134,10 +134,10 @@ func (mr *MockServiceMockRecorder) RoundGetTagByUserID(ctx, guildID, payload any
 }
 
 // TagSwapRequested mocks base method.
-func (m *MockService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (leaderboardservice.LeaderboardOperationResult, error) {
+func (m *MockService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TagSwapRequested", ctx, guildID, userID, targetTag)
-	ret0, _ := ret[0].(leaderboardservice.LeaderboardOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

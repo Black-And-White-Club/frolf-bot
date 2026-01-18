@@ -3,14 +3,14 @@ package guildservice
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
-	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/mocks"
+	guilddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
@@ -20,158 +20,103 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	mockDB := guilddb.NewMockGuildDB(ctrl)
+	mockRepo := guilddbmocks.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &guildmetrics.NoOpMetrics{}
 	tracer := noop.NewTracerProvider().Tracer("test")
 
-	validConfig := &guildtypes.GuildConfig{GuildID: "guild-1"}
-
 	tests := []struct {
 		name        string
-		mockDBSetup func(*guilddb.MockGuildDB)
+		mockSetup   func(*guilddbmocks.MockRepository)
 		guildID     sharedtypes.GuildID
-		wantResult  GuildOperationResult
+		wantSuccess bool
+		wantFailure bool
 		wantErr     error
+		failReason  string
 	}{
 		{
 			name: "success",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(validConfig, nil)
+			mockSetup: func(m *guilddbmocks.MockRepository) {
 				m.EXPECT().DeleteConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(nil)
 			},
-			guildID: "guild-1",
-			wantResult: GuildOperationResult{
-				Success: &guildevents.GuildConfigDeletedPayloadV1{
-					GuildID: "guild-1",
-				},
-			},
-			wantErr: nil,
+			guildID:     "guild-1",
+			wantSuccess: true,
 		},
 		{
-			name: "not found",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-2")).Return(nil, nil)
+			name: "idempotent - already deleted returns success",
+			mockSetup: func(m *guilddbmocks.MockRepository) {
+				// Repo is idempotent - returns nil for already deleted
+				m.EXPECT().DeleteConfig(gomock.Any(), sharedtypes.GuildID("guild-2")).Return(nil)
 			},
-			guildID: "guild-2",
-			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: "guild-2",
-					Reason:  "guild config not found",
-				},
-			},
-			wantErr: errors.New("guild config not found"),
-		},
-		{
-			name: "db error on get",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-3")).Return(nil, errors.New("db error"))
-			},
-			guildID: "guild-3",
-			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: "guild-3",
-					Reason:  "db error",
-				},
-			},
-			wantErr: errors.New("db error"),
+			guildID:     "guild-2",
+			wantSuccess: true,
 		},
 		{
 			name: "db error on delete",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {
-				m.EXPECT().GetConfig(gomock.Any(), sharedtypes.GuildID("guild-4")).Return(validConfig, nil)
+			mockSetup: func(m *guilddbmocks.MockRepository) {
 				m.EXPECT().DeleteConfig(gomock.Any(), sharedtypes.GuildID("guild-4")).Return(errors.New("delete error"))
 			},
-			guildID: "guild-4",
-			wantResult: GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: "guild-4",
-					Reason:  "delete error",
-				},
-			},
-			wantErr: errors.New("delete error"),
+			guildID:     "guild-4",
+			wantFailure: true,
+			wantErr:     errors.New("delete error"),
+			failReason:  "delete error",
 		},
 		{
 			name:        "invalid guildID",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {},
+			mockSetup:   func(m *guilddbmocks.MockRepository) {},
 			guildID:     "",
-			wantResult: GuildOperationResult{
-				Error: errors.New("invalid guild ID"),
-			},
-			wantErr: errors.New("invalid guild ID"),
-		},
-		{
-			name:        "nil context",
-			mockDBSetup: func(m *guilddb.MockGuildDB) {},
-			guildID:     "guild-5",
-			wantResult: GuildOperationResult{
-				Error: errors.New("context cannot be nil"),
-			},
-			wantErr: errors.New("context cannot be nil"),
+			wantFailure: true,
+			failReason:  ErrInvalidGuildID.Error(),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockDBSetup(mockDB)
+			tt.mockSetup(mockRepo)
 			s := &GuildService{
-				GuildDB: mockDB,
+				repo:    mockRepo,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, guildID sharedtypes.GuildID, serviceFunc func(ctx context.Context) (GuildOperationResult, error)) (GuildOperationResult, error) {
-					return serviceFunc(ctx)
-				},
 			}
-			callCtx := ctx
-			if tt.name == "nil context" {
-				callCtx = nil
-			}
-			got, err := s.DeleteGuildConfig(callCtx, tt.guildID)
+
+			got, err := s.DeleteGuildConfig(ctx, tt.guildID)
+
+			// Error check
 			if tt.wantErr != nil {
-				// Accept the error either returned directly or embedded in the result.Error
-				if err != nil {
-					if err.Error() != tt.wantErr.Error() {
-						t.Errorf("expected error: %v, got: %v", tt.wantErr, err)
-					}
-				} else if got.Error != nil {
-					if got.Error.Error() != tt.wantErr.Error() {
-						t.Errorf("expected error: %v, got result.Error: %v", tt.wantErr, got.Error)
-					}
-				} else {
-					t.Errorf("expected error: %v, got: %v", tt.wantErr, err)
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.wantErr.Error())
+				} else if !strings.Contains(err.Error(), tt.wantErr.Error()) {
+					t.Errorf("expected error containing %q, got %q", tt.wantErr.Error(), err.Error())
 				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+				return
 			}
-			if tt.wantResult.Success != nil {
+
+			if err != nil && tt.wantErr == nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			// Success check
+			if tt.wantSuccess {
 				if got.Success == nil {
 					t.Errorf("expected success, got nil")
 					return
 				}
-				exp := tt.wantResult.Success.(*guildevents.GuildConfigDeletedPayloadV1)
 				actual := got.Success.(*guildevents.GuildConfigDeletedPayloadV1)
-				if exp.GuildID != actual.GuildID {
-					t.Errorf("expected GuildID %q, got %q", exp.GuildID, actual.GuildID)
+				if actual.GuildID != tt.guildID {
+					t.Errorf("expected GuildID %q, got %q", tt.guildID, actual.GuildID)
 				}
 			}
-			if tt.wantResult.Failure != nil {
+
+			// Failure check
+			if tt.wantFailure {
 				if got.Failure == nil {
-					t.Errorf("expected failure, got nil")
+					t.Errorf("expected failure payload, got nil")
 					return
 				}
-				exp := tt.wantResult.Failure.(*guildevents.GuildConfigDeletionFailedPayloadV1)
 				actual := got.Failure.(*guildevents.GuildConfigDeletionFailedPayloadV1)
-				if exp.GuildID != actual.GuildID {
-					t.Errorf("expected failure GuildID %q, got %q", exp.GuildID, actual.GuildID)
-				}
-				if exp.Reason != actual.Reason {
-					t.Errorf("expected failure Reason %q, got %q", exp.Reason, actual.Reason)
-				}
-			}
-			if tt.wantResult.Error != nil {
-				if got.Error == nil || got.Error.Error() != tt.wantResult.Error.Error() {
-					t.Errorf("expected error payload %v, got %v", tt.wantResult.Error, got.Error)
+				if actual.Reason != tt.failReason {
+					t.Errorf("expected failure Reason %q, got %q", tt.failReason, actual.Reason)
 				}
 			}
 		})

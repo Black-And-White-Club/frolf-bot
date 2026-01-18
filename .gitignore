@@ -48,3 +48,4 @@ reports/unit-test-output.log
 spec.md
 glob_audit.sh
 backend_mapping.md
+doc_agents/

@@ -15,35 +15,36 @@ import (
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockGuildDB is a mock of GuildDB interface.
-type MockGuildDB struct {
+// MockRepository is a mock of Repository interface.
+type MockRepository struct {
 	ctrl     *gomock.Controller
-	recorder *MockGuildDBMockRecorder
+	recorder *MockRepositoryMockRecorder
 	isgomock struct{}
 }
 
-// MockGuildDBMockRecorder is the mock recorder for MockGuildDB.
-type MockGuildDBMockRecorder struct {
-	mock *MockGuildDB
+// MockRepositoryMockRecorder is the mock recorder for MockRepository.
+type MockRepositoryMockRecorder struct {
+	mock *MockRepository
 }
 
-// NewMockGuildDB creates a new mock instance.
-func NewMockGuildDB(ctrl *gomock.Controller) *MockGuildDB {
-	mock := &MockGuildDB{ctrl: ctrl}
-	mock.recorder = &MockGuildDBMockRecorder{mock}
+// NewMockRepository creates a new mock instance.
+func NewMockRepository(ctrl *gomock.Controller) *MockRepository {
+	mock := &MockRepository{ctrl: ctrl}
+	mock.recorder = &MockRepositoryMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockGuildDB) EXPECT() *MockGuildDBMockRecorder {
+func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
 // DeleteConfig mocks base method.
-func (m *MockGuildDB) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {
+func (m *MockRepository) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteConfig", ctx, guildID)
 	ret0, _ := ret[0].(error)
@@ -51,13 +52,13 @@ func (m *MockGuildDB) DeleteConfig(ctx context.Context, guildID sharedtypes.Guil
 }
 
 // DeleteConfig indicates an expected call of DeleteConfig.
-func (mr *MockGuildDBMockRecorder) DeleteConfig(ctx, guildID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) DeleteConfig(ctx, guildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConfig", reflect.TypeOf((*MockGuildDB)(nil).DeleteConfig), ctx, guildID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConfig", reflect.TypeOf((*MockRepository)(nil).DeleteConfig), ctx, guildID)
 }
 
 // GetConfig mocks base method.
-func (m *MockGuildDB) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+func (m *MockRepository) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConfig", ctx, guildID)
 	ret0, _ := ret[0].(*guildtypes.GuildConfig)
@@ -66,13 +67,13 @@ func (m *MockGuildDB) GetConfig(ctx context.Context, guildID sharedtypes.GuildID
 }
 
 // GetConfig indicates an expected call of GetConfig.
-func (mr *MockGuildDBMockRecorder) GetConfig(ctx, guildID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetConfig(ctx, guildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockGuildDB)(nil).GetConfig), ctx, guildID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockRepository)(nil).GetConfig), ctx, guildID)
 }
 
 // SaveConfig mocks base method.
-func (m *MockGuildDB) SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) error {
+func (m *MockRepository) SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SaveConfig", ctx, config)
 	ret0, _ := ret[0].(error)
@@ -80,13 +81,13 @@ func (m *MockGuildDB) SaveConfig(ctx context.Context, config *guildtypes.GuildCo
 }
 
 // SaveConfig indicates an expected call of SaveConfig.
-func (mr *MockGuildDBMockRecorder) SaveConfig(ctx, config any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) SaveConfig(ctx, config any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveConfig", reflect.TypeOf((*MockGuildDB)(nil).SaveConfig), ctx, config)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveConfig", reflect.TypeOf((*MockRepository)(nil).SaveConfig), ctx, config)
 }
 
 // UpdateConfig mocks base method.
-func (m *MockGuildDB) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates map[string]any) error {
+func (m *MockRepository) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateConfig", ctx, guildID, updates)
 	ret0, _ := ret[0].(error)
@@ -94,7 +95,7 @@ func (m *MockGuildDB) UpdateConfig(ctx context.Context, guildID sharedtypes.Guil
 }
 
 // UpdateConfig indicates an expected call of UpdateConfig.
-func (mr *MockGuildDBMockRecorder) UpdateConfig(ctx, guildID, updates any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdateConfig(ctx, guildID, updates any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateConfig", reflect.TypeOf((*MockGuildDB)(nil).UpdateConfig), ctx, guildID, updates)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateConfig", reflect.TypeOf((*MockRepository)(nil).UpdateConfig), ctx, guildID, updates)
 }

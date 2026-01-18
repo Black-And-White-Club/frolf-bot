@@ -8,6 +8,9 @@ import (
 )
 
 func init() {
+	if err := Migrations.DiscoverCaller(); err != nil {
+		panic(err)
+	}
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Splitting users table into users + guild_memberships...")
 
@@ -17,9 +20,11 @@ func init() {
 				CREATE TABLE IF NOT EXISTS users_new (
 					id BIGSERIAL PRIMARY KEY,
 					user_id TEXT UNIQUE NOT NULL,
-					udisc_username TEXT,
-					udisc_name TEXT,
-					created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+						udisc_username TEXT,
+						udisc_name TEXT,
+						created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+						-- Keep updated_at on the identity table so newer code can rely on it.
+						updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 				);
 			`); err != nil {
 				return fmt.Errorf("failed to create users_new table: %w", err)
@@ -42,11 +47,26 @@ func init() {
 			}
 
 			// Step 3: Migrate unique users to identity table (deduplicate by user_id)
+			// Use a conditional block so this migration works whether or not the
+			// original `users` table already has an `updated_at` column.
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO users_new (user_id, udisc_username, udisc_name, created_at)
-				SELECT DISTINCT ON (user_id) user_id, udisc_username, udisc_name, created_at
-				FROM users
-				ORDER BY user_id, id;
+				DO $$
+				BEGIN
+					IF EXISTS (
+						SELECT 1 FROM information_schema.columns
+						WHERE table_name = 'users' AND column_name = 'updated_at'
+					) THEN
+						INSERT INTO users_new (user_id, udisc_username, udisc_name, created_at, updated_at)
+						SELECT DISTINCT ON (user_id) user_id, udisc_username, udisc_name, created_at, COALESCE(updated_at, created_at)
+						FROM users
+						ORDER BY user_id, id;
+					ELSE
+						INSERT INTO users_new (user_id, udisc_username, udisc_name, created_at, updated_at)
+						SELECT DISTINCT ON (user_id) user_id, udisc_username, udisc_name, created_at, created_at
+						FROM users
+						ORDER BY user_id, id;
+					END IF;
+				END $$;
 			`); err != nil {
 				return fmt.Errorf("failed to migrate users: %w", err)
 			}
@@ -94,6 +114,7 @@ func init() {
 					udisc_username TEXT,
 					udisc_name TEXT,
 					created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+					updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 					UNIQUE(user_id, guild_id)
 				);
 			`); err != nil {
@@ -102,8 +123,8 @@ func init() {
 
 			// Migrate data back: join users and guild_memberships
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO users_old (user_id, guild_id, role, udisc_username, udisc_name, created_at)
-				SELECT u.user_id, gm.guild_id, gm.role, u.udisc_username, u.udisc_name, u.created_at
+				INSERT INTO users_old (user_id, guild_id, role, udisc_username, udisc_name, created_at, updated_at)
+				SELECT u.user_id, gm.guild_id, gm.role, u.udisc_username, u.udisc_name, u.created_at, COALESCE(u.updated_at, u.created_at)
 				FROM users u
 				JOIN guild_memberships gm ON u.user_id = gm.user_id;
 			`); err != nil {

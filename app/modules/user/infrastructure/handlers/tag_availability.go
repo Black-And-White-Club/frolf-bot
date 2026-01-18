@@ -2,7 +2,6 @@ package userhandlers
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -15,32 +14,15 @@ func (h *UserHandlers) HandleTagAvailable(
 	ctx context.Context,
 	payload *sharedevents.TagAvailablePayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.userService.CreateUser(ctx, payload.GuildID, payload.UserID, &payload.TagNumber, nil, nil)
+	result, err := h.service.CreateUser(ctx, payload.GuildID, payload.UserID, &payload.TagNumber, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		failedPayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for failure payload")
-		}
-		return []handlerwrapper.Result{
-			{Topic: userevents.UserCreationFailedV1, Payload: failedPayload},
-		}, nil
-	}
-
-	if result.Success != nil {
-		successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected type for success payload")
-		}
-		return []handlerwrapper.Result{
-			{Topic: userevents.UserCreatedV1, Payload: successPayload},
-		}, nil
-	}
-
-	return nil, errors.New("user creation service returned unexpected result")
+	return mapOperationResult(result,
+		userevents.UserCreatedV1,
+		userevents.UserCreationFailedV1,
+	), nil
 }
 
 // HandleTagUnavailable handles the TagUnavailable event.
@@ -54,7 +36,7 @@ func (h *UserHandlers) HandleTagUnavailable(
 		reason = "tag not available"
 	}
 
-	// Create the UserCreationFailed payload
+	// Create the UserCreationFailed payload directly - no service call needed
 	failedPayload := &userevents.UserCreationFailedPayloadV1{
 		GuildID:   payload.GuildID,
 		UserID:    payload.UserID,

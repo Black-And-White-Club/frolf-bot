@@ -6,13 +6,9 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -32,11 +28,6 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 	// Mock dependencies
 	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name          string
@@ -60,10 +51,13 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{{UserID: testRequestorID, TagNumber: 2}, {UserID: testTargetID, TagNumber: 1}},
-						TagChanges: []leaderboardservice.TagChange{{GuildID: testGuildID, UserID: testRequestorID, OldTag: &[]sharedtypes.TagNumber{1}[0], NewTag: &[]sharedtypes.TagNumber{2}[0], Reason: sharedtypes.ServiceUpdateSourceTagSwap}},
-					},
+					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+						GuildID: testGuildID,
+						Assignments: []leaderboardevents.TagAssignmentInfoV1{
+							{UserID: testRequestorID, TagNumber: 2},
+							{UserID: testTargetID, TagNumber: 1},
+						},
+					}),
 					nil,
 				)
 			},
@@ -84,7 +78,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
-				).Return(leaderboardservice.LeaderboardOperationResult{}, fmt.Errorf("internal service error"))
+				).Return(results.OperationResult{}, fmt.Errorf("internal service error"))
 			},
 			payload:       testPayload,
 			wantErr:       true,
@@ -112,7 +106,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
-				).Return(leaderboardservice.LeaderboardOperationResult{}, nil)
+				).Return(results.OperationResult{}, nil)
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -126,10 +120,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			tt.mockSetup()
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()

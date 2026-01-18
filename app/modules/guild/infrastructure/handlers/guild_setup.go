@@ -17,22 +17,13 @@ func (h *GuildHandlers) HandleGuildSetup(ctx context.Context, payload *guildtype
 		return nil, errors.New("payload cannot be nil")
 	}
 
-	result, err := h.guildService.CreateGuildConfig(ctx, payload)
+	result, err := h.service.CreateGuildConfig(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigCreationFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigCreatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, errors.New("unexpected empty result from CreateGuildConfig service")
+	return mapOperationResult(result,
+		guildevents.GuildConfigCreatedV1,
+		guildevents.GuildConfigCreationFailedV1,
+	), nil
 }

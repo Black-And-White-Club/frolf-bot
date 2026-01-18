@@ -11,6 +11,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	queuemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue/mocks"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
@@ -25,7 +26,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -34,21 +35,18 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl) // ← Add mock time parser
 
 	s := &RoundService{
-		RoundDB:        mockDB,
+		repo:           mockDB,
 		logger:         logger,
 		metrics:        mockMetrics,
 		tracer:         tracer,
 		roundValidator: mockRoundValidator,
-		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-			return serviceFunc(ctx)
-		},
 	}
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	tests := []struct {
 		name    string
 		payload roundevents.UpdateRoundRequestedPayloadV1 // ← Changed to Discord payload type
-		want    RoundOperationResult
+		want    results.OperationResult
 		wantErr bool
 	}{
 		{
@@ -59,7 +57,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				Title:    titlePtr("New Title"), // ← Pointer types
 				Timezone: timezonePtr("America/Chicago"),
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Success: &roundevents.RoundUpdateValidatedPayloadV1{
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						RoundID: testRoundID,
@@ -79,7 +77,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				StartTime: stringPtr("tomorrow at 2pm"),
 				Timezone:  timezonePtr("America/Chicago"),
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Success: &roundevents.RoundUpdateValidatedPayloadV1{
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						RoundID: testRoundID,
@@ -96,7 +94,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 			payload: roundevents.UpdateRoundRequestedPayloadV1{
 				RoundID: sharedtypes.RoundID(uuid.Nil),
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: round ID cannot be zero; at least one field to update must be provided",
@@ -110,7 +108,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				RoundID: testRoundID,
 				UserID:  sharedtypes.DiscordID("user123"),
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: at least one field to update must be provided",
@@ -127,7 +125,7 @@ func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updat
 				StartTime: stringPtr("invalid time"),
 				Timezone:  timezonePtr("America/Chicago"),
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "validation failed: time parsing failed: invalid time format",
@@ -190,7 +188,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -198,14 +196,11 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
 
 	s := &RoundService{
-		RoundDB:        mockDB,
+		repo:           mockDB,
 		logger:         logger,
 		metrics:        mockMetrics,
 		tracer:         tracer,
 		roundValidator: mockRoundValidator,
-		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-			return serviceFunc(ctx)
-		},
 	}
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
@@ -214,7 +209,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload roundevents.RoundUpdateValidatedPayloadV1
-		want    RoundOperationResult
+		want    results.OperationResult
 		wantErr bool
 	}{
 		{
@@ -228,7 +223,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("user123"),
 				},
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Success: &roundevents.RoundEntityUpdatedPayloadV1{
 					GuildID: testGuildID, // Added this
 					Round: roundtypes.Round{
@@ -251,7 +246,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("user123"),
 				},
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: testGuildID, // Added this
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
@@ -276,7 +271,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 					UserID:  sharedtypes.DiscordID("user123"),
 				},
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: testGuildID, // Added this
 					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
@@ -329,11 +324,12 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	// Use UTC time to match implementation
 	testStartUpdateTime := sharedtypes.StartTime(time.Now().UTC().Add(2 * time.Hour))
+
 	tests := []struct {
 		name      string
 		payload   roundevents.RoundScheduleUpdatePayloadV1
-		mockSetup func(*rounddb.MockRoundDB, *queuemocks.MockQueueService)
-		want      RoundOperationResult
+		mockSetup func(*rounddb.MockRepository, *queuemocks.MockQueueService)
+		want      results.OperationResult
 		wantErr   bool
 	}{
 		{
@@ -345,7 +341,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				StartTime: &testStartUpdateTime,
 				Location:  roundtypes.LocationPtr("New Location"),
 			},
-			mockSetup: func(mockDB *rounddb.MockRoundDB, mockQueue *queuemocks.MockQueueService) {
+			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
 				// Expect cancellation of existing jobs
 				guildID := sharedtypes.GuildID("guild-123")
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
@@ -365,7 +361,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				// Expect round start scheduling (use gomock.Any() for time since implementation uses time.Now())
 				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Success: &roundevents.RoundScheduleUpdatePayloadV1{
 					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testRoundID,
@@ -385,11 +381,11 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				StartTime: &testStartUpdateTime,
 				Location:  roundtypes.LocationPtr("New Location"),
 			},
-			mockSetup: func(mockDB *rounddb.MockRoundDB, mockQueue *queuemocks.MockQueueService) {
+			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
 				// Expect cancellation to fail
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(errors.New("cancel jobs failed"))
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "failed to cancel existing scheduled jobs: cancel jobs failed",
@@ -406,7 +402,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				StartTime: &testStartUpdateTime,
 				Location:  roundtypes.LocationPtr("New Location"),
 			},
-			mockSetup: func(mockDB *rounddb.MockRoundDB, mockQueue *queuemocks.MockQueueService) {
+			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
 				// Expect cancellation to succeed
 				guildID := sharedtypes.GuildID("guild-123")
 				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
@@ -414,7 +410,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				// Expect GetEventMessageID to fail
 				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("", errors.New("event message ID not found"))
 			},
-			want: RoundOperationResult{
+			want: results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					RoundUpdateRequest: nil,
 					Error:              "failed to get EventMessageID: event message ID not found",
@@ -429,7 +425,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockDB := rounddb.NewMockRepository(ctrl)
 			logger := loggerfrolfbot.NoOpLogger
 			tracerProvider := noop.NewTracerProvider()
 			tracer := tracerProvider.Tracer("test")
@@ -438,15 +434,12 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			mockQueue := queuemocks.NewMockQueueService(ctrl)
 
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				QueueService:   mockQueue,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
+				queueService:   mockQueue,
 			}
 
 			// Setup mocks

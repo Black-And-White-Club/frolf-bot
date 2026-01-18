@@ -9,6 +9,7 @@ import (
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 	guildmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -30,23 +31,21 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigRetrievedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-						Config: guildtypes.GuildConfig{
-							GuildID:              sharedtypes.GuildID("guild-1"),
-							SignupChannelID:      "signup-chan",
-							SignupMessageID:      "msg-1",
-							EventChannelID:       "event-chan",
-							LeaderboardChannelID: "leaderboard-chan",
-							UserRoleID:           "role-1",
-							EditorRoleID:         "role-2",
-							AdminRoleID:          "role-3",
-							SignupEmoji:          ":frolf:",
-							AutoSetupCompleted:   true,
-						},
+				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.SuccessResult(&guildevents.GuildConfigRetrievedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+					Config: guildtypes.GuildConfig{
+						GuildID:              sharedtypes.GuildID("guild-1"),
+						SignupChannelID:      "signup-chan",
+						SignupMessageID:      "msg-1",
+						EventChannelID:       "event-chan",
+						LeaderboardChannelID: "leaderboard-chan",
+						UserRoleID:           "role-1",
+						EditorRoleID:         "role-2",
+						AdminRoleID:          "role-3",
+						SignupEmoji:          ":frolf:",
+						AutoSetupCompleted:   true,
 					},
-				}, nil)
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigRetrievedV1,
@@ -58,13 +57,10 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigRetrievalFailedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-						Reason:  guildservice.ErrGuildConfigNotFound.Error(),
-					},
-					Error: guildservice.ErrGuildConfigNotFound,
-				}, nil)
+				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.FailureResult(&guildevents.GuildConfigRetrievalFailedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+					Reason:  guildservice.ErrGuildConfigNotFound.Error(),
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigRetrievalFailedV1,
@@ -82,7 +78,7 @@ func TestGuildHandlers_HandleRetrieveGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{}, context.DeadlineExceeded)
+				m.EXPECT().GetGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.OperationResult{}, context.DeadlineExceeded)
 			},
 			wantErr: true,
 			wantLen: 0,

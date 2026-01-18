@@ -3,13 +3,13 @@ package leaderboardhandlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -22,10 +22,6 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 	ctx context.Context,
 	payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Processing leaderboard update from scores",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("round_id", payload.RoundID.String()))
-
 	requests := make([]sharedtypes.TagAssignmentRequest, 0, len(payload.SortedParticipantTags))
 	for _, tagUserPair := range payload.SortedParticipantTags {
 		parts := strings.Split(tagUserPair, ":")
@@ -39,7 +35,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		})
 	}
 
-	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
+	result, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
@@ -61,10 +57,26 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		return nil, err
 	}
 
-	// Build success events
-	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(result.Leaderboard))
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(result.Leaderboard))
-	for _, entry := range result.Leaderboard {
+	// Handle domain-level failures returned inside the OperationResult
+	if result.IsFailure() {
+		// No failure topic defined for this handler; ack and stop
+		return []handlerwrapper.Result{}, nil
+	}
+
+	// Expect success payload to contain assignment info
+	var assignments []leaderboardevents.TagAssignmentInfoV1
+	if result.IsSuccess() {
+		if payloadSuccess, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
+			assignments = payloadSuccess.Assignments
+		} else {
+			return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
+		}
+	}
+
+	// Build success events from assignments
+	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(assignments))
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(assignments))
+	for _, entry := range assignments {
 		leaderboardData[entry.TagNumber] = entry.UserID
 		changedTags[entry.UserID] = entry.TagNumber
 	}

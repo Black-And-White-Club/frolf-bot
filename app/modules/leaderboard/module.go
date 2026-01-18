@@ -9,6 +9,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
@@ -16,7 +17,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/uptrace/bun" // Added for *bun.DB
+	"github.com/uptrace/bun"
 )
 
 type Module struct {
@@ -50,7 +51,6 @@ func NewLeaderboardModule(
 	logger.InfoContext(ctx, "Initializing Leaderboard Module")
 
 	// 1. Domain Service (The Business Logic)
-	// FIX: Pass db as the first argument
 	service := leaderboardservice.NewLeaderboardService(db, leaderboardDB, logger, metrics, tracer)
 
 	// 2. Saga Infrastructure (The "Memory" for swaps)
@@ -64,7 +64,9 @@ func NewLeaderboardModule(
 	promRegistry := prometheus.NewRegistry()
 	lbRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, promRegistry)
 
-	if err := lbRouter.Configure(routerCtx, service, sagaCoord, eventBus, metrics); err != nil {
+	handlers := leaderboardhandlers.NewLeaderboardHandlers(service, sagaCoord, logger, tracer, helpers, metrics)
+
+	if err := lbRouter.Configure(routerCtx, handlers); err != nil {
 		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)
 	}
 
@@ -98,14 +100,17 @@ func ensureSagaKV(js jetstream.JetStream) (jetstream.KeyValue, error) {
 }
 
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-	m.observability.Provider.Logger.InfoContext(ctx, "Leaderboard module started")
-
+	m.observability.Provider.Logger.InfoContext(ctx, "Starting leaderboard module")
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
+
+	if wg != nil {
+		wg.Add(1)
+		defer wg.Done()
+	}
+
 	<-ctx.Done()
+	m.observability.Provider.Logger.InfoContext(ctx, "Leaderboard module goroutine stopped")
 }
 
 func (m *Module) Close() error {

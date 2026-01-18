@@ -14,27 +14,15 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.ValidateScoreUpdateRequest(ctx, *payload)
+	result, err := h.service.ValidateScoreUpdateRequest(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "score update validation failed",
-			attr.Any("failure", result.Failure),
-		)
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundScoreUpdateErrorV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundScoreUpdateValidatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from ValidateScoreUpdateRequest service"}
+	return mapOperationResult(result,
+		roundevents.RoundScoreUpdateValidatedV1,
+		roundevents.RoundScoreUpdateErrorV1,
+	), nil
 }
 
 // HandleScoreUpdateValidated processes a validated score update and applies it to the round.
@@ -42,27 +30,15 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateValidatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.UpdateParticipantScore(ctx, *payload)
+	result, err := h.service.UpdateParticipantScore(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "participant score update failed",
-			attr.Any("failure", result.Failure),
-		)
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundScoreUpdateErrorV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantScoreUpdatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from UpdateParticipantScore service"}
+	return mapOperationResult(result,
+		roundevents.RoundParticipantScoreUpdatedV1,
+		roundevents.RoundScoreUpdateErrorV1,
+	), nil
 }
 
 // HandleScoreBulkUpdateRequest handles bulk score overrides for a round.
@@ -74,27 +50,15 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 		return nil, sharedtypes.ValidationError{Message: "bulk score update payload is nil"}
 	}
 
-	result, err := h.roundService.UpdateParticipantScoresBulk(ctx, *payload)
+	result, err := h.service.UpdateParticipantScoresBulk(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "bulk participant score update failed",
-			attr.Any("failure", result.Failure),
-		)
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundScoreUpdateErrorV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundScoresBulkUpdatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from UpdateParticipantScoresBulk service"}
+	return mapOperationResult(result,
+		roundevents.RoundScoresBulkUpdatedV1,
+		roundevents.RoundScoreUpdateErrorV1,
+	), nil
 }
 
 // HandleParticipantScoreUpdated checks if all scores have been submitted after an update.
@@ -107,7 +71,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 		attr.String("user_id", string(payload.UserID)),
 	)
 
-	result, err := h.roundService.CheckAllScoresSubmitted(ctx, *payload)
+	result, err := h.service.CheckAllScoresSubmitted(ctx, *payload)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed", attr.Error(err))
 		return nil, err

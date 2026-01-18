@@ -17,32 +17,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockScoreDB is a mock of ScoreDB interface.
-type MockScoreDB struct {
+// MockRepository is a mock of Repository interface.
+type MockRepository struct {
 	ctrl     *gomock.Controller
-	recorder *MockScoreDBMockRecorder
+	recorder *MockRepositoryMockRecorder
 	isgomock struct{}
 }
 
-// MockScoreDBMockRecorder is the mock recorder for MockScoreDB.
-type MockScoreDBMockRecorder struct {
-	mock *MockScoreDB
+// MockRepositoryMockRecorder is the mock recorder for MockRepository.
+type MockRepositoryMockRecorder struct {
+	mock *MockRepository
 }
 
-// NewMockScoreDB creates a new mock instance.
-func NewMockScoreDB(ctrl *gomock.Controller) *MockScoreDB {
-	mock := &MockScoreDB{ctrl: ctrl}
-	mock.recorder = &MockScoreDBMockRecorder{mock}
+// NewMockRepository creates a new mock instance.
+func NewMockRepository(ctrl *gomock.Controller) *MockRepository {
+	mock := &MockRepository{ctrl: ctrl}
+	mock.recorder = &MockRepositoryMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockScoreDB) EXPECT() *MockScoreDBMockRecorder {
+func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
 // GetScoresForRound mocks base method.
-func (m *MockScoreDB) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+func (m *MockRepository) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetScoresForRound", ctx, guildID, roundID)
 	ret0, _ := ret[0].([]sharedtypes.ScoreInfo)
@@ -51,13 +51,13 @@ func (m *MockScoreDB) GetScoresForRound(ctx context.Context, guildID sharedtypes
 }
 
 // GetScoresForRound indicates an expected call of GetScoresForRound.
-func (mr *MockScoreDBMockRecorder) GetScoresForRound(ctx, guildID, roundID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetScoresForRound(ctx, guildID, roundID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScoresForRound", reflect.TypeOf((*MockScoreDB)(nil).GetScoresForRound), ctx, guildID, roundID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScoresForRound", reflect.TypeOf((*MockRepository)(nil).GetScoresForRound), ctx, guildID, roundID)
 }
 
 // LogScores mocks base method.
-func (m *MockScoreDB) LogScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
+func (m *MockRepository) LogScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, source string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LogScores", ctx, guildID, roundID, scores, source)
 	ret0, _ := ret[0].(error)
@@ -65,13 +65,13 @@ func (m *MockScoreDB) LogScores(ctx context.Context, guildID sharedtypes.GuildID
 }
 
 // LogScores indicates an expected call of LogScores.
-func (mr *MockScoreDBMockRecorder) LogScores(ctx, guildID, roundID, scores, source any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) LogScores(ctx, guildID, roundID, scores, source any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogScores", reflect.TypeOf((*MockScoreDB)(nil).LogScores), ctx, guildID, roundID, scores, source)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogScores", reflect.TypeOf((*MockRepository)(nil).LogScores), ctx, guildID, roundID, scores, source)
 }
 
 // UpdateOrAddScore mocks base method.
-func (m *MockScoreDB) UpdateOrAddScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scoreInfo sharedtypes.ScoreInfo) error {
+func (m *MockRepository) UpdateOrAddScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scoreInfo sharedtypes.ScoreInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateOrAddScore", ctx, guildID, roundID, scoreInfo)
 	ret0, _ := ret[0].(error)
@@ -79,13 +79,13 @@ func (m *MockScoreDB) UpdateOrAddScore(ctx context.Context, guildID sharedtypes.
 }
 
 // UpdateOrAddScore indicates an expected call of UpdateOrAddScore.
-func (mr *MockScoreDBMockRecorder) UpdateOrAddScore(ctx, guildID, roundID, scoreInfo any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdateOrAddScore(ctx, guildID, roundID, scoreInfo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrAddScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateOrAddScore), ctx, guildID, roundID, scoreInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrAddScore", reflect.TypeOf((*MockRepository)(nil).UpdateOrAddScore), ctx, guildID, roundID, scoreInfo)
 }
 
 // UpdateScore mocks base method.
-func (m *MockScoreDB) UpdateScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
+func (m *MockRepository) UpdateScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, newScore sharedtypes.Score) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateScore", ctx, guildID, roundID, userID, newScore)
 	ret0, _ := ret[0].(error)
@@ -93,7 +93,7 @@ func (m *MockScoreDB) UpdateScore(ctx context.Context, guildID sharedtypes.Guild
 }
 
 // UpdateScore indicates an expected call of UpdateScore.
-func (mr *MockScoreDBMockRecorder) UpdateScore(ctx, guildID, roundID, userID, newScore any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdateScore(ctx, guildID, roundID, userID, newScore any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockScoreDB)(nil).UpdateScore), ctx, guildID, roundID, userID, newScore)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScore", reflect.TypeOf((*MockRepository)(nil).UpdateScore), ctx, guildID, roundID, userID, newScore)
 }

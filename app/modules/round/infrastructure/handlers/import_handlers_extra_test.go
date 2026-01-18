@@ -7,20 +7,16 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	importID := "imp-1"
 	guildID := sharedtypes.GuildID("g-1")
@@ -53,7 +49,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 					{UserID: sharedtypes.DiscordID("u1"), Score: scorePointer(sharedtypes.Score(5))},
 				}
 				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ImportScoresAppliedPayloadV1{
 							GuildID:        guildID,
 							RoundID:        roundID,
@@ -74,7 +70,7 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			name: "Service failure produces ImportFailed",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.ImportFailedPayloadV1{
 							GuildID:  guildID,
 							RoundID:  roundID,
@@ -109,19 +105,19 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			name: "Unexpected success type returns error",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{Success: "not-the-right-type"},
+					results.OperationResult{Success: "not-the-right-type"},
 					nil,
 				)
 			},
-			payload:       testPayload,
-			wantErr:       true,
+			payload:        testPayload,
+			wantErr:        true,
 			expectedErrMsg: "unexpected success payload type",
 		},
 		{
 			name: "Service error returns error",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
@@ -140,10 +136,8 @@ func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			results, err := h.HandleImportCompleted(context.Background(), tt.payload)

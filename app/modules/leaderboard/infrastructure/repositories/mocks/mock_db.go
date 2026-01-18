@@ -20,32 +20,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockLeaderboardDB is a mock of LeaderboardDB interface.
-type MockLeaderboardDB struct {
+// MockRepository is a mock of Repository interface.
+type MockRepository struct {
 	ctrl     *gomock.Controller
-	recorder *MockLeaderboardDBMockRecorder
+	recorder *MockRepositoryMockRecorder
 	isgomock struct{}
 }
 
-// MockLeaderboardDBMockRecorder is the mock recorder for MockLeaderboardDB.
-type MockLeaderboardDBMockRecorder struct {
-	mock *MockLeaderboardDB
+// MockRepositoryMockRecorder is the mock recorder for MockRepository.
+type MockRepositoryMockRecorder struct {
+	mock *MockRepository
 }
 
-// NewMockLeaderboardDB creates a new mock instance.
-func NewMockLeaderboardDB(ctrl *gomock.Controller) *MockLeaderboardDB {
-	mock := &MockLeaderboardDB{ctrl: ctrl}
-	mock.recorder = &MockLeaderboardDBMockRecorder{mock}
+// NewMockRepository creates a new mock instance.
+func NewMockRepository(ctrl *gomock.Controller) *MockRepository {
+	mock := &MockRepository{ctrl: ctrl}
+	mock.recorder = &MockRepositoryMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockLeaderboardDB) EXPECT() *MockLeaderboardDBMockRecorder {
+func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
 // CheckTagAvailability mocks base method.
-func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (leaderboarddb.TagAvailabilityResult, error) {
+func (m *MockRepository) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (leaderboarddb.TagAvailabilityResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTagAvailability", ctx, guildID, userID, tagNumber)
 	ret0, _ := ret[0].(leaderboarddb.TagAvailabilityResult)
@@ -54,13 +54,13 @@ func (m *MockLeaderboardDB) CheckTagAvailability(ctx context.Context, guildID sh
 }
 
 // CheckTagAvailability indicates an expected call of CheckTagAvailability.
-func (mr *MockLeaderboardDBMockRecorder) CheckTagAvailability(ctx, guildID, userID, tagNumber any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) CheckTagAvailability(ctx, guildID, userID, tagNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockLeaderboardDB)(nil).CheckTagAvailability), ctx, guildID, userID, tagNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTagAvailability", reflect.TypeOf((*MockRepository)(nil).CheckTagAvailability), ctx, guildID, userID, tagNumber)
 }
 
 // CreateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) CreateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboard *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error) {
+func (m *MockRepository) CreateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboard *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateLeaderboard", ctx, idb, guildID, leaderboard)
 	ret0, _ := ret[0].(*leaderboarddb.Leaderboard)
@@ -69,13 +69,13 @@ func (m *MockLeaderboardDB) CreateLeaderboard(ctx context.Context, idb bun.IDB, 
 }
 
 // CreateLeaderboard indicates an expected call of CreateLeaderboard.
-func (mr *MockLeaderboardDBMockRecorder) CreateLeaderboard(ctx, idb, guildID, leaderboard any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) CreateLeaderboard(ctx, idb, guildID, leaderboard any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).CreateLeaderboard), ctx, idb, guildID, leaderboard)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLeaderboard", reflect.TypeOf((*MockRepository)(nil).CreateLeaderboard), ctx, idb, guildID, leaderboard)
 }
 
 // DeactivateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) DeactivateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error {
+func (m *MockRepository) DeactivateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeactivateLeaderboard", ctx, idb, guildID, leaderboardID)
 	ret0, _ := ret[0].(error)
@@ -83,13 +83,13 @@ func (m *MockLeaderboardDB) DeactivateLeaderboard(ctx context.Context, idb bun.I
 }
 
 // DeactivateLeaderboard indicates an expected call of DeactivateLeaderboard.
-func (mr *MockLeaderboardDBMockRecorder) DeactivateLeaderboard(ctx, idb, guildID, leaderboardID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) DeactivateLeaderboard(ctx, idb, guildID, leaderboardID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).DeactivateLeaderboard), ctx, idb, guildID, leaderboardID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateLeaderboard", reflect.TypeOf((*MockRepository)(nil).DeactivateLeaderboard), ctx, idb, guildID, leaderboardID)
 }
 
 // GetActiveLeaderboard mocks base method.
-func (m *MockLeaderboardDB) GetActiveLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+func (m *MockRepository) GetActiveLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetActiveLeaderboard", ctx, guildID)
 	ret0, _ := ret[0].(*leaderboarddb.Leaderboard)
@@ -98,13 +98,13 @@ func (m *MockLeaderboardDB) GetActiveLeaderboard(ctx context.Context, guildID sh
 }
 
 // GetActiveLeaderboard indicates an expected call of GetActiveLeaderboard.
-func (mr *MockLeaderboardDBMockRecorder) GetActiveLeaderboard(ctx, guildID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetActiveLeaderboard(ctx, guildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).GetActiveLeaderboard), ctx, guildID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveLeaderboard", reflect.TypeOf((*MockRepository)(nil).GetActiveLeaderboard), ctx, guildID)
 }
 
 // GetActiveLeaderboardIDB mocks base method.
-func (m *MockLeaderboardDB) GetActiveLeaderboardIDB(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+func (m *MockRepository) GetActiveLeaderboardIDB(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetActiveLeaderboardIDB", ctx, idb, guildID)
 	ret0, _ := ret[0].(*leaderboarddb.Leaderboard)
@@ -113,13 +113,13 @@ func (m *MockLeaderboardDB) GetActiveLeaderboardIDB(ctx context.Context, idb bun
 }
 
 // GetActiveLeaderboardIDB indicates an expected call of GetActiveLeaderboardIDB.
-func (mr *MockLeaderboardDBMockRecorder) GetActiveLeaderboardIDB(ctx, idb, guildID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetActiveLeaderboardIDB(ctx, idb, guildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveLeaderboardIDB", reflect.TypeOf((*MockLeaderboardDB)(nil).GetActiveLeaderboardIDB), ctx, idb, guildID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveLeaderboardIDB", reflect.TypeOf((*MockRepository)(nil).GetActiveLeaderboardIDB), ctx, idb, guildID)
 }
 
 // GetTagByUserID mocks base method.
-func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
+func (m *MockRepository) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTagByUserID", ctx, guildID, userID)
 	ret0, _ := ret[0].(*sharedtypes.TagNumber)
@@ -128,13 +128,13 @@ func (m *MockLeaderboardDB) GetTagByUserID(ctx context.Context, guildID sharedty
 }
 
 // GetTagByUserID indicates an expected call of GetTagByUserID.
-func (mr *MockLeaderboardDBMockRecorder) GetTagByUserID(ctx, guildID, userID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetTagByUserID(ctx, guildID, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockLeaderboardDB)(nil).GetTagByUserID), ctx, guildID, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTagByUserID", reflect.TypeOf((*MockRepository)(nil).GetTagByUserID), ctx, guildID, userID)
 }
 
 // UpdateLeaderboard mocks base method.
-func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
+func (m *MockRepository) UpdateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLeaderboard", ctx, idb, guildID, leaderboardData, updateID, source)
 	ret0, _ := ret[0].(*leaderboarddb.Leaderboard)
@@ -143,7 +143,7 @@ func (m *MockLeaderboardDB) UpdateLeaderboard(ctx context.Context, idb bun.IDB, 
 }
 
 // UpdateLeaderboard indicates an expected call of UpdateLeaderboard.
-func (mr *MockLeaderboardDBMockRecorder) UpdateLeaderboard(ctx, idb, guildID, leaderboardData, updateID, source any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdateLeaderboard(ctx, idb, guildID, leaderboardData, updateID, source any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockLeaderboardDB)(nil).UpdateLeaderboard), ctx, idb, guildID, leaderboardData, updateID, source)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLeaderboard", reflect.TypeOf((*MockRepository)(nil).UpdateLeaderboard), ctx, idb, guildID, leaderboardData, updateID, source)
 }

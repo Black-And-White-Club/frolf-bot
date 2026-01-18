@@ -9,11 +9,13 @@ import (
 )
 
 // HandleScorecardParsed consumes a parsed scorecard and emits match confirmation or confirmed events.
+// This handler uses a type switch because the service may return different success payload types
+// depending on whether confirmation is required or all matches were resolved automatically.
 func (h *UserHandlers) HandleScorecardParsed(
 	ctx context.Context,
 	payload *roundevents.ParsedScorecardPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.userService.MatchParsedScorecard(ctx, *payload)
+	result, err := h.service.MatchParsedScorecard(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}

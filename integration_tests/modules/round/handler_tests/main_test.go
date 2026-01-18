@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 )
@@ -12,40 +13,39 @@ import (
 func TestMain(m *testing.M) {
 	log.Println("TestMain started in package roundhandler_integration_tests")
 
-	// 1. Initialize the global Containers (Postgres/NATS)
-	globalT := &testing.T{}
-	var err error
-	testEnv, err = testutils.NewTestEnvironment(globalT)
-	if err != nil {
-		log.Fatalf("TestMain: Failed to initialize test environment: %v", err)
-	}
+	// 1. Setup global environment
+	testEnvOnce.Do(func() {
+		// Avoid passing &testing.T{} if possible.
+		// If NewTestEnvironment requires it, ensure it doesn't call t.Fatal.
+		env, err := testutils.NewTestEnvironment(&testing.T{})
+		if err != nil {
+			log.Fatalf("TestMain: Failed to setup test environment: %v", err)
+		}
+		testEnv = env
+	})
 
-	// 2. Initialize Shared Application Infrastructure (Router/Module/EventBus)
-	// We call this once here to ensure it's ready before any test runs
-	ctx := context.Background()
-	deps, err := initSharedInfrastructure(ctx, testEnv)
-	if err != nil {
-		log.Fatalf("TestMain: Failed to initialize application infra: %v", err)
-	}
-	sharedDeps = deps
+	// 2. Set Env Vars
+	oldAppEnv := os.Getenv("APP_ENV")
+	os.Setenv("APP_ENV", "test")
 
-	log.Println("TestMain: Global environment and application infra ready.")
-
-	// 3. Run Tests
+	// 3. Run the tests and capture exit code
 	exitCode := m.Run()
 
-	// 4. Global Cleanup
-	log.Println("TestMain: Running global cleanup...")
-	if sharedDeps.RoundModule != nil {
-		sharedDeps.RoundModule.Close()
-	}
-	if sharedDeps.Router != nil {
-		sharedDeps.Router.Close()
-	}
-	if sharedDeps.EventBus != nil {
-		sharedDeps.EventBus.Close()
-	}
-	testEnv.Cleanup()
+	// 4. Manual Cleanup (Don't rely on defer before os.Exit)
+	log.Println("TestMain: Running global test environment cleanup.")
+	os.Setenv("APP_ENV", oldAppEnv)
 
+	if testEnv != nil {
+		testEnv.Cleanup()
+	}
+
+	// Only shutdown the pool if testEnv.Cleanup() doesn't already do it
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	testutils.ShutdownContainerPool(ctx)
+
+	log.Printf("TestMain: Finished with exit code: %d", exitCode)
+
+	// 5. Finally Exit
 	os.Exit(exitCode)
 }

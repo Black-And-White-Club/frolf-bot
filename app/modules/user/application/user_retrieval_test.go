@@ -11,13 +11,14 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
-func TestUserServiceImpl_GetUser(t *testing.T) {
+func TestUserService_GetUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -25,7 +26,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 
-	mockDB := userdb.NewMockUserDB(ctrl)
+	mockDB := userdb.NewMockRepository(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
@@ -34,13 +35,13 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		mockDBSetup      func(*userdb.MockUserDB)
-		expectedOpResult UserOperationResult
+		mockDBSetup      func(*userdb.MockRepository)
+		expectedOpResult results.OperationResult
 		expectedErr      error
 	}{
 		{
 			name: "Successfully retrieves user",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
 					Return(&userdbtypes.UserWithMembership{
@@ -52,52 +53,34 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 						JoinedAt: time.Now(),
 					}, nil)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: &userevents.GetUserResponsePayloadV1{
-					User: &usertypes.UserData{
-						ID:     1,
-						UserID: testUserID,
-						Role:   sharedtypes.UserRoleAdmin,
-					},
+			expectedOpResult: results.SuccessResult(&userevents.GetUserResponsePayloadV1{
+				User: &usertypes.UserData{
+					ID:     1,
+					UserID: testUserID,
+					Role:   sharedtypes.UserRoleAdmin,
 				},
-				Failure: nil,
-				Error:   nil,
-			},
+			}),
 			expectedErr: nil,
 		},
 		{
 			name: "User not found",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
-					Return(nil, userdbtypes.ErrUserNotFound)
+					Return(nil, userdbtypes.ErrNotFound)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserFailedPayloadV1{
-					UserID: testUserID,
-					Reason: "user not found",
-				},
-				Error: nil,
-			},
+			expectedOpResult: results.FailureResult(&userevents.GetUserFailedPayloadV1{UserID: testUserID, Reason: "user not found"}),
 			expectedErr: nil,
 		},
 		{
 			name: "Database error retrieving user",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				dbErr := errors.New("database connection failed")
 				mockDB.EXPECT().
 					GetUserByUserID(gomock.Any(), testUserID, testGuildID).
 					Return(nil, dbErr)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserFailedPayloadV1{
-					UserID: testUserID,
-					Reason: "failed to retrieve user from database",
-				},
-				Error: errors.New("database connection failed"),
-			},
+			expectedOpResult: results.FailureResult(&userevents.GetUserFailedPayloadV1{UserID: testUserID, Reason: "failed to retrieve user from database"}),
 			// Service now returns failure payload with Error populated but no top-level error
 			expectedErr: nil,
 		},
@@ -107,18 +90,11 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			s := &UserServiceImpl{
-				UserDB:  mockDB,
+			s := &UserService{
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				// Mock the serviceWrapper to call the provided function directly in tests
-				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
-					// In the test wrapper, just call the actual service function and return its result
-					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
-					// as these are concerns of the wrapper itself, not the service method logic being tested.
-					return serviceFunc(ctx)
-				},
 			}
 
 			gotResult, gotErr := s.GetUser(ctx, testGuildID, testUserID)
@@ -156,17 +132,6 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
 			}
 
-			// Validate the Error field within the UserOperationResult
-			if tt.expectedOpResult.Error != nil {
-				if gotResult.Error == nil {
-					t.Errorf("Expected error in result, got nil")
-				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
-					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
-				}
-			} else if gotResult.Error != nil {
-				t.Errorf("Unexpected error in result: %v", gotResult.Error)
-			}
-
 			// Validate the top-level returned error
 			if tt.expectedErr != nil {
 				if gotErr == nil {
@@ -181,7 +146,7 @@ func TestUserServiceImpl_GetUser(t *testing.T) {
 	}
 }
 
-func TestUserServiceImpl_GetUserRole(t *testing.T) {
+func TestUserService_GetUserRole(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -189,7 +154,7 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 
-	mockDB := userdb.NewMockUserDB(ctrl)
+	mockDB := userdb.NewMockRepository(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
@@ -198,61 +163,49 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		mockDBSetup      func(*userdb.MockUserDB)
-		expectedOpResult UserOperationResult
+		mockDBSetup      func(*userdb.MockRepository)
+		expectedOpResult results.OperationResult
 		expectedErr      error // This should be the error returned by the mocked serviceWrapper
 	}{
 		{
 			name: "Successfully retrieves user role",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleAdmin, nil)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: &userevents.GetUserRoleResponsePayloadV1{
-					UserID: testUserID,
-					Role:   sharedtypes.UserRoleAdmin,
-				},
-				Failure: nil,
-				Error:   nil,
-			},
+			expectedOpResult: results.SuccessResult(&userevents.GetUserRoleResponsePayloadV1{
+				UserID: testUserID,
+				Role:   sharedtypes.UserRoleAdmin,
+			}),
 			expectedErr: nil,
 		},
 		{
 			name: "Database error retrieving user role",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				dbErr := errors.New("failed to retrieve user role")
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleEnum(""), dbErr)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserRoleFailedPayloadV1{
-					UserID: testUserID,
-					Reason: "failed to retrieve user role from database", // Reason set in the service code
-				},
-				Error: errors.New("failed to retrieve user role"), // Original DB error is returned in the result
-			},
+			expectedOpResult: results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
+				UserID: testUserID,
+				Reason: "failed to retrieve user role from database", // Reason set in the service code
+			}),
 			// Service now returns failure payload with Error populated but no top-level error
 			expectedErr: nil,
 		},
 		{
 			name: "Retrieved invalid user role",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					GetUserRole(gomock.Any(), testUserID, testGuildID).
 					Return(sharedtypes.UserRoleEnum("InvalidRole"), nil)
 			},
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.GetUserRoleFailedPayloadV1{
-					UserID: testUserID,
-					Reason: "user found but has invalid role", // Reason set in the service code
-				},
-				Error: nil, // Service code returns nil error in result for invalid role
-			},
+			expectedOpResult: results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
+				UserID: testUserID,
+				Reason: "user found but has invalid role", // Reason set in the service code
+			}),
 			expectedErr: nil, // Mocked serviceWrapper returns nil error at top level for invalid role
 		},
 	}
@@ -261,18 +214,11 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			s := &UserServiceImpl{
-				UserDB:  mockDB,
+			s := &UserService{
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				// Mock the serviceWrapper to call the provided function directly in tests
-				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
-					// In the test wrapper, just call the actual service function and return its result
-					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
-					// as these are concerns of the wrapper itself, not the service method logic being tested.
-					return serviceFunc(ctx)
-				},
 			}
 
 			gotResult, gotErr := s.GetUserRole(ctx, testGuildID, testUserID)
@@ -308,17 +254,6 @@ func TestUserServiceImpl_GetUserRole(t *testing.T) {
 				}
 			} else if gotResult.Failure != nil {
 				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
-			}
-
-			// Validate the Error field within the UserOperationResult
-			if tt.expectedOpResult.Error != nil {
-				if gotResult.Error == nil {
-					t.Errorf("Expected error in result, got nil")
-				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
-					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
-				}
-			} else if gotResult.Error != nil {
-				t.Errorf("Unexpected error in result: %v", gotResult.Error)
 			}
 
 			// Validate the top-level returned error

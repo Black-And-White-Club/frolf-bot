@@ -8,7 +8,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 )
 
@@ -18,7 +18,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 		expectedError            bool
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Successful update of scheduled rounds with new tags",
@@ -52,7 +52,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 					"user5": 555, // Not in rounds
 				}
 			},
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
 				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 
 				if len(success.UpdatedRounds) != 2 {
@@ -79,7 +79,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				guildID := sharedtypes.GuildID("test-guild")
 				return guildID, map[sharedtypes.DiscordID]sharedtypes.TagNumber{"nonexistent": 999}
 			},
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
 				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if success.Summary.RoundsUpdated != 0 {
 					t.Errorf("Expected 0 rounds updated, got %d", success.Summary.RoundsUpdated)
@@ -91,7 +91,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, map[sharedtypes.DiscordID]sharedtypes.TagNumber) {
 				return "test-guild", make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 			},
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
 				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
 				if success.Summary.TotalRoundsProcessed != 0 {
 					t.Error("Expected 0 rounds processed for empty map")
@@ -103,7 +103,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, map[sharedtypes.DiscordID]sharedtypes.TagNumber) {
 				return "", map[sharedtypes.DiscordID]sharedtypes.TagNumber{"u1": 1}
 			},
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
 				// Assert that Failure is not nil
 				if res.Failure == nil {
 					t.Fatal("Expected res.Failure to be populated, but got nil")

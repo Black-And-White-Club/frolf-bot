@@ -1,13 +1,13 @@
 package userintegrationtests
 
 import (
-	"time"
 	"context"
 	"io"
 	"log"
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -28,7 +28,7 @@ var (
 // TestDeps holds dependencies needed by individual tests.
 type TestDeps struct {
 	Ctx     context.Context
-	DB      userdb.UserDB
+	DB      userdb.Repository
 	BunDB   *bun.DB
 	Service userservice.Service
 	Cleanup func()
@@ -73,8 +73,7 @@ func SetupTestUserService(t *testing.T) TestDeps {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-
-	realDB := &userdb.UserDBImpl{DB: env.DB}
+	realDB := userdb.NewRepository(env.DB)
 
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	noOpMetrics := &usermetrics.NoOpMetrics{}
@@ -83,7 +82,6 @@ func SetupTestUserService(t *testing.T) TestDeps {
 	// Create the UserService with no-op dependencies
 	service := userservice.NewUserService(
 		realDB,
-		nil, // No EventBus needed for user service
 		testLogger,
 		noOpMetrics,
 		noOpTracer,

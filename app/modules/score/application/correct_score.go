@@ -38,7 +38,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 		// Preserve existing tag number if not provided
 		effectiveTag := tagNumber
 		if effectiveTag == nil {
-			if existing, err := s.ScoreDB.GetScoresForRound(ctx, guildID, roundID); err == nil {
+			if existing, err := s.repo.GetScoresForRound(ctx, guildID, roundID); err == nil {
 				for _, si := range existing {
 					if si.UserID == userID && si.TagNumber != nil {
 						tn := *si.TagNumber
@@ -55,7 +55,7 @@ func (s *ScoreService) CorrectScore(ctx context.Context, guildID sharedtypes.Gui
 			TagNumber: effectiveTag,
 		}
 		dbStart := time.Now()
-		err := s.ScoreDB.UpdateOrAddScore(ctx, guildID, roundID, scoreInfo)
+		err := s.repo.UpdateOrAddScore(ctx, guildID, roundID, scoreInfo)
 		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update/add score",

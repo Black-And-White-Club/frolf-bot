@@ -5,12 +5,13 @@ import (
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
-// Service defines the contract for the guild service layer.
+// Service defines the interface for guild operations.
 type Service interface {
-	CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (GuildOperationResult, error)
-	GetGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (GuildOperationResult, error)
-	UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (GuildOperationResult, error)
-	DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (GuildOperationResult, error)
+	CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error)
+	GetGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error)
+	UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error)
+	DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error)
 }

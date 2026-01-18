@@ -10,7 +10,7 @@ import (
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guildmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -56,24 +56,22 @@ func TestGuildHandlers_HandleGuildSetup(t *testing.T) {
 					AutoSetupCompleted:   true,
 					SetupCompletedAt:     &setupTime,
 				}
-				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigCreatedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-						Config: guildtypes.GuildConfig{
-							GuildID:              sharedtypes.GuildID("guild-1"),
-							SignupChannelID:      "signup-chan",
-							SignupMessageID:      "msg-1",
-							EventChannelID:       "event-chan",
-							LeaderboardChannelID: "leaderboard-chan",
-							UserRoleID:           "role-1",
-							EditorRoleID:         "role-2",
-							AdminRoleID:          "role-3",
-							SignupEmoji:          ":frolf:",
-							AutoSetupCompleted:   true,
-							SetupCompletedAt:     &setupTime,
-						},
+				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(results.SuccessResult(&guildevents.GuildConfigCreatedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+					Config: guildtypes.GuildConfig{
+						GuildID:              sharedtypes.GuildID("guild-1"),
+						SignupChannelID:      "signup-chan",
+						SignupMessageID:      "msg-1",
+						EventChannelID:       "event-chan",
+						LeaderboardChannelID: "leaderboard-chan",
+						UserRoleID:           "role-1",
+						EditorRoleID:         "role-2",
+						AdminRoleID:          "role-3",
+						SignupEmoji:          ":frolf:",
+						AutoSetupCompleted:   true,
+						SetupCompletedAt:     &setupTime,
 					},
-				}, nil)
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigCreatedV1,
@@ -108,13 +106,10 @@ func TestGuildHandlers_HandleGuildSetup(t *testing.T) {
 					AutoSetupCompleted:   true,
 					SetupCompletedAt:     &setupTime,
 				}
-				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-						Reason:  "config already exists",
-					},
-					Error: guildservice.ErrGuildConfigConflict,
-				}, nil)
+				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(results.FailureResult(&guildevents.GuildConfigCreationFailedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+					Reason:  "config already exists",
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigCreationFailedV1,
@@ -135,7 +130,7 @@ func TestGuildHandlers_HandleGuildSetup(t *testing.T) {
 				expectedConfig := &guildtypes.GuildConfig{
 					GuildID: sharedtypes.GuildID("guild-1"),
 				}
-				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(guildservice.GuildOperationResult{}, context.DeadlineExceeded)
+				m.EXPECT().CreateGuildConfig(gomock.Any(), expectedConfig).Return(results.OperationResult{}, context.DeadlineExceeded)
 			},
 			wantErr: true,
 			wantLen: 0,

@@ -45,13 +45,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation of existing jobs
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 
 				// Expect reminder scheduling - use gomock.Any() for time since implementation uses time.Now()
-				mockQueue.EXPECT().ScheduleRoundReminder(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling - use gomock.Any() for time since implementation uses time.Now()
-				mockQueue.EXPECT().ScheduleRoundStart(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedError: nil,
 			wantSuccess:   true,
@@ -63,7 +63,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to fail
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(errors.New("job cancellation error"))
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(errors.New("job cancellation error"))
 			},
 			expectedError: nil, // Error is handled in Failure
 			wantSuccess:   false,
@@ -75,10 +75,10 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 
 				// Expect reminder scheduling to fail - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("reminder scheduling error"))
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("reminder scheduling error"))
 			},
 			expectedError: nil, // Error is handled in Failure
 			wantSuccess:   false,
@@ -90,13 +90,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 
 				// Expect reminder scheduling to succeed - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling to fail - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("round start scheduling error"))
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("round start scheduling error"))
 			},
 			expectedError: nil, // Error is handled in Failure
 			wantSuccess:   false,
@@ -108,7 +108,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 				// No scheduling calls expected as times are in the past
 			},
 			expectedError: nil,
@@ -121,13 +121,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "12345",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 
 				// Expect reminder scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedError: nil,
 			wantSuccess:   true,
@@ -139,13 +139,13 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			discordMessageID: "",
 			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
 				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(ctx, roundID).Return(nil)
+				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
 
 				// Expect reminder scheduling with empty EventMessageID - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 
 				// Expect round start scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(ctx, gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedError: nil,
 			wantSuccess:   true,
@@ -187,11 +187,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				logger:       logger,
 				metrics:      mockMetrics,
 				tracer:       tracer,
-				QueueService: mockQueue,
-				// Bypass the serviceWrapper for direct unit testing
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
+				queueService: mockQueue,
 			}
 
 			guildID := sharedtypes.GuildID("test-guild")

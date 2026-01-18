@@ -15,7 +15,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscUsername(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserDB := usermocks.NewMockUserDB(ctrl)
+	mockUserDB := usermocks.NewMockRepository(ctrl)
 	adapter := NewUserLookupAdapter(mockUserDB)
 
 	testGuildID := sharedtypes.GuildID("guild-123")
@@ -42,7 +42,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscUsername(t *testing.T) {
 
 	t.Run("User not found", func(t *testing.T) {
 		mockUserDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
-			Return(nil, userdb.ErrUserNotFound)
+			Return(nil, userdb.ErrNotFound)
 
 		result, err := adapter.FindByNormalizedUDiscUsername(context.Background(), testGuildID, testUsername)
 		if err != nil {
@@ -68,7 +68,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscDisplayName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUserDB := usermocks.NewMockUserDB(ctrl)
+	mockUserDB := usermocks.NewMockRepository(ctrl)
 	adapter := NewUserLookupAdapter(mockUserDB)
 
 	testGuildID := sharedtypes.GuildID("guild-123")
@@ -95,7 +95,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscDisplayName(t *testing.T) {
 
 	t.Run("User not found", func(t *testing.T) {
 		mockUserDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testDisplayName).
-			Return(nil, userdb.ErrUserNotFound)
+			Return(nil, userdb.ErrNotFound)
 
 		result, err := adapter.FindByNormalizedUDiscDisplayName(context.Background(), testGuildID, testDisplayName)
 		if err != nil {

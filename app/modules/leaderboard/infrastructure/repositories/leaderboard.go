@@ -11,24 +11,24 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// LeaderboardRepository handles database operations for leaderboards.
-type LeaderboardDBImpl struct {
-	DB *bun.DB
+// Impl implements the Repository interface using Bun ORM.
+type Impl struct {
+	db bun.IDB
 }
 
-var (
-	ErrNoActiveLeaderboard = errors.New("no active leaderboard found")
-	ErrUserTagNotFound     = errors.New("user tag not found in active leaderboard")
-)
+// NewRepository creates a new leaderboard repository.
+func NewRepository(db bun.IDB) Repository {
+	return &Impl{db: db}
+}
 
-// --- READ METHODS (Can use bun.IDB or stick to db.DB for simplicity) ---
+// --- READ METHODS (transaction-aware) ---
 
-func (db *LeaderboardDBImpl) GetActiveLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (*Leaderboard, error) {
-	return db.GetActiveLeaderboardIDB(ctx, db.DB, guildID)
+func (r *Impl) GetActiveLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (*Leaderboard, error) {
+	return r.GetActiveLeaderboardIDB(ctx, r.db, guildID)
 }
 
 // GetActiveLeaderboardIDB is the transaction-aware version of the getter
-func (db *LeaderboardDBImpl) GetActiveLeaderboardIDB(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID) (*Leaderboard, error) {
+func (r *Impl) GetActiveLeaderboardIDB(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID) (*Leaderboard, error) {
 	leaderboard := new(Leaderboard)
 	err := idb.NewSelect().
 		Model(leaderboard).
@@ -41,7 +41,7 @@ func (db *LeaderboardDBImpl) GetActiveLeaderboardIDB(ctx context.Context, idb bu
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoActiveLeaderboard
 		}
-		return nil, fmt.Errorf("failed to get active leaderboard: %w", err)
+		return nil, fmt.Errorf("leaderboarddb.GetActiveLeaderboardIDB: %w", err)
 	}
 	return leaderboard, nil
 }
@@ -50,7 +50,7 @@ func (db *LeaderboardDBImpl) GetActiveLeaderboardIDB(ctx context.Context, idb bu
 
 // CreateLeaderboard inserts a new leaderboard record.
 // It accepts bun.IDB so it can participate in the Service's transactions.
-func (db *LeaderboardDBImpl) CreateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (*Leaderboard, error) {
+func (r *Impl) CreateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (*Leaderboard, error) {
 	leaderboard.GuildID = guildID
 
 	// Ensure we use the passed 'idb' (which could be a transaction)
@@ -60,26 +60,29 @@ func (db *LeaderboardDBImpl) CreateLeaderboard(ctx context.Context, idb bun.IDB,
 		Exec(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create leaderboard record: %w", err)
+		return nil, fmt.Errorf("leaderboarddb.CreateLeaderboard: %w", err)
 	}
 
 	return leaderboard, nil
 }
 
 // DeactivateLeaderboard deactivates the specified leaderboard using the provided IDB (DB or Tx).
-func (db *LeaderboardDBImpl) DeactivateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error {
+func (r *Impl) DeactivateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error {
 	_, err := idb.NewUpdate().
 		Model((*Leaderboard)(nil)).
 		Set("is_active = ?", false).
 		Where("id = ?", leaderboardID).
 		Where("guild_id = ?", guildID).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("leaderboarddb.DeactivateLeaderboard: %w", err)
+	}
+	return nil
 }
 
 // UpdateLeaderboard now accepts bun.IDB. It performs the "Deactivate Old -> Insert New" logic.
 // This allows the Service to wrap this call and a "Publish to Outbox" call in one transaction.
-func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*Leaderboard, error) {
+func (r *Impl) UpdateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*Leaderboard, error) {
 	// 1. Deactivate the current leaderboard
 	_, err := idb.NewUpdate().
 		Model((*Leaderboard)(nil)).
@@ -88,7 +91,7 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, idb bun.IDB,
 		Where("guild_id = ?", guildID).
 		Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to deactivate current leaderboard: %w", err)
+		return nil, fmt.Errorf("leaderboarddb.UpdateLeaderboard.deactivate: %w", err)
 	}
 
 	// 2. Create a new leaderboard with the updated data
@@ -104,15 +107,15 @@ func (db *LeaderboardDBImpl) UpdateLeaderboard(ctx context.Context, idb bun.IDB,
 		Model(newLeaderboard).
 		Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert new leaderboard: %w", err)
+		return nil, fmt.Errorf("leaderboarddb.UpdateLeaderboard.insert: %w", err)
 	}
 
 	return newLeaderboard, nil
 }
 
 // CheckTagAvailability remains similar but uses the IDB-aware getter
-func (db *LeaderboardDBImpl) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (TagAvailabilityResult, error) {
-	leaderboard, err := db.GetActiveLeaderboardIDB(ctx, db.DB, guildID)
+func (r *Impl) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (TagAvailabilityResult, error) {
+	leaderboard, err := r.GetActiveLeaderboardIDB(ctx, r.db, guildID)
 	if err != nil {
 		if errors.Is(err, ErrNoActiveLeaderboard) {
 			// Flow for first-time guild setup
@@ -152,8 +155,8 @@ func (l *Leaderboard) HasUserID(userID sharedtypes.DiscordID) bool {
 }
 
 // GetTagByUserID updated to use IDB-aware logic
-func (db *LeaderboardDBImpl) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
-	activeLeaderboard, err := db.GetActiveLeaderboardIDB(ctx, db.DB, guildID)
+func (r *Impl) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (*sharedtypes.TagNumber, error) {
+	activeLeaderboard, err := r.GetActiveLeaderboardIDB(ctx, r.db, guildID)
 	if err != nil {
 		return nil, err
 	}

@@ -2,15 +2,14 @@ package leaderboardhandlers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
 // HandleGetLeaderboardRequest returns the full current state.
@@ -18,28 +17,15 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	ctx context.Context,
 	payload *leaderboardevents.GetLeaderboardRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.leaderboardService.GetLeaderboard(ctx, payload.GuildID)
+	result, err := h.service.GetLeaderboard(ctx, payload.GuildID)
 	if err != nil {
 		return nil, err
 	}
 
-	leaderboardEntries := make([]leaderboardtypes.LeaderboardEntry, len(result.Leaderboard))
-	for i, entry := range result.Leaderboard {
-		leaderboardEntries[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
-		}
-	}
-
-	return []handlerwrapper.Result{
-		{
-			Topic: leaderboardevents.GetLeaderboardResponseV1,
-			Payload: &leaderboardevents.GetLeaderboardResponsePayloadV1{
-				GuildID:     payload.GuildID,
-				Leaderboard: leaderboardEntries,
-			},
-		},
-	}, nil
+	return mapOperationResult(result,
+		leaderboardevents.GetLeaderboardResponseV1,
+		leaderboardevents.GetLeaderboardFailedV1,
+	), nil
 }
 
 // HandleGetTagByUserIDRequest performs a single tag lookup.
@@ -47,7 +33,7 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 	ctx context.Context,
 	payload *sharedevents.DiscordTagLookupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	tag, err := h.leaderboardService.GetTagByUserID(ctx, payload.GuildID, payload.UserID)
+	tag, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.UserID)
 	found := err == nil
 
 	var tagPtr *sharedtypes.TagNumber
@@ -75,43 +61,39 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 	guildID sharedtypes.GuildID,
 	requestorID sharedtypes.DiscordID,
 	batchID string,
-	result leaderboardservice.LeaderboardOperationResult,
+	result results.OperationResult,
 	source string,
 ) []handlerwrapper.Result {
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-	assignments := make([]leaderboardevents.TagAssignmentInfoV1, len(result.Leaderboard))
-
-	for i, entry := range result.Leaderboard {
-		assignments[i] = leaderboardevents.TagAssignmentInfoV1{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
+	// Expect the service to return a LeaderboardBatchTagAssignedPayloadV1
+	var assignments []leaderboardevents.TagAssignmentInfoV1
+	if result.IsSuccess() {
+		if payload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
+			assignments = payload.Assignments
 		}
 	}
 
-	for _, change := range result.TagChanges {
-		changedTags[change.UserID] = *change.NewTag
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+	for _, a := range assignments {
+		changedTags[a.UserID] = a.TagNumber
+	}
+
+	// Build the batch-assigned payload using the handler-provided metadata
+	batchPayload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+		GuildID:          guildID,
+		RequestingUserID: requestorID,
+		BatchID:          batchID,
+		AssignmentCount:  len(assignments),
+		Assignments:      assignments,
 	}
 
 	return []handlerwrapper.Result{
-		{
-			Topic: leaderboardevents.LeaderboardBatchTagAssignedV1,
-			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-				GuildID:          guildID,
-				RequestingUserID: requestorID,
-				BatchID:          batchID,
-				AssignmentCount:  len(result.Leaderboard),
-				Assignments:      assignments,
-			},
-		},
-		{
-			Topic: sharedevents.TagUpdateForScheduledRoundsV1,
-			Payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
-				GuildID:     guildID,
-				ChangedTags: changedTags,
-				UpdatedAt:   time.Now().UTC(),
-				Source:      source,
-			},
-		},
+		{Topic: leaderboardevents.LeaderboardBatchTagAssignedV1, Payload: batchPayload},
+		{Topic: sharedevents.TagUpdateForScheduledRoundsV1, Payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
+			GuildID:     guildID,
+			ChangedTags: changedTags,
+			UpdatedAt:   time.Now().UTC(),
+			Source:      source,
+		}},
 	}
 }
 
@@ -120,24 +102,22 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(
 	ctx context.Context,
 	payload *sharedevents.RoundTagLookupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Received RoundTagLookupRequest event",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("user_id", string(payload.UserID)),
-		attr.String("round_id", payload.RoundID.String()),
-	)
-
 	// 1. Call specialized Round lookup in the Service
-	result, err := h.leaderboardService.RoundGetTagByUserID(ctx, payload.GuildID, *payload)
+	result, err := h.service.RoundGetTagByUserID(ctx, payload.GuildID, *payload)
 
 	// 2. SYSTEM FAILURE (e.g., DB Connection Lost) -> Trigger Watermill Retry
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. DOMAIN FAILURE (e.g., Guild not initialized) -> ACK and send Failure Event
-	if result.Err != nil {
-		h.logger.WarnContext(ctx, "Round tag lookup domain failure",
-			attr.Error(result.Err))
+	// 3. DOMAIN FAILURE -> ACK and send Failure Event (single-topic behavior retained)
+	if result.IsFailure() {
+		var reason string
+		if p, ok := result.Failure.(*sharedevents.RoundTagLookupFailedPayloadV1); ok {
+			reason = p.Reason
+		} else {
+			reason = fmt.Sprintf("%v", result.Failure)
+		}
 
 		return []handlerwrapper.Result{
 			{
@@ -146,39 +126,25 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(
 					ScopedGuildID: sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 					UserID:        payload.UserID,
 					RoundID:       payload.RoundID,
-					Reason:        result.Err.Error(),
+					Reason:        reason,
 				},
 			},
 		}, nil
 	}
 
-	// 4. SUCCESS / NOT FOUND (Business Outcomes)
-	// If the user is on the leaderboard, result.Leaderboard will contain 1 entry.
-	found := len(result.Leaderboard) > 0
-	var tagNumber *sharedtypes.TagNumber
-	if found {
-		val := result.Leaderboard[0].TagNumber
-		tagNumber = &val
+	// 4. SUCCESS Path: Expect a RoundTagLookupResultPayloadV1
+	if result.IsSuccess() {
+		if p, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1); ok {
+			topic := sharedevents.RoundTagLookupFoundV1
+			if !p.Found {
+				topic = sharedevents.RoundTagLookupNotFoundV1
+			}
+			return []handlerwrapper.Result{{Topic: topic, Payload: p}}, nil
+		}
+		// Unexpected success payload
+		return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
 	}
 
-	responsePayload := &sharedevents.RoundTagLookupResultPayloadV1{
-		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: payload.GuildID},
-		UserID:             payload.UserID,
-		RoundID:            payload.RoundID,
-		OriginalResponse:   payload.Response,
-		OriginalJoinedLate: payload.JoinedLate,
-		TagNumber:          tagNumber,
-		Found:              found,
-	}
-
-	topic := sharedevents.RoundTagLookupFoundV1
-	if !found {
-		topic = sharedevents.RoundTagLookupNotFoundV1
-		h.logger.InfoContext(ctx, "Round participant tag not found",
-			attr.String("user_id", string(payload.UserID)))
-	}
-
-	return []handlerwrapper.Result{
-		{Topic: topic, Payload: responsePayload},
-	}, nil
+	// All success/failure paths handled above; should not reach here.
+	return nil, nil
 }

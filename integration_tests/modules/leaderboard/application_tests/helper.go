@@ -73,8 +73,7 @@ func SetupTestLeaderboardService(t *testing.T) TestDeps {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-
-	realDB := &leaderboarddb.LeaderboardDBImpl{DB: env.DB}
+	realDB := leaderboarddb.NewRepository(env.DB)
 
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	noOpMetrics := &leaderboardmetrics.NoOpMetrics{}

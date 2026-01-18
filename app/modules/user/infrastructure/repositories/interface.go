@@ -4,10 +4,16 @@ import (
 	"context"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/uptrace/bun"
 )
 
-// UserDB is an interface for interacting with the user database.
-type UserDB interface {
+// Repository defines the persistence contract for user data.
+//
+// Error semantics:
+//  - ErrNotFound: requested record does not exist (Get* methods)
+//  - ErrNoRowsAffected: UPDATE/DELETE matched no rows
+//  - other errors: infrastructure failures
+type Repository interface {
 	// Global user operations
 	GetUserGlobal(ctx context.Context, userID sharedtypes.DiscordID) (*User, error)
 	CreateGlobalUser(ctx context.Context, user *User) error
@@ -26,3 +32,13 @@ type UserDB interface {
 	FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
 }
+
+// Backwards-compatibility aliases for callers that used the old naming.
+type (
+	UserDB = Repository
+)
+
+// NewUserDB is kept for compatibility; use NewRepository when possible.
+// Implementations should provide NewRepository.
+// NewUserDB is an alias for NewRepository to preserve existing callers.
+func NewUserDB(db bun.IDB) Repository { return NewRepository(db) }

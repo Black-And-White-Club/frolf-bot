@@ -48,7 +48,7 @@ func NewUserModule(
 	logger.InfoContext(ctx, "user.NewUserModule called")
 
 	// Initialize user service
-	userService := userservice.NewUserService(userDB, eventBus, logger, metrics, tracer)
+	userService := userservice.NewUserService(userDB, logger, metrics, tracer)
 
 	// Create a new Prometheus Registry for this module's router and metrics.
 	// This registry will be used by the router's metrics builder.

@@ -2,78 +2,42 @@ package guildservice
 
 import (
 	"context"
-	"errors"
+
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // DeleteGuildConfig performs a soft delete on a guild configuration.
-func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (GuildOperationResult, error) {
-	return s.serviceWrapper(ctx, "DeleteGuildConfig", guildID, func(ctx context.Context) (GuildOperationResult, error) {
-		if ctx == nil {
-			return GuildOperationResult{
-				Error: errors.New("context cannot be nil"),
-			}, errors.New("context cannot be nil")
-		}
+// Idempotent: deleting a non-existent or already-deleted config succeeds.
+func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
+	return s.withTelemetry(ctx, "DeleteGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
+		// Validate
 		if guildID == "" {
-			return GuildOperationResult{
-				Error: errors.New("invalid guild ID"),
-			}, errors.New("invalid guild ID")
+			return deletionFailure(guildID, ErrInvalidGuildID), nil
 		}
 
-		// Try to get the config first
-		existing, err := s.GuildDB.GetConfig(ctx, guildID)
-		if err != nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  err.Error(),
-				},
-				Error: err,
-			}, err
-		}
-		if existing == nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  "guild config not found",
-				},
-				Error: errors.New("guild config not found"),
-			}, nil
+		// Execute soft delete
+		// The repository handles idempotency (returns nil if already deleted)
+		if err := s.repo.DeleteConfig(ctx, guildID); err != nil {
+			// Infrastructure error - should retry
+			return deletionFailure(guildID, err), err
 		}
 
-		// Build resource snapshot for the event from the existing config.
-		rs := guildtypes.ResourceState{
-			SignupChannelID:      existing.SignupChannelID,
-			SignupMessageID:      existing.SignupMessageID,
-			EventChannelID:       existing.EventChannelID,
-			LeaderboardChannelID: existing.LeaderboardChannelID,
-			UserRoleID:           existing.UserRoleID,
-			EditorRoleID:         existing.EditorRoleID,
-			AdminRoleID:          existing.AdminRoleID,
-			Results:              map[string]guildtypes.DeletionResult{},
-		}
+		// Success
+		// The event signals deletion intent. Discord worker uses ResourceState
+		// snapshot to clean up physical resources.
+		return results.SuccessResult(&guildevents.GuildConfigDeletedPayloadV1{
+			GuildID: guildID,
+		}), nil
+	})
+}
 
-		// Soft delete: set IsActive = false and snapshot resource_state.
-		err = s.GuildDB.DeleteConfig(ctx, guildID)
-		if err != nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  err.Error(),
-				},
-				Error: err,
-			}, err
-		}
-
-		// Success payload includes the resource snapshot so consumers can act.
-		return GuildOperationResult{
-			Success: &guildevents.GuildConfigDeletedPayloadV1{
-				GuildID:       guildID,
-				ResourceState: rs,
-			},
-		}, nil
+// deletionFailure creates a failure result for config deletion.
+func deletionFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
+	return results.FailureResult(&guildevents.GuildConfigDeletionFailedPayloadV1{
+		GuildID: guildID,
+		Reason:  err.Error(),
 	})
 }

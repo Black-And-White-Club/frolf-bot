@@ -15,6 +15,7 @@ type User struct {
 	UDiscUsername *string               `bun:"udisc_username,nullzero" json:"udisc_username,omitempty"` // @username
 	UDiscName     *string               `bun:"udisc_name,nullzero" json:"udisc_name,omitempty"`         // Name shown on casual rounds
 	CreatedAt     time.Time             `bun:"created_at,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt     time.Time             `bun:"updated_at,notnull,default:current_timestamp" json:"updated_at"`
 
 	// ORM relationships
 	Memberships []*GuildMembership `bun:"rel:has-many,join:user_id=user_id" json:"-"`
@@ -37,9 +38,9 @@ type GuildMembership struct {
 // UserWithMembership combines user identity with guild-specific data.
 // Used for queries that need both global and guild context.
 type UserWithMembership struct {
-	User      *User
-	Role      sharedtypes.UserRoleEnum `bun:"role"`
-	JoinedAt  time.Time                `bun:"joined_at"`
+	User     *User
+	Role     sharedtypes.UserRoleEnum `bun:"role"`
+	JoinedAt time.Time                `bun:"joined_at"`
 }
 
 // Add these methods to your User struct
@@ -54,4 +55,3 @@ func (u *User) GetID() int64 {
 func (u *User) GetUserID() sharedtypes.DiscordID {
 	return u.UserID
 }
-

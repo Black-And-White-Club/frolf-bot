@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -83,6 +84,24 @@ func (env *TestEnvironment) ResetJetStreamState(ctx context.Context, streamNames
 	}
 
 	return nil
+}
+
+// WaitForConsumer waits for a consumer to become ready within the specified timeout
+func (env *TestEnvironment) WaitForConsumer(ctx context.Context, streamName, consumerName string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		stream, err := env.JetStream.Stream(ctx, streamName)
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		_, err = stream.Consumer(ctx, consumerName)
+		if err == nil {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("consumer %s/%s not ready after %v", streamName, consumerName, timeout)
 }
 
 // isStreamNotFoundError checks if the error indicates a stream was not found

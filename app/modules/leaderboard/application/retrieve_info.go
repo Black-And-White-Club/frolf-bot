@@ -7,61 +7,72 @@ import (
 	"fmt"
 	"time"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
-// GetLeaderboard matches the Interface: returns (LeaderboardOperationResult, error)
-func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (LeaderboardOperationResult, error) {
+// GetLeaderboard returns an OperationResult representing the current leaderboard.
+func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
 	s.metrics.RecordLeaderboardGetAttempt(ctx, "LeaderboardService")
 
-	return s.serviceWrapper(ctx, "GetLeaderboard", func(ctx context.Context) (LeaderboardOperationResult, error) {
+	return s.withTelemetry(ctx, "GetLeaderboard", guildID, func(ctx context.Context) (results.OperationResult, error) {
 		dbStartTime := time.Now()
-		leaderboard, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
+		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, guildID)
 		s.metrics.RecordLeaderboardGetDuration(ctx, "LeaderboardService", time.Since(dbStartTime))
 
 		if err != nil {
-			// For any error from the DB surface surface a friendly failure reason while preserving the
-			// underlying error for debugging. Tests expect a specific failure reason string.
 			s.metrics.RecordLeaderboardGetFailure(ctx, "LeaderboardService")
-			return LeaderboardOperationResult{Err: fmt.Errorf("Database error when retrieving leaderboard: %w", err)}, nil
+			return results.FailureResult(&leaderboardevents.GetLeaderboardFailedPayloadV1{
+				GuildID: guildID,
+				Reason:  "database error",
+			}), err
 		}
 
 		s.metrics.RecordLeaderboardGetSuccess(ctx, "LeaderboardService")
-		return LeaderboardOperationResult{
-			Leaderboard: leaderboard.LeaderboardData,
-		}, nil
+
+		entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
+		copy(entries, leaderboard.LeaderboardData)
+
+		return results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
+			GuildID:     guildID,
+			Leaderboard: entries,
+		}), nil
 	})
 }
 
-// RoundGetTagByUserID matches the Interface: returns (LeaderboardOperationResult, error)
-func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (LeaderboardOperationResult, error) {
-	// We call GetTagByUserID (which now returns a raw tag) and wrap it for the event bus
+// RoundGetTagByUserID returns a round-scoped tag lookup result payload.
+func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (results.OperationResult, error) {
 	tag, err := s.GetTagByUserID(ctx, guildID, payload.UserID)
 	if err != nil {
-		// If not found or error, return empty data per typical round flow expectations
-		return LeaderboardOperationResult{Leaderboard: leaderboardtypes.LeaderboardData{}}, nil
+		// Not found -> return result payload with Found=false as a failure outcome
+		return results.FailureResult(&sharedevents.RoundTagLookupResultPayloadV1{
+			ScopedGuildID: sharedevents.ScopedGuildID{GuildID: guildID},
+			UserID:        payload.UserID,
+			RoundID:       payload.RoundID,
+			TagNumber:     nil,
+			Found:         false,
+		}), nil
 	}
 
-	return LeaderboardOperationResult{
-		Leaderboard: leaderboardtypes.LeaderboardData{
-			{
-				UserID:    payload.UserID,
-				TagNumber: tag,
-			},
-		},
-	}, nil
+	return results.SuccessResult(&sharedevents.RoundTagLookupResultPayloadV1{
+		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: guildID},
+		UserID:        payload.UserID,
+		RoundID:       payload.RoundID,
+		TagNumber:     &tag,
+		Found:         true,
+	}), nil
 }
 
-// GetTagByUserID matches the Interface: returns (sharedtypes.TagNumber, error)
-// Note: Removed serviceWrapper here because serviceWrapper expects LeaderboardOperationResult
+// GetTagByUserID returns the tag number for a user or an error.
 func (s *LeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
 	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
 
 	dbStartTime := time.Now()
-	tagNumber, err := s.LeaderboardDB.GetTagByUserID(ctx, guildID, userID)
+	tagNumber, err := s.repo.GetTagByUserID(ctx, guildID, userID)
 	s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Since(dbStartTime))
 
 	if err != nil {
@@ -71,9 +82,6 @@ func (s *LeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedt
 		return 0, fmt.Errorf("system error retrieving tag: %w", err)
 	}
 
-	// Some repository implementations (or mocks) may return (nil, nil) to indicate
-	// that no tag exists for the user. Treat that case as sql.ErrNoRows so callers
-	// (like RoundGetTagByUserID) can handle it as "not found".
 	if tagNumber == nil {
 		return 0, sql.ErrNoRows
 	}
@@ -100,7 +108,7 @@ func (s *LeaderboardService) CheckTagAvailability(
 		return sharedevents.TagAvailabilityCheckResultPayloadV1{}, failure, nil
 	}
 
-	result, err := s.LeaderboardDB.CheckTagAvailability(ctx, guildID, userID, *tagNumber)
+	result, err := s.repo.CheckTagAvailability(ctx, guildID, userID, *tagNumber)
 	if err != nil {
 		return sharedevents.TagAvailabilityCheckResultPayloadV1{}, nil, err
 	}

@@ -73,7 +73,7 @@ func SetupTestGuildService(t *testing.T) TestDeps {
 	}
 	log.Printf("[%s] SetupTestGuildService: Environment reset complete", t.Name())
 
-	realDB := &guilddb.GuildDBImpl{DB: env.DB}
+	realDB := guilddb.NewRepository(env.DB)
 
 	// Use a logger that writes to test output for debugging
 	testLogger := slog.New(slog.NewTextHandler(testWriter{t: t}, &slog.HandlerOptions{
@@ -84,7 +84,6 @@ func SetupTestGuildService(t *testing.T) TestDeps {
 	// Create the GuildService with no-op dependencies
 	service := guildservice.NewGuildService(
 		realDB,
-		nil, // No event bus needed for these tests
 		testLogger,
 		noOpMetrics,
 		noOpTracer,

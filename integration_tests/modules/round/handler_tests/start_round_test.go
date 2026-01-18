@@ -33,13 +33,14 @@ func TestHandleRoundStarted(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
 				data2 := NewTestData()
+				realDB := rounddb.NewRepository(env.DB)
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{
 					{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil},
 				})
 
 				// Ensure the round stored in DB has the title we expect the Discord payload to contain
-				if _, err := (&rounddb.RoundDBImpl{DB: env.DB}).UpdateRound(env.Ctx, sharedtypes.GuildID("test-guild"), roundID, &roundtypes.Round{Title: roundtypes.Title("Test Round")}); err != nil {
+				if _, err := (realDB).UpdateRound(env.Ctx, sharedtypes.GuildID("test-guild"), roundID, &roundtypes.Round{Title: roundtypes.Title("Test Round")}); err != nil {
 					t.Fatalf("Failed to set round title in DB: %v", err)
 				}
 

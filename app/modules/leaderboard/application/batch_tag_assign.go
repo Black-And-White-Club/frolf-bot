@@ -3,12 +3,13 @@ package leaderboardservice
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
@@ -21,11 +22,11 @@ func (s *LeaderboardService) ExecuteBatchTagAssignment(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (LeaderboardOperationResult, error) {
+) (results.OperationResult, error) {
 
-	return s.serviceWrapper(ctx, "ExecuteBatchTagAssignment", func(ctx context.Context) (LeaderboardOperationResult, error) {
+	return s.withTelemetry(ctx, "ExecuteBatchTagAssignment", guildID, func(ctx context.Context) (results.OperationResult, error) {
 		// 1. Transactional Execution
-		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (LeaderboardOperationResult, error) {
+		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (results.OperationResult, error) {
 			// 2. Call the internal logic helper
 			return s.executeBatchLogic(ctx, db, guildID, requests, updateID, source)
 		})
@@ -41,7 +42,7 @@ func (s *LeaderboardService) executeBatchLogic(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (LeaderboardOperationResult, error) {
+)(results.OperationResult, error) {
 
 	s.logInfoContext(ctx, "Executing funnel logic",
 		attr.String("source", string(source)),
@@ -50,14 +51,14 @@ func (s *LeaderboardService) executeBatchLogic(
 	)
 
 	// 1. Get current state (IDB aware)
-	current, err := s.LeaderboardDB.GetActiveLeaderboardIDB(ctx, db, guildID)
+	current, err := s.repo.GetActiveLeaderboardIDB(ctx, db, guildID)
 	if err != nil {
 		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
 			current = &leaderboarddb.Leaderboard{
 				LeaderboardData: leaderboardtypes.LeaderboardData{},
 			}
 		} else {
-			return LeaderboardOperationResult{}, fmt.Errorf("failed to fetch current leaderboard: %w", err)
+			return results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
 		}
 	}
 	beforeData := current.LeaderboardData
@@ -93,7 +94,7 @@ func (s *LeaderboardService) executeBatchLogic(
 				// Find the requestor's current tag to help the Saga map the chain
 				currentTag := userToTagMap[req.UserID]
 
-				return LeaderboardOperationResult{}, &TagSwapNeededError{
+				return results.OperationResult{}, &TagSwapNeededError{
 					RequestorID:  req.UserID,
 					TargetUserID: holderID,
 					TargetTag:    req.TagNumber,
@@ -108,7 +109,7 @@ func (s *LeaderboardService) executeBatchLogic(
 	newData := s.GenerateUpdatedSnapshot(beforeData, requests)
 
 	// Atomic DB Write
-	updatedLB, err := s.LeaderboardDB.UpdateLeaderboard(
+	updatedLB, err := s.repo.UpdateLeaderboard(
 		ctx,
 		db,
 		guildID,
@@ -117,16 +118,24 @@ func (s *LeaderboardService) executeBatchLogic(
 		source,
 	)
 	if err != nil {
-		return LeaderboardOperationResult{}, fmt.Errorf("failed to commit update: %w", err)
+		return results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
 	}
 
-	// 4. Compute Diffs for events
-	changes := computeTagChanges(beforeData, updatedLB.LeaderboardData, guildID, source)
+	// 4. Build success payload with leaderboard data
+	payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+		GuildID:         guildID,
+		AssignmentCount: len(updatedLB.LeaderboardData),
+		Assignments:     make([]leaderboardevents.TagAssignmentInfoV1, len(updatedLB.LeaderboardData)),
+	}
 
-	return LeaderboardOperationResult{
-		Leaderboard: updatedLB.LeaderboardData,
-		TagChanges:  changes,
-	}, nil
+	for i, entry := range updatedLB.LeaderboardData {
+		payload.Assignments[i] = leaderboardevents.TagAssignmentInfoV1{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		}
+	}
+
+	return results.SuccessResult(payload), nil
 }
 
 // GenerateUpdatedSnapshot remains public as it's a useful pure function for testing.
@@ -159,42 +168,6 @@ func (s *LeaderboardService) GenerateUpdatedSnapshot(
 	})
 
 	return newData
-}
-
-// computeTagChanges determines granular moves.
-func computeTagChanges(
-	before, after leaderboardtypes.LeaderboardData,
-	guildID sharedtypes.GuildID,
-	reason sharedtypes.ServiceUpdateSource,
-) []TagChange {
-	beforeMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-	for _, e := range before {
-		beforeMap[e.UserID] = e.TagNumber
-	}
-
-	var changes []TagChange
-	for _, entry := range after {
-		oldTag, exists := beforeMap[entry.UserID]
-		if exists && oldTag == entry.TagNumber {
-			continue
-		}
-
-		var oldTagPtr *sharedtypes.TagNumber
-		if exists {
-			oldVal := oldTag
-			oldTagPtr = &oldVal
-		}
-
-		newVal := entry.TagNumber
-		changes = append(changes, TagChange{
-			GuildID: guildID,
-			UserID:  entry.UserID,
-			OldTag:  oldTagPtr,
-			NewTag:  &newVal,
-			Reason:  reason,
-		})
-	}
-	return changes
 }
 
 // FindTagByUserID helper.

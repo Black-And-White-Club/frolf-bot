@@ -7,12 +7,11 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,8 +27,6 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -47,7 +44,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundDeleteValidatedPayloadV1{
 							GuildID:                   testGuildID,
 							RoundDeleteRequestPayload: *testPayload,
@@ -68,7 +65,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundDeleteErrorPayloadV1{
 							GuildID: testGuildID,
 							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
@@ -94,7 +91,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -103,18 +100,18 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			expectedErrMsg: "database error",
 		},
 		{
-			name: "Unknown result returns validation error",
+			name: "Unknown result returns empty results",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 	}
@@ -128,10 +125,9 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()
@@ -168,8 +164,6 @@ func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -195,10 +189,9 @@ func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
 			mockRoundService := roundmocks.NewMockService(ctrl)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()
@@ -236,8 +229,6 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name             string
@@ -258,7 +249,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundDeletedPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
@@ -280,7 +271,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundDeletedPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
@@ -306,7 +297,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundDeleteErrorPayloadV1{
 							GuildID: testGuildID,
 							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
@@ -332,7 +323,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -342,19 +333,19 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			expectedErrMsg: "database error",
 		},
 		{
-			name: "Unknown result returns validation error",
+			name: "Unknown result returns empty results",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().DeleteRound(
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
 			ctx:           context.Background(),
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 	}
@@ -368,10 +359,9 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: utils.NewHelper(logger),
 			}
 
 			results, err := h.HandleRoundDeleteAuthorized(tt.ctx, tt.payload)

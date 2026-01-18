@@ -6,13 +6,10 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -46,9 +43,7 @@ func TestScoreHandlers_HandleBulkCorrectScoreRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &scoremetrics.NoOpMetrics{}
+	// no-op observability in handler tests
 
 	mockSvc := scoremocks.NewMockService(ctrl)
 	mockSvc.EXPECT().CorrectScore(gomock.Any(), testGuildID, testRoundID, userID1, score1, nil).
@@ -57,10 +52,8 @@ func TestScoreHandlers_HandleBulkCorrectScoreRequest(t *testing.T) {
 		Return(scoreservice.ScoreOperationResult{Success: &sharedevents.ScoreUpdatedPayloadV1{GuildID: testGuildID, RoundID: testRoundID, UserID: userID2, Score: score2}}, nil)
 
 	h := &ScoreHandlers{
-		scoreService: mockSvc,
-		logger:       logger,
-		tracer:       tracer,
-		metrics:      metrics,
+		service: mockSvc,
+		helpers: nil,
 	}
 
 	ctx := context.WithValue(context.Background(), "channel_id", "channel-1")
@@ -116,19 +109,15 @@ func TestScoreHandlers_HandleBulkCorrectScoreRequest_UsesDiscordMessageID(t *tes
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &scoremetrics.NoOpMetrics{}
+	// no-op observability in handler tests
 
 	mockSvc := scoremocks.NewMockService(ctrl)
 	mockSvc.EXPECT().CorrectScore(gomock.Any(), sharedtypes.GuildID("guild-1"), gomock.Any(), sharedtypes.DiscordID("user-1"), sharedtypes.Score(5), nil).
 		Return(scoreservice.ScoreOperationResult{Success: &sharedevents.ScoreUpdatedPayloadV1{GuildID: sharedtypes.GuildID("guild-1"), UserID: sharedtypes.DiscordID("user-1"), Score: sharedtypes.Score(5)}}, nil)
 
 	h := &ScoreHandlers{
-		scoreService: mockSvc,
-		logger:       logger,
-		tracer:       tracer,
-		metrics:      metrics,
+		service: mockSvc,
+		helpers: nil,
 	}
 
 	ctx := context.WithValue(context.Background(), "discord_message_id", "discord-msg-1")
@@ -168,15 +157,10 @@ func TestScoreHandlers_HandleBulkCorrectScoreRequest_NilPayload(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &scoremetrics.NoOpMetrics{}
-
+	// no-op observability in handler tests
 	h := &ScoreHandlers{
-		scoreService: scoremocks.NewMockService(ctrl),
-		logger:       logger,
-		tracer:       tracer,
-		metrics:      metrics,
+		service: scoremocks.NewMockService(ctrl),
+		helpers: nil,
 	}
 
 	_, err := h.HandleBulkCorrectScoreRequest(context.Background(), nil)

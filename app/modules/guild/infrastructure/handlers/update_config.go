@@ -15,7 +15,7 @@ func (h *GuildHandlers) HandleUpdateGuildConfig(ctx context.Context, payload *gu
 		return nil, errors.New("payload cannot be nil")
 	}
 
-	// Convert payload to shared config type
+	// Convert event payload to domain model
 	config := &guildtypes.GuildConfig{
 		GuildID:              payload.GuildID,
 		SignupChannelID:      payload.SignupChannelID,
@@ -30,22 +30,13 @@ func (h *GuildHandlers) HandleUpdateGuildConfig(ctx context.Context, payload *gu
 		SetupCompletedAt:     payload.SetupCompletedAt,
 	}
 
-	result, err := h.guildService.UpdateGuildConfig(ctx, config)
+	result, err := h.service.UpdateGuildConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigUpdateFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigUpdatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, errors.New("unexpected empty result from UpdateGuildConfig service")
+	return mapOperationResult(result,
+		guildevents.GuildConfigUpdatedV1,
+		guildevents.GuildConfigUpdateFailedV1,
+	), nil
 }

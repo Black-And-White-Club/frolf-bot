@@ -33,7 +33,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 	// Define test cases
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*scoredb.MockScoreDB)
+		mockDBSetup    func(*scoredb.MockRepository)
 		userID         sharedtypes.DiscordID
 		score          sharedtypes.Score
 		tagNumber      *sharedtypes.TagNumber
@@ -42,7 +42,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 	}{
 		{
 			name: "Successfully corrects score",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().
 					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
 					Return([]sharedtypes.ScoreInfo{}, nil)
@@ -69,7 +69,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		},
 		{
 			name: "Preserves existing tag when none provided",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				existingTag := sharedtypes.TagNumber(7)
 				mockDB.EXPECT().
 					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
@@ -97,7 +97,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		},
 		{
 			name: "Successfully corrects score with tag number",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().
 					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
@@ -121,7 +121,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		},
 		{
 			name: "Fails due to database error",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().
 					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
 					Return([]sharedtypes.ScoreInfo{}, nil)
@@ -148,7 +148,7 @@ func TestScoreService_CorrectScore(t *testing.T) {
 		},
 		{
 			name: "Fails due to invalid tag number",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().
 					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
 						UserID:    testUserID,
@@ -178,11 +178,11 @@ func TestScoreService_CorrectScore(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockDB := scoredb.NewMockScoreDB(ctrl)
+			mockDB := scoredb.NewMockRepository(ctrl)
 
 			// Initialize service with No-Op implementations
 			s := &ScoreService{
-				ScoreDB: mockDB,
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,

@@ -5,28 +5,25 @@ import (
 	"log/slog"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// LeaderboardHandlers handles leaderboard-related events.
+// LeaderboardHandlers implements the Handlers interface for leaderboard events.
 type LeaderboardHandlers struct {
-	leaderboardService leaderboardservice.Service
-	sagaCoordinator    *saga.SwapSagaCoordinator
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	metrics            leaderboardmetrics.LeaderboardMetrics
-	helpers            utils.Helpers
+	service         leaderboardservice.Service
+	sagaCoordinator *saga.SwapSagaCoordinator
+	helpers         utils.Helpers
 }
 
-// NewLeaderboardHandlers creates a new instance of LeaderboardHandlers.
+// NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
 func NewLeaderboardHandlers(
-	leaderboardService leaderboardservice.Service,
+	service leaderboardservice.Service,
 	sagaCoordinator *saga.SwapSagaCoordinator,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -34,13 +31,30 @@ func NewLeaderboardHandlers(
 	metrics leaderboardmetrics.LeaderboardMetrics,
 ) Handlers {
 	return &LeaderboardHandlers{
-		leaderboardService: leaderboardService,
-		sagaCoordinator:    sagaCoordinator,
-		logger:             logger,
-		tracer:             tracer,
-		helpers:            helpers,
-		metrics:            metrics,
+		service:         service,
+		sagaCoordinator: sagaCoordinator,
+		helpers:         helpers,
 	}
+}
+
+// mapOperationResult converts a service OperationResult to handler Results.
+// For standard single-topic success/failure patterns.
+func mapOperationResult(
+	result results.OperationResult,
+	successTopic, failureTopic string,
+) []handlerwrapper.Result {
+	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+
+	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
+	for i, hr := range handlerResults {
+		wrapperResults[i] = handlerwrapper.Result{
+			Topic:    hr.Topic,
+			Payload:  hr.Payload,
+			Metadata: hr.Metadata,
+		}
+	}
+
+	return wrapperResults
 }
 
 // HandleGuildConfigCreated seeds an empty active leaderboard for the guild if missing.
@@ -48,18 +62,8 @@ func (h *LeaderboardHandlers) HandleGuildConfigCreated(
 	ctx context.Context,
 	payload *guildevents.GuildConfigCreatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Received GuildConfigCreated event",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("guild_id", string(payload.GuildID)),
-	)
-
-	if err := h.leaderboardService.EnsureGuildLeaderboard(ctx, payload.GuildID); err != nil {
+	if err := h.service.EnsureGuildLeaderboard(ctx, payload.GuildID); err != nil {
 		return nil, err
 	}
-
-	h.logger.InfoContext(ctx, "Guild leaderboard ensured",
-		attr.ExtractCorrelationID(ctx),
-	)
-
 	return []handlerwrapper.Result{}, nil
 }

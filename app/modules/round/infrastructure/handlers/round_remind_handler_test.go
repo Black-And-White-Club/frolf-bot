@@ -7,12 +7,10 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,8 +27,6 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -48,7 +44,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.DiscordReminderPayloadV1{
 							RoundID:      testRoundID,
 							GuildID:      testGuildID,
@@ -71,7 +67,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.DiscordReminderPayloadV1{
 							RoundID:      testRoundID,
 							GuildID:      testGuildID,
@@ -93,7 +89,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundReminderFailedPayloadV1{
 							RoundID: testRoundID,
 							Error:   "round not found",
@@ -114,7 +110,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database connection failed"),
 				)
 			},
@@ -129,7 +125,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -144,7 +140,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
@@ -160,7 +156,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.DiscordReminderPayloadV1{
 							RoundID:      testRoundID,
 							GuildID:      testGuildID,
@@ -187,10 +183,8 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()

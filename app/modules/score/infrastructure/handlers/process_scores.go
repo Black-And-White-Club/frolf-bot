@@ -16,7 +16,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(ctx context.Context, pay
 	}
 
 	// Call the service to process round scores.
-	result, err := h.scoreService.ProcessRoundScores(
+	result, err := h.service.ProcessRoundScores(
 		ctx,
 		payload.GuildID,
 		payload.RoundID,

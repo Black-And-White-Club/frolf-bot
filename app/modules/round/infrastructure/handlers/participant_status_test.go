@@ -7,13 +7,11 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -33,8 +31,6 @@ func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name           string
@@ -50,7 +46,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ParticipantJoinValidationRequestPayloadV1{
 							RoundID:  testRoundID,
 							GuildID:  testGuildID,
@@ -71,7 +67,7 @@ func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -87,10 +83,8 @@ func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			_, err := h.HandleParticipantJoinRequest(context.Background(), tt.payload)

@@ -9,6 +9,9 @@ import (
 )
 
 func init() {
+	if err := Migrations.DiscoverCaller(); err != nil {
+		panic(err)
+	}
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Adding UDisc fields to users table...")
 

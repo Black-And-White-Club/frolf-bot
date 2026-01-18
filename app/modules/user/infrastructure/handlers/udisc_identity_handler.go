@@ -12,7 +12,7 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(
 	ctx context.Context,
 	payload *userevents.UpdateUDiscIdentityRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.userService.UpdateUDiscIdentity(
+	result, err := h.service.UpdateUDiscIdentity(
 		ctx,
 		payload.GuildID,
 		payload.UserID,
@@ -23,17 +23,8 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: userevents.UDiscIdentityUpdateFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: userevents.UDiscIdentityUpdatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, nil
+	return mapOperationResult(result,
+		userevents.UDiscIdentityUpdatedV1,
+		userevents.UDiscIdentityUpdateFailedV1,
+	), nil
 }

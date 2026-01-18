@@ -6,14 +6,15 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // ScheduleRoundEvents schedules a 1-hour reminder and the start event for the round.
 // It handles cases where the round start time might be too close for certain reminders.
-func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ScheduleRoundEvents", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (results.OperationResult, error) {
+	return s.withTelemetry(ctx, "ScheduleRoundEvents", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round scheduling",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.Time("start_time", payload.StartTime.AsTime()),
@@ -24,12 +25,12 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 			attr.RoundID("round_id", payload.RoundID),
 		)
 
-		if err := s.QueueService.CancelRoundJobs(ctx, payload.RoundID); err != nil {
+		if err := s.queueService.CancelRoundJobs(ctx, payload.RoundID); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to cancel existing jobs",
 				attr.RoundID("round_id", payload.RoundID),
 				attr.Error(err),
 			)
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					RoundID: payload.RoundID,
 					Error:   err.Error(),
@@ -78,12 +79,12 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				s.logger.WarnContext(ctx, "No event channel ID available to embed in reminder payload", attr.String("guild_id", string(guildID)))
 			}
 
-			if err := s.QueueService.ScheduleRoundReminder(ctx, guildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
+			if err := s.queueService.ScheduleRoundReminder(ctx, guildID, payload.RoundID, reminderTimeUTC, reminderPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule reminder job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
 				)
-				return RoundOperationResult{
+				return results.OperationResult{
 					Failure: &roundevents.RoundErrorPayloadV1{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
@@ -113,12 +114,12 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 				StartTime: payload.StartTime,
 			}
 
-			if err := s.QueueService.ScheduleRoundStart(ctx, guildID, payload.RoundID, startTimeUTC, startPayload); err != nil {
+			if err := s.queueService.ScheduleRoundStart(ctx, guildID, payload.RoundID, startTimeUTC, startPayload); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to schedule round start job",
 					attr.RoundID("round_id", payload.RoundID),
 					attr.Error(err),
 				)
-				return RoundOperationResult{
+				return results.OperationResult{
 					Failure: &roundevents.RoundErrorPayloadV1{
 						RoundID: payload.RoundID,
 						Error:   err.Error(),
@@ -133,7 +134,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, guildID sharedty
 		}
 
 		// Return success with the original payload
-		return RoundOperationResult{
+		return results.OperationResult{
 			Success: &roundevents.RoundScheduledPayloadV1{
 				GuildID: guildID, // ensure guild scope propagates for downstream handlers
 				BaseRoundPayload: roundtypes.BaseRoundPayload{

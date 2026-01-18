@@ -7,12 +7,11 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -32,8 +31,7 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
+	helper := utils.NewHelper(logger)
 
 	tests := []struct {
 		name            string
@@ -48,7 +46,7 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			name: "Successfully handle ScorecardUploaded",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ScorecardUploadedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
@@ -69,7 +67,7 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			name: "Handle CreateImportJob error",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
@@ -81,7 +79,7 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			name: "Handle CreateImportJob failure result",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().CreateImportJob(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.ImportFailedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
@@ -108,10 +106,9 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: helper,
 			}
 
 			results, err := h.HandleScorecardUploaded(context.Background(), tt.payload)
@@ -146,8 +143,7 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
+	helper := utils.NewHelper(logger)
 
 	tests := []struct {
 		name            string
@@ -162,7 +158,7 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 			name: "Successfully handle ScorecardURLRequested",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.ScorecardURLRequestedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
@@ -182,7 +178,7 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 			name: "Handle HandleScorecardURLRequested error",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
@@ -194,7 +190,7 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 			name: "Handle HandleScorecardURLRequested failure result",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().HandleScorecardURLRequested(gomock.Any(), *testPayload).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.ImportFailedPayloadV1{
 							ImportID: testImportID,
 							GuildID:  testGuildID,
@@ -221,10 +217,9 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: helper,
 			}
 
 			results, err := h.HandleScorecardURLRequested(context.Background(), tt.payload)

@@ -16,7 +16,7 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 	}
 
 	// 1. Execute the service logic
-	result, err := h.scoreService.CorrectScore(
+	result, err := h.service.CorrectScore(
 		ctx,
 		payload.GuildID,
 		payload.RoundID,
@@ -62,14 +62,10 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 
 		// 5. Trigger reprocessing
 		// Fetch scores to include in the reprocess request
-		scores, err := h.scoreService.GetScoresForRound(ctx, successPayload.GuildID, successPayload.RoundID)
+		scores, err := h.service.GetScoresForRound(ctx, successPayload.GuildID, successPayload.RoundID)
 		if err != nil {
-			// We log a warning but return the success event.
 			// Do NOT return an error here, or the handler will retry and double-publish.
-			h.logger.WarnContext(ctx, "Score updated but failed to fetch scores for reprocessing",
-				"round_id", successPayload.RoundID,
-				"error", err,
-			)
+			// Service layer already logged the error.
 			return results, nil
 		}
 

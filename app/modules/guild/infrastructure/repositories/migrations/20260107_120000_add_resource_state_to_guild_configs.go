@@ -16,8 +16,12 @@ func init() {
             _, err := db.ExecContext(ctx, `
                 DO $$ 
                 BEGIN
+                    -- Create the enum with all known values up-front to avoid
+                    -- ordering issues where later migrations add values that are
+                    -- immediately used by code. Tests run migrations in-process
+                    -- and an out-of-order execution can cause invalid input errors.
                     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deletion_status_enum') THEN
-                        CREATE TYPE deletion_status_enum AS ENUM ('pending', 'completed', 'failed');
+                        CREATE TYPE deletion_status_enum AS ENUM ('none', 'pending', 'completed', 'failed');
                     END IF;
                 END $$;
             `)

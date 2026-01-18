@@ -174,8 +174,7 @@ func RunTest(t *testing.T, tc TestCase, env *TestEnvironment) {
 		}(topic, msgCh)
 	}
 
-	// Wait for ephemeral consumers to register
-	time.Sleep(200 * time.Millisecond)
+	// No wait needed - SubscribeForTest creates ephemeral consumer synchronously
 
 	// 3. Trigger the event
 	triggerMsg := tc.PublishMsgFn(t, env)

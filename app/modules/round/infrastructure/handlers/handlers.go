@@ -5,37 +5,50 @@ import (
 	"log/slog"
 	"time"
 
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
-	"go.opentelemetry.io/otel/trace"
 )
 
-// RoundHandlers handles round-related events.
+// RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
-	roundService roundservice.Service
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	metrics      roundmetrics.RoundMetrics
-	helpers      utils.Helpers
+	service roundservice.Service
+	logger  *slog.Logger
+	helpers utils.Helpers
 }
 
-// NewRoundHandlers creates a new instance of RoundHandlers.
+// NewRoundHandlers creates a new RoundHandlers instance.
 func NewRoundHandlers(
-	roundService roundservice.Service,
+	service roundservice.Service,
 	logger *slog.Logger,
-	tracer trace.Tracer,
 	helpers utils.Helpers,
-	metrics roundmetrics.RoundMetrics,
 ) Handlers {
 	return &RoundHandlers{
-		roundService: roundService,
-		logger:       logger,
-		tracer:       tracer,
-		helpers:      helpers,
-		metrics:      metrics,
+		service: service,
+		logger:  logger,
+		helpers: helpers,
 	}
+}
+
+// mapOperationResult converts a service OperationResult to handler Results.
+func mapOperationResult(
+	result results.OperationResult,
+	successTopic, failureTopic string,
+) []handlerwrapper.Result {
+	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+
+	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
+	for i, hr := range handlerResults {
+		wrapperResults[i] = handlerwrapper.Result{
+			Topic:    hr.Topic,
+			Payload:  hr.Payload,
+			Metadata: hr.Metadata,
+		}
+	}
+
+	return wrapperResults
 }
 
 // extractAnchorClock builds an AnchorClock from context if a timestamp is provided; falls back to RealClock.

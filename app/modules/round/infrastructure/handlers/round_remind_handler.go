@@ -23,7 +23,7 @@ func (h *RoundHandlers) HandleRoundReminder(
 	)
 
 	// Delegate to the service to fetch participant lists and format the final notification data.
-	result, err := h.roundService.ProcessRoundReminder(ctx, *payload)
+	result, err := h.service.ProcessRoundReminder(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}

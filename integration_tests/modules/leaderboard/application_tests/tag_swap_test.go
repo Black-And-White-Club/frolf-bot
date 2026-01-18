@@ -8,9 +8,10 @@ import (
 
 	"github.com/uptrace/bun"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboardService "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
@@ -29,7 +30,7 @@ func TestTagSwapRequested(t *testing.T) {
 		targetTag       sharedtypes.TagNumber
 		expectedError   bool
 		expectedSuccess bool
-		validateResult  func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult)
+		validateResult  func(t *testing.T, deps TestDeps, result results.OperationResult)
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
 		{
@@ -53,14 +54,14 @@ func TestTagSwapRequested(t *testing.T) {
 			targetTag:       20, // Targets user_swap_B
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
-				if result.Leaderboard == nil {
-					t.Errorf("Expected leaderboard data in result, got nil")
-					return
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+				// Expect a success payload indicating the swap was processed
+				successPayload, ok := result.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
+				if !ok || successPayload == nil {
+					t.Fatalf("expected success payload of type *leaderboardevents.TagSwapProcessedPayloadV1, got %T", result.Success)
 				}
-				// Verify changes slice contains the swap
-				if len(result.TagChanges) != 2 {
-					t.Errorf("Expected 2 tag changes, got %d", len(result.TagChanges))
+				if successPayload.RequestorID != "user_swap_A" || successPayload.TargetID != "user_swap_B" {
+					t.Errorf("unexpected swap payload values: %+v", successPayload)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -108,9 +109,17 @@ func TestTagSwapRequested(t *testing.T) {
 			userID:        "stranger_danger",
 			targetTag:     20,
 			expectedError: false, // Business logic error returned in Result.Err
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
-				if result.Err == nil || !strings.Contains(result.Err.Error(), "requesting user not on leaderboard") {
-					t.Errorf("Expected 'requesting user not on leaderboard' error, got: %v", result.Err)
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+				// Expect a business failure payload
+				if result.Failure == nil {
+					t.Fatalf("expected failure payload but got success: %v", result.Success)
+				}
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
+				if !ok || failurePayload == nil {
+					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
+				}
+				if !strings.Contains(failurePayload.Reason, "requesting user not on leaderboard") {
+					t.Errorf("expected reason about requesting user not on leaderboard, got: %s", failurePayload.Reason)
 				}
 			},
 		},
@@ -129,9 +138,16 @@ func TestTagSwapRequested(t *testing.T) {
 			},
 			userID:    "user_swap_A",
 			targetTag: 999, // Non-existent tag
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
-				if result.Err == nil || !strings.Contains(result.Err.Error(), "target tag not currently assigned") {
-					t.Errorf("Expected 'target tag not currently assigned' error, got: %v", result.Err)
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+				if result.Failure == nil {
+					t.Fatalf("expected failure payload but got success: %v", result.Success)
+				}
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
+				if !ok || failurePayload == nil {
+					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
+				}
+				if !strings.Contains(failurePayload.Reason, "target tag not currently assigned") {
+					t.Errorf("expected reason about target tag not assigned, got: %s", failurePayload.Reason)
 				}
 			},
 		},
@@ -150,9 +166,16 @@ func TestTagSwapRequested(t *testing.T) {
 			},
 			userID:    "user_swap_A",
 			targetTag: 10,
-			validateResult: func(t *testing.T, deps TestDeps, result leaderboardService.LeaderboardOperationResult) {
-				if result.Err == nil || !strings.Contains(result.Err.Error(), "cannot swap tag with self") {
-					t.Errorf("Expected 'cannot swap tag with self' error, got: %v", result.Err)
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+				if result.Failure == nil {
+					t.Fatalf("expected failure payload but got success: %v", result.Success)
+				}
+				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
+				if !ok || failurePayload == nil {
+					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
+				}
+				if !strings.Contains(failurePayload.Reason, "cannot swap tag with self") {
+					t.Errorf("expected reason about swapping with self, got: %s", failurePayload.Reason)
 				}
 			},
 		},

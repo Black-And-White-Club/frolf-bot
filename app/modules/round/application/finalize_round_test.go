@@ -13,6 +13,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
@@ -41,20 +42,20 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 
 	tests := []struct {
 		name                    string
-		mockDBSetup             func(*rounddb.MockRoundDB)
+		mockDBSetup             func(*rounddb.MockRepository)
 		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
 		mockEventBusSetup       func(*eventbus.MockEventBus)
 		payload                 roundevents.AllScoresSubmittedPayloadV1
-		expectedResult          RoundOperationResult
+		expectedResult          results.OperationResult
 		expectedError           error
 	}{
 		{
 			name: "success finalizing round",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
+				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
 				// Expect GetRound to be called to fetch fresh data after state update
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(testFinalizedRound, nil)
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(testFinalizedRound, nil)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -66,7 +67,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundData: *testFinalizedRound,
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: &roundevents.RoundFinalizedPayloadV1{
 					RoundID:   testRoundID,
 					GuildID:   sharedtypes.GuildID("guild-123"),
@@ -77,9 +78,9 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		},
 		{
 			name: "failure updating round state",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRoundState(ctx, guildID, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
+				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
 			},
 			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
 				// No expectations for the RoundValidator
@@ -90,7 +91,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				RoundID: testRoundID,
 				GuildID: sharedtypes.GuildID("guild-123"),
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
@@ -105,7 +106,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			// Reset mocks for each subtest
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockDB := rounddb.NewMockRepository(ctrl)
 			mockEventBus := eventbus.NewMockEventBus(ctrl)
 
 			tt.mockDBSetup(mockDB)
@@ -113,15 +114,12 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			tt.mockEventBusSetup(mockEventBus)
 
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				EventBus:       mockEventBus,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
+				eventBus:       mockEventBus,
 			}
 
 			result, err := s.FinalizeRound(ctx, tt.payload)
@@ -191,14 +189,14 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRoundDB)
+		mockDBSetup    func(*rounddb.MockRepository)
 		payload        roundevents.RoundFinalizedPayloadV1
-		expectedResult RoundOperationResult
+		expectedResult results.OperationResult
 		expectedError  error
 	}{
 		{
 			name: "success notifying score module with various participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayloadV1{
@@ -215,7 +213,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 					RoundID: testRoundID,
 					Scores: []sharedtypes.ScoreInfo{
@@ -229,7 +227,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "failure with no participants having scores",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayloadV1{
@@ -244,7 +242,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
@@ -254,7 +252,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "failure with empty participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayloadV1{
@@ -266,7 +264,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 					Participants: []roundtypes.Participant{}, // Empty slice
 				},
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
@@ -276,7 +274,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 		},
 		{
 			name: "failure with nil participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				// No DB calls needed - NotifyScoreModule uses RoundData from payload
 			},
 			payload: roundevents.RoundFinalizedPayloadV1{
@@ -288,7 +286,7 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 					Participants: nil, // Nil slice
 				},
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "no participants with submitted scores found",
@@ -303,19 +301,16 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 			// Reset mocks for each subtest
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRoundDB(ctrl)
+			mockDB := rounddb.NewMockRepository(ctrl)
 
 			tt.mockDBSetup(mockDB)
 
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
 			}
 
 			result, err := s.NotifyScoreModule(ctx, tt.payload)

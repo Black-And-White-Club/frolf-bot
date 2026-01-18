@@ -8,13 +8,11 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -30,8 +28,6 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -51,7 +47,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundUpdateValidatedPayloadV1{
 							GuildID: testGuildID,
 							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
@@ -78,7 +74,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundUpdateErrorPayloadV1{
 							GuildID: testGuildID,
 							Error:   "invalid update request",
@@ -101,7 +97,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -118,7 +114,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -137,10 +133,8 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()
@@ -188,8 +182,6 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -207,7 +199,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundEntityUpdatedPayloadV1{
 							GuildID: testGuildID,
 							Round: roundtypes.Round{
@@ -231,7 +223,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundEntityUpdatedPayloadV1{
 							GuildID: testGuildID,
 							Round: roundtypes.Round{
@@ -256,7 +248,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundUpdateErrorPayloadV1{
 							GuildID: testGuildID,
 							Error:   "update failed",
@@ -277,7 +269,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -292,7 +284,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -311,10 +303,8 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()
@@ -355,16 +345,14 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name            string
-		mockSetup       func(*roundmocks.MockService)
-		payload         *roundevents.RoundEntityUpdatedPayloadV1
-		wantErr         bool
-		wantResultLen   int
-		expectedErrMsg  string
+		name           string
+		mockSetup      func(*roundmocks.MockService)
+		payload        *roundevents.RoundEntityUpdatedPayloadV1
+		wantErr        bool
+		wantResultLen  int
+		expectedErrMsg string
 	}{
 		{
 			name: "Successfully update scheduled round events",
@@ -373,7 +361,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundUpdateSuccessPayloadV1{},
 					},
 					nil,
@@ -390,7 +378,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundUpdateErrorPayloadV1{
 							GuildID: testGuildID,
 							Error:   "schedule update failed",
@@ -410,7 +398,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("scheduling service error"),
 				)
 			},
@@ -425,7 +413,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -440,7 +428,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundUpdateSuccessPayloadV1{},
 					},
 					nil,
@@ -468,10 +456,8 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()

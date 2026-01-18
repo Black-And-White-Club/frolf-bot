@@ -102,11 +102,12 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 				})
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
-				if len(received[sharedevents.RoundTagLookupNotFoundV1]) != 1 {
-					t.Fatalf("Expected 1 RoundTagLookupNotFound message, got %d", len(received[sharedevents.RoundTagLookupNotFoundV1]))
+				// Service now returns a failure result for missing tag lookups; handler maps that to RoundTagLookupFailedV1
+				if len(received[sharedevents.RoundTagLookupFailedV1]) != 1 {
+					t.Fatalf("Expected 1 RoundTagLookupFailed message, got %d", len(received[sharedevents.RoundTagLookupFailedV1]))
 				}
 			},
-			expectedOutgoingTopics: []string{sharedevents.RoundTagLookupNotFoundV1},
+			expectedOutgoingTopics: []string{sharedevents.RoundTagLookupFailedV1},
 		},
 		{
 			name:  "Failure - No active leaderboard present",

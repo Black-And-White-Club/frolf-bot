@@ -10,7 +10,6 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
@@ -129,7 +128,7 @@ func (r *UserRouter) Configure(routerCtx context.Context, userService userservic
 	)
 
 	// Register the event handlers with the router, passing the routerCtx.
-	if err := r.registerHandlers(userHandlers, userMetrics); err != nil {
+	if err := r.registerHandlers(routerCtx, userHandlers); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
 	return nil
@@ -170,32 +169,8 @@ func registerHandler[T any](
 	)
 }
 
-// getPublishTopic resolves the topic to publish for a given handler's returned message.
-// This centralizes routing logic in the router (not in handlers or helpers).
-func (r *UserRouter) getPublishTopic(handlerName string, msg *message.Message) string {
-	switch {
-	case handlerName == "user."+sharedevents.TagAvailableV1:
-		// HandleTagAvailable always returns UserCreatedV1
-		return userevents.UserCreatedV1
-
-	case handlerName == "user."+sharedevents.TagUnavailableV1:
-		// HandleTagUnavailable always returns UserCreationFailedV1
-		return userevents.UserCreationFailedV1
-
-	// Most handlers can return multiple different result messages (success/failure/etc.)
-	// During migration we fallback to the metadata topic so handlers can continue to
-	// drive specific result routing until the router covers all cases.
-	default:
-		r.logger.Warn("unknown handler in topic resolution - no metadata fallback in Phase 2",
-			attr.String("handler", handlerName),
-		)
-		// During Phase 2 routers must own routing; return empty to indicate resolver failure.
-		return ""
-	}
-}
-
 // registerHandlers registers all user module handlers using the generic pattern
-func (r *UserRouter) registerHandlers(handlers userhandlers.Handlers, userMetrics usermetrics.UserMetrics) error {
+func (r *UserRouter) registerHandlers(ctx context.Context, handlers userhandlers.Handlers) error {
 	var metrics handlerwrapper.ReturningMetrics // reserved for metrics integration
 
 	deps := handlerDeps{

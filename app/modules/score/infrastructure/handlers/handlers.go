@@ -1,36 +1,48 @@
 package scorehandlers
 
 import (
-	"log/slog"
-
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
-	"go.opentelemetry.io/otel/trace"
 )
 
-// ScoreHandlers handles score-related events.
+// ScoreHandlers implements the Handlers interface for score events.
 type ScoreHandlers struct {
-	scoreService scoreservice.Service
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	metrics      scoremetrics.ScoreMetrics
-	Helpers      utils.Helpers
+	service scoreservice.Service
+	helpers utils.Helpers
 }
 
-// NewScoreHandlers creates a new ScoreHandlers.
+// NewScoreHandlers creates a new ScoreHandlers instance.
 func NewScoreHandlers(
-	scoreService scoreservice.Service,
-	logger *slog.Logger,
-	tracer trace.Tracer,
+	service scoreservice.Service,
+	// logger and tracer parameters are kept for compatibility but ignored by handlers
+	_ interface{},
+	_ interface{},
 	helpers utils.Helpers,
-	metrics scoremetrics.ScoreMetrics,
+	_ interface{},
 ) Handlers {
 	return &ScoreHandlers{
-		scoreService: scoreService,
-		logger:       logger,
-		tracer:       tracer,
-		Helpers:      helpers,
-		metrics:      metrics,
+		service: service,
+		helpers: helpers,
 	}
+}
+
+// mapOperationResult converts a service OperationResult to handler Results.
+func mapOperationResult(
+	result results.OperationResult,
+	successTopic, failureTopic string,
+) []handlerwrapper.Result {
+	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+
+	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
+	for i, hr := range handlerResults {
+		wrapperResults[i] = handlerwrapper.Result{
+			Topic:   hr.Topic,
+			Payload: hr.Payload,
+			Metadata: hr.Metadata,
+		}
+	}
+
+	return wrapperResults
 }

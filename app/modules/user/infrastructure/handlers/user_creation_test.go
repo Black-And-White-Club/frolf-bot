@@ -9,7 +9,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -59,10 +59,9 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, nil, nil).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Success: &userevents.UserCreatedPayloadV1{UserID: testUserID},
 						Failure: nil,
-						Error:   nil,
 					}, nil)
 			},
 			wantLen:   1,
@@ -78,10 +77,9 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, nil, nil).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayloadV1{UserID: testUserID, Reason: "failed"},
-						Error:   nil,
 					}, nil)
 			},
 			wantLen:   1,
@@ -97,7 +95,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, nil, nil, nil).
-					Return(userservice.UserOperationResult{}, nil)
+					Return(results.OperationResult{}, context.DeadlineExceeded)
 			},
 			wantErr: true,
 		},

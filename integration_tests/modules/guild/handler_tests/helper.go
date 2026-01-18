@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -22,8 +23,6 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-var standardStreamNames = []string{"guild", "discord", "leaderboard", "round", "score"}
-
 var (
 	testEnv     *testutils.TestEnvironment
 	testEnvOnce sync.Once
@@ -32,10 +31,10 @@ var (
 
 type HandlerTestDeps struct {
 	*testutils.TestEnvironment
-	GuildModule  *guildmodule.Module
-	Router       *message.Router
-	EventBus     eventbus.EventBus
-	TestHelpers  utils.Helpers
+	GuildModule *guildmodule.Module
+	Router      *message.Router
+	EventBus    eventbus.EventBus
+	TestHelpers utils.Helpers
 }
 
 func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
@@ -64,7 +63,7 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	return testEnv
 }
 
-func SetupTestGuildHandler(t *testing.T) (HandlerTestDeps, func()) {
+func SetupTestGuildHandler(t *testing.T) HandlerTestDeps {
 	t.Helper()
 
 	env := GetTestEnv(t)
@@ -75,7 +74,10 @@ func SetupTestGuildHandler(t *testing.T) (HandlerTestDeps, func()) {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-	guildDB := &guilddb.GuildDBImpl{DB: env.DB}
+	guildDB := guilddb.NewRepository(env.DB)
+	// Set the APP_ENV to "test" for the duration of the test run
+	oldEnv := os.Getenv("APP_ENV")
+	os.Setenv("APP_ENV", "test")
 	watermillLogger := watermill.NopLogger{}
 
 	eventBusCtx, eventBusCancel := context.WithCancel(env.Ctx)
@@ -94,7 +96,11 @@ func SetupTestGuildHandler(t *testing.T) (HandlerTestDeps, func()) {
 		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	for _, streamName := range standardStreamNames {
+	// 1. Define streams explicitly to ensure 'guild' exists
+	requiredStreams := []string{"user", "discord", "leaderboard", "round", "score", "guild"}
+
+	// 2. Create specific streams
+	for _, streamName := range requiredStreams {
 		if err := eventBusImpl.CreateStream(env.Ctx, streamName); err != nil {
 			eventBusImpl.Close()
 			eventBusCancel()
@@ -146,28 +152,40 @@ func SetupTestGuildHandler(t *testing.T) (HandlerTestDeps, func()) {
 		}
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	// Wait for router to be running
+	select {
+	case <-watermillRouter.Running():
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatal("router failed to start")
+	}
 
+	// 3. Robust Cleanup (LIFO Order)
 	cleanup := func() {
 		log.Println("Cleaning up guild handler test environment...")
-		routerRunCancel()
 
+		// A. Close Module FIRST
 		if guildModule != nil {
-			guildModule.Close()
-		}
-
-		if watermillRouter != nil {
-			if err := watermillRouter.Close(); err != nil {
-				t.Logf("Warning: Failed to close Watermill router: %v", err)
+			if err := guildModule.Close(); err != nil {
+				log.Printf("Error closing module: %v", err)
 			}
 		}
 
-		eventBusCancel()
+		// B. Stop Router execution
+		routerRunCancel()
 
+		// C. Close Router explicitly (optional but safe)
+		if watermillRouter != nil {
+			_ = watermillRouter.Close()
+		}
+
+		// D. Close EventBus
+		eventBusCancel()
 		if eventBusImpl != nil {
 			eventBusImpl.Close()
 		}
 
+		// E. Wait for goroutines
 		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer waitCancel()
 
@@ -183,15 +201,21 @@ func SetupTestGuildHandler(t *testing.T) (HandlerTestDeps, func()) {
 		case <-waitCtx.Done():
 			log.Println("WARNING: Router goroutine did not finish within timeout")
 		}
-	}
 
+		// Restore environment
+		os.Setenv("APP_ENV", oldEnv)
+	}
 	t.Cleanup(cleanup)
 
+	// 4. Create Environment Copy to inject local EventBus
+	localEnv := *env
+	localEnv.EventBus = eventBusImpl
+
 	return HandlerTestDeps{
-		TestEnvironment: env,
+		TestEnvironment: &localEnv, // Use the local copy
 		GuildModule:     guildModule,
 		Router:          watermillRouter,
 		EventBus:        eventBusImpl,
 		TestHelpers:     realHelpers,
-	}, cleanup
+	}
 }

@@ -5,6 +5,7 @@ import (
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
 // Service defines the contract for leaderboard operations.
@@ -20,30 +21,29 @@ type Service interface {
 		requests []sharedtypes.TagAssignmentRequest,
 		updateID sharedtypes.RoundID,
 		source sharedtypes.ServiceUpdateSource,
-	) (LeaderboardOperationResult, error)
+	) (results.OperationResult, error)
 
-	// TagSwapRequested now uses domain types.
-	// It attempts an assignment and allows the TagSwapNeededError to bubble up.
+	// TagSwapRequested attempts an assignment and allows TagSwapNeededError to bubble up.
 	TagSwapRequested(
 		ctx context.Context,
 		guildID sharedtypes.GuildID,
 		userID sharedtypes.DiscordID,
 		targetTag sharedtypes.TagNumber,
-	) (LeaderboardOperationResult, error)
+	) (results.OperationResult, error)
 
 	// --- READS ---
 
-	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (LeaderboardOperationResult, error)
+	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error)
 
-	// Simplified lookup: returns the tag or an error (e.g., ErrUserTagNotFound)
+	// GetTagByUserID returns the tag for a user or an error.
 	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error)
 
-	// RoundGetTagByUserID can stay as-is if it needs to return metadata for round events
+	// RoundGetTagByUserID provides tag lookup with round-specific metadata.
 	RoundGetTagByUserID(
 		ctx context.Context,
 		guildID sharedtypes.GuildID,
 		payload sharedevents.RoundTagLookupRequestedPayloadV1,
-	) (LeaderboardOperationResult, error)
+	) (results.OperationResult, error)
 
 	// CheckTagAvailability validates whether a tag can be assigned to a user.
 	CheckTagAvailability(
