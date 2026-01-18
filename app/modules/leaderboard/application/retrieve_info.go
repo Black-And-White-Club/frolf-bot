@@ -47,23 +47,27 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedt
 // RoundGetTagByUserID returns a round-scoped tag lookup result payload.
 func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (results.OperationResult, error) {
 	tag, err := s.GetTagByUserID(ctx, guildID, payload.UserID)
+
 	if err != nil {
-		// Not found -> return result payload with Found=false as a failure outcome
 		return results.FailureResult(&sharedevents.RoundTagLookupResultPayloadV1{
-			ScopedGuildID: sharedevents.ScopedGuildID{GuildID: guildID},
-			UserID:        payload.UserID,
-			RoundID:       payload.RoundID,
-			TagNumber:     nil,
-			Found:         false,
+			ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: guildID},
+			UserID:             payload.UserID,
+			RoundID:            payload.RoundID,
+			TagNumber:          nil,
+			Found:              false,
+			OriginalResponse:   payload.Response,
+			OriginalJoinedLate: payload.JoinedLate,
 		}), nil
 	}
 
 	return results.SuccessResult(&sharedevents.RoundTagLookupResultPayloadV1{
-		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: guildID},
-		UserID:        payload.UserID,
-		RoundID:       payload.RoundID,
-		TagNumber:     &tag,
-		Found:         true,
+		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: guildID},
+		UserID:             payload.UserID,
+		RoundID:            payload.RoundID,
+		TagNumber:          &tag,
+		Found:              true,
+		OriginalResponse:   payload.Response,
+		OriginalJoinedLate: payload.JoinedLate,
 	}), nil
 }
 

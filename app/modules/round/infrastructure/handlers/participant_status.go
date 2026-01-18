@@ -129,6 +129,10 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	if err != nil {
 		return nil, err
 	}
+
+	tagLookupRequest.Response = payload.Response
+	tagLookupRequest.OriginalResponse = payload.Response
+
 	if tagLookupRequest.GuildID == "" {
 		tagLookupRequest.GuildID = payload.GuildID
 	}
