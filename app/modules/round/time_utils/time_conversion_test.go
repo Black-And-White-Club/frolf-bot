@@ -208,6 +208,38 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			want:         time.Date(2027, 6, 5, 20, 0, 0, 0, time.UTC).Unix(), // 3 PM EDT = 20:00 UTC (summer time)
 			wantErr:      false,
 		},
+		{
+			name:         "ISO-8601 format YYYY-MM-DD HH:MM",
+			startTimeStr: "2027-06-20 18:00",
+			timezone:     "America/Chicago",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // June 5, 2027 12:00 UTC (7 AM CDT)
+			want:         time.Date(2027, 6, 20, 23, 0, 0, 0, time.UTC).Unix(), // June 20, 2027 6 PM CDT = June 20 23:00 UTC
+			wantErr:      false,
+		},
+		{
+			name:         "ISO-8601 format YYYY-MM-DD HH:MM:SS",
+			startTimeStr: "2027-07-15 14:30:00",
+			timezone:     "America/New_York",
+			mockNow:      time.Date(2027, 7, 10, 12, 0, 0, 0, time.UTC),       // July 10, 2027
+			want:         time.Date(2027, 7, 15, 18, 30, 0, 0, time.UTC).Unix(), // July 15, 2027 2:30 PM EDT = 18:30 UTC
+			wantErr:      false,
+		},
+		{
+			name:         "MM/DD/YYYY HH:MM format",
+			startTimeStr: "08/25/2027 09:15",
+			timezone:     "America/Los_Angeles",
+			mockNow:      time.Date(2027, 8, 20, 12, 0, 0, 0, time.UTC),       // Aug 20, 2027
+			want:         time.Date(2027, 8, 25, 16, 15, 0, 0, time.UTC).Unix(), // Aug 25, 2027 9:15 AM PDT = 16:15 UTC (DST)
+			wantErr:      false,
+		},
+		{
+			name:         "ISO-8601 format in the past",
+			startTimeStr: "2027-06-01 10:00",
+			timezone:     "America/Chicago",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // June 5, 2027 (after the requested time)
+			want:         0,
+			wantErr:      true,
+		},
 	}
 
 	for _, tt := range tests {

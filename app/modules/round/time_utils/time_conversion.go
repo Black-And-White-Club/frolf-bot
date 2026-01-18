@@ -92,7 +92,41 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 	timePattern := `(\d{1,2})(\d{2})(am|pm)`
 	startTimeStr = regexp.MustCompile(timePattern).ReplaceAllString(startTimeStr, "$1:$2 $3")
 
-	// Initialize `when` parser
+	// Try explicit date/time formats before using natural language parser
+	// These formats are more reliable for structured input
+	explicitFormats := []string{
+		"2006-01-02 15:04:05", // YYYY-MM-DD HH:MM:SS
+		"2006-01-02 15:04",    // YYYY-MM-DD HH:MM
+		"2006-01-02 3:04 PM",  // YYYY-MM-DD H:MM AM/PM
+		"01/02/2006 15:04",    // MM/DD/YYYY HH:MM
+		"01/02/2006 3:04 PM",  // MM/DD/YYYY H:MM AM/PM
+		"2006-01-02",          // YYYY-MM-DD (will need time added)
+	}
+
+	for _, format := range explicitFormats {
+		parsedTime, err := time.ParseInLocation(format, startTimeStr, loc)
+		if err == nil {
+			nowInLoc := clock.Now().In(loc).Truncate(time.Minute)
+			parsedTime = parsedTime.Truncate(time.Minute)
+
+			slog.Info("Parsed time using explicit format",
+				slog.String("format", format),
+				slog.String("input", startTimeStr),
+				slog.String("parsed_time", parsedTime.Format(time.RFC3339)),
+				slog.String("timezone", loc.String()),
+			)
+
+			// Ensure parsed time is in the future
+			if parsedTime.Before(nowInLoc) {
+				return 0, fmt.Errorf("start time must be in the future (parsed: %s, now: %s)", parsedTime.Format(time.RFC3339), nowInLoc.Format(time.RFC3339))
+			}
+
+			// Convert to UTC and return
+			return parsedTime.In(time.UTC).Unix(), nil
+		}
+	}
+
+	// Initialize `when` parser for natural language input
 	w := when.New(nil)
 	w.Add(en.All...)
 
@@ -103,14 +137,18 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 	}
 	if r != nil {
 		parsedTime := r.Time.In(loc)
-		slog.Info("Parsed time using when", slog.String("parsed_time", parsedTime.Format(time.RFC3339)))
+		slog.Info("Parsed time using when natural language parser",
+			slog.String("input", startTimeStr),
+			slog.String("parsed_time", parsedTime.Format(time.RFC3339)),
+			slog.String("timezone", loc.String()),
+		)
 
 		// Ensure parsed time is in the future
 		nowInLoc := clock.Now().In(loc).Truncate(time.Minute)
 		parsedTime = parsedTime.Truncate(time.Minute)
 
 		if parsedTime.Before(nowInLoc) {
-			return 0, fmt.Errorf("start time must be in the future (parsed: %s, now: %s)", parsedTime, nowInLoc)
+			return 0, fmt.Errorf("start time must be in the future (parsed: %s, now: %s)", parsedTime.Format(time.RFC3339), nowInLoc.Format(time.RFC3339))
 		}
 
 		// Convert to UTC and return
@@ -124,9 +162,18 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 	manualTimeStr := fmt.Sprintf("%s %s", clock.Now().Weekday().String(), startTimeStr)
 	parsedTime, err := time.ParseInLocation("Monday 3:04 PM", manualTimeStr, loc)
 	if err != nil {
-		return 0, fmt.Errorf("could not recognize time format: %s", startTimeStr)
+		slog.Error("All parsing methods failed",
+			slog.String("input", startTimeStr),
+			slog.String("timezone", loc.String()),
+			slog.Any("error", err),
+		)
+		return 0, fmt.Errorf("could not recognize time format '%s'. Supported formats: YYYY-MM-DD HH:MM, MM/DD/YYYY HH:MM, or natural language like 'tomorrow 5pm'", startTimeStr)
 	}
 
-	slog.Info("Parsed time using manual fallback", slog.String("parsed_time", parsedTime.Format(time.RFC3339)))
+	slog.Info("Parsed time using manual fallback",
+		slog.String("input", startTimeStr),
+		slog.String("parsed_time", parsedTime.Format(time.RFC3339)),
+		slog.String("timezone", loc.String()),
+	)
 	return parsedTime.In(time.UTC).Unix(), nil
 }
