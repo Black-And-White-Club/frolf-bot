@@ -179,7 +179,7 @@ func (s *Service) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes
 
 	job := RoundReminderJob{
 		GuildID:   guildID,
-		RoundID:   roundID.String(),
+		RoundID:   roundID,
 		RoundData: payload,
 	}
 

@@ -85,7 +85,7 @@ func (w *RoundReminderWorker) Work(ctx context.Context, job *river.Job[RoundRemi
 	ctxLogger := w.logger.With(
 		attr.Int64("job_id", job.ID),
 		attr.String("guild_id", string(job.Args.GuildID)),
-		attr.String("round_id", job.Args.RoundID),
+		attr.String("round_id", job.Args.RoundID.String()),
 		attr.String("operation", "process_round_reminder_job"),
 	)
 

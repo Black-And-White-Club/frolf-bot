@@ -19,7 +19,7 @@ func (RoundStartJob) Kind() string { return "round_start" }
 // This job will publish a round.reminder event at the scheduled time
 type RoundReminderJob struct {
 	GuildID   sharedtypes.GuildID                  `json:"guild_id"`
-	RoundID   string                               `json:"round_id"`
+	RoundID   sharedtypes.RoundID                  `json:"round_id"`
 	RoundData roundevents.DiscordReminderPayloadV1 `json:"round_data"` // ✅ Correct payload type
 }
 
