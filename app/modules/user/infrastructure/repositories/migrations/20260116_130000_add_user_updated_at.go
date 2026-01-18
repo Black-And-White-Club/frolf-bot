@@ -8,9 +8,6 @@ import (
 )
 
 func init() {
-	if err := Migrations.DiscoverCaller(); err != nil {
-		panic(err)
-	}
 
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Print(" [up migration] adding updated_at to users table...")

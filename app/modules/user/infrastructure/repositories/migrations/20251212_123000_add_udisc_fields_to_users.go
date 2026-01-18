@@ -3,17 +3,13 @@ package usermigrations
 import (
 	"context"
 	"fmt"
-	"os"
 
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
 func init() {
-	if err := Migrations.DiscoverCaller(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: migration caller discovery failed: %v\n", err)
-		// proceed without DiscoverCaller
-	}
+
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Adding UDisc fields to users table...")
 
