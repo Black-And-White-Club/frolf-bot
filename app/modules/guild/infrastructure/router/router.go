@@ -2,31 +2,38 @@ package guildrouter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 	guildhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/handlers"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// GuildRouter handles routing for guild module events.
+const (
+	TestEnvironmentFlag  = "APP_ENV"
+	TestEnvironmentValue = "test"
+)
+
+// GuildRouter handles Watermill handler registration for guild events.
 type GuildRouter struct {
-	logger     *slog.Logger
-	Router     *message.Router
-	subscriber eventbus.EventBus
-	publisher  eventbus.EventBus
-	config     *config.Config
-	helper     utils.Helpers
-	tracer     trace.Tracer
+	logger             *slog.Logger
+	Router             *message.Router
+	subscriber         eventbus.EventBus
+	publisher          eventbus.EventBus
+	config             *config.Config
+	helper             utils.Helpers
+	tracer             trace.Tracer
+	metricsBuilder     *metrics.PrometheusMetricsBuilder
+	prometheusRegistry *prometheus.Registry
+	metricsEnabled     bool
 }
 
 // NewGuildRouter creates a new GuildRouter.
@@ -35,39 +42,47 @@ func NewGuildRouter(
 	router *message.Router,
 	subscriber eventbus.EventBus,
 	publisher eventbus.EventBus,
-	config *config.Config,
+	cfg *config.Config,
 	helper utils.Helpers,
 	tracer trace.Tracer,
+	prometheusRegistry *prometheus.Registry,
 ) *GuildRouter {
+	actualAppEnv := os.Getenv(TestEnvironmentFlag)
+	inTestEnv := actualAppEnv == TestEnvironmentValue
+
+	var metricsBuilder *metrics.PrometheusMetricsBuilder
+	if prometheusRegistry != nil && !inTestEnv {
+		builder := metrics.NewPrometheusMetricsBuilder(prometheusRegistry, "", "")
+		metricsBuilder = &builder
+	}
+
 	return &GuildRouter{
-		logger:     logger,
-		Router:     router,
-		subscriber: subscriber,
-		publisher:  publisher,
-		config:     config,
-		helper:     helper,
-		tracer:     tracer,
+		logger:             logger,
+		Router:             router,
+		subscriber:         subscriber,
+		publisher:          publisher,
+		config:             cfg,
+		helper:             helper,
+		tracer:             tracer,
+		metricsBuilder:     metricsBuilder,
+		prometheusRegistry: prometheusRegistry,
+		metricsEnabled:     metricsBuilder != nil,
 	}
 }
 
-// Configure sets up the router with the necessary handlers and dependencies.
-func (r *GuildRouter) Configure(routerCtx context.Context, guildService guildservice.Service, eventbus eventbus.EventBus, guildMetrics guildmetrics.GuildMetrics) error {
-	guildHandlers := guildhandlers.NewGuildHandlers(guildService, r.logger, r.tracer, r.helper, guildMetrics)
-
-	r.Router.AddMiddleware(
-		middleware.CorrelationID,
-		utils.NewMiddlewareHelper().CommonMetadataMiddleware("guild"),
-		utils.NewMiddlewareHelper().DiscordMetadataMiddleware(),
-		utils.NewMiddlewareHelper().RoutingMetadataMiddleware(),
-		middleware.Recoverer,
-	)
-
-	if err := r.RegisterHandlers(routerCtx, guildHandlers); err != nil {
-		return fmt.Errorf("failed to register handlers: %w", err)
+// Configure sets up the router with handlers.
+func (r *GuildRouter) Configure(_ context.Context, handlers guildhandlers.Handlers) error {
+	// Add metrics middleware conditionally
+	if r.metricsEnabled && r.metricsBuilder != nil {
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 	}
+
+	// Register all handlers
+	r.registerHandlers(handlers)
 	return nil
 }
 
+// handlerDeps bundles dependencies for handler registration.
 type handlerDeps struct {
 	router     *message.Router
 	subscriber eventbus.EventBus
@@ -75,10 +90,27 @@ type handlerDeps struct {
 	logger     *slog.Logger
 	tracer     trace.Tracer
 	helper     utils.Helpers
-	metrics    handlerwrapper.ReturningMetrics
 }
 
-// registerHandler registers a pure transformation-pattern handler with typed payload.
+// registerHandlers wires NATS topics to handler methods.
+func (r *GuildRouter) registerHandlers(handlers guildhandlers.Handlers) {
+	deps := handlerDeps{
+		router:     r.Router,
+		subscriber: r.subscriber,
+		publisher:  r.publisher,
+		logger:     r.logger,
+		tracer:     r.tracer,
+		helper:     r.helper,
+	}
+
+	registerHandler(deps, guildevents.GuildConfigCreationRequestedV1, handlers.HandleCreateGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigRetrievalRequestedV1, handlers.HandleRetrieveGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigUpdateRequestedV1, handlers.HandleUpdateGuildConfig)
+	registerHandler(deps, guildevents.GuildConfigDeletionRequestedV1, handlers.HandleDeleteGuildConfig)
+	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
+}
+
+// registerHandler is a generic function for type-safe Watermill handler registration.
 func registerHandler[T any](
 	deps handlerDeps,
 	topic string,
@@ -90,43 +122,20 @@ func registerHandler[T any](
 		handlerName,
 		topic,
 		deps.subscriber,
-		"", // Watermill reads topic from message metadata when empty
+		"",
 		deps.publisher,
 		handlerwrapper.WrapTransformingTyped(
 			handlerName,
 			deps.logger,
 			deps.tracer,
 			deps.helper,
-			deps.metrics,
+			nil, // metrics can be passed if needed
 			handler,
 		),
 	)
 }
 
-// RegisterHandlers registers event handlers using the pure transformation pattern.
-func (r *GuildRouter) RegisterHandlers(ctx context.Context, handlers guildhandlers.Handlers) error {
-	var metrics handlerwrapper.ReturningMetrics // reserved for Phase 6
-
-	deps := handlerDeps{
-		router:     r.Router,
-		subscriber: r.subscriber,
-		publisher:  r.publisher,
-		logger:     r.logger,
-		tracer:     r.tracer,
-		helper:     r.helper,
-		metrics:    metrics,
-	}
-
-	registerHandler(deps, guildevents.GuildConfigCreationRequestedV1, handlers.HandleCreateGuildConfig)
-	registerHandler(deps, guildevents.GuildConfigRetrievalRequestedV1, handlers.HandleRetrieveGuildConfig)
-	registerHandler(deps, guildevents.GuildConfigUpdateRequestedV1, handlers.HandleUpdateGuildConfig)
-	registerHandler(deps, guildevents.GuildConfigDeletionRequestedV1, handlers.HandleDeleteGuildConfig)
-	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
-
-	return nil
-}
-
-// Close stops the router.
+// Close shuts down the router.
 func (r *GuildRouter) Close() error {
 	return r.Router.Close()
 }

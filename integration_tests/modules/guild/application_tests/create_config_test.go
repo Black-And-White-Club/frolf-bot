@@ -7,14 +7,14 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
 func TestCreateGuildConfig(t *testing.T) {
 	tests := []struct {
 		name             string
 		setupFn          func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig)
-		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error)
+		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error)
 		expectedSuccess  bool
 		expectedErrorMsg string
 	}{
@@ -22,22 +22,20 @@ func TestCreateGuildConfig(t *testing.T) {
 			name: "Success - Valid guild config creation",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				config := &guildtypes.GuildConfig{
-				GuildID:              "123456789012345678",
-				SignupChannelID:      "234567890123456789",
-				EventChannelID:       "345678901234567890",
-				LeaderboardChannelID: "456789012345678901",
-				UserRoleID:           "567890123456789012",
-				SignupEmoji:          "✅",
+					GuildID:              "123456789012345678",
+					SignupChannelID:      "234567890123456789",
+					EventChannelID:       "345678901234567890",
+					LeaderboardChannelID: "456789012345678901",
+					UserRoleID:           "567890123456789012",
+					SignupEmoji:          "✅",
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateGuildConfig returned unexpected error: %v", err)
 				}
-				if result.Error != nil {
-					t.Fatalf("Result contained unexpected Error: %v", result.Error)
-				}
+				// No system error expected; checked via err above
 				if result.Success == nil {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
@@ -66,17 +64,17 @@ func TestCreateGuildConfig(t *testing.T) {
 				if retrievedConfig.GuildID != guildID {
 					t.Errorf("Retrieved config GuildID mismatch: expected %q, got %q", guildID, retrievedConfig.GuildID)
 				}
-			if retrievedConfig.SignupChannelID != "234567890123456789" {
-				t.Errorf("Retrieved config SignupChannelID mismatch: expected %q, got %q", "234567890123456789", retrievedConfig.SignupChannelID)
+				if retrievedConfig.SignupChannelID != "234567890123456789" {
+					t.Errorf("Retrieved config SignupChannelID mismatch: expected %q, got %q", "234567890123456789", retrievedConfig.SignupChannelID)
 				}
-			if retrievedConfig.EventChannelID != "345678901234567890" {
-				t.Errorf("Retrieved config EventChannelID mismatch: expected %q, got %q", "345678901234567890", retrievedConfig.EventChannelID)
+				if retrievedConfig.EventChannelID != "345678901234567890" {
+					t.Errorf("Retrieved config EventChannelID mismatch: expected %q, got %q", "345678901234567890", retrievedConfig.EventChannelID)
 				}
-		if retrievedConfig.LeaderboardChannelID != "456789012345678901" {
-			t.Errorf("Retrieved config LeaderboardChannelID mismatch: expected %q, got %q", "456789012345678901", retrievedConfig.LeaderboardChannelID)
+				if retrievedConfig.LeaderboardChannelID != "456789012345678901" {
+					t.Errorf("Retrieved config LeaderboardChannelID mismatch: expected %q, got %q", "456789012345678901", retrievedConfig.LeaderboardChannelID)
 				}
-			if retrievedConfig.UserRoleID != "567890123456789012" {
-				t.Errorf("Retrieved config UserRoleID mismatch: expected %q, got %q", "567890123456789012", retrievedConfig.UserRoleID)
+				if retrievedConfig.UserRoleID != "567890123456789012" {
+					t.Errorf("Retrieved config UserRoleID mismatch: expected %q, got %q", "567890123456789012", retrievedConfig.UserRoleID)
 				}
 				if retrievedConfig.SignupEmoji != "✅" {
 					t.Errorf("Retrieved config SignupEmoji mismatch: expected %q, got %q", "✅", retrievedConfig.SignupEmoji)
@@ -88,12 +86,12 @@ func TestCreateGuildConfig(t *testing.T) {
 			name: "Success - Idempotent when config matches",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				config := &guildtypes.GuildConfig{
-			GuildID:              "223456789012345678",
-			SignupChannelID:      "334567890123456789",
-			EventChannelID:       "445678901234567890",
-			LeaderboardChannelID: "556789012345678901",
-			UserRoleID:           "667890123456789012",
-				SignupEmoji:          "✅",
+					GuildID:              "223456789012345678",
+					SignupChannelID:      "334567890123456789",
+					EventChannelID:       "445678901234567890",
+					LeaderboardChannelID: "556789012345678901",
+					UserRoleID:           "667890123456789012",
+					SignupEmoji:          "✅",
 				}
 				// Create the config first time
 				_, err := deps.Service.CreateGuildConfig(deps.Ctx, config)
@@ -102,13 +100,11 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateGuildConfig returned unexpected error: %v", err)
 				}
-				if result.Error != nil {
-					t.Fatalf("Result contained unexpected Error: %v", result.Error)
-				}
+				// No system error expected; checked via err above
 				if result.Success == nil {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
@@ -119,21 +115,18 @@ func TestCreateGuildConfig(t *testing.T) {
 			name: "Failure - Missing required field (signup channel)",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				config := &guildtypes.GuildConfig{
-			GuildID:              "323456789012345678",
-			SignupChannelID:      "", // Missing
-			EventChannelID:       "445678901234567890",
-			LeaderboardChannelID: "556789012345678901",
-			UserRoleID:           "667890123456789012",
-				SignupEmoji:          "✅",
+					GuildID:              "323456789012345678",
+					SignupChannelID:      "", // Missing
+					EventChannelID:       "445678901234567890",
+					LeaderboardChannelID: "556789012345678901",
+					UserRoleID:           "667890123456789012",
+					SignupEmoji:          "✅",
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil && result.Error == nil && result.Failure == nil {
-					t.Fatalf("Expected error or failure for missing signup channel but got none")
-				}
-				if result.Success != nil {
-					t.Fatalf("Expected failure but got success: %+v", result.Success)
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+				if err != nil {
+					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload but got nil")
@@ -154,21 +147,18 @@ func TestCreateGuildConfig(t *testing.T) {
 			name: "Failure - Missing required field (event channel)",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				config := &guildtypes.GuildConfig{
-			GuildID:              "423456789012345678",
-			SignupChannelID:      "534567890123456789",
-			EventChannelID:       "", // Missing
-			LeaderboardChannelID: "656789012345678901",
-			UserRoleID:           "767890123456789012",
-				SignupEmoji:          "✅",
+					GuildID:              "423456789012345678",
+					SignupChannelID:      "534567890123456789",
+					EventChannelID:       "", // Missing
+					LeaderboardChannelID: "656789012345678901",
+					UserRoleID:           "767890123456789012",
+					SignupEmoji:          "✅",
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil && result.Error == nil && result.Failure == nil {
-					t.Fatalf("Expected error or failure for missing event channel but got none")
-				}
-				if result.Success != nil {
-					t.Fatalf("Expected failure but got success: %+v", result.Success)
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+				if err != nil {
+					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload but got nil")
@@ -180,21 +170,18 @@ func TestCreateGuildConfig(t *testing.T) {
 			name: "Failure - Empty guild ID",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				config := &guildtypes.GuildConfig{
-				GuildID:              "", // Empty
-			SignupChannelID:      "534567890123456789",
-			EventChannelID:       "545678901234567890",
-			LeaderboardChannelID: "556789012345678901",
-			UserRoleID:           "567890123456789012",
-				SignupEmoji:          "✅",
+					GuildID:              "", // Empty
+					SignupChannelID:      "534567890123456789",
+					EventChannelID:       "545678901234567890",
+					LeaderboardChannelID: "556789012345678901",
+					UserRoleID:           "567890123456789012",
+					SignupEmoji:          "✅",
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil && result.Error == nil && result.Failure == nil {
-					t.Fatalf("Expected error or failure for empty guild ID but got none")
-				}
-				if result.Success != nil {
-					t.Fatalf("Expected failure but got success: %+v", result.Success)
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+				if err != nil {
+					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload but got nil")
@@ -207,9 +194,10 @@ func TestCreateGuildConfig(t *testing.T) {
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				return deps.Ctx, nil
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildOperationResult, err error) {
-				if err == nil {
-					t.Fatalf("Expected error for nil config but got nil")
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+				// Service returns a business failure payload for nil config (no system error)
+				if err != nil {
+					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
 				if result.Success != nil {
 					t.Fatalf("Expected failure but got success: %+v", result.Success)
@@ -271,8 +259,8 @@ func TestCreateGuildConfig_AlreadyExists(t *testing.T) {
 	}
 
 	result, err := deps.Service.CreateGuildConfig(deps.Ctx, differentConfig)
-	if err == nil && result.Error == nil && result.Failure == nil {
-		t.Fatalf("Expected error or failure when config already exists with different settings but got none")
+	if err != nil {
+		t.Fatalf("Expected business failure but got system error: %v", err)
 	}
 
 	if result.Success != nil {

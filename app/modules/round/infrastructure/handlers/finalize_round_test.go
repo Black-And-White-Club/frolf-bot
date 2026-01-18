@@ -9,13 +9,12 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -60,16 +59,14 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name            string
-		mockSetup       func(*roundmocks.MockService)
-		payload         *roundevents.AllScoresSubmittedPayloadV1
-		wantErr         bool
-		wantResultLen   int
-		expectedErrMsg  string
+		name           string
+		mockSetup      func(*roundmocks.MockService)
+		payload        *roundevents.AllScoresSubmittedPayloadV1
+		wantErr        bool
+		wantResultLen  int
+		expectedErrMsg string
 	}{
 		{
 			name: "Successfully handle AllScoresSubmitted",
@@ -78,7 +75,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundFinalizedPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
@@ -103,7 +100,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 							RoundID: testRoundID,
 							Error:   "finalization failed",
@@ -123,7 +120,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -138,7 +135,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -168,7 +165,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*payloadNoGuild,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundFinalizedPayloadV1{
 							GuildID: "",
 							RoundID: testRoundID,
@@ -221,7 +218,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					gomock.Any(),
 					*payloadMany,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundFinalizedPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
@@ -266,10 +263,9 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()
@@ -328,8 +324,6 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -347,7 +341,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 							RoundID: testRoundID,
 							Scores: []sharedtypes.ScoreInfo{
@@ -371,7 +365,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 							RoundID: testRoundID,
 							Error:   "no participants with scores",
@@ -392,7 +386,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("service unavailable"),
 				)
 			},
@@ -407,12 +401,12 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
@@ -422,14 +416,16 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*testPayload,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
 				)
 			},
-			payload: testPayload,
-			wantErr: true,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: sharedevents.ProcessRoundScoresRequestedV1,
 		},
 		{
 			name: "Empty participants list",
@@ -447,7 +443,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*payloadNoParticipants,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundFinalizationErrorPayloadV1{
 							RoundID: testRoundID,
 							Error:   "no participants",
@@ -490,7 +486,7 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 					gomock.Any(),
 					*payloadMany,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
 							RoundID: testRoundID,
 							Scores: []sharedtypes.ScoreInfo{
@@ -530,10 +526,9 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
+				helpers: utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()

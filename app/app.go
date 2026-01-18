@@ -127,7 +127,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: Leaderboard module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing round module...")
-	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize round module", attr.Error(err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}

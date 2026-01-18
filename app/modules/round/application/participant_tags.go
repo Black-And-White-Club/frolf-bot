@@ -6,6 +6,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
@@ -64,13 +65,13 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber,
-) (RoundOperationResult, error) {
+) (results.OperationResult, error) {
 	// Wrap in service logic for tracing/metrics.
 	// Use uuid.Nil because this affects multiple potential rounds.
-	return s.serviceWrapper(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (RoundOperationResult, error) {
+	return s.withTelemetry(ctx, "UpdateScheduledRoundsWithNewTags", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (results.OperationResult, error) {
 
 		if guildID == "" {
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					Error: "missing guild_id in update request",
 				},
@@ -79,7 +80,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 
 		if len(changedTags) == 0 {
 			s.logger.InfoContext(ctx, "No tag changes to sync; skipping round updates")
-			return RoundOperationResult{
+			return results.OperationResult{
 				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 					GuildID: guildID,
 					Summary: roundevents.UpdateSummaryV1{GuildID: guildID},
@@ -89,10 +90,10 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 
 		// 1. Fetch all upcoming rounds for this guild.
 		// This ensures we catch any future events the users are signed up for.
-		allUpcomingRounds, err := s.RoundDB.GetUpcomingRounds(ctx, guildID)
+		allUpcomingRounds, err := s.repo.GetUpcomingRounds(ctx, guildID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to retrieve upcoming rounds for tag sync", attr.Error(err))
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: guildID,
 					Error:   fmt.Sprintf("failed to get upcoming rounds: %v", err),
@@ -108,7 +109,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 				attr.String("guild_id", string(guildID)),
 				attr.Int("total_upcoming", len(allUpcomingRounds)))
 
-			return RoundOperationResult{
+			return results.OperationResult{
 				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 					GuildID: guildID,
 					Summary: roundevents.UpdateSummaryV1{
@@ -121,9 +122,9 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 		}
 
 		// 3. Batch persist the changes to the Database
-		if err := s.RoundDB.UpdateRoundsAndParticipants(ctx, guildID, updates); err != nil {
+		if err := s.repo.UpdateRoundsAndParticipants(ctx, guildID, updates); err != nil {
 			s.logger.ErrorContext(ctx, "Database failure during round tag synchronization", attr.Error(err))
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
 					GuildID: guildID,
 					Error:   fmt.Sprintf("database update failed: %v", err),
@@ -160,7 +161,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 			attr.Int("rounds_updated", len(updates)),
 			attr.Int("total_users_synced", totalParticipantsUpdated))
 
-		return RoundOperationResult{
+		return results.OperationResult{
 			Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 				GuildID:       guildID,
 				UpdatedRounds: updatedRounds,

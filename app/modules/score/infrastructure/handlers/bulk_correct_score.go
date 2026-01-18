@@ -7,7 +7,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -27,7 +26,7 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 	}
 
 	for _, upd := range payload.Updates {
-		result, err := h.scoreService.CorrectScore(ctx, payload.GuildID, payload.RoundID, upd.UserID, upd.Score, upd.TagNumber)
+		result, err := h.service.CorrectScore(ctx, payload.GuildID, payload.RoundID, upd.UserID, upd.Score, upd.TagNumber)
 		if err != nil {
 			return nil, err
 		}
@@ -65,11 +64,6 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		Payload: bulk,
 	}}
 
-	h.logger.InfoContext(ctx, "Applied bulk score overrides and forwarded to round bulk score update flow",
-		attr.RoundID("round_id", payload.RoundID),
-		attr.Int("updates_requested", len(payload.Updates)),
-		attr.Int("emitted_messages", len(results)),
-	)
-
+	// Handlers delegate observability to the service layer; no logging here.
 	return results, nil
 }

@@ -6,13 +6,10 @@ import (
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -32,9 +29,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 	// Mock dependencies
 	mockScoreService := scoremocks.NewMockService(ctrl)
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &scoremetrics.NoOpMetrics{}
+	// no-op observability in handler tests
 
 	tests := []struct {
 		name           string
@@ -197,10 +192,8 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 			tt.mockSetup()
 
 			h := &ScoreHandlers{
-				scoreService: mockScoreService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockScoreService,
+				helpers: nil,
 			}
 
 			ctx := context.Background()

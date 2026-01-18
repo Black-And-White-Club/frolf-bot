@@ -7,14 +7,11 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -23,9 +20,6 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testPayload := &leaderboardevents.GetLeaderboardRequestedPayloadV1{
@@ -44,9 +38,10 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			name: "Successfully get leaderboard",
 			mockSetup: func() {
 					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-						leaderboardservice.LeaderboardOperationResult{
+						results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
+							GuildID:     testGuildID,
 							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-						},
+						}),
 						nil,
 					)
 			},
@@ -59,7 +54,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			name: "Service error in GetLeaderboard",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					leaderboardservice.LeaderboardOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -71,9 +66,10 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			name: "Service failure - no active leaderboard",
 			mockSetup: func() {
 					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-						leaderboardservice.LeaderboardOperationResult{
+						results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
+							GuildID:     testGuildID,
 							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-						},
+						}),
 						nil,
 					)
 			},
@@ -89,10 +85,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 			tt.mockSetup()
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()
@@ -118,9 +111,6 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testUserID := sharedtypes.DiscordID("user-456")
@@ -185,10 +175,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 			tt.mockSetup()
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()
@@ -214,9 +201,6 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &leaderboardmetrics.NoOpMetrics{}
 
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
@@ -243,9 +227,12 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 			name: "Successfully lookup round tag - found",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{{UserID: testUserID, TagNumber: testTagNumber}},
-					},
+					results.SuccessResult(&sharedevents.RoundTagLookupResultPayloadV1{
+						ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testPayload.GuildID},
+						UserID:        testUserID,
+						TagNumber:     &testTagNumber,
+						Found:         true,
+					}),
 					nil,
 				)
 			},
@@ -258,22 +245,25 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 			name: "Successfully lookup round tag - not found",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					leaderboardservice.LeaderboardOperationResult{
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-					},
+					results.FailureResult(&sharedevents.RoundTagLookupFailedPayloadV1{
+						ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testPayload.GuildID},
+						UserID:        testUserID,
+						RoundID:       testPayload.RoundID,
+						Reason:        "not found",
+					}),
 					nil,
 				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     sharedevents.RoundTagLookupNotFoundV1,
+			wantTopic:     sharedevents.RoundTagLookupFailedV1,
 		},
 		{
 			name: "Service error",
 			mockSetup: func() {
 				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					leaderboardservice.LeaderboardOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("service error"),
 				)
 			},
@@ -288,10 +278,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 			tt.mockSetup()
 
 			h := &LeaderboardHandlers{
-				leaderboardService: mockLeaderboardService,
-				logger:             logger,
-				tracer:             tracer,
-				metrics:            metrics,
+				service: mockLeaderboardService,
 			}
 
 			ctx := context.Background()

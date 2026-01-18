@@ -16,7 +16,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 	ctx context.Context,
 	payload *roundevents.AllScoresSubmittedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	finalizeResult, err := h.roundService.FinalizeRound(ctx, *payload)
+	finalizeResult, err := h.service.FinalizeRound(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
@@ -85,30 +85,13 @@ func (h *RoundHandlers) HandleRoundFinalized(
 	ctx context.Context,
 	payload *roundevents.RoundFinalizedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.NotifyScoreModule(ctx, *payload)
+	result, err := h.service.NotifyScoreModule(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "notify score module failed",
-			attr.Any("failure", result.Failure),
-		)
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundFinalizationErrorV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
-		if !ok {
-			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from NotifyScoreModule"}
-		}
-
-		return []handlerwrapper.Result{
-			{Topic: sharedevents.ProcessRoundScoresRequestedV1, Payload: successPayload},
-		}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "unexpected result from service: both success and failure are nil"}
+	return mapOperationResult(result,
+		sharedevents.ProcessRoundScoresRequestedV1,
+		roundevents.RoundFinalizationErrorV1,
+	), nil
 }

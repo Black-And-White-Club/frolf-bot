@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestUserServiceImpl_CreateUser(t *testing.T) {
+func TestUserService_CreateUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -30,19 +30,19 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 	tracer := tracerProvider.Tracer("test")
 
 	tests := []struct {
-		name               string
-		mockDBSetup        func(*mockdb.MockUserDB)
-		userID             sharedtypes.DiscordID
-		guildID            sharedtypes.GuildID
-		tag                *sharedtypes.TagNumber
-		expectedSuccess    bool
+		name                string
+		mockDBSetup         func(*mockdb.MockRepository)
+		userID              sharedtypes.DiscordID
+		guildID             sharedtypes.GuildID
+		tag                 *sharedtypes.TagNumber
+		expectedSuccess     bool
 		expectedIsReturning bool
-		expectedReason     string
-		expectErr          bool
+		expectedReason      string
+		expectErr           bool
 	}{
 		{
 			name: "New user creation (IsReturningUser=false)",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// Step 1: User doesn't exist globally
 				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
 				// Step 2: Create global user succeeds
@@ -59,7 +59,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "Returning user to new guild (IsReturningUser=true)",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// Step 1: User exists globally
 				existingUser := &userdb.User{UserID: testUserID}
 				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(existingUser, nil)
@@ -77,7 +77,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "User already exists in guild (failure)",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// Step 1: User exists globally
 				existingUser := &userdb.User{UserID: testUserID}
 				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(existingUser, nil)
@@ -94,7 +94,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "CreateGlobalUser fails (duplicate user error)",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// Step 1: User doesn't exist globally
 				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
 				// Step 2: CreateGlobalUser fails with duplicate error
@@ -105,11 +105,11 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 			tag:             nil,
 			expectedSuccess: false,
 			expectedReason:  "user already exists",
-			expectErr:       true,
+			expectErr:       false,
 		},
 		{
 			name: "CreateGuildMembership fails",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// Step 1: User doesn't exist globally
 				m.EXPECT().GetUserGlobal(gomock.Any(), testUserID).Return(nil, errors.New("not found"))
 				// Step 2: CreateGlobalUser succeeds
@@ -126,7 +126,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "Empty Discord ID validation",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// No DB calls expected
 			},
 			userID:          "",
@@ -138,7 +138,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "Negative tag number validation",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// No DB calls expected
 			},
 			userID:          testUserID,
@@ -150,7 +150,7 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 		},
 		{
 			name: "Nil context validation",
-			mockDBSetup: func(m *mockdb.MockUserDB) {
+			mockDBSetup: func(m *mockdb.MockRepository) {
 				// No DB calls expected
 			},
 			userID:          testUserID,
@@ -163,17 +163,14 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockDB := mockdb.NewMockUserDB(ctrl)
+			mockDB := mockdb.NewMockRepository(ctrl)
 			tt.mockDBSetup(mockDB)
 
-			s := &UserServiceImpl{
-				UserDB:  mockDB,
+			s := &UserService{
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
-					return serviceFunc(ctx)
-				},
 			}
 
 			ctxArg := ctx
@@ -197,10 +194,10 @@ func TestUserServiceImpl_CreateUser(t *testing.T) {
 					}
 				}
 			} else {
-				// For nil context validation, expect error directly in result.Error
+				// For nil context validation, expect a failure result (and an error return)
 				if tt.name == "Nil context validation" {
-					if result.Error == nil {
-						t.Errorf("Expected error in result, got nil")
+					if result.Failure == nil {
+						t.Errorf("Expected failure in result, got nil")
 					}
 				} else if result.Failure == nil {
 					t.Errorf("Expected failure, got success")

@@ -6,6 +6,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
@@ -16,16 +17,16 @@ func (s *RoundService) ProcessRoundStart(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	roundID sharedtypes.RoundID,
-) (RoundOperationResult, error) {
+) (results.OperationResult, error) {
 
-	return s.serviceWrapper(ctx, "ProcessRoundStart", roundID, func(ctx context.Context) (RoundOperationResult, error) {
+	return s.withTelemetry(ctx, "ProcessRoundStart", roundID, func(ctx context.Context) (results.OperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round start",
 			attr.RoundID("round_id", roundID),
 			attr.String("guild_id", string(guildID)),
 		)
 
 		// Fetch the round from DB (DB is the source of truth)
-		round, err := s.RoundDB.GetRound(ctx, guildID, roundID)
+		round, err := s.repo.GetRound(ctx, guildID, roundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get round from database",
 				attr.RoundID("round_id", roundID),
@@ -33,7 +34,7 @@ func (s *RoundService) ProcessRoundStart(
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
@@ -44,7 +45,7 @@ func (s *RoundService) ProcessRoundStart(
 
 		// Ensure we have an event message id to update/notify Discord
 		if round.EventMessageID == "" {
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
@@ -54,7 +55,7 @@ func (s *RoundService) ProcessRoundStart(
 		}
 
 		// Update the round state to "in progress"
-		err = s.RoundDB.UpdateRoundState(ctx, guildID, roundID, roundtypes.RoundStateInProgress)
+		err = s.repo.UpdateRoundState(ctx, guildID, roundID, roundtypes.RoundStateInProgress)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round state to in progress",
 				attr.RoundID("round_id", roundID),
@@ -62,7 +63,7 @@ func (s *RoundService) ProcessRoundStart(
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRoundState")
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
@@ -105,6 +106,6 @@ func (s *RoundService) ProcessRoundStart(
 			payload.Config = sharedevents.NewGuildConfigFragment(cfg)
 		}
 
-		return RoundOperationResult{Success: payload}, nil
+		return results.OperationResult{Success: payload}, nil
 	})
 }

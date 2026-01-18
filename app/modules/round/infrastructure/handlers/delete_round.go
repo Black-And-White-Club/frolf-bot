@@ -4,7 +4,6 @@ import (
 	"context"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/google/uuid"
@@ -20,25 +19,15 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(
 		return nil, sharedtypes.ValidationError{Message: "invalid round ID: cannot process delete request with nil UUID"}
 	}
 
-	result, err := h.roundService.ValidateRoundDeleteRequest(ctx, *payload)
+	result, err := h.service.ValidateRoundDeleteRequest(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "round delete request validation failed", attr.Any("failure", result.Failure))
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundDeleteErrorV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundDeleteValidatedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "service returned unexpected nil result from ValidateRoundDeleteRequest"}
+	return mapOperationResult(result,
+		roundevents.RoundDeleteValidatedV1,
+		roundevents.RoundDeleteErrorV1,
+	), nil
 }
 
 // HandleRoundDeleteValidated moves the process forward once validation is complete.
@@ -65,37 +54,23 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	// 1. Extract the Discord Message ID from context to ensure it propagates
 	discordMessageID, _ := ctx.Value("discord_message_id").(string)
 
-	result, err := h.roundService.DeleteRound(ctx, *payload)
+	result, err := h.service.DeleteRound(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "round delete execution failed",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.Any("failure", result.Failure),
-		)
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundDeleteErrorV1, Payload: result.Failure},
-		}, nil
+	results := mapOperationResult(result,
+		roundevents.RoundDeletedV1,
+		roundevents.RoundDeleteErrorV1,
+	)
+
+	// 2. If we have a message ID, promote it to metadata so the Discord
+	// handler knows which embed to delete.
+	if discordMessageID != "" && len(results) > 0 {
+		results[0].Metadata = map[string]string{
+			"discord_message_id": discordMessageID,
+		}
 	}
 
-	if result.Success != nil {
-		res := handlerwrapper.Result{
-			Topic:   roundevents.RoundDeletedV1,
-			Payload: result.Success,
-		}
-
-		// 2. If we have a message ID, promote it to metadata so the Discord
-		// handler knows which embed to delete.
-		if discordMessageID != "" {
-			res.Metadata = map[string]string{
-				"discord_message_id": discordMessageID,
-			}
-		}
-
-		return []handlerwrapper.Result{res}, nil
-	}
-
-	return nil, sharedtypes.ValidationError{Message: "service returned unexpected nil result from DeleteRound"}
+	return results, nil
 }

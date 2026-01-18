@@ -9,15 +9,8 @@ import (
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-)
-
-// Common domain errors
-var (
-	ErrUserAlreadyExists = errors.New("user already exists")
-	ErrInvalidDiscordID  = errors.New("invalid Discord ID")
-	ErrNegativeTagNumber = errors.New("tag number cannot be negative")
-	ErrNilContext        = errors.New("context cannot be nil")
 )
 
 // normalizeUDiscName normalizes a UDisc name for matching (lowercase, trimmed).
@@ -26,21 +19,19 @@ func normalizeUDiscName(name string) string {
 }
 
 // CreateUser creates a user and returns a success or failure payload.
-func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (UserOperationResult, error) {
+func (s *UserService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (results.OperationResult, error) {
 	if ctx == nil {
-		return UserOperationResult{
-			Error: ErrNilContext,
-		}, ErrNilContext
+		return results.FailureResult(&userevents.UserCreationFailedPayloadV1{GuildID: guildID, UserID: userID, TagNumber: tag, Reason: ErrNilContext.Error()}), ErrNilContext
 	}
 
 	// Handle empty Discord ID - domain failure, not execution error
 	if userID == "" {
-		return createFailureResult(guildID, userID, tag, ErrInvalidDiscordID), nil
+		return results.FailureResult(&userevents.UserCreationFailedPayloadV1{GuildID: guildID, UserID: userID, TagNumber: tag, Reason: ErrInvalidDiscordID.Error()}), nil
 	}
 
 	// Handle negative tag numbers - domain failure, not execution error
 	if tag != nil && *tag < 0 {
-		return createFailureResult(guildID, userID, tag, ErrNegativeTagNumber), nil
+		return results.FailureResult(&userevents.UserCreationFailedPayloadV1{GuildID: guildID, UserID: userID, TagNumber: tag, Reason: ErrNegativeTagNumber.Error()}), nil
 	}
 
 	startTime := time.Now()
@@ -52,25 +43,22 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 	}
 	s.metrics.RecordUserCreationAttempt(ctx, userType, source)
 
-	result, err := s.serviceWrapper(ctx, "CreateUser", userID, func(ctx context.Context) (UserOperationResult, error) {
+	result, err := s.withTelemetry(ctx, "CreateUser", userID, func(ctx context.Context) (results.OperationResult, error) {
 		// Step 1: Check if user exists globally
-		globalUser, err := s.UserDB.GetUserGlobal(ctx, userID)
+		globalUser, err := s.repo.GetUserGlobal(ctx, userID)
 		userExists := err == nil && globalUser != nil
 
 		if userExists {
 			// User exists globally - check if they're already in this guild
-			membership, err := s.UserDB.GetGuildMembership(ctx, userID, guildID)
+			membership, err := s.repo.GetGuildMembership(ctx, userID, guildID)
 			if err == nil && membership != nil {
 				// Already a member of this guild - domain failure, not execution error
-				return UserOperationResult{
-					Failure: &userevents.UserCreationFailedPayloadV1{
-						GuildID:   guildID,
-						UserID:    userID,
-						TagNumber: tag,
-						Reason:    "user already exists in this guild",
-					},
-					Error: ErrUserAlreadyExists,
-				}, nil
+				return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
+					GuildID:   guildID,
+					UserID:    userID,
+					TagNumber: tag,
+					Reason:    "user already exists in this guild",
+				}), nil
 			}
 
 			// User exists but not in this guild - create membership only
@@ -79,35 +67,30 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 				GuildID: guildID,
 				Role:    sharedtypes.UserRoleUser,
 			}
-			if err := s.UserDB.CreateGuildMembership(ctx, membership); err != nil {
+			if err := s.repo.CreateGuildMembership(ctx, membership); err != nil {
 				s.logger.ErrorContext(ctx, "Failed to create guild membership",
 					attr.String("user_id", string(userID)),
 					attr.String("guild_id", string(guildID)),
 					attr.Error(err),
 				)
 				s.metrics.RecordUserCreationFailure(ctx, userType, source)
-				return UserOperationResult{
-					Failure: &userevents.UserCreationFailedPayloadV1{
-						GuildID:   guildID,
-						UserID:    userID,
-						TagNumber: tag,
-						Reason:    err.Error(),
-					},
-					Error: err,
-				}, err
+				return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
+					GuildID:   guildID,
+					UserID:    userID,
+					TagNumber: tag,
+					Reason:    err.Error(),
+				}), err
 			}
 
 			// Success - returning user to new guild
 			s.metrics.RecordUserCreationSuccess(ctx, userType, source)
 
-			return UserOperationResult{
-				Success: &userevents.UserCreatedPayloadV1{
-					GuildID:         guildID,
-					UserID:          userID,
-					TagNumber:       tag,
-					IsReturningUser: true,
-				},
-			}, nil
+			return results.SuccessResult(&userevents.UserCreatedPayloadV1{
+				GuildID:         guildID,
+				UserID:          userID,
+				TagNumber:       tag,
+				IsReturningUser: true,
+			}), nil
 		}
 
 		// Step 2: User doesn't exist - create global user
@@ -126,7 +109,7 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 		}
 
 		dbStart := time.Now()
-		if err := s.UserDB.CreateGlobalUser(ctx, newUser); err != nil {
+		if err := s.repo.CreateGlobalUser(ctx, newUser); err != nil {
 			dbDuration := time.Since(dbStart)
 			s.metrics.RecordDBQueryDuration(ctx, dbDuration)
 
@@ -154,15 +137,23 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			}
 
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
-			return UserOperationResult{
-				Failure: &userevents.UserCreationFailedPayloadV1{
+			// Duplicate user is a domain-level failure (idempotent semantics);
+			// return a failure payload and NO top-level error so handlers publish
+			// the domain failure instead of retrying the message.
+			if errors.Is(domainErr, ErrUserAlreadyExists) {
+				return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
 					GuildID:   guildID,
 					UserID:    userID,
 					TagNumber: tag,
 					Reason:    domainErr.Error(),
-				},
-				Error: domainErr,
-			}, domainErr
+				}), nil
+			}
+			return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
+				GuildID:   guildID,
+				UserID:    userID,
+				TagNumber: tag,
+				Reason:    domainErr.Error(),
+			}), domainErr
 		}
 		dbDuration := time.Since(dbStart)
 		s.metrics.RecordDBQueryDuration(ctx, dbDuration)
@@ -174,35 +165,30 @@ func (s *UserServiceImpl) CreateUser(ctx context.Context, guildID sharedtypes.Gu
 			Role:    sharedtypes.UserRoleUser,
 		}
 
-		if err := s.UserDB.CreateGuildMembership(ctx, membership); err != nil {
+		if err := s.repo.CreateGuildMembership(ctx, membership); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to create guild membership",
 				attr.String("user_id", string(userID)),
 				attr.String("guild_id", string(guildID)),
 				attr.Error(err),
 			)
 			s.metrics.RecordUserCreationFailure(ctx, userType, source)
-			return UserOperationResult{
-				Failure: &userevents.UserCreationFailedPayloadV1{
-					GuildID:   guildID,
-					UserID:    userID,
-					TagNumber: tag,
-					Reason:    err.Error(),
-				},
-				Error: err,
-			}, err
+			return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
+				GuildID:   guildID,
+				UserID:    userID,
+				TagNumber: tag,
+				Reason:    err.Error(),
+			}), err
 		}
 
 		// Success - new user
 		s.metrics.RecordUserCreationSuccess(ctx, userType, source)
 
-		return UserOperationResult{
-			Success: &userevents.UserCreatedPayloadV1{
-				GuildID:         guildID,
-				UserID:          userID,
-				TagNumber:       tag,
-				IsReturningUser: false,
-			},
-		}, nil
+		return results.SuccessResult(&userevents.UserCreatedPayloadV1{
+			GuildID:         guildID,
+			UserID:          userID,
+			TagNumber:       tag,
+			IsReturningUser: false,
+		}), nil
 	})
 
 	s.metrics.RecordUserCreationDuration(ctx, userType, source, time.Since(startTime))
@@ -224,22 +210,16 @@ func translateDBError(err error) error {
 		return ErrUserAlreadyExists
 	}
 
-	// Add more error translations as needed
-
 	// Default case: return the original error
 	return err
 }
 
 // createFailureResult is a helper to create standardized failure results
-func createFailureResult(guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) UserOperationResult {
-	return UserOperationResult{
-		Success: nil,
-		Failure: &userevents.UserCreationFailedPayloadV1{
-			GuildID:   guildID,
-			UserID:    userID,
-			TagNumber: tag,
-			Reason:    err.Error(),
-		},
-		Error: err,
-	}
+func createFailureResult(guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, err error) results.OperationResult {
+	return results.FailureResult(&userevents.UserCreationFailedPayloadV1{
+		GuildID:   guildID,
+		UserID:    userID,
+		TagNumber: tag,
+		Reason:    err.Error(),
+	})
 }

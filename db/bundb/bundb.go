@@ -20,11 +20,11 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB            userdb.UserDB
+	UserDB            userdb.Repository
 	RoundDB           rounddb.RoundDB
 	ScoreDB           scoredb.ScoreDB
 	LeaderboardDB     leaderboarddb.LeaderboardDB
-	GuildDB           guilddb.GuildDB
+	GuildDB           guilddb.Repository
 	SharedDBInterface sharedinterface.GuildConfigReader
 	db                *bun.DB
 }
@@ -71,11 +71,11 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 	log.Println("newDBServiceWithDB - Models registered successfully")
 
 	dbService := &DBService{
-		UserDB:        &userdb.UserDBImpl{DB: db},
-		RoundDB:       &rounddb.RoundDBImpl{DB: db},
-		ScoreDB:       &scoredb.ScoreDBImpl{DB: db},
-		LeaderboardDB: &leaderboarddb.LeaderboardDBImpl{DB: db},
-		GuildDB:       &guilddb.GuildDBImpl{DB: db},
+		UserDB:        userdb.NewRepository(db),
+		RoundDB:       rounddb.NewRepository(db),
+		ScoreDB:       scoredb.NewRepository(db),
+		LeaderboardDB: leaderboarddb.NewRepository(db),
+		GuildDB:       guilddb.NewRepository(db),
 		db:            db,
 	}
 

@@ -10,29 +10,25 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
-	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
 
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 )
 
 const (
-	appEnvVar = "APP_ENV"
-	envTest   = "test"
+	TestEnvironmentFlag  = "APP_ENV"
+	TestEnvironmentValue = "test"
 )
 
 type RoundRouter struct {
 	logger     *slog.Logger
-	router     *message.Router
+	Router     *message.Router
 	subscriber eventbus.EventBus
 	publisher  eventbus.EventBus
 	helper     utils.Helpers
@@ -51,51 +47,35 @@ func NewRoundRouter(
 	tracer trace.Tracer,
 	registry *prometheus.Registry,
 ) *RoundRouter {
-	inTestEnv := os.Getenv(appEnvVar) == envTest
+	actualAppEnv := os.Getenv(TestEnvironmentFlag)
+	inTestEnv := actualAppEnv == TestEnvironmentValue
 
-	var builder *metrics.PrometheusMetricsBuilder
+	var metricsBuilder *metrics.PrometheusMetricsBuilder
 	if registry != nil && !inTestEnv {
 		b := metrics.NewPrometheusMetricsBuilder(registry, "", "")
-		builder = &b
+		metricsBuilder = &b
 	}
 
 	return &RoundRouter{
 		logger:         logger,
-		router:         router,
+		Router:         router,
 		subscriber:     subscriber,
 		publisher:      publisher,
 		helper:         helper,
 		tracer:         tracer,
-		metricsBuilder: builder,
-		metricsEnabled: builder != nil,
+		metricsBuilder: metricsBuilder,
+		metricsEnabled: metricsBuilder != nil,
 	}
 }
 
-func (r *RoundRouter) Configure(
-	service roundservice.Service,
-	roundMetrics roundmetrics.RoundMetrics,
-) error {
-	if r.metricsEnabled {
-		r.metricsBuilder.AddPrometheusRouterMetrics(r.router)
+func (r *RoundRouter) Configure(_ context.Context, handlers roundhandlers.Handlers) error {
+	if r.metricsEnabled && r.metricsBuilder != nil {
+		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 	}
 
-	handlers := roundhandlers.NewRoundHandlers(
-		service,
-		r.logger,
-		r.tracer,
-		r.helper,
-		roundMetrics,
-	)
-
-	r.router.AddMiddleware(
-		middleware.CorrelationID,
-		utils.NewMiddlewareHelper().CommonMetadataMiddleware("round"),
-		utils.NewMiddlewareHelper().DiscordMetadataMiddleware(),
-		middleware.Recoverer,
-		tracingfrolfbot.TraceHandler(r.tracer),
-	)
-
-	return r.registerHandlers(handlers)
+	// Register all handlers
+	r.registerHandlers(handlers)
+	return nil
 }
 
 type handlerDeps struct {
@@ -137,7 +117,7 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	var metrics handlerwrapper.ReturningMetrics // reserved for Phase 6
 
 	deps := handlerDeps{
-		router:     r.router,
+		router:     r.Router,
 		subscriber: r.subscriber,
 		publisher:  r.publisher,
 		logger:     r.logger,
@@ -201,5 +181,5 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 }
 
 func (r *RoundRouter) Close() error {
-	return r.router.Close()
+	return r.Router.Close()
 }

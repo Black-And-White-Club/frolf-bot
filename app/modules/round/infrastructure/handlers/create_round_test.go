@@ -7,14 +7,11 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -35,10 +32,6 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 		UserID:      testUserID,
 	}
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
 	tests := []struct {
 		name           string
 		mockSetup      func(*roundmocks.MockService)
@@ -57,7 +50,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{
 							BaseRoundPayload: roundtypes.BaseRoundPayload{
 								RoundID:     testCreateRoundID,
@@ -87,7 +80,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundValidationFailedPayloadV1{
 							UserID:        testUserID,
 							ErrorMessages: []string{"validation failed"},
@@ -110,7 +103,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("internal error"),
 				)
 			},
@@ -119,7 +112,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			expectedErrMsg:  "internal error",
 		},
 		{
-			name: "Unknown result returns validation error",
+			name: "Unknown result returns empty results",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().ValidateAndProcessRoundWithClock(
 					gomock.Any(),
@@ -127,12 +120,12 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:        testPayload,
-			wantErr:        true,
+			wantErr:        false,
 			wantResultLen:  0,
 		},
 	}
@@ -146,10 +139,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
 			}
 
 			ctx := context.Background()
@@ -196,10 +186,6 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		DiscordGuildID:   "test-guild-id",
 	}
 
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
 	tests := []struct {
 		name            string
 		mockSetup       func(*roundmocks.MockService)
@@ -217,7 +203,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{
 							BaseRoundPayload: roundtypes.BaseRoundPayload{
 								RoundID:     testRoundID,
@@ -246,7 +232,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundCreationFailedPayloadV1{
 							ErrorMessage: "creation failed",
 						},
@@ -267,7 +253,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -276,19 +262,19 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			expectedErrMsg: "database error",
 		},
 		{
-			name: "Unknown result returns validation error",
+			name: "Unknown result returns empty results",
 			mockSetup: func(mockRoundService *roundmocks.MockService) {
 				mockRoundService.EXPECT().StoreRound(
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 	}
@@ -302,10 +288,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
 			}
 
 			ctx := context.Background()
@@ -349,10 +332,6 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 		StartTime:   &testStartTime,
 		CreatedBy:   testUserID,
 	}
-
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -431,10 +410,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
 			}
 
 			results, err := h.HandleRoundEventMessageIDUpdate(tt.ctx, tt.payload)

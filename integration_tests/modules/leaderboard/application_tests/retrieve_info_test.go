@@ -8,9 +8,11 @@ import (
 
 	"github.com/uptrace/bun"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardService "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -50,12 +52,16 @@ func TestLeaderboardReadOperations(t *testing.T) {
 				return s.GetLeaderboard(ctx, "test_guild_1")
 			},
 			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(leaderboardService.LeaderboardOperationResult)
-				if opResult.Err != nil {
-					t.Errorf("expected no internal error, got %v", opResult.Err)
+				opResult := result.(results.OperationResult)
+				if err != nil {
+					t.Fatalf("expected no system error, got: %v", err)
 				}
-				if len(opResult.Leaderboard) != 1 {
-					t.Errorf("expected 1 entry, got %d", len(opResult.Leaderboard))
+				successPayload, ok := opResult.Success.(*leaderboardevents.GetLeaderboardResponsePayloadV1)
+				if !ok || successPayload == nil {
+					t.Fatalf("expected success payload of type *leaderboardevents.GetLeaderboardResponsePayloadV1, got %T", opResult.Success)
+				}
+				if len(successPayload.Leaderboard) != 1 {
+					t.Errorf("expected 1 entry, got %d", len(successPayload.Leaderboard))
 				}
 			},
 		},
@@ -65,10 +71,14 @@ func TestLeaderboardReadOperations(t *testing.T) {
 			runOperation: func(s leaderboardService.Service) (any, error) {
 				return s.GetLeaderboard(ctx, "empty_guild")
 			},
+			wantErr: true,
 			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(leaderboardService.LeaderboardOperationResult)
-				if !errors.Is(opResult.Err, leaderboarddb.ErrNoActiveLeaderboard) {
-					t.Errorf("expected ErrNoActiveLeaderboard in result.Err, got %v", opResult.Err)
+				// Missing leaderboard results in a system error from the underlying repo
+				if err == nil {
+					t.Fatalf("expected system error for missing leaderboard, got nil")
+				}
+				if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+					t.Errorf("expected ErrNoActiveLeaderboard, got %v", err)
 				}
 			},
 		},
@@ -89,9 +99,16 @@ func TestLeaderboardReadOperations(t *testing.T) {
 				return s.RoundGetTagByUserID(ctx, "test_guild_1", payload)
 			},
 			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(leaderboardService.LeaderboardOperationResult)
-				if len(opResult.Leaderboard) != 1 || opResult.Leaderboard[0].TagNumber != 42 {
-					t.Errorf("expected tag 42, got: %v", opResult.Leaderboard)
+				opResult := result.(results.OperationResult)
+				if err != nil {
+					t.Fatalf("expected no system error, got: %v", err)
+				}
+				successPayload, ok := opResult.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
+				if !ok || successPayload == nil {
+					t.Fatalf("expected success payload of type *sharedevents.RoundTagLookupResultPayloadV1, got %T", opResult.Success)
+				}
+				if successPayload.TagNumber == nil || *successPayload.TagNumber != 42 {
+					t.Errorf("expected tag 42, got: %v", successPayload.TagNumber)
 				}
 			},
 		},

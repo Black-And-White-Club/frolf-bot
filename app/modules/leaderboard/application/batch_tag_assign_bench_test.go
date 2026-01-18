@@ -1,7 +1,6 @@
 package leaderboardservice
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -45,13 +44,6 @@ func newBenchmarkService() *LeaderboardService {
 		logger:  loggerfrolfbot.NoOpLogger,
 		tracer:  tracer,
 		metrics: &leaderboardmetrics.NoOpMetrics{},
-		serviceWrapper: func(
-			ctx context.Context,
-			operationName string,
-			serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error),
-		) (LeaderboardOperationResult, error) {
-			return serviceFunc(ctx)
-		},
 	}
 }
 
@@ -124,28 +116,3 @@ func BenchmarkGenerateUpdatedSnapshot_XLarge(b *testing.B) {
 	}
 }
 
-// ----------------------
-// computeTagChanges Benchmarks
-// ----------------------
-
-func BenchmarkComputeTagChanges_Large(b *testing.B) {
-	before := createBenchmarkLeaderboardData(5_000)
-
-	after := make(leaderboardtypes.LeaderboardData, len(before))
-	for i, e := range before {
-		after[i] = leaderboardtypes.LeaderboardEntry{
-			UserID:    e.UserID,
-			TagNumber: e.TagNumber + 1,
-		}
-	}
-
-	guildID := sharedtypes.GuildID("bench-guild")
-	reason := sharedtypes.ServiceUpdateSourceManual
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_ = computeTagChanges(before, after, guildID, reason)
-	}
-}

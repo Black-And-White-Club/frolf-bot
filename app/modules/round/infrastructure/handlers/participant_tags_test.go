@@ -8,13 +8,11 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -33,8 +31,6 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -53,7 +49,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 							UpdatedRounds: []roundevents.RoundUpdateInfoV1{
 								{
@@ -87,7 +83,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundUpdateErrorPayloadV1{
 							GuildID: testGuildID,
 							Error:   "tag update failed",
@@ -109,7 +105,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database error"),
 				)
 			},
@@ -125,7 +121,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -142,7 +138,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
@@ -161,7 +157,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
 							UpdatedRounds: []roundevents.RoundUpdateInfoV1{}, // No rounds affected
 							Summary: roundevents.UpdateSummaryV1{
@@ -187,7 +183,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
@@ -209,10 +205,8 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()

@@ -9,7 +9,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	"github.com/google/uuid"
 )
@@ -28,7 +28,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 		payload                  roundevents.UpdateRoundRequestedPayloadV1
 		expectedError            bool
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Valid update request - Title only",
@@ -42,7 +42,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				Timezone:  timezonePtr("America/New_York"),
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -73,7 +73,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				Timezone:    timezonePtr("America/New_York"),
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -108,7 +108,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 			},
 			expectedError:            false, // Service uses failure payload instead of error
 			expectedErrorMessagePart: "round ID cannot be zero",
-			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -133,7 +133,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 			},
 			expectedError:            false, // Service uses failure payload instead of error
 			expectedErrorMessagePart: "at least one field to update must be provided",
-			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -160,7 +160,7 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 			},
 			expectedError:            false, // Service uses failure payload instead of error
 			expectedErrorMessagePart: "could not recognize time format",
-			validateResult: func(t *testing.T, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -247,7 +247,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID)
 		expectedError            bool
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Successful update of title",
@@ -279,7 +279,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				return payload, originalRound.ID
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil.")
 				}
@@ -344,7 +344,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				return payload, originalRound.ID
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -398,7 +398,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 				return payload, originalRound.ID
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				entityUpdatedPayload := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
 				if entityUpdatedPayload.Round.EventType == nil || *entityUpdatedPayload.Round.EventType != "tournament" {
 					t.Errorf("Expected EventType 'tournament', got %v", entityUpdatedPayload.Round.EventType)
@@ -422,7 +422,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 			},
 			expectedError:            false,
 			expectedErrorMessagePart: "failed to update round in database",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -486,7 +486,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundScheduleUpdatePayloadV1, sharedtypes.RoundID)
 		expectedError            bool
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Failed to fetch round for rescheduling - round not found",
@@ -504,7 +504,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 			},
 			expectedError:            false, // Service uses failure payload instead of error
 			expectedErrorMessagePart: "failed to get EventMessageID",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -548,7 +548,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 			},
 			expectedError:            false, // Service uses failure payload instead of error
 			expectedErrorMessagePart: "cannot update schedule",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				// For this test case, since we're not implementing the actual validation logic,
 				// we expect success. In a real implementation, this would validate round state.
 				if returnedResult.Success == nil {
@@ -592,7 +592,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				return payload, round.ID
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
@@ -643,7 +643,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				return payload, round.ID
 			},
 			expectedError: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}

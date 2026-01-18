@@ -4,10 +4,8 @@ import (
 	"testing"
 
 	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -25,13 +23,11 @@ func TestNewRoundHandlers(t *testing.T) {
 
 				// Create mock dependencies
 				mockRoundService := roundservice.NewMockService(ctrl)
-				logger := loggerfrolfbot.NoOpLogger
-				tracer := noop.NewTracerProvider().Tracer("test")
 				mockHelpersInstance := mockHelpers.NewMockHelpers(ctrl)
-				mockMetrics := mocks.NewMockRoundMetrics(ctrl)
+				logger := loggerfrolfbot.NoOpLogger
 
 				// Call the function being tested
-				handlers := NewRoundHandlers(mockRoundService, logger, tracer, mockHelpersInstance, mockMetrics)
+				handlers := NewRoundHandlers(mockRoundService, logger, mockHelpersInstance)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -42,20 +38,12 @@ func TestNewRoundHandlers(t *testing.T) {
 				roundHandlers := handlers.(*RoundHandlers)
 
 				// Check that all dependencies were correctly assigned
-				if roundHandlers.roundService != mockRoundService {
-					t.Errorf("roundService not correctly assigned")
-				}
-				if roundHandlers.logger != logger {
-					t.Errorf("logger not correctly assigned")
-				}
-				if roundHandlers.tracer != tracer {
-					t.Errorf("tracer not correctly assigned")
+				// Note: only service and helpers are stored in the struct now
+				if roundHandlers.service != mockRoundService {
+					t.Errorf("service not correctly assigned")
 				}
 				if roundHandlers.helpers != mockHelpersInstance {
 					t.Errorf("helpers not correctly assigned")
-				}
-				if roundHandlers.metrics != mockMetrics {
-					t.Errorf("metrics not correctly assigned")
 				}
 			},
 		},
@@ -66,7 +54,7 @@ func TestNewRoundHandlers(t *testing.T) {
 				defer ctrl.Finish()
 
 				// Call with nil dependencies
-				handlers := NewRoundHandlers(nil, nil, nil, nil, nil)
+				handlers := NewRoundHandlers(nil, nil, nil)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -74,21 +62,13 @@ func TestNewRoundHandlers(t *testing.T) {
 				}
 
 				// Check nil fields
+				// Note: only service and helpers are stored in the struct now
 				if roundHandlers, ok := handlers.(*RoundHandlers); ok {
-					if roundHandlers.roundService != nil {
-						t.Errorf("roundService should be nil")
-					}
-					if roundHandlers.logger != nil {
-						t.Errorf("logger should be nil")
-					}
-					if roundHandlers.tracer != nil {
-						t.Errorf("tracer should be nil")
+					if roundHandlers.service != nil {
+						t.Errorf("service should be nil")
 					}
 					if roundHandlers.helpers != nil {
 						t.Errorf("helpers should be nil")
-					}
-					if roundHandlers.metrics != nil {
-						t.Errorf("metrics should be nil")
 					}
 				} else {
 					t.Errorf("handlers is not of type *RoundHandlers")

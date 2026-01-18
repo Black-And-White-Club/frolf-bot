@@ -8,98 +8,73 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	"github.com/google/go-cmp/cmp"
 )
 
 // CreateGuildConfig creates a new guild configuration.
-// Common domain errors for guild config
-var (
-	ErrGuildConfigConflict = errors.New("guild config already exists with different settings - use update instead")
-	ErrInvalidGuildID      = errors.New("invalid guild ID")
-	ErrNilContext          = errors.New("context cannot be nil")
-)
-
-// CreateGuildConfig creates a new guild configuration.
-func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (GuildOperationResult, error) {
-	if ctx == nil {
-		return GuildOperationResult{
-			Error: ErrNilContext,
-		}, ErrNilContext
-	}
-
+// Idempotent: re-creating an identical config returns success.
+func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
+	// Pre-validation (before telemetry)
 	if config == nil {
-		return createGuildConfigFailureResult("", config, errors.New("config payload is nil")), errors.New("config payload is nil")
-	}
-	guildID := config.GuildID
-	if guildID == "" {
-		return createGuildConfigFailureResult(guildID, config, ErrInvalidGuildID), nil
-	}
-	// Validation: require key config fields
-	if config.SignupChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("signup channel ID required")), nil
-	}
-	if config.EventChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("event channel ID required")), nil
-	}
-	if config.LeaderboardChannelID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("leaderboard channel ID required")), nil
-	}
-	if config.UserRoleID == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("user role ID required")), nil
-	}
-	if config.SignupEmoji == "" {
-		return createGuildConfigFailureResult(guildID, config, errors.New("signup emoji required")), nil
+		return creationFailure("", ErrNilConfig), nil
 	}
 
-	// Check if config already exists
-	existing, err := s.GuildDB.GetConfig(ctx, guildID)
-	if err != nil {
-		// Database error occurred during lookup
-		return createGuildConfigFailureResult(guildID, config, err), err
-	}
-	if existing != nil {
-		if guildConfigsEqual(existing, config) {
-			successPayload := &guildevents.GuildConfigCreatedPayloadV1{
-				GuildID: guildID,
-				Config:  *existing,
-			}
-			return GuildOperationResult{
-				Success: successPayload,
-			}, nil
+	guildID := config.GuildID
+
+	return s.withTelemetry(ctx, "CreateGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
+		// Validate guild ID
+		if guildID == "" {
+			return creationFailure(guildID, ErrInvalidGuildID), nil
 		}
 
-		return createGuildConfigFailureResult(guildID, config, ErrGuildConfigConflict), nil
-	}
+		// Domain-level validation
+		if err := config.Validate(); err != nil {
+			return creationFailure(guildID, err), nil
+		}
 
-	// Save config (repository handles conversion to DB model)
-	err = s.GuildDB.SaveConfig(ctx, config)
-	if err != nil {
-		return createGuildConfigFailureResult(guildID, config, err), err
-	}
+		// Check for existing configuration (idempotency)
+		existing, err := s.repo.GetConfig(ctx, guildID)
+		if err != nil && !errors.Is(err, guilddb.ErrNotFound) {
+			// Infrastructure error - should retry
+			return creationFailure(guildID, err), err
+		}
 
-	// Success payload (return the canonical config)
-	successPayload := &guildevents.GuildConfigCreatedPayloadV1{
-		GuildID: guildID,
-		Config:  *config,
-	}
-	return GuildOperationResult{
-		Success: successPayload,
-	}, nil
-}
+		if existing != nil {
+			// Config exists - check if identical (idempotent success)
+			if configsEqual(existing, config) {
+				return results.SuccessResult(&guildevents.GuildConfigCreatedPayloadV1{
+					GuildID: guildID,
+					Config:  *existing,
+				}), nil
+			}
+			// Conflict - exists but differs
+			return creationFailure(guildID, ErrGuildConfigConflict), nil
+		}
 
-// createGuildConfigFailureResult is a helper to create standardized failure results
-func createGuildConfigFailureResult(guildID sharedtypes.GuildID, config *guildtypes.GuildConfig, err error) GuildOperationResult {
-	return GuildOperationResult{
-		Success: nil,
-		Failure: &guildevents.GuildConfigCreationFailedPayloadV1{
+		// Save new configuration
+		if err := s.repo.SaveConfig(ctx, config); err != nil {
+			return creationFailure(guildID, err), err
+		}
+
+		return results.SuccessResult(&guildevents.GuildConfigCreatedPayloadV1{
 			GuildID: guildID,
-			Reason:  err.Error(),
-		},
-		Error: err,
-	}
+			Config:  *config,
+		}), nil
+	})
 }
 
-var guildConfigCmpOptions = []cmp.Option{
+// creationFailure creates a failure result for config creation.
+func creationFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
+	return results.FailureResult(&guildevents.GuildConfigCreationFailedPayloadV1{
+		GuildID: guildID,
+		Reason:  err.Error(),
+	})
+}
+
+// configCmpOptions defines how to compare GuildConfig structs for idempotency checks.
+var configCmpOptions = []cmp.Option{
 	cmp.Comparer(func(a, b *time.Time) bool {
 		if a == nil || b == nil {
 			return a == b
@@ -108,10 +83,10 @@ var guildConfigCmpOptions = []cmp.Option{
 	}),
 }
 
-func guildConfigsEqual(a, b *guildtypes.GuildConfig) bool {
+// configsEqual performs a deep comparison between two configurations.
+func configsEqual(a, b *guildtypes.GuildConfig) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-
-	return cmp.Equal(*a, *b, guildConfigCmpOptions...)
+	return cmp.Equal(*a, *b, configCmpOptions...)
 }

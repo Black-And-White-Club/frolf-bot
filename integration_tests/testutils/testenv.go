@@ -26,7 +26,6 @@ import (
 	eventbusmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
-	"github.com/Black-And-White-Club/frolf-bot/integration_tests/containers"
 )
 
 // TestEnvironment holds all resources needed for integration testing
@@ -42,10 +41,6 @@ type TestEnvironment struct {
 	JetStream     jetstream.JetStream
 	Config        *config.Config
 	T             *testing.T
-	// Add container lifecycle management fields
-	testCount      int
-	recreateAfter  int
-	lastRecreation time.Time
 }
 
 // NewTestEnvironment creates a new test environment with Postgres and NATS containers
@@ -58,7 +53,6 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		Ctx:           ctx,
 		CancelContext: cancel,
 		T:             t,
-		recreateAfter: 20, // Recreate containers every 20 tests
 	}
 
 	if err := env.setupContainers(ctx); err != nil {
@@ -66,28 +60,21 @@ func NewTestEnvironment(t *testing.T) (*TestEnvironment, error) {
 		return nil, err
 	}
 
-	env.lastRecreation = time.Now()
 	return env, nil
 }
 
 // setupContainers initializes all containers and connections
 func (env *TestEnvironment) setupContainers(ctx context.Context) error {
-	pgContainer, pgConnStr, err := containers.SetupPostgresContainer(ctx)
+	pgContainer, natsContainer, pgConnStr, natsURL, err := globalPool.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to setup postgres container: %w", err)
+		return fmt.Errorf("failed to acquire containers from pool: %w", err)
 	}
 	env.PgContainer = pgContainer
-
-	natsContainer, natsURL, err := containers.SetupNatsContainer(ctx)
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		return fmt.Errorf("failed to setup nats container: %w", err)
-	}
 	env.NatsContainer = natsContainer
 
 	sqlDB, err := sql.Open("pgx", pgConnStr)
 	if err != nil {
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to open sql DB connection: %w", err)
 	}
 
@@ -96,14 +83,14 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 
 	if err := runMigrationsWithConnStr(db, pgConnStr); err != nil {
 		db.Close()
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	dbService, err := bundb.NewTestDBService(db)
 	if err != nil {
 		db.Close()
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to create DB service: %w", err)
 	}
 	env.DBService = dbService
@@ -111,7 +98,7 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	natsConn, err := nats.Connect(natsURL, nats.Timeout(10*time.Second))
 	if err != nil {
 		db.Close()
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	env.NatsConn = natsConn
@@ -120,7 +107,7 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	if err != nil {
 		natsConn.Close()
 		db.Close()
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to create JetStream context: %w", err)
 	}
 	env.JetStream = js
@@ -132,11 +119,19 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	env.Config = cfg
 
 	// Create EventBus
-	discardLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// By default tests discard EventBus logs to avoid noisy output. For debugging hangs
+	// you can enable EventBus logs by setting STREAM_EVENTBUS_LOGS=1 in the environment.
+	var eventLogger *slog.Logger
+	if os.Getenv("STREAM_EVENTBUS_LOGS") == "1" {
+		eventLogger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	} else {
+		eventLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	eventBus, err := eventbus.NewEventBus(
 		ctx,
 		natsURL,
-		discardLogger,
+		eventLogger,
 		"backend",
 		eventbusmetrics.NewNoop(),
 		noop.NewTracerProvider().Tracer("test"),
@@ -144,7 +139,7 @@ func (env *TestEnvironment) setupContainers(ctx context.Context) error {
 	if err != nil {
 		natsConn.Close()
 		db.Close()
-		cleanupContainers(ctx, pgContainer, natsContainer)
+		globalPool.Release()
 		return fmt.Errorf("failed to create EventBus: %w", err)
 	}
 	env.EventBus = eventBus
@@ -159,8 +154,13 @@ func (env *TestEnvironment) Reset(ctx context.Context) error {
 		return fmt.Errorf("failed to cleanup database: %w", err)
 	}
 
-	// Reset JetStream
-	if err := env.ResetJetStreamState(ctx, "round", "user", "discord", "delayed", "leaderboard", "score"); err != nil {
+	// Delete all consumers first (new)
+	if err := env.DeleteJetStreamConsumers(ctx, StandardStreamNames...); err != nil {
+		return fmt.Errorf("failed to delete consumers: %w", err)
+	}
+
+	// Then purge messages
+	if err := env.ResetJetStreamState(ctx, StandardStreamNames...); err != nil {
 		return fmt.Errorf("failed to reset JetStream: %w", err)
 	}
 
@@ -230,35 +230,11 @@ func (env *TestEnvironment) Cleanup() {
 		log.Println("DB connection closed.")
 	}
 
-	// Terminate containers with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if env.NatsContainer != nil {
-		if err := env.NatsContainer.Terminate(ctx); err != nil {
-			log.Printf("Error terminating NATS container: %v", err)
-		} else {
-			log.Println("NATS container terminated.")
-		}
-	}
-	if env.PgContainer != nil {
-		if err := env.PgContainer.Terminate(ctx); err != nil {
-			log.Printf("Error terminating Postgres container: %v", err)
-		} else {
-			log.Println("PostgreSQL container terminated.")
-		}
-	}
+	// Release container pool reference (don't terminate containers)
+	globalPool.Release()
 	log.Println("Cleanup complete.")
 }
 
-func cleanupContainers(ctx context.Context, pg *postgres.PostgresContainer, nats testcontainers.Container) {
-	if pg != nil {
-		pg.Terminate(ctx)
-	}
-	if nats != nil {
-		nats.Terminate(ctx)
-	}
-}
 
 // configureLocalDockerAutodetect sets minimal Testcontainers overrides for Colima environments
 // to make the integration suite plug-and-play. It only applies when:

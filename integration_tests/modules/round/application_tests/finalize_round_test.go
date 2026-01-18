@@ -9,7 +9,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -20,7 +20,7 @@ func TestFinalizeRound(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.AllScoresSubmittedPayloadV1)
 		expectedFailure          bool // Changed from expectedError
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Successful finalization of an existing round",
@@ -44,7 +44,7 @@ func TestFinalizeRound(t *testing.T) {
 				}
 			},
 			expectedFailure: false, // Changed from expectedError
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil. Actual: %#v (type: %T)", returnedResult.Success, returnedResult.Success)
 				}
@@ -90,7 +90,7 @@ func TestFinalizeRound(t *testing.T) {
 			},
 			expectedFailure:          true,
 			expectedErrorMessagePart: "failed to fetch round data", // Updated to match actual implementation
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
@@ -125,7 +125,7 @@ func TestFinalizeRound(t *testing.T) {
 			},
 			expectedFailure:          true,
 			expectedErrorMessagePart: "failed to fetch round data", // Updated to match actual implementation
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success != nil {
 					t.Errorf("Expected nil success on failure, but got: %+v", returnedResult.Success)
 				}
@@ -168,7 +168,7 @@ func TestFinalizeRound(t *testing.T) {
 				}
 			},
 			expectedFailure: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -249,7 +249,7 @@ func TestNotifyScoreModule(t *testing.T) {
 		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) (sharedtypes.RoundID, *roundevents.RoundFinalizedPayloadV1)
 		expectedFailure          bool
 		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult)
+		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
 	}{
 		{
 			name: "Successful notification with participants having scores and tag numbers",
@@ -293,7 +293,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				}
 			},
 			expectedFailure: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}
@@ -381,7 +381,7 @@ func TestNotifyScoreModule(t *testing.T) {
 			},
 			expectedFailure:          true, // Changed to expect failure
 			expectedErrorMessagePart: "no participants with submitted scores found",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -421,7 +421,7 @@ func TestNotifyScoreModule(t *testing.T) {
 			},
 			expectedFailure:          true, // Changed to expect failure
 			expectedErrorMessagePart: "no participants with submitted scores found",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
 				}
@@ -485,7 +485,7 @@ func TestNotifyScoreModule(t *testing.T) {
 				}
 			},
 			expectedFailure: false,
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Success == nil {
 					t.Fatalf("Expected success result, but got nil")
 				}

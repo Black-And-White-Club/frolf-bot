@@ -69,7 +69,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+	mockDB := rounddbmocks.NewMockRepository(ctrl)
 	ctx := context.Background()
 	basePayload := roundevents.ScorecardUploadedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
@@ -213,7 +213,7 @@ func TestRoundService_HandleScorecardURLRequested(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+	mockDB := rounddbmocks.NewMockRepository(ctrl)
 	ctx := context.Background()
 	payload := roundevents.ScorecardURLRequestedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
@@ -275,7 +275,7 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+	mockDB := rounddbmocks.NewMockRepository(ctrl)
 	ctx := context.Background()
 	basePayload := roundevents.ScorecardUploadedPayloadV1{
 		GuildID:   sharedtypes.GuildID("guild-1"),
@@ -365,7 +365,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
@@ -384,7 +384,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
@@ -408,7 +408,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ParsedScorecardPayloadV1{
 			GuildID:  sharedtypes.GuildID("guild-1"),
@@ -432,7 +432,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
 		player := roundtypes.PlayerScoreRow{PlayerName: "Matched One", HoleScores: []int{3, 3}, Total: 0}
@@ -476,7 +476,7 @@ func TestRoundService_IngestParsedScorecard(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		mockEventBus := mocks.NewMockEventBus(ctrl)
 		ctx := context.Background()
 		player := roundtypes.PlayerScoreRow{PlayerName: "Auto Add", HoleScores: []int{2, 2}, Total: -2}
@@ -547,7 +547,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
@@ -569,7 +569,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),
@@ -593,7 +593,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		roundID := sharedtypes.RoundID(uuid.New())
 		payload := roundevents.ImportCompletedPayloadV1{
@@ -635,7 +635,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := rounddbmocks.NewMockRoundDB(ctrl)
+		mockDB := rounddbmocks.NewMockRepository(ctrl)
 		ctx := context.Background()
 		payload := roundevents.ImportCompletedPayloadV1{
 			GuildID:  sharedtypes.GuildID("g-1"),

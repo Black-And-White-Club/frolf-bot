@@ -4,7 +4,6 @@ import (
 	"context"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -13,12 +12,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 	ctx context.Context,
 	payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, failure, err := h.leaderboardService.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, payload.TagNumber)
+	result, failure, err := h.service.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, payload.TagNumber)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed to handle TagAvailabilityCheckRequested event",
-			attr.ExtractCorrelationID(ctx),
-			attr.Error(err),
-		)
 		return nil, err
 	}
 

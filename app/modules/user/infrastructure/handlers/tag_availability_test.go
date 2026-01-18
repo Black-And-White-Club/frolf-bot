@@ -9,7 +9,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -45,10 +45,9 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
 						Failure: nil,
-						Error:   nil,
 					},
 					nil,
 				)
@@ -66,7 +65,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: nil,
 						Failure: &userevents.UserCreationFailedPayloadV1{
 							GuildID:   testGuildID,
@@ -74,7 +73,6 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 							TagNumber: &testTagNumber,
 							Reason:    "failed",
 						},
-						Error: nil,
 					},
 					nil,
 				)
@@ -92,8 +90,8 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					userservice.UserOperationResult{},
-					nil,
+					results.OperationResult{},
+					context.DeadlineExceeded,
 				)
 			},
 			wantErr: true,

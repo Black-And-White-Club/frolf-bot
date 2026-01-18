@@ -4,82 +4,66 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/ptr"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 )
 
-// UpdateGuildConfig updates an existing guild configuration.
-func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (GuildOperationResult, error) {
-	if ctx == nil {
-		return GuildOperationResult{
-			Error: errors.New("context cannot be nil"),
-		}, errors.New("context cannot be nil")
-	}
+// UpdateGuildConfig updates an existing guild configuration using partial updates.
+func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
+	// Pre-validation (before telemetry)
 	if config == nil {
-		return GuildOperationResult{
-			Error: errors.New("config cannot be nil"),
-		}, errors.New("config cannot be nil")
+		return updateFailure("", ErrNilConfig), nil
 	}
+
 	guildID := config.GuildID
-	if guildID == "" {
-		return GuildOperationResult{
-			Error: errors.New("invalid guild ID"),
-		}, errors.New("invalid guild ID")
-	}
 
-	return s.serviceWrapper(ctx, "UpdateGuildConfig", guildID, func(ctx context.Context) (GuildOperationResult, error) {
-		existing, err := s.GuildDB.GetConfig(ctx, guildID)
-		if err != nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  "could not fetch existing config: " + err.Error(),
-				},
-				Error: err,
-			}, err
-		}
-		if existing == nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  "guild config not found",
-				},
-				Error: errors.New("guild config not found"),
-			}, nil
+	return s.withTelemetry(ctx, "UpdateGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
+		// Validate
+		if guildID == "" {
+			return updateFailure(guildID, ErrInvalidGuildID), nil
 		}
 
-		// Build updates map from config.
-		// Keys are Go-style field names and are validated/translated by the repository layer.
-		updates := map[string]any{
-			"SignupChannelID":      config.SignupChannelID,
-			"SignupMessageID":      config.SignupMessageID,
-			"EventChannelID":       config.EventChannelID,
-			"LeaderboardChannelID": config.LeaderboardChannelID,
-			"UserRoleID":           config.UserRoleID,
-			"EditorRoleID":         config.EditorRoleID,
-			"AdminRoleID":          config.AdminRoleID,
-			"SignupEmoji":          config.SignupEmoji,
-			"AutoSetupCompleted":   config.AutoSetupCompleted,
-			"SetupCompletedAt":     config.SetupCompletedAt,
-			// Add more fields as needed
+		// Build partial update fields
+		updates := &guilddb.UpdateFields{
+			SignupChannelID:      ptr.IfNonEmpty(config.SignupChannelID),
+			SignupMessageID:      ptr.IfNonEmpty(config.SignupMessageID),
+			EventChannelID:       ptr.IfNonEmpty(config.EventChannelID),
+			LeaderboardChannelID: ptr.IfNonEmpty(config.LeaderboardChannelID),
+			UserRoleID:           ptr.IfNonEmpty(config.UserRoleID),
+			EditorRoleID:         ptr.IfNonEmpty(config.EditorRoleID),
+			AdminRoleID:          ptr.IfNonEmpty(config.AdminRoleID),
+			SignupEmoji:          ptr.IfNonEmpty(config.SignupEmoji),
+			AutoSetupCompleted:   ptr.IfTrue(config.AutoSetupCompleted),
+			SetupCompletedAt:     ptr.TimeToUnixNano(config.SetupCompletedAt),
 		}
 
-		err = s.GuildDB.UpdateConfig(ctx, guildID, updates)
-		if err != nil {
-			return GuildOperationResult{
-				Failure: &guildevents.GuildConfigUpdateFailedPayloadV1{
-					GuildID: guildID,
-					Reason:  err.Error(),
-				},
-				Error: err,
-			}, err
+		// Perform the update
+		if err := s.repo.UpdateConfig(ctx, guildID, updates); err != nil {
+			if errors.Is(err, guilddb.ErrNoRowsAffected) {
+				// No active config found - domain failure
+				return updateFailure(guildID, ErrGuildConfigNotFound), nil
+			}
+			// Infrastructure error - should retry
+			return updateFailure(guildID, err), err
 		}
 
-		return GuildOperationResult{
-			Success: &guildevents.GuildConfigUpdatedPayloadV1{
-				GuildID: guildID,
-				Config:  *config,
-			},
-		}, nil
+		// Success
+		return results.SuccessResult(&guildevents.GuildConfigUpdatedPayloadV1{
+			GuildID: guildID,
+			Config:  *config,
+		}), nil
+	})
+}
+
+// updateFailure creates a failure result for config update.
+func updateFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
+	return results.FailureResult(&guildevents.GuildConfigUpdateFailedPayloadV1{
+		GuildID: guildID,
+		Reason:  err.Error(),
 	})
 }

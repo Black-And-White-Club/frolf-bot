@@ -14,22 +14,13 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(ctx context.Context, payload *
 		return nil, errors.New("payload cannot be nil")
 	}
 
-	result, err := h.guildService.GetGuildConfig(ctx, payload.GuildID)
+	result, err := h.service.GetGuildConfig(ctx, payload.GuildID)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigRetrievalFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigRetrievedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, errors.New("unexpected empty result from GetGuildConfig service")
+	return mapOperationResult(result,
+		guildevents.GuildConfigRetrievedV1,
+		guildevents.GuildConfigRetrievalFailedV1,
+	), nil
 }

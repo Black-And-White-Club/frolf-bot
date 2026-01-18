@@ -9,13 +9,14 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
-func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
+func TestUserService_UpdateUserRoleInDatabase(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -26,7 +27,7 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 	invalidRole := sharedtypes.UserRoleEnum("InvalidRole")
 	dbErr := errors.New("database connection failed")
 
-	mockDB := userdb.NewMockUserDB(ctrl)
+	mockDB := userdb.NewMockRepository(ctrl)
 
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &usermetrics.NoOpMetrics{}
@@ -35,88 +36,72 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		mockDBSetup      func(*userdb.MockUserDB)
+		mockDBSetup      func(*userdb.MockRepository)
 		newRole          sharedtypes.UserRoleEnum
-		expectedOpResult UserOperationResult
+		expectedOpResult results.OperationResult
 		expectedErr      error // This should be the error returned by the mocked serviceWrapper (which is the error from the inner serviceFunc)
 	}{
 		{
 			name: "Successfully updates user role",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
 					Return(nil)
 			},
 			newRole: testRole,
-			expectedOpResult: UserOperationResult{
-				Success: &userevents.UserRoleUpdateResultPayloadV1{
-					UserID:  testUserID,
-					Role:    testRole,
-					Success: true,
-					Reason:  "",
-				},
-				Failure: nil,
-				Error:   nil,
-			},
+			expectedOpResult: results.SuccessResult(&userevents.UserRoleUpdateResultPayloadV1{
+				UserID:  testUserID,
+				Role:    testRole,
+				Success: true,
+				Reason:  "",
+			}),
 			expectedErr: nil,
 		},
 		{
 			name: "Fails due to invalid role",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				// No database call expected for invalid role
 			},
 			newRole: invalidRole,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
-					UserID:  testUserID,
-					Role:    invalidRole,
-					Success: false,
-					Reason:  "invalid role", // Reason set in the service code (Reason field)
-				},
-				Error: errors.New("invalid role"), // Error within the result
-			},
+			expectedOpResult: results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
+				UserID:  testUserID,
+				Role:    invalidRole,
+				Success: false,
+				Reason:  "invalid role", // Reason set in the service code (Reason field)
+			}),
 			expectedErr: nil, // Mocked serviceWrapper returns nil error at top level for this case
 		},
 		{
 			name: "Fails due to user not found",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
-					Return(userdbtypes.ErrUserNotFound)
+					Return(userdbtypes.ErrNotFound)
 			},
 			newRole: testRole,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
-					UserID:  testUserID,
-					Role:    testRole,
-					Success: false,
-					Reason:  "user not found", // Reason set in the service code (Reason field)
-				},
-				Error: userdbtypes.ErrUserNotFound, // Error within the result
-			},
+			expectedOpResult: results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
+				UserID:  testUserID,
+				Role:    testRole,
+				Success: false,
+				Reason:  "user not found", // Reason set in the service code (Reason field)
+			}),
 			// Service now returns failure payload with Error populated but no top-level error
 			expectedErr: nil,
 		},
 		{
 			name: "Fails due to database error",
-			mockDBSetup: func(mockDB *userdb.MockUserDB) {
+			mockDBSetup: func(mockDB *userdb.MockRepository) {
 				mockDB.EXPECT().
 					UpdateUserRole(gomock.Any(), testUserID, testGuildID, testRole).
 					Return(dbErr)
 			},
 			newRole: testRole,
-			expectedOpResult: UserOperationResult{
-				Success: nil,
-				Failure: &userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
-					UserID:  testUserID,
-					Role:    testRole,
-					Success: false,
-					Reason:  "failed to update user role", // Reason set in the service code (Reason field)
-				},
-				Error: dbErr, // Error within the result
-			},
+			expectedOpResult: results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{ // Expecting UserRoleUpdateResultPayloadV1
+				UserID:  testUserID,
+				Role:    testRole,
+				Success: false,
+				Reason:  "failed to update user role", // Reason set in the service code (Reason field)
+			}),
 			// Service now returns failure payload with Error populated but no top-level error
 			expectedErr: nil,
 		},
@@ -126,18 +111,11 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
-			s := &UserServiceImpl{
-				UserDB:  mockDB,
+			s := &UserService{
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				// Mock the serviceWrapper to call the provided function directly in tests
-				serviceWrapper: func(ctx context.Context, operationName string, userID sharedtypes.DiscordID, serviceFunc func(ctx context.Context) (UserOperationResult, error)) (UserOperationResult, error) {
-					// In the test wrapper, just call the actual service function and return its result
-					// We skip the real wrapper's tracing, logging, metrics, panic recovery for simplicity
-					// as these are concerns of the wrapper itself, not the service method logic being tested.
-					return serviceFunc(ctx)
-				},
 			}
 
 			gotResult, gotErr := s.UpdateUserRoleInDatabase(ctx, testGuildID, testUserID, tt.newRole)
@@ -183,17 +161,6 @@ func TestUserServiceImpl_UpdateUserRoleInDatabase(t *testing.T) {
 
 			} else if gotResult.Failure != nil {
 				t.Errorf("Unexpected failure payload: %v", gotResult.Failure)
-			}
-
-			// Validate the Error field within the UserOperationResult
-			if tt.expectedOpResult.Error != nil {
-				if gotResult.Error == nil {
-					t.Errorf("Expected error in result, got nil")
-				} else if gotResult.Error.Error() != tt.expectedOpResult.Error.Error() {
-					t.Errorf("Mismatched result error reason, got: %v, expected: %v", gotResult.Error.Error(), tt.expectedOpResult.Error.Error())
-				}
-			} else if gotResult.Error != nil {
-				t.Errorf("Unexpected error in result: %v", gotResult.Error)
 			}
 
 			// Validate the top-level returned error

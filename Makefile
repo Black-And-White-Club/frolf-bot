@@ -334,33 +334,89 @@ test-round-summary:
 	rm -f $$TEMP_FILE; \
 	exit $$EXIT_CODE)
 
-# --- Go Coverage Targets ---
-COV_DATA := $(REPORTS_DIR)/coverage_data
-COV_TEXT := $(REPORTS_DIR)/coverage.out
+# -------------------------------
+# Coverage (Sane & Actionable)
+# -------------------------------
 
-REPORTS_DIR = reports
-COVER_PKGS = ./app/...
+REPORTS_DIR := reports
 
-coverage-all:
+# Only business logic packages
+COVER_PKGS := $(shell go list ./app/... | \
+	grep -E '/application|/infrastructure/handlers' | \
+	grep -vE '/mocks|/migrations' | \
+	tr '\n' ',' | sed 's/,$$//')
+
+coverage:
 	@mkdir -p $(REPORTS_DIR)
-	@echo "Running all tests (Unit + Integration) cumulatively..."
-	
-	@# 1. Run everything at once. 
-	@# -coverpkg=./app/... ensures integration tests contribute to /app coverage.
-	@# We exclude the integration_tests folder from the "measured" packages so they don't bloat the denominator.
-	@go test -v ./app/... ./integration_tests/... \
+	@echo "=========================================="
+	@echo "Running unit + integration tests"
+	@echo "Measured packages:"
+	@echo "  $(COVER_PKGS)"
+	@echo "=========================================="
+
+	@go test -v \
+		./app/... \
+		./integration_tests/... \
 		-coverpkg=$(COVER_PKGS) \
-		-coverprofile=$(REPORTS_DIR)/coverage-raw.out
-	
-	@echo "Filtering out mocks, migrations, and test utils..."
-	@# 2. Use a cleaner filter for the final report
-	@grep -Ev "mock|_mock|migrations|testutils|app/app.go|main.go|module.go" $(REPORTS_DIR)/coverage-raw.out > $(REPORTS_DIR)/coverage.out
-	
+		-coverprofile=$(REPORTS_DIR)/coverage.out
+
 	@echo "=========================================="
-	@echo "CUMULATIVE PERCENTAGE:"
-	@go tool cover -func=$(REPORTS_DIR)/coverage.out | grep total | awk '{print $$3}'
+	@echo "COVERAGE TOTAL:"
+	@go tool cover -func=$(REPORTS_DIR)/coverage.out | grep total
 	@echo "=========================================="
-	@echo "HTML Report: go tool cover -html=$(REPORTS_DIR)/coverage.out"
+	@echo "HTML REPORT:"
+	@echo "go tool cover -html=$(REPORTS_DIR)/coverage.out"
+
+REPORTS_DIR := reports
+
+UNIT_COVER_PKGS := $(shell go list ./app/... | \
+	grep -E '/application|/shared|/infrastructure/handlers' | \
+	grep -vE '/mocks|/migrations|/router|/models|/interfaces' | \
+	tr '\n' ',' | sed 's/,$$//')
+
+coverage-unit:
+	@mkdir -p $(REPORTS_DIR)
+	@echo "=========================================="
+	@echo "UNIT / API COVERAGE"
+	@echo "Measured packages:"
+	@echo "  $(UNIT_COVER_PKGS)"
+	@echo "=========================================="
+
+	@go test -v ./app/... \
+		-covermode=atomic \
+		-coverpkg=$(UNIT_COVER_PKGS) \
+		-coverprofile=$(REPORTS_DIR)/coverage-unit.out
+
+	@echo "=========================================="
+	@echo "UNIT COVERAGE TOTAL:"
+	@go tool cover -func=$(REPORTS_DIR)/coverage-unit.out | grep total
+	@echo "=========================================="
+	@echo "HTML REPORT:"
+	@echo "go tool cover -html=$(REPORTS_DIR)/coverage-unit.out"
+
+INTEGRATION_COVER_PKGS := $(shell go list ./app/... | \
+	grep -E '/repositories|/events' | \
+	grep -vE '/migrations|/mocks' | \
+	tr '\n' ',' | sed 's/,$$//')
+
+coverage-integration:
+	@mkdir -p $(REPORTS_DIR)
+	@echo "=========================================="
+	@echo "INTEGRATION COVERAGE"
+	@echo "Measured packages:"
+	@echo "  $(INTEGRATION_COVER_PKGS)"
+	@echo "=========================================="
+
+	@go test -v ./integration_tests/... \
+		-covermode=atomic \
+		-coverpkg=$(INTEGRATION_COVER_PKGS) \
+		-coverprofile=$(REPORTS_DIR)/coverage-integration.out
+
+	@echo "=========================================="
+	@echo "INTEGRATION COVERAGE TOTAL:"
+	@go tool cover -func=$(REPORTS_DIR)/coverage-integration.out | grep total
+	@echo "=========================================="
+
 
 # Enhanced coverage with test counts
 coverage-all-with-counts:
@@ -382,34 +438,6 @@ coverage-html: coverage-all
 	@go tool cover -html=$(COV_TEXT) -o $(REPORTS_DIR)/coverage.html
 	@echo "HTML report: $(REPORTS_DIR)/coverage.html"
 	@echo "Open with: open $(REPORTS_DIR)/coverage.html"
-
-# Run unit tests only with coverage
-coverage-unit:
-	@mkdir -p $(REPORTS_DIR)
-	@echo "Running unit tests only..."
-	@go test -v ./app/... -short \
-		-coverpkg=$(COVER_PKGS) \
-		-coverprofile=$(REPORTS_DIR)/unit-coverage-raw.out
-	@echo "Filtering out mocks, migrations, and test utils..."
-	@grep -Ev "mock|_mock|migrations|testutils" $(REPORTS_DIR)/unit-coverage-raw.out > $(REPORTS_DIR)/unit-coverage.out
-	@echo "=========================================="
-	@echo "UNIT TEST COVERAGE:"
-	@go tool cover -func=$(REPORTS_DIR)/unit-coverage.out | grep total | awk '{print $$3}'
-	@echo "=========================================="
-
-# Run integration tests only with coverage
-coverage-integration:
-	@mkdir -p $(REPORTS_DIR)
-	@echo "Running integration tests only..."
-	@go test -v ./integration_tests/... \
-		-coverpkg=$(COVER_PKGS) \
-		-coverprofile=$(REPORTS_DIR)/integration-coverage-raw.out
-	@echo "Filtering out mocks, migrations, and test utils..."
-	@grep -Ev "mock|_mock|migrations|testutils" $(REPORTS_DIR)/integration-coverage-raw.out > $(REPORTS_DIR)/integration-coverage.out
-	@echo "=========================================="
-	@echo "INTEGRATION TEST COVERAGE:"
-	@go tool cover -func=$(REPORTS_DIR)/integration-coverage.out | grep total | awk '{print $$3}'
-	@echo "=========================================="
 
 # Clean coverage reports
 clean-coverage:

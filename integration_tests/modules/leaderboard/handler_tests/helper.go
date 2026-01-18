@@ -93,7 +93,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 	oldEnv := os.Getenv("APP_ENV")
 	os.Setenv("APP_ENV", "test")
 
-	leaderboardDB := &leaderboarddb.LeaderboardDBImpl{DB: env.DB}
+	realDB := leaderboarddb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -155,7 +155,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		env.Config,
 		testObservability,
 		env.DB,
-		leaderboardDB,
+		realDB,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,
@@ -179,8 +179,13 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		}
 	}()
 
-	// Wait a moment for the router to initialize
-	time.Sleep(500 * time.Millisecond)
+	// Wait for router to be running
+	select {
+	case <-watermillRouter.Running():
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatal("router failed to start")
+	}
 
 	// Add comprehensive cleanup function to test context
 	cleanup := func() {

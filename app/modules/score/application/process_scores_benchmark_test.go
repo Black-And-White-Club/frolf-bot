@@ -17,14 +17,14 @@ import (
 )
 
 // setupBenchmarkService creates a service with mocked dependencies for benchmarking
-func setupBenchmarkService(t *testing.B, mockDB *scoredb.MockScoreDB) *ScoreService {
+func setupBenchmarkService(t *testing.B, mockDB *scoredb.MockRepository) *ScoreService {
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &scoremetrics.NoOpMetrics{}
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 
 	return &ScoreService{
-		ScoreDB: mockDB,
+		repo:    mockDB,
 		logger:  logger,
 		metrics: metrics,
 		tracer:  tracer,
@@ -79,7 +79,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 			ctrl := gomock.NewController(b)
 			defer ctrl.Finish()
 
-			mockDB := scoredb.NewMockScoreDB(ctrl)
+			mockDB := scoredb.NewMockRepository(ctrl)
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().
@@ -105,7 +105,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 			ctrl := gomock.NewController(b)
 			defer ctrl.Finish()
 
-			mockDB := scoredb.NewMockScoreDB(ctrl)
+			mockDB := scoredb.NewMockRepository(ctrl)
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().
@@ -131,7 +131,7 @@ func BenchmarkProcessRoundScores(b *testing.B) {
 			ctrl := gomock.NewController(b)
 			defer ctrl.Finish()
 
-			mockDB := scoredb.NewMockScoreDB(ctrl)
+			mockDB := scoredb.NewMockRepository(ctrl)
 
 			// Configure mock DB to accept any scores
 			mockDB.EXPECT().

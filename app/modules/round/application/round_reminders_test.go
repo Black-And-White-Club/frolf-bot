@@ -12,6 +12,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
@@ -50,7 +51,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -61,16 +62,16 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRoundDB)
+		mockDBSetup    func(*rounddb.MockRepository)
 		payload        roundevents.DiscordReminderPayloadV1
-		expectedResult RoundOperationResult
+		expectedResult results.OperationResult
 		expectedError  error
 	}{
 		{
 			name: "successful processing with participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
+				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
 			},
 			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
@@ -81,7 +82,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				ReminderType:   testReminderType,
 				EventMessageID: testDiscordMessageID,
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: roundevents.DiscordReminderPayloadV1{
 					RoundID:        testReminderRoundID,
 					RoundTitle:     testReminderRoundTitle,
@@ -96,9 +97,9 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		},
 		{
 			name: "successful processing with no participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
+				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
 			},
 			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
@@ -109,7 +110,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				ReminderType:   testReminderType,
 				EventMessageID: testDiscordMessageID,
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: roundevents.DiscordReminderPayloadV1{
 					RoundID:        testReminderRoundID,
 					GuildID:        sharedtypes.GuildID("guild-123"),
@@ -125,9 +126,9 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 		},
 		{
 			name: "error retrieving participants",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(ctx, guildID, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
+				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
 			},
 			payload: roundevents.DiscordReminderPayloadV1{
 				RoundID:        testReminderRoundID,
@@ -138,7 +139,7 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				ReminderType:   testReminderType,
 				EventMessageID: testDiscordMessageID,
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{ // Add pointer here
 					RoundID: testReminderRoundID,
 					Error:   "database error",
@@ -153,15 +154,12 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				EventBus:       mockEventBus,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
+				eventBus:       mockEventBus,
 			}
 
 			result, err := s.ProcessRoundReminder(ctx, tt.payload)

@@ -15,7 +15,7 @@ import (
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -44,10 +44,10 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateGuildConfig mocks base method.
-func (m *MockService) CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (guildservice.GuildOperationResult, error) {
+func (m *MockService) CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateGuildConfig", ctx, config)
-	ret0, _ := ret[0].(guildservice.GuildOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -59,10 +59,10 @@ func (mr *MockServiceMockRecorder) CreateGuildConfig(ctx, config any) *gomock.Ca
 }
 
 // DeleteGuildConfig mocks base method.
-func (m *MockService) DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (guildservice.GuildOperationResult, error) {
+func (m *MockService) DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteGuildConfig", ctx, guildID)
-	ret0, _ := ret[0].(guildservice.GuildOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,10 +74,10 @@ func (mr *MockServiceMockRecorder) DeleteGuildConfig(ctx, guildID any) *gomock.C
 }
 
 // GetGuildConfig mocks base method.
-func (m *MockService) GetGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (guildservice.GuildOperationResult, error) {
+func (m *MockService) GetGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetGuildConfig", ctx, guildID)
-	ret0, _ := ret[0].(guildservice.GuildOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (mr *MockServiceMockRecorder) GetGuildConfig(ctx, guildID any) *gomock.Call
 }
 
 // UpdateGuildConfig mocks base method.
-func (m *MockService) UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (guildservice.GuildOperationResult, error) {
+func (m *MockService) UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateGuildConfig", ctx, config)
-	ret0, _ := ret[0].(guildservice.GuildOperationResult)
+	ret0, _ := ret[0].(results.OperationResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

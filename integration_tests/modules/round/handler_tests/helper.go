@@ -2,7 +2,6 @@ package roundhandler_integration_tests
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -26,13 +25,14 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-// var (
-// 	testEnv     *testutils.TestEnvironment
-// 	testEnvOnce sync.Once
-// 	testEnvErr  error
-// )
-
+// Ensure these cover all streams the Round module interacts with
 var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+
+var (
+	testEnv     *testutils.TestEnvironment
+	testEnvOnce sync.Once
+	testEnvErr  error
+)
 
 type RoundHandlerTestDeps struct {
 	*testutils.TestEnvironment
@@ -43,62 +43,59 @@ type RoundHandlerTestDeps struct {
 	ReceivedMsgsMutex *sync.Mutex
 	TestObservability observability.Observability
 	TestHelpers       utils.Helpers
-	MessageCapture    *testutils.MessageCapture
 }
 
-// HandlerTestDeps is an alias for RoundHandlerTestDeps for consistency with user module naming
+// HandlerTestDeps alias for consistency
 type HandlerTestDeps = RoundHandlerTestDeps
-
-// func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
-// 	t.Helper()
-// 	testEnvOnce.Do(func() {
-// 		env, err := testutils.NewTestEnvironment(t)
-// 		if err != nil {
-// 			testEnvErr = err
-// 			return
-// 		}
-// 		testEnv = env
-// 	})
-// 	if testEnvErr != nil {
-// 		t.Fatalf("failed to initialize test environment: %v", testEnvErr)
-// 	}
-// 	return testEnv
-// }
-
-var (
-	testEnv     *testutils.TestEnvironment
-	testEnvOnce sync.Once
-	testEnvErr  error
-
-	// Global shared deps for the package
-	sharedDeps RoundHandlerTestDeps
-	// sharedOnce sync.Once
-)
 
 func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	t.Helper()
 	testEnvOnce.Do(func() {
+		log.Println("Initializing round handler test environment...")
 		env, err := testutils.NewTestEnvironment(t)
 		if err != nil {
 			testEnvErr = err
-			return
+			log.Printf("Failed to set up test environment: %v", err)
+		} else {
+			log.Println("Round handler test environment initialized successfully.")
+			testEnv = env
 		}
-		testEnv = env
 	})
+
 	if testEnvErr != nil {
-		t.Fatalf("failed to initialize test environment: %v", testEnvErr)
+		t.Fatalf("Round handler test environment initialization failed: %v", testEnvErr)
 	}
+	if testEnv == nil {
+		t.Fatalf("Round handler test environment not initialized")
+	}
+
 	return testEnv
 }
 
-// initSharedInfrastructure initializes the components that should persist
-// across all tests in this package.
-func initSharedInfrastructure(ctx context.Context, env *testutils.TestEnvironment) (RoundHandlerTestDeps, error) {
+func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
+	t.Helper()
+
+	// 1. Use NopLogger to silence Watermill noise
+	watermillLogger := watermill.NopLogger{}
+
+	env := GetTestEnv(t)
+
+	// 2. Prepare Contexts
+	resetCtx, resetCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer resetCancel()
+	if err := env.Reset(resetCtx); err != nil {
+		t.Fatalf("Failed to reset environment: %v", err)
+	}
+
+	oldEnv := os.Getenv("APP_ENV")
 	os.Setenv("APP_ENV", "test")
 
-	// 1. Create EventBus
+	testCtx, testCancel := context.WithCancel(context.Background())
+	routerRunCtx, routerRunCancel := context.WithCancel(testCtx)
+
+	// 3. Create Isolated EventBus (Already using io.Discard, which is good)
 	eventBusImpl, err := eventbus.NewEventBus(
-		ctx,
+		testCtx,
 		env.Config.NATS.URL,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		"backend",
@@ -106,108 +103,108 @@ func initSharedInfrastructure(ctx context.Context, env *testutils.TestEnvironmen
 		noop.NewTracerProvider().Tracer("test"),
 	)
 	if err != nil {
-		return RoundHandlerTestDeps{}, fmt.Errorf("failed to create EventBus: %w", err)
+		testCancel()
+		t.Fatalf("Failed to create EventBus: %v", err)
 	}
 
-	// 2. Setup Streams
+	// 4. Create Streams (Add error checking here but keep it quiet)
 	for _, streamName := range standardStreamNames {
-		if err := eventBusImpl.CreateStream(ctx, streamName); err != nil {
-			eventBusImpl.Close()
-			return RoundHandlerTestDeps{}, fmt.Errorf("failed to create stream %q: %w", streamName, err)
+		if err := eventBusImpl.CreateStream(testCtx, streamName); err != nil {
+			t.Fatalf("Failed to create stream %s: %v", streamName, err)
 		}
 	}
 
-	// 3. Setup Router
+	// 5. Router Setup
 	watermillRouter, err := message.NewRouter(message.RouterConfig{
-		CloseTimeout: 5 * time.Second,
-	}, watermill.NopLogger{})
+		CloseTimeout: 1 * time.Second,
+	}, watermillLogger)
 	if err != nil {
 		eventBusImpl.Close()
-		return RoundHandlerTestDeps{}, fmt.Errorf("failed to create router: %w", err)
+		testCancel()
+		t.Fatalf("Failed to create router: %v", err)
 	}
 	watermillRouter.AddMiddleware(middleware.CorrelationID)
 
-	testObservability := observability.Observability{
-		Provider: &observability.Provider{
-			Logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		},
-		Registry: &observability.Registry{
-			RoundMetrics: &roundmetrics.NoOpMetrics{},
-			Tracer:       noop.NewTracerProvider().Tracer("test"),
-		},
-	}
-
+	// 6. Dependencies & Module
+	realDB := rounddb.NewRepository(env.DB)
+	userRepo := userdb.NewRepository(env.DB)
 	realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
-	// 4. Initialize Round Module
-	// Note: We pass ctx twice (for the module and the router runner context)
 	roundModule, err := round.NewRoundModule(
-		ctx,
+		testCtx,
 		env.Config,
-		testObservability,
-		&rounddb.RoundDBImpl{DB: env.DB},
-		&userdb.UserDBImpl{DB: env.DB},
+		observability.Observability{
+			Provider: &observability.Provider{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))},
+			Registry: &observability.Registry{RoundMetrics: &roundmetrics.NoOpMetrics{}, Tracer: noop.NewTracerProvider().Tracer("test")},
+		},
+		realDB,
+		env.DB,
+		userRepo,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,
-		ctx,
+		routerRunCtx,
 	)
 	if err != nil {
 		eventBusImpl.Close()
-		watermillRouter.Close()
-		return RoundHandlerTestDeps{}, fmt.Errorf("failed to create round module: %w", err)
+		testCancel()
+		t.Fatalf("Failed to create round module: %v", err)
 	}
 
-	// 5. Start the Router goroutine
-	// It will stay running until the TestMain context is cancelled
+	// 7. Run Router
+	routerWg := &sync.WaitGroup{}
+	routerWg.Add(1)
 	go func() {
-		if runErr := watermillRouter.Run(ctx); runErr != nil && runErr != context.Canceled {
-			log.Printf("Global Watermill router exited with error: %v", runErr)
+		defer routerWg.Done()
+		if runErr := watermillRouter.Run(routerRunCtx); runErr != nil && runErr != context.Canceled {
+			// Use t.Errorf so it only shows up if something actually goes wrong
+			t.Errorf("Router exited unexpectedly: %v", runErr)
 		}
 	}()
 
-	// Give a small window for the router to finish subscribing
-	time.Sleep(500 * time.Millisecond)
+	select {
+	case <-watermillRouter.Running():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Router startup timed out")
+	}
+
+	// 8. Silent Cleanup
+	cleanup := func() {
+		// We removed the log.Println statements here.
+		// If you need to debug a hang again, you can add t.Log("Cleaning up...")
+		if watermillRouter != nil {
+			_ = watermillRouter.Close()
+		}
+
+		if roundModule != nil {
+			_ = roundModule.Close()
+		}
+
+		if eventBusImpl != nil {
+			eventBusImpl.Close()
+		}
+
+		routerRunCancel()
+		testCancel()
+
+		routerWg.Wait()
+		os.Setenv("APP_ENV", oldEnv)
+	}
+	t.Cleanup(cleanup)
+
+	localEnv := *env
+	localEnv.EventBus = eventBusImpl
 
 	return RoundHandlerTestDeps{
-		TestEnvironment:   env,
+		TestEnvironment:   &localEnv,
 		RoundModule:       roundModule,
 		Router:            watermillRouter,
 		EventBus:          eventBusImpl,
 		ReceivedMsgs:      make(map[string][]*message.Message),
 		ReceivedMsgsMutex: &sync.Mutex{},
-		TestObservability: testObservability,
 		TestHelpers:       realHelpers,
-	}, nil
-}
-
-// SetupTestRoundHandler is called by individual tests.
-// It resets the database but reuses the shared infrastructure.
-func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
-	t.Helper()
-
-	if testEnv == nil {
-		t.Fatal("testEnv not initialized. Ensure TestMain is calling initSharedInfrastructure.")
 	}
-
-	// 1. Reset Database State for isolation
-	resetCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := testEnv.Reset(resetCtx); err != nil {
-		t.Fatalf("Failed to reset database for test: %v", err)
-	}
-
-	// 2. Clear the mutex-protected map if you are using it for manual tracking
-	// (though RunTest handles its own tracking usually)
-	sharedDeps.ReceivedMsgsMutex.Lock()
-	sharedDeps.ReceivedMsgs = make(map[string][]*message.Message)
-	sharedDeps.ReceivedMsgsMutex.Unlock()
-
-	return sharedDeps
 }
-
-// boolPtr returns a pointer to a bool value
 func boolPtr(b bool) *bool {
 	return &b
 }

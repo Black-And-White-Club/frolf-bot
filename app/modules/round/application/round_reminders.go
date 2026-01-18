@@ -5,14 +5,15 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // ProcessRoundReminder handles the reminder event when it's triggered from the delayed queue
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "ProcessRoundReminder", payload.RoundID, func(ctx context.Context) (RoundOperationResult, error) {
+func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (results.OperationResult, error) {
+	return s.withTelemetry(ctx, "ProcessRoundReminder", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
 		s.logger.InfoContext(ctx, "Processing round reminder",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.String("reminder_type", payload.ReminderType),
@@ -22,7 +23,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 		// Filter participants who have accepted or are tentative
 		var userIDs []sharedtypes.DiscordID
 		// Get participants from DB
-		participants, err := s.RoundDB.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+		participants, err := s.repo.GetParticipants(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to get participants for round",
 				attr.RoundID("round_id", payload.RoundID),
@@ -30,7 +31,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetParticipants")
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
@@ -89,7 +90,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, payload roundev
 		}
 
 		// Always return the DiscordReminderPayload (handler will decide what to do with it)
-		return RoundOperationResult{
+		return results.OperationResult{
 			Success: discordPayload,
 		}, nil
 	})

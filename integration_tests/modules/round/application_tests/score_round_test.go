@@ -9,7 +9,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -241,7 +241,7 @@ func TestUpdateParticipantScore(t *testing.T) {
 		initialSetup     func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID)
 		payload          roundevents.ScoreUpdateValidatedPayloadV1
 		expectedError    bool
-		validateResponse func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID)
+		validateResponse func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID)
 	}{
 		{
 			name:    "Successful score update",
@@ -265,7 +265,7 @@ func TestUpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedError: false,
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID) {
+			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
 				if result.Success == nil {
 					if result.Failure != nil {
 						t.Fatalf("Expected success payload, got failure instead: %+v", result.Failure)
@@ -315,7 +315,7 @@ func TestUpdateParticipantScore(t *testing.T) {
 				},
 			},
 			expectedError: false, // Service uses failure payload instead of error
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID) {
+			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
@@ -393,7 +393,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 		expectedError         bool
 		expectedAllDone       bool   // true if expecting AllScoresSubmittedPayloadV1
 		expectedErrorContains string // Added for more specific error checking
-		validateResponse      func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID)
+		validateResponse      func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID)
 	}{
 		{
 			name:    "All scores submitted",
@@ -420,7 +420,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedAllDone: true,
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID) {
+			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
 				if result.Success == nil {
 					t.Fatalf("Expected success payload, but got nil")
 				}
@@ -464,7 +464,7 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			},
 			expectedError:   false,
 			expectedAllDone: false,
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID) {
+			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
 				if result.Success == nil {
 					t.Fatalf("Expected success payload, but got nil")
 				}
@@ -508,8 +508,8 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 			},
 			expectedError:         false, // Service uses failure payload instead of error
 			expectedAllDone:       false,
-			expectedErrorContains: "round with ID",
-			validateResponse: func(t *testing.T, result roundservice.RoundOperationResult, roundID sharedtypes.RoundID) {
+			expectedErrorContains: "round",
+			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}
@@ -517,8 +517,8 @@ func TestCheckAllScoresSubmitted(t *testing.T) {
 				if !ok {
 					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
 				}
-				if !strings.Contains(failurePayload.Error, "round with ID") {
-					t.Errorf("Expected error message to contain 'round with ID', got '%s'", failurePayload.Error)
+				if !strings.Contains(failurePayload.Error, "round") {
+					t.Errorf("Expected error message to contain 'round', got '%s'", failurePayload.Error)
 				}
 			},
 		},

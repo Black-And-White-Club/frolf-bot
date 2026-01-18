@@ -9,7 +9,7 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -47,10 +47,9 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: &userevents.GetUserResponsePayloadV1{User: testUserData},
 						Failure: nil,
-						Error:   nil,
 					},
 					nil,
 				)
@@ -67,13 +66,12 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: nil,
 						Failure: &userevents.GetUserFailedPayloadV1{
 							UserID: testUserID,
 							Reason: "user not found",
 						},
-						Error: nil,
 					},
 					nil,
 				)
@@ -90,8 +88,8 @@ func TestUserHandlers_HandleGetUserRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUser(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{},
-					nil,
+					results.OperationResult{},
+					context.DeadlineExceeded,
 				)
 			},
 			wantErr: true,
@@ -152,10 +150,9 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: &userevents.GetUserRoleResponsePayloadV1{UserID: testUserID, Role: "admin"},
 						Failure: nil,
-						Error:   nil,
 					},
 					nil,
 				)
@@ -172,13 +169,12 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: nil,
 						Failure: &userevents.GetUserRoleFailedPayloadV1{
 							UserID: testUserID,
 							Reason: "user role not found",
 						},
-						Error: nil,
 					},
 					nil,
 				)
@@ -195,8 +191,8 @@ func TestUserHandlers_HandleGetUserRoleRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().GetUserRole(gomock.Any(), testGuildID, testUserID).Return(
-					userservice.UserOperationResult{},
-					nil,
+					results.OperationResult{},
+					context.DeadlineExceeded,
 				)
 			},
 			wantErr: true,

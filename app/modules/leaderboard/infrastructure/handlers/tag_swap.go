@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -18,14 +17,9 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 	ctx context.Context,
 	payload *leaderboardevents.TagSwapRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Manual tag swap requested",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("requestor_id", string(payload.RequestorID)),
-		attr.String("target_id", string(payload.TargetID)))
-
 	// 1. We still need to know WHAT tag the Target currently holds.
 	// The service helper 'GetTagByUserID' is perfect for this.
-	targetTag, err := h.leaderboardService.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
+	targetTag, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
 	if err != nil {
 		// If Target has no tag, we can't swap.
 		return []handlerwrapper.Result{{
@@ -39,10 +33,10 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 
 	// 2. Identify the requestor's current tag for the Saga record.
 	// We ignore the error here; if they don't have a tag, CurrentTag is just 0.
-	requestorTag, _ := h.leaderboardService.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
+	requestorTag, _ := h.service.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
 
 	// 3. Attempt the Funnel
-	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
+	result, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		[]sharedtypes.TagAssignmentRequest{

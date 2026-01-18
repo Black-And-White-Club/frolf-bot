@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.81
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.83
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -63,7 +63,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect

@@ -24,7 +24,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 
 	return s.serviceWrapper(ctx, "ProcessRoundScores", roundID, func(ctx context.Context) (ScoreOperationResult, error) {
 		// Check if scores already exist for this round
-		existingScores, err := s.ScoreDB.GetScoresForRound(ctx, guildID, roundID)
+		existingScores, err := s.repo.GetScoresForRound(ctx, guildID, roundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to check existing scores",
 				attr.ExtractCorrelationID(ctx),
@@ -90,7 +90,7 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		s.metrics.RecordOperationDuration(ctx, "ExtractTagInformation", time.Duration(time.Since(extractStartTime).Seconds()))
 
 		dbStart := time.Now()
-		if err := s.ScoreDB.LogScores(ctx, guildID, roundID, processedScores, "auto"); err != nil {
+		if err := s.repo.LogScores(ctx, guildID, roundID, processedScores, "auto"); err != nil {
 			s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
 			s.logger.ErrorContext(ctx, "Failed to log scores to database",
 				attr.ExtractCorrelationID(ctx),

@@ -8,7 +8,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -52,10 +52,9 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				}
 
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: updateResultPayload,
 						Failure: nil,
-						Error:   nil,
 					},
 					nil,
 				)
@@ -81,10 +80,9 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 				}
 
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
-					userservice.UserOperationResult{
+					results.OperationResult{
 						Success: nil,
 						Failure: failurePayload,
-						Error:   nil,
 					},
 					nil,
 				)
@@ -102,8 +100,8 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUserRoleInDatabase(gomock.Any(), testGuildID, testUserID, testNewRole).Return(
-					userservice.UserOperationResult{},
-					nil,
+					results.OperationResult{},
+					context.DeadlineExceeded,
 				)
 			},
 			wantErr: true,

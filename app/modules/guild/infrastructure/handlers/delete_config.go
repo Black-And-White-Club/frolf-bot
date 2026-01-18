@@ -15,22 +15,13 @@ func (h *GuildHandlers) HandleDeleteGuildConfig(ctx context.Context, payload *gu
 		return nil, errors.New("payload cannot be nil")
 	}
 
-	result, err := h.guildService.DeleteGuildConfig(ctx, sharedtypes.GuildID(payload.GuildID))
+	result, err := h.service.DeleteGuildConfig(ctx, sharedtypes.GuildID(payload.GuildID))
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigDeletionFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	if result.Success != nil {
-		return []handlerwrapper.Result{
-			{Topic: guildevents.GuildConfigDeletedV1, Payload: result.Success},
-		}, nil
-	}
-
-	return nil, errors.New("unexpected empty result from DeleteGuildConfig service")
+	return mapOperationResult(result,
+		guildevents.GuildConfigDeletedV1,
+		guildevents.GuildConfigDeletionFailedV1,
+	), nil
 }

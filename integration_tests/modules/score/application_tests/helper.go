@@ -1,13 +1,13 @@
 package scoreintegrationtests
 
 import (
-	"time"
 	"context"
 	"io"
 	"log"
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -72,8 +72,7 @@ func SetupTestScoreService(t *testing.T) TestDeps {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-
-	realDB := &scoredb.ScoreDBImpl{DB: env.DB}
+	realDB := scoredb.NewRepository(env.DB)
 
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	noOpMetrics := &scoremetrics.NoOpMetrics{}

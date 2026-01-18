@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -18,10 +17,6 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 	ctx context.Context,
 	payload *sharedevents.BatchTagAssignmentRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	h.logger.InfoContext(ctx, "Handling batch tag assignment",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("batch_id", payload.BatchID))
-
 	requests := make([]sharedtypes.TagAssignmentRequest, len(payload.Assignments))
 	for i, a := range payload.Assignments {
 		requests[i] = sharedtypes.TagAssignmentRequest{
@@ -35,7 +30,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, fmt.Errorf("invalid batch_id format: %w", err)
 	}
 
-	result, err := h.leaderboardService.ExecuteBatchTagAssignment(
+	result, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
@@ -46,10 +41,6 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 	if err != nil {
 		var swapErr *leaderboardservice.TagSwapNeededError
 		if errors.As(err, &swapErr) {
-			h.logger.InfoContext(ctx, "Conflict detected, recording intent in Saga",
-				attr.String("requestor", string(swapErr.RequestorID)),
-				attr.Int("target_tag", int(swapErr.TargetTag)))
-
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     swapErr.RequestorID,
 				CurrentTag: swapErr.CurrentTag,

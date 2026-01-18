@@ -7,7 +7,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 )
 
@@ -47,7 +47,7 @@ func TestStoreRound(t *testing.T) {
 		payload         roundevents.RoundEntityCreatedPayloadV1
 		expectedError   bool
 		expectedSuccess bool
-		validateResult  func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult)
+		validateResult  func(t *testing.T, deps *RoundTestDeps, result results.OperationResult)
 		validateDBState func(t *testing.T, deps *RoundTestDeps, expectedRoundID sharedtypes.RoundID) // Expect the ID from the result
 	}{
 		{
@@ -55,7 +55,7 @@ func TestStoreRound(t *testing.T) {
 			payload:         createValidPayload(),
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
 				if result.Success == nil {
 					t.Errorf("Expected success result, but got nil")
 					return
@@ -119,7 +119,7 @@ func TestStoreRound(t *testing.T) {
 			}(),
 			expectedError:   true,
 			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
@@ -150,7 +150,7 @@ func TestStoreRound(t *testing.T) {
 			}(),
 			expectedError:   true,
 			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
@@ -178,7 +178,7 @@ func TestStoreRound(t *testing.T) {
 			}(),
 			expectedError:   true,
 			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return
@@ -206,7 +206,7 @@ func TestStoreRound(t *testing.T) {
 			}(),
 			expectedError:   true,
 			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result roundservice.RoundOperationResult) {
+			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
 				if result.Failure == nil {
 					t.Errorf("Expected failure result, but got nil")
 					return

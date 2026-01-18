@@ -48,7 +48,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.CheckParticipantStatus(ctx, *payload)
+	result, err := h.service.CheckParticipantStatus(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinValidationRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayloadV1{
+	result, err := h.service.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayloadV1{
 		RoundID:  payload.RoundID,
 		UserID:   payload.UserID,
 		Response: payload.Response,
@@ -144,7 +144,7 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.UpdateParticipantStatus(ctx, *payload)
+	result, err := h.service.UpdateParticipantStatus(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantRemovalRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.ParticipantRemoval(ctx, *payload)
+	result, err := h.service.ParticipantRemoval(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	ctx context.Context,
 	updatePayload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	updateResult, err := h.roundService.UpdateParticipantStatus(ctx, *updatePayload)
+	updateResult, err := h.service.UpdateParticipantStatus(ctx, *updatePayload)
 	if err != nil {
 		return nil, err
 	}

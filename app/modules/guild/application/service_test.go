@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/mocks"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -29,141 +29,82 @@ func TestNewGuildService(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				// Create mock dependencies
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
-				mockDB := guilddb.NewMockGuildDB(ctrl)
-				mockEventBus := eventbus.NewMockEventBus(ctrl)
+				mockRepo := guilddb.NewMockRepository(ctrl)
 				mockMetrics := &guildmetrics.NoOpMetrics{}
 				tracer := noop.NewTracerProvider().Tracer("test")
 
-				// Call the function being tested
-				service := NewGuildService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+				service := NewGuildService(mockRepo, logger, mockMetrics, tracer)
 
-				// Ensure service is correctly created
 				if service == nil {
 					t.Fatal("NewGuildService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				guildServiceImpl, ok := service.(*GuildService)
-				if !ok {
-					t.Fatal("NewGuildService did not return *GuildService")
+				if service.repo != mockRepo {
+					t.Error("repo not set correctly")
 				}
 
-				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				guildServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, guildID sharedtypes.GuildID, serviceFunc func(ctx context.Context) (GuildOperationResult, error)) (GuildOperationResult, error) {
-					return serviceFunc(ctx) // Just execute serviceFunc directly
-				}
-
-				// Check that all dependencies were correctly assigned
-				if guildServiceImpl.GuildDB != mockDB {
-					t.Error("GuildDB not set correctly")
-				}
-				if guildServiceImpl.eventBus != mockEventBus {
-					t.Error("eventBus not set correctly")
-				}
-				if guildServiceImpl.logger != logger {
+				if service.logger != logger {
 					t.Error("logger not set correctly")
 				}
-				if guildServiceImpl.metrics != mockMetrics {
+				if service.metrics != mockMetrics {
 					t.Error("metrics not set correctly")
 				}
-				if guildServiceImpl.tracer != tracer {
+				if service.tracer != tracer {
 					t.Error("tracer not set correctly")
-				}
-
-				// Ensure serviceWrapper is correctly set
-				if guildServiceImpl.serviceWrapper == nil {
-					t.Error("serviceWrapper not set")
 				}
 			},
 		},
 		{
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+				service := NewGuildService(nil, nil, nil, nil)
 
-				// Call with nil dependencies
-				service := NewGuildService(nil, nil, nil, nil, nil)
-
-				// Ensure service is correctly created
 				if service == nil {
 					t.Fatal("NewGuildService returned nil")
 				}
 
-				// Access the concrete type to override serviceWrapper
-				guildServiceImpl, ok := service.(*GuildService)
-				if !ok {
-					t.Fatal("NewGuildService did not return *GuildService")
+				if service.repo != nil {
+					t.Error("repo should be nil")
 				}
 
-				// Override serviceWrapper to avoid nil tracing/logger issues
-				guildServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, guildID sharedtypes.GuildID, serviceFunc func(ctx context.Context) (GuildOperationResult, error)) (GuildOperationResult, error) {
-					return serviceFunc(ctx) // Just execute serviceFunc directly
-				}
-
-				// Check nil fields
-				if guildServiceImpl.GuildDB != nil {
-					t.Error("GuildDB should be nil")
-				}
-				if guildServiceImpl.eventBus != nil {
-					t.Error("eventBus should be nil")
-				}
-				if guildServiceImpl.logger != nil {
+				if service.logger != nil {
 					t.Error("logger should be nil")
 				}
-				if guildServiceImpl.metrics != nil {
+				if service.metrics != nil {
 					t.Error("metrics should be nil")
 				}
-				if guildServiceImpl.tracer != nil {
+				if service.tracer != nil {
 					t.Error("tracer should be nil")
-				}
-
-				// Ensure serviceWrapper is still set
-				if guildServiceImpl.serviceWrapper == nil {
-					t.Error("serviceWrapper should still be set")
-				}
-
-				// Test serviceWrapper runs correctly with nil dependencies
-				result, err := guildServiceImpl.serviceWrapper(context.Background(), "test", "guild-1", func(ctx context.Context) (GuildOperationResult, error) {
-					return GuildOperationResult{Success: "ok"}, nil
-				})
-				if err != nil {
-					t.Errorf("serviceWrapper should work with nil dependencies, got error: %v", err)
-				}
-				if result.Success != "ok" {
-					t.Errorf("expected success 'ok', got: %v", result.Success)
 				}
 			},
 		},
 	}
 
-	// Run all test cases
 	for _, tt := range tests {
 		t.Run(tt.name, tt.test)
 	}
 }
 
-func Test_serviceWrapper(t *testing.T) {
+func TestWithTelemetry(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("guild-1")
 
 	type args struct {
 		ctx           context.Context
 		operationName string
 		guildID       sharedtypes.GuildID
-		serviceFunc   func(ctx context.Context) (GuildOperationResult, error)
+		op            func(ctx context.Context) (results.OperationResult, error)
 		logger        *slog.Logger
 		metrics       guildmetrics.GuildMetrics
 		tracer        trace.Tracer
 	}
+
 	tests := []struct {
 		name    string
 		args    func(ctrl *gomock.Controller) args
-		want    GuildOperationResult
+		want    results.OperationResult
 		wantErr bool
-		setup   func(a *args, ctx context.Context)
 	}{
 		{
 			name: "Successful operation",
@@ -177,22 +118,19 @@ func Test_serviceWrapper(t *testing.T) {
 					ctx:           context.Background(),
 					operationName: "TestOperation",
 					guildID:       testGuildID,
-					serviceFunc: func(ctx context.Context) (GuildOperationResult, error) {
-						return GuildOperationResult{Success: "test"}, nil
+					op: func(ctx context.Context) (results.OperationResult, error) {
+						return results.SuccessResult("test"), nil
 					},
 					logger:  logger,
 					metrics: metrics,
 					tracer:  tracer,
 				}
 			},
-			want:    GuildOperationResult{Success: "test"},
+			want:    results.SuccessResult("test"),
 			wantErr: false,
-			setup: func(a *args, ctx context.Context) {
-				// No additional setup needed for success case
-			},
 		},
 		{
-			name: "Handles panic in service function",
+			name: "Handles panic in operation",
 			args: func(ctrl *gomock.Controller) args {
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
@@ -203,7 +141,7 @@ func Test_serviceWrapper(t *testing.T) {
 					ctx:           context.Background(),
 					operationName: "TestOperation",
 					guildID:       testGuildID,
-					serviceFunc: func(ctx context.Context) (GuildOperationResult, error) {
+					op: func(ctx context.Context) (results.OperationResult, error) {
 						panic("test panic")
 					},
 					logger:  logger,
@@ -212,10 +150,9 @@ func Test_serviceWrapper(t *testing.T) {
 				}
 			},
 			wantErr: true,
-			setup:   func(a *args, ctx context.Context) {},
 		},
 		{
-			name: "Handles service function returning an error",
+			name: "Handles operation returning an error",
 			args: func(ctrl *gomock.Controller) args {
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
@@ -226,8 +163,8 @@ func Test_serviceWrapper(t *testing.T) {
 					ctx:           context.Background(),
 					operationName: "TestOperation",
 					guildID:       testGuildID,
-					serviceFunc: func(ctx context.Context) (GuildOperationResult, error) {
-						return GuildOperationResult{Error: errors.New("service error")}, errors.New("service error")
+					op: func(ctx context.Context) (results.OperationResult, error) {
+						return results.OperationResult{}, errors.New("service error")
 					},
 					logger:  logger,
 					metrics: metrics,
@@ -235,33 +172,9 @@ func Test_serviceWrapper(t *testing.T) {
 				}
 			},
 			wantErr: true,
-			setup:   func(a *args, ctx context.Context) {},
 		},
 		{
-			name: "Handles nil context",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           nil,
-					operationName: "TestOperation",
-					guildID:       testGuildID,
-					serviceFunc: func(ctx context.Context) (GuildOperationResult, error) {
-						return GuildOperationResult{}, nil
-					},
-					logger:  logger,
-					metrics: metrics,
-					tracer:  tracer,
-				}
-			},
-			wantErr: true,
-			setup:   func(a *args, ctx context.Context) {},
-		},
-		{
-			name: "Handles nil service function",
+			name: "Handles nil operation",
 			args: func(ctrl *gomock.Controller) args {
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
@@ -272,14 +185,13 @@ func Test_serviceWrapper(t *testing.T) {
 					ctx:           context.Background(),
 					operationName: "TestOperation",
 					guildID:       testGuildID,
-					serviceFunc:   nil,
+					op:            nil,
 					logger:        logger,
 					metrics:       metrics,
 					tracer:        tracer,
 				}
 			},
 			wantErr: true,
-			setup:   func(a *args, ctx context.Context) {},
 		},
 	}
 
@@ -289,27 +201,23 @@ func Test_serviceWrapper(t *testing.T) {
 			defer ctrl.Finish()
 
 			a := tt.args(ctrl)
-			tt.setup(&a, a.ctx)
 
-			got, err := serviceWrapper(a.ctx, a.operationName, a.guildID, a.serviceFunc, a.logger, a.metrics, a.tracer)
+			svc := &GuildService{logger: a.logger, metrics: a.metrics, tracer: a.tracer}
+			got, err := svc.withTelemetry(a.ctx, a.operationName, a.guildID, a.op)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("withTelemetry() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !tt.wantErr {
 				if got.Success != tt.want.Success {
-					t.Errorf("serviceWrapper() got = %v, want %v", got, tt.want)
-				}
-			} else {
-				if got.Error == nil {
-					t.Error("expected result.Error to be set on error case")
+					t.Errorf("withTelemetry() got = %v, want %v", got, tt.want)
 				}
 			}
 		})
 	}
 }
 
-func TestGuildConfigsEqual(t *testing.T) {
+func TestConfigsEqual(t *testing.T) {
 	now := time.Now().UTC()
 	later := now.Add(time.Hour)
 
@@ -403,9 +311,9 @@ func TestGuildConfigsEqual(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := guildConfigsEqual(tt.a, tt.b)
+			got := configsEqual(tt.a, tt.b)
 			if got != tt.want {
-				t.Errorf("guildConfigsEqual() = %v, want %v", got, tt.want)
+				t.Errorf("configsEqual() = %v, want %v", got, tt.want)
 			}
 		})
 	}

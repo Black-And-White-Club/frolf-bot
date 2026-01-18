@@ -16,20 +16,15 @@ func (h *RoundHandlers) HandleScorecardUploaded(
 	ctx context.Context,
 	payload *roundevents.ScorecardUploadedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.CreateImportJob(ctx, *payload)
+	result, err := h.service.CreateImportJob(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.ImportFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	return []handlerwrapper.Result{
-		{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success},
-	}, nil
+	return mapOperationResult(result,
+		roundevents.ScorecardParseRequestedV1,
+		roundevents.ImportFailedV1,
+	), nil
 }
 
 // HandleScorecardURLRequested transforms a URL request into a parse request.
@@ -37,20 +32,15 @@ func (h *RoundHandlers) HandleScorecardURLRequested(
 	ctx context.Context,
 	payload *roundevents.ScorecardURLRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.roundService.HandleScorecardURLRequested(ctx, *payload)
+	result, err := h.service.HandleScorecardURLRequested(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.ImportFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	return []handlerwrapper.Result{
-		{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success},
-	}, nil
+	return mapOperationResult(result,
+		roundevents.ScorecardParseRequestedV1,
+		roundevents.ImportFailedV1,
+	), nil
 }
 
 // HandleParseScorecardRequest handles the actual parsing of file data.
@@ -61,7 +51,7 @@ func (h *RoundHandlers) HandleParseScorecardRequest(
 	// Minimal diagnostic log specifically for data-heavy operations.
 	h.logger.DebugContext(ctx, "parsing scorecard file data", attr.Int("size", len(payload.FileData)))
 
-	result, err := h.roundService.ParseScorecard(ctx, *payload, payload.FileData)
+	result, err := h.service.ParseScorecard(ctx, *payload, payload.FileData)
 	if err != nil {
 		return nil, err
 	}
@@ -97,20 +87,15 @@ func (h *RoundHandlers) HandleUserMatchConfirmedForIngest(
 		return nil, sharedtypes.ValidationError{Message: "invalid parsed scorecard payload type"}
 	}
 
-	result, err := h.roundService.IngestParsedScorecard(ctx, *parsed)
+	result, err := h.service.IngestParsedScorecard(ctx, *parsed)
 	if err != nil {
 		return nil, err
 	}
 
-	if result.Failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: roundevents.ImportFailedV1, Payload: result.Failure},
-		}, nil
-	}
-
-	return []handlerwrapper.Result{
-		{Topic: roundevents.ImportCompletedV1, Payload: result.Success},
-	}, nil
+	return mapOperationResult(result,
+		roundevents.ImportCompletedV1,
+		roundevents.ImportFailedV1,
+	), nil
 }
 
 // HandleImportCompleted transforms a completed import into a score submission event.
@@ -122,7 +107,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 		return nil, nil
 	}
 
-	res, err := h.roundService.ApplyImportedScores(ctx, *payload)
+	res, err := h.service.ApplyImportedScores(ctx, *payload)
 	if err != nil {
 		return nil, err
 	}

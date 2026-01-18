@@ -3,7 +3,9 @@ package containers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -85,8 +87,23 @@ func SetupPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, s
 		}
 		return nil, "", fmt.Errorf("failed to get PostgreSQL connection string: %w", err)
 	}
-
 	log.Printf("PostgreSQL container started with resource limits and init script. URL: %s", pgURL)
+
+	// Optionally stream container logs to stdout for debugging hangs. Enable by
+	// setting the environment variable STREAM_TESTCONTAINER_LOGS=1
+	if os.Getenv("STREAM_TESTCONTAINER_LOGS") == "1" {
+		go func() {
+			rc, err := pgContainer.Logs(ctx)
+			if err != nil {
+				log.Printf("Failed to attach to Postgres container logs: %v", err)
+				return
+			}
+			defer rc.Close()
+			if _, err := io.Copy(os.Stdout, rc); err != nil {
+				log.Printf("Error streaming Postgres container logs: %v", err)
+			}
+		}()
+	}
 	return pgContainer, pgURL, nil
 }
 

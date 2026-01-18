@@ -12,48 +12,116 @@ import (
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// LeaderboardService handles leaderboard-related logic.
+// LeaderboardService implements the Service interface.
 type LeaderboardService struct {
-	db             *bun.DB
-	LeaderboardDB  leaderboarddb.LeaderboardDB
-	logger         *slog.Logger
-	metrics        leaderboardmetrics.LeaderboardMetrics
-	tracer         trace.Tracer
-	serviceWrapper func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error)
+	repo    leaderboarddb.Repository
+	logger  *slog.Logger
+	metrics leaderboardmetrics.LeaderboardMetrics
+	tracer  trace.Tracer
+	db      *bun.DB // Keep for runInTx helper (justified deviation)
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
 func NewLeaderboardService(
-	db *bun.DB, // Pass the DB connection here
-	repo leaderboarddb.LeaderboardDB,
+	db *bun.DB,
+	repo leaderboarddb.Repository,
 	logger *slog.Logger,
 	metrics leaderboardmetrics.LeaderboardMetrics,
 	tracer trace.Tracer,
 ) *LeaderboardService {
 	return &LeaderboardService{
-		db:            db,
-		LeaderboardDB: repo,
-		logger:        logger,
-		metrics:       metrics,
-		tracer:        tracer,
-		serviceWrapper: func(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-			return serviceWrapper(ctx, operationName, serviceFunc, logger, metrics, tracer)
-		},
+		repo:    repo,
+		logger:  logger,
+		metrics: metrics,
+		tracer:  tracer,
+		db:      db,
 	}
 }
 
-// runInTx is a 2026 best-practice helper to ensure service operations are atomic.
-func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Context, db bun.IDB) (LeaderboardOperationResult, error)) (LeaderboardOperationResult, error) {
-	var result LeaderboardOperationResult
-	// If no DB provided (e.g., in unit tests that mock the repository layer),
-	// execute the function without a transaction and allow the repositories to
-	// accept a nil bun.IDB (they should handle it or the mocks will match gomock.Any()).
+// operationFunc is the signature for service operation functions.
+type operationFunc func(ctx context.Context) (results.OperationResult, error)
+
+// withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
+// This standardizes observability across all service methods.
+func (s *LeaderboardService) withTelemetry(
+	ctx context.Context,
+	operationName string,
+	guildID sharedtypes.GuildID,
+	op operationFunc,
+) (result results.OperationResult, err error) {
+	// Start span (nil-safe tracer)
+	var span trace.Span
+	if s.tracer != nil {
+		ctx, span = s.tracer.Start(ctx, operationName, trace.WithAttributes(
+			attribute.String("operation", operationName),
+			attribute.String("guild_id", string(guildID)),
+		))
+	} else {
+		// Use a no-op span from context when tracer is not provided (tests may pass nil)
+		span = trace.SpanFromContext(ctx)
+	}
+	defer span.End()
+
+	// Record attempt
+	if s.metrics != nil {
+		s.metrics.RecordOperationAttempt(ctx, operationName, "LeaderboardService")
+	}
+
+	// Track duration
+	startTime := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.RecordOperationDuration(ctx, operationName, "LeaderboardService", time.Since(startTime))
+		}
+	}()
+
+	// Log operation start
+	s.logInfoContext(ctx, "Operation triggered", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
+
+	// Panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in %s: %v", operationName, r)
+			s.logErrorContext(ctx, "Critical panic recovered", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(err))
+			if s.metrics != nil {
+				s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
+			}
+			span.RecordError(err)
+			result = results.OperationResult{}
+		}
+	}()
+
+	// Execute operation
+	result, err = op(ctx)
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
+		s.logErrorContext(ctx, "Operation failed", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(wrappedErr))
+		if s.metrics != nil {
+			s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
+		}
+		span.RecordError(wrappedErr)
+		return result, wrappedErr
+	}
+
+	s.logInfoContext(ctx, operationName+" completed successfully", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
+	if s.metrics != nil {
+		s.metrics.RecordOperationSuccess(ctx, operationName, "LeaderboardService")
+	}
+
+	return result, nil
+}
+
+// runInTx is a helper to ensure service operations are atomic.
+// Justified deviation: Leaderboard requires multi-operation transactions.
+func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Context, db bun.IDB) (results.OperationResult, error)) (results.OperationResult, error) {
+	var result results.OperationResult
 	if s.db == nil {
 		var err error
 		result, err = fn(ctx, nil)
@@ -62,7 +130,6 @@ func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Co
 
 	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var err error
-		// bun.Tx implements bun.IDB so we can pass it to the provided function
 		result, err = fn(ctx, tx)
 		return err
 	})
@@ -71,7 +138,7 @@ func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Co
 
 // EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
 func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
-	_, err := s.LeaderboardDB.GetActiveLeaderboard(ctx, guildID)
+	_, err := s.repo.GetActiveLeaderboard(ctx, guildID)
 	if err == nil {
 		return nil
 	}
@@ -88,100 +155,22 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 		GuildID:         guildID,
 	}
 
-	// Pass s.db as the bun.IDB argument here
-	if _, err := s.LeaderboardDB.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
+	if _, err := s.repo.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
 		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
 	}
 	return nil
 }
 
-// logInfoContext is a nil-safe wrapper around s.logger.InfoContext for tests
+// logInfoContext is a nil-safe wrapper for tests.
 func (s *LeaderboardService) logInfoContext(ctx context.Context, msg string, args ...any) {
 	if s.logger != nil {
 		s.logger.InfoContext(ctx, msg, args...)
 	}
 }
 
-// serviceWrapper handles common tracing, logging, and metrics for service operations.
-// It also includes panic recovery and consistent error handling.
-// This function was optimized to reduce memory allocations, particularly related to context and error creation.
-func serviceWrapper(ctx context.Context, operationName string, serviceFunc func(ctx context.Context) (LeaderboardOperationResult, error), logger *slog.Logger, metrics leaderboardmetrics.LeaderboardMetrics, tracer trace.Tracer) (result LeaderboardOperationResult, err error) {
-	if serviceFunc == nil {
-		// Use a predefined error for a static message to avoid repeated allocation.
-		// However, in this specific case, errors.New is acceptable as it's an infrequent error path.
-		return LeaderboardOperationResult{}, errors.New("service function is nil")
+// logErrorContext is a nil-safe wrapper for error logging used in tests.
+func (s *LeaderboardService) logErrorContext(ctx context.Context, msg string, args ...any) {
+	if s.logger != nil {
+		s.logger.ErrorContext(ctx, msg, args...)
 	}
-
-	// Start a new tracing span while preserving existing context.
-	// trace.WithAttributes allocates, but is standard for adding span attributes.
-	// Consider sampling in your tracing configuration to reduce this overhead in production.
-	ctx, span := tracer.Start(ctx, operationName, trace.WithAttributes(
-		attribute.String("operation", operationName),
-	))
-	defer span.End()
-
-	// Record operation attempt metric. Metric recording might involve internal allocations
-	// within the metrics library, especially with labels. Review metrics library implementation
-	// and label cardinality if this remains a hotspot.
-	metrics.RecordOperationAttempt(ctx, operationName, "LeaderboardService")
-
-	startTime := time.Now()
-	defer func() {
-		// Calculate duration and record metric.
-		// time.Since and duration conversion are generally low allocation.
-		duration := time.Duration(time.Since(startTime).Seconds())
-		metrics.RecordOperationDuration(ctx, operationName, "LeaderboardService", duration)
-	}()
-
-	// Log operation start. Logging can allocate for message formatting and field handling.
-	// Ensure your logger is efficient and consider log levels in production.
-	logger.InfoContext(ctx, "Operation triggered",
-		attr.ExtractCorrelationID(ctx), // Extracting correlation ID might involve context lookup but ideally minimal allocation.
-		attr.String("operation", operationName),
-	)
-
-	// Defer for panic recovery. This uses named return values to set result and err.
-	defer func() {
-		if r := recover(); r != nil {
-			// Creating error message and new error for panic.
-			// fmt.Sprintf and errors.New allocate, but are necessary for proper panic reporting.
-			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-			logger.ErrorContext(ctx, errorMsg,
-				attr.ExtractCorrelationID(ctx),
-				attr.Any("panic", r), // attr.Any might allocate depending on the type of 'r'.
-			)
-			metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
-			// Recording error on span allocates for the error object and message.
-			span.RecordError(errors.New(errorMsg))
-
-			// Set the return values explicitly for panic cases.
-			result = LeaderboardOperationResult{}
-			err = fmt.Errorf("%s", errorMsg) // fmt.Errorf allocates
-		}
-	}()
-
-	// Execute the core service function.
-	result, err = serviceFunc(ctx)
-	if err != nil {
-		// Wrap and log the error. fmt.Errorf with %w allocates for the new error object and string formatting.
-		// This allocation is generally necessary for proper error chaining and reporting.
-		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-		logger.ErrorContext(ctx, "Error in "+operationName,
-			attr.ExtractCorrelationID(ctx),
-			attr.Error(wrappedErr), // attr.Error might allocate depending on the error type.
-		)
-		metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
-		// Recording error on span allocates.
-		span.RecordError(wrappedErr)
-		return result, wrappedErr
-	}
-
-	// Log successful completion. Logging allocates.
-	logger.InfoContext(ctx, operationName+" completed successfully",
-		attr.ExtractCorrelationID(ctx),
-		attr.String("operation", operationName),
-	)
-	metrics.RecordOperationSuccess(ctx, operationName, "LeaderboardService")
-
-	return result, nil
 }

@@ -5,20 +5,21 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // GetRound retrieves the round from the database.
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (RoundOperationResult, error) {
-	return s.serviceWrapper(ctx, "GetRound", roundID, func(ctx context.Context) (RoundOperationResult, error) {
+func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error) {
+	return s.withTelemetry(ctx, "GetRound", roundID, func(ctx context.Context) (results.OperationResult, error) {
 		s.logger.InfoContext(ctx, "Getting round from database",
 			attr.RoundID("round_id", roundID),
 			attr.String("guild_id", string(guildID)),
 		)
 
-		dbRound, err := s.RoundDB.GetRound(ctx, guildID, roundID)
+		dbRound, err := s.repo.GetRound(ctx, guildID, roundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to retrieve round",
 				attr.RoundID("round_id", roundID),
@@ -26,7 +27,7 @@ func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
-			return RoundOperationResult{
+			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
@@ -59,7 +60,7 @@ func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 			attr.String("guild_id", string(guildID)),
 		)
 
-		return RoundOperationResult{
+		return results.OperationResult{
 			Success: rtRound,
 		}, nil
 	})

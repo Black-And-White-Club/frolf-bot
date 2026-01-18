@@ -8,6 +8,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 	guildmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -29,11 +30,9 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Success: &guildevents.GuildConfigDeletedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-					},
-				}, nil)
+				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.SuccessResult(&guildevents.GuildConfigDeletedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigDeletedV1,
@@ -45,13 +44,10 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{
-					Failure: &guildevents.GuildConfigDeletionFailedPayloadV1{
-						GuildID: sharedtypes.GuildID("guild-1"),
-						Reason:  guildservice.ErrGuildConfigNotFound.Error(),
-					},
-					Error: guildservice.ErrGuildConfigNotFound,
-				}, nil)
+				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.FailureResult(&guildevents.GuildConfigDeletionFailedPayloadV1{
+					GuildID: sharedtypes.GuildID("guild-1"),
+					Reason:  guildservice.ErrGuildConfigNotFound.Error(),
+				}), nil)
 			},
 			wantErr:   false,
 			wantTopic: guildevents.GuildConfigDeletionFailedV1,
@@ -69,7 +65,7 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 				GuildID: sharedtypes.GuildID("guild-1"),
 			},
 			mockSetup: func(m *guildmocks.MockService) {
-				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(guildservice.GuildOperationResult{}, context.DeadlineExceeded)
+				m.EXPECT().DeleteGuildConfig(gomock.Any(), sharedtypes.GuildID("guild-1")).Return(results.OperationResult{}, context.DeadlineExceeded)
 			},
 			wantErr: true,
 			wantLen: 0,

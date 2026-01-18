@@ -8,15 +8,22 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// TagAvailabilityResult represents the detailed result of a tag availability check
+// TagAvailabilityResult represents the detailed result of a tag availability check.
 type TagAvailabilityResult struct {
 	Available bool
 	Reason    string
 }
 
-// LeaderboardDB represents the interface for interacting with the leaderboard database.
-// Updated for 2026 Best Practices: Transactional Awareness via bun.IDB
-type LeaderboardDB interface {
+// Repository defines the contract for leaderboard persistence.
+// All methods are context-aware for cancellation and timeout propagation.
+//
+// Error semantics:
+//   - ErrNotFound: Record does not exist
+//   - ErrNoActiveLeaderboard: No active leaderboard for guild
+//   - ErrUserTagNotFound: User has no tag in active leaderboard
+//   - ErrNoRowsAffected: UPDATE/DELETE matched no rows
+//   - Other errors: Infrastructure failures (DB connection, query errors)
+type Repository interface {
 	// Read Methods
 	GetActiveLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (*Leaderboard, error)
 	GetActiveLeaderboardIDB(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID) (*Leaderboard, error)
@@ -29,3 +36,10 @@ type LeaderboardDB interface {
 	CreateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (*Leaderboard, error)
 	DeactivateLeaderboard(ctx context.Context, idb bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error
 }
+
+// Type aliases for backward compatibility during migration.
+// Remove these after all callers are updated.
+type (
+	LeaderboardDB     = Repository
+	LeaderboardDBImpl = Impl
+)

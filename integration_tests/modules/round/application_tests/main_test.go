@@ -1,23 +1,17 @@
 package roundintegrationtests
 
 import (
+	"context"
 	"log"
 	"os"
-	"sync"
 	"testing"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 )
 
-// Global variables for the test environment, initialized once.
-var (
-	testEnv     *testutils.TestEnvironment
-	testEnvOnce sync.Once
-	testEnvErr  error
-)
-
 // TestMain initializes and cleans up the global test environment.
-// Per-test setup (service, event bus) is handled within test functions.
+// Per-test setup (service) is handled within test functions.
 func TestMain(m *testing.M) {
 	log.Println("TestMain started in package roundintegrationtests")
 
@@ -69,6 +63,11 @@ func TestMain(m *testing.M) {
 	// Run the tests
 	exitCode := m.Run()
 	log.Printf("TestMain: m.Run() finished with exit code: %d", exitCode)
+
+	// Shutdown container pool
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	testutils.ShutdownContainerPool(ctx)
 
 	// Exit with the test result code
 	os.Exit(exitCode)

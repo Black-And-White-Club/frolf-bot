@@ -90,7 +90,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	os.Setenv("APP_ENV", "test")
 	log.Println("Truncated relevant tables before test")
 
-	scoreDB := &scoredb.ScoreDBImpl{DB: env.DB}
+	realDB := scoredb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -151,7 +151,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 		env.Ctx,
 		env.Config,
 		testObservability,
-		scoreDB,
+		realDB,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,
@@ -174,8 +174,13 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 		}
 	}()
 
-	// Wait a moment for the router to initialize
-	time.Sleep(500 * time.Millisecond)
+	// Wait for router to be running
+	select {
+	case <-watermillRouter.Running():
+		// ready
+	case <-time.After(5 * time.Second):
+		t.Fatal("router failed to start")
+	}
 
 	// Add comprehensive cleanup function to test context
 	cleanup := func() {

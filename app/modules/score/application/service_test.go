@@ -34,7 +34,7 @@ func TestNewScoreService(t *testing.T) {
 				// Create mock dependencies
 				testHandler := loggerfrolfbot.NewTestHandler()
 				logger := slog.New(testHandler)
-				mockDB := scoredb.NewMockScoreDB(ctrl)
+				mockDB := scoredb.NewMockRepository(ctrl)
 				mockEventBus := eventbus.NewMockEventBus(ctrl)
 				mockMetrics := &scoremetrics.NoOpMetrics{}
 				tracer := noop.NewTracerProvider().Tracer("test")
@@ -58,7 +58,7 @@ func TestNewScoreService(t *testing.T) {
 				}
 
 				// Check that all dependencies were correctly assigned
-				if scoreServiceImpl.ScoreDB != mockDB {
+				if scoreServiceImpl.repo != mockDB {
 					t.Errorf("Score DB not correctly assigned")
 				}
 				if scoreServiceImpl.EventBus != mockEventBus {
@@ -106,7 +106,7 @@ func TestNewScoreService(t *testing.T) {
 				}
 
 				// Check nil fields
-				if scoreServiceImpl.ScoreDB != nil {
+				if scoreServiceImpl.repo != nil {
 					t.Errorf("Score DB should be nil")
 				}
 				if scoreServiceImpl.EventBus != nil {
@@ -192,9 +192,9 @@ func Test_serviceWrapper(t *testing.T) {
 
 				// Mock metrics & logs
 				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
-				mockLogger.Info("Operation succeeded", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockLogger.Info("TestOperation completed successfully", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "TestOperation", testRoundID)
 			},
 		},
@@ -223,7 +223,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
 				mockLogger := a.logger
 				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
 				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
@@ -254,7 +254,7 @@ func Test_serviceWrapper(t *testing.T) {
 				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
 				mockLogger := a.logger
 				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
+				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
 				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
 				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)

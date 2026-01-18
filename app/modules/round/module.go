@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
+	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
@@ -19,6 +20,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/uptrace/bun"
 )
 
 type Module struct {
@@ -38,6 +40,7 @@ func NewRoundModule(
 	cfg *config.Config,
 	obs observability.Observability,
 	roundDB rounddb.RoundDB,
+	db *bun.DB,
 	userDB userdb.UserDB,
 	eventBus eventbus.EventBus,
 	router *message.Router,
@@ -50,14 +53,9 @@ func NewRoundModule(
 
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
-	roundDBImpl, ok := roundDB.(*rounddb.RoundDBImpl)
-	if !ok {
-		return nil, fmt.Errorf("roundDB is not of type *RoundDBImpl")
-	}
-
 	queueService, err := roundqueue.NewService(
 		ctx,
-		roundDBImpl.DB,
+		db,
 		logger,
 		cfg.Postgres.DSN,
 		metrics,
@@ -74,7 +72,7 @@ func NewRoundModule(
 
 	roundValidator := roundutil.NewRoundValidator()
 
-	roundService := roundservice.NewRoundService(
+	service := roundservice.NewRoundService(
 		roundDB,
 		queueService,
 		eventBus,
@@ -90,15 +88,17 @@ func NewRoundModule(
 	// Initialize round router
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, helpers, tracer, prometheusRegistry)
 
-	// CRITICAL FIX: Configure registers the handlers and adds middleware (CorrelationID)
-	// Without this, the router is created but never listens to any topics.
-	if err := roundRouter.Configure(roundService, metrics); err != nil {
+	// 2. Initialize Handlers
+	handlers := roundhandlers.NewRoundHandlers(service, logger, helpers)
+
+	// 3. Configure the router with handlers (registers topics and middleware)
+	if err := roundRouter.Configure(routerCtx, handlers); err != nil {
 		return nil, fmt.Errorf("failed to configure round router: %w", err)
 	}
 
 	module := &Module{
 		EventBus:           eventBus,
-		RoundService:       roundService,
+		RoundService:       service,
 		QueueService:       queueService,
 		config:             cfg,
 		RoundRouter:        roundRouter,

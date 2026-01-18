@@ -3,7 +3,9 @@ package containers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -61,6 +63,23 @@ func SetupNatsContainer(ctx context.Context) (*nats.NATSContainer, string, error
 	}
 
 	log.Printf("NATS container started with resource limits. URL: %s", natsURL)
+
+	// Optionally stream NATS container logs to stdout for debugging hangs. Enable by
+	// setting the environment variable STREAM_TESTCONTAINER_LOGS=1
+	if os.Getenv("STREAM_TESTCONTAINER_LOGS") == "1" {
+		go func() {
+			rc, err := natsContainer.Logs(ctx)
+			if err != nil {
+				log.Printf("Failed to attach to NATS container logs: %v", err)
+				return
+			}
+			defer rc.Close()
+			if _, err := io.Copy(os.Stdout, rc); err != nil {
+				log.Printf("Error streaming NATS container logs: %v", err)
+			}
+		}()
+	}
+
 	return natsContainer, natsURL, nil
 }
 

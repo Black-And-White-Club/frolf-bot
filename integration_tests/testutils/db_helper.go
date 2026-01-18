@@ -19,11 +19,6 @@ import (
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
-// runMigrations runs all module migrations
-func runMigrations(db *bun.DB) error {
-	return runMigrationsWithConnStr(db, "")
-}
-
 // runMigrationsWithConnStr runs all module migrations with an optional connection string for River
 func runMigrationsWithConnStr(db *bun.DB, pgConnStr string) error {
 	ctx := context.Background()
@@ -108,6 +103,12 @@ func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Mi
 // Known application tables (cached to avoid querying information_schema every time)
 var appTables = []string{"guild_memberships", "users", "scores", "leaderboards", "rounds", "guild_configs"}
 
+// CleanupRiverJobs deletes all jobs from the River queue
+func CleanupRiverJobs(ctx context.Context, db *bun.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM river_job")
+	return err
+}
+
 // CleanupDatabase truncates all tables in the database to ensure a clean state
 func CleanupDatabase(ctx context.Context, db *bun.DB) error {
 	if len(appTables) == 0 {
@@ -121,8 +122,17 @@ func CleanupDatabase(ctx context.Context, db *bun.DB) error {
 		return fmt.Errorf("failed to truncate tables: %w", err)
 	}
 
+	// Clean up River queue jobs
+	if err := CleanupRiverJobs(ctx, db); err != nil {
+		// Don't fail if table doesn't exist yet
+		if !strings.Contains(err.Error(), "does not exist") {
+			return fmt.Errorf("failed to cleanup river jobs: %w", err)
+		}
+	}
+
 	return nil
 }
+
 // TruncateTables truncates the specified tables
 func TruncateTables(ctx context.Context, db *bun.DB, tables ...string) error {
 	if len(tables) == 0 {

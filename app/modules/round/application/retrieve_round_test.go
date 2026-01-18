@@ -12,6 +12,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
@@ -48,7 +49,7 @@ func TestRoundService_GetRound(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	mockDB := rounddb.NewMockRoundDB(ctrl)
+	mockDB := rounddb.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
@@ -58,28 +59,28 @@ func TestRoundService_GetRound(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRoundDB)
-		expectedResult RoundOperationResult
+		mockDBSetup    func(*rounddb.MockRepository)
+		expectedResult results.OperationResult
 		expectedError  error
 	}{
 		{
 			name: "successful retrieval",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&testRound, nil)
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&testRound, nil)
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Success: &testRound,
 			},
 			expectedError: nil,
 		},
 		{
 			name: "error retrieving round",
-			mockDBSetup: func(mockDB *rounddb.MockRoundDB) {
+			mockDBSetup: func(mockDB *rounddb.MockRepository) {
 				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(ctx, guildID, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
+				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
 			},
-			expectedResult: RoundOperationResult{
+			expectedResult: results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					RoundID: testRoundID,
 					Error:   "database error",
@@ -94,15 +95,12 @@ func TestRoundService_GetRound(t *testing.T) {
 			tt.mockDBSetup(mockDB)
 
 			s := &RoundService{
-				RoundDB:        mockDB,
+				repo:           mockDB,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
 				roundValidator: mockRoundValidator,
-				EventBus:       mockEventBus,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (RoundOperationResult, error)) (RoundOperationResult, error) {
-					return serviceFunc(ctx)
-				},
+				eventBus:       mockEventBus,
 			}
 
 			guildID := sharedtypes.GuildID("guild-123")

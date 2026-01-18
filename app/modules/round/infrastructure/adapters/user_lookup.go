@@ -21,7 +21,7 @@ func NewUserLookupAdapter(db userdb.UserDB) *UserLookupAdapter {
 func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, normalizedUsername string) (*roundservice.UserIdentity, error) {
 	user, err := a.userDB.FindByUDiscUsername(ctx, guildID, normalizedUsername)
 	if err != nil {
-		if err == userdb.ErrUserNotFound {
+		if err == userdb.ErrNotFound {
 			return nil, nil
 		}
 		return nil, err
@@ -33,7 +33,7 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, g
 func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
 	user, err := a.userDB.FindByUDiscName(ctx, guildID, normalizedDisplayName)
 	if err != nil {
-		if err == userdb.ErrUserNotFound {
+		if err == userdb.ErrNotFound {
 			return nil, nil
 		}
 		return nil, err

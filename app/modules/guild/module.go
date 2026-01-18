@@ -9,6 +9,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
+	guildhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/handlers"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	guildrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -28,12 +29,12 @@ type Module struct {
 	prometheusRegistry *prometheus.Registry
 }
 
-// NewGuildModule creates a new instance of the Guild module.
+// NewGuildModule creates and initializes a new guild module.
 func NewGuildModule(
 	ctx context.Context,
 	cfg *config.Config,
 	obs observability.Observability,
-	guildDB guilddb.GuildDB,
+	guildRepo guilddb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -43,73 +44,65 @@ func NewGuildModule(
 	metrics := obs.Registry.GuildMetrics
 	tracer := obs.Registry.Tracer
 
-	logger.InfoContext(ctx, "guild.NewGuildModule called")
+	logger.InfoContext(ctx, "guild.NewGuildModule initializing")
 
-	// Initialize guild service
-	guildService := guildservice.NewGuildService(guildDB, eventBus, logger, metrics, tracer)
+	// 1. Initialize Service
+	service := guildservice.NewGuildService(guildRepo, logger, metrics, tracer)
 
-	// Create a Prometheus registry for this module (not used by router constructor)
+	// 2. Initialize Handlers
+	handlers := guildhandlers.NewGuildHandlers(service, logger, tracer, helpers, metrics)
+
+	// 3. Initialize Router
 	prometheusRegistry := prometheus.NewRegistry()
+	guildRouter := guildrouter.NewGuildRouter(
+		logger,
+		router,
+		eventBus,
+		eventBus,
+		cfg,
+		helpers,
+		tracer,
+		prometheusRegistry,
+	)
 
-	// Initialize guild router (without prometheusRegistry)
-	guildRouter := guildrouter.NewGuildRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer)
-
-	// Configure the router with the guild service
-	if err := guildRouter.Configure(routerCtx, guildService, eventBus, metrics); err != nil {
+	// 4. Configure the router with handlers
+	if err := guildRouter.Configure(routerCtx, handlers); err != nil {
 		return nil, fmt.Errorf("failed to configure guild router: %w", err)
 	}
 
-	module := &Module{
+	return &Module{
 		EventBus:           eventBus,
-		GuildService:       guildService,
+		GuildService:       service,
 		config:             cfg,
 		GuildRouter:        guildRouter,
 		Helper:             helpers,
 		observability:      obs,
 		prometheusRegistry: prometheusRegistry,
-	}
-
-	return module, nil
+	}, nil
 }
 
 // Run starts the guild module.
 func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
-	logger := m.observability.Provider.Logger
-	logger.InfoContext(ctx, "Starting guild module")
-
-	// Create a context that can be canceled
+	m.observability.Provider.Logger.InfoContext(ctx, "Starting guild module")
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
-	defer cancel()
 
-	// If we have a wait group, mark as done when this method exits
 	if wg != nil {
+		wg.Add(1)
 		defer wg.Done()
 	}
 
-	// Keep this goroutine alive until the context is canceled
 	<-ctx.Done()
-	logger.InfoContext(ctx, "Guild module goroutine stopped")
+	m.observability.Provider.Logger.InfoContext(ctx, "Guild module goroutine stopped")
 }
 
-// Close stops the guild module and cleans up resources.
+// Close shuts down the guild module.
 func (m *Module) Close() error {
-	logger := m.observability.Provider.Logger
-	logger.Info("Stopping guild module")
-
-	// Cancel any other running operations
 	if m.cancelFunc != nil {
 		m.cancelFunc()
 	}
-
-	// Close the GuildRouter
 	if m.GuildRouter != nil {
-		if err := m.GuildRouter.Close(); err != nil {
-			logger.Error("Error closing GuildRouter from module", "error", err)
-			return fmt.Errorf("error closing GuildRouter: %w", err)
-		}
+		return m.GuildRouter.Close()
 	}
-
-	logger.Info("Guild module stopped")
 	return nil
 }

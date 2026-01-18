@@ -9,13 +9,10 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -41,7 +38,6 @@ type LeaderboardRouter struct {
 	metricsBuilder     *metrics.PrometheusMetricsBuilder
 	prometheusRegistry *prometheus.Registry
 	metricsEnabled     bool
-	sagaCoordinator    *saga.SwapSagaCoordinator
 }
 
 // NewLeaderboardRouter creates a new instance of the router.
@@ -86,27 +82,12 @@ func NewLeaderboardRouter(
 // Configure sets up the middlewares and registers all module-specific event handlers.
 func (r *LeaderboardRouter) Configure(
 	routerCtx context.Context,
-	leaderboardService leaderboardservice.Service,
-	sagaCoordinator *saga.SwapSagaCoordinator,
-	eventbus eventbus.EventBus,
-	leaderboardMetrics leaderboardmetrics.LeaderboardMetrics,
+	handlers leaderboardhandlers.Handlers,
 ) error {
-	r.sagaCoordinator = sagaCoordinator
-
 	if r.metricsEnabled && r.metricsBuilder != nil {
 		r.logger.Info("Adding Prometheus router metrics middleware for Leaderboard")
 		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 	}
-
-	// Initialize Handlers with all dependencies, including the Saga
-	leaderboardHandlers := leaderboardhandlers.NewLeaderboardHandlers(
-		leaderboardService,
-		r.sagaCoordinator,
-		r.logger,
-		r.tracer,
-		r.helper,
-		leaderboardMetrics,
-	)
 
 	r.Router.AddMiddleware(
 		middleware.CorrelationID,
@@ -117,7 +98,7 @@ func (r *LeaderboardRouter) Configure(
 		tracingfrolfbot.TraceHandler(r.tracer),
 	)
 
-	return r.RegisterHandlers(routerCtx, leaderboardHandlers)
+	return r.RegisterHandlers(routerCtx, handlers)
 }
 
 // handlerDeps provides a scannable structure for the registerHandler helper.

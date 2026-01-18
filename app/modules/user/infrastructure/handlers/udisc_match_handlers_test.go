@@ -9,7 +9,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -46,7 +46,7 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Success: &userevents.UDiscMatchConfirmationRequiredPayloadV1{
 							ImportID: testImportID,
 						},
@@ -65,7 +65,7 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Success: &userevents.UDiscMatchConfirmedPayloadV1{
 							ImportID: testImportID,
 						},
@@ -84,7 +84,7 @@ func TestUserHandlers_HandleScorecardParsed(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().MatchParsedScorecard(gomock.Any(), gomock.Any()).
-					Return(userservice.UserOperationResult{}, nil)
+					Return(results.OperationResult{}, nil)
 			},
 			wantLen: 0,
 			wantErr: false,

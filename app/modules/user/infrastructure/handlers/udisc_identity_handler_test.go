@@ -8,7 +8,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
@@ -46,7 +46,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, &testUsername, &testName).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Success: &userevents.UDiscIdentityUpdatedPayloadV1{
 							UserID: testUserID,
 						},
@@ -66,7 +66,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, &testUsername, &testName).
-					Return(userservice.UserOperationResult{
+					Return(results.OperationResult{
 						Failure: &userevents.UDiscIdentityUpdateFailedPayloadV1{
 							GuildID: testGuildID,
 							UserID:  testUserID,
@@ -88,7 +88,7 @@ func TestUserHandlers_HandleUpdateUDiscIdentityRequest(t *testing.T) {
 			},
 			mockSetup: func() {
 				mockUserService.EXPECT().UpdateUDiscIdentity(gomock.Any(), testGuildID, testUserID, &testUsername, &testName).
-					Return(userservice.UserOperationResult{}, nil)
+					Return(results.OperationResult{}, nil)
 			},
 			wantLen: 0,
 			wantErr: false,

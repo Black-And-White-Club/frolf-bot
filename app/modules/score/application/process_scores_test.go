@@ -32,7 +32,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 	// Define test cases for ProcessRoundScores function.
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*scoredb.MockScoreDB)
+		mockDBSetup    func(*scoredb.MockRepository)
 		scores         []sharedtypes.ScoreInfo
 		expectedResult ScoreOperationResult
 		expectedError  error
@@ -40,7 +40,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 	}{
 		{
 			name: "Successfully processes round scores",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				gomock.InOrder(
 					mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{}, nil),
 					mockDB.EXPECT().
@@ -74,7 +74,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Successfully processes round scores when existing scores present and overwrite requested",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				gomock.InOrder(
 					mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{
 						{
@@ -114,7 +114,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Fails due to database error",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				gomock.InOrder(
 					mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{}, nil),
 					mockDB.EXPECT().
@@ -141,7 +141,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Fails due to invalid round ID",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				gomock.InOrder(
 					mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{}, nil),
 					mockDB.EXPECT().
@@ -168,7 +168,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Fails with empty score list",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{}, nil)
 			},
 			scores:    []sharedtypes.ScoreInfo{},
@@ -184,7 +184,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Handles extreme score values (expects validation error)", // Renamed for clarity
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{}, nil)
 			},
 			scores: []sharedtypes.ScoreInfo{
@@ -214,7 +214,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Fails when GetScoresForRound errors",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return(nil, errors.New("db failure"))
 			},
 			scores: []sharedtypes.ScoreInfo{
@@ -236,7 +236,7 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 		},
 		{
 			name: "Fails when scores already exist and overwrite not requested",
-			mockDBSetup: func(mockDB *scoredb.MockScoreDB) {
+			mockDBSetup: func(mockDB *scoredb.MockRepository) {
 				mockDB.EXPECT().GetScoresForRound(gomock.Any(), testGuildID, testRoundID).Return([]sharedtypes.ScoreInfo{
 					{
 						UserID:    testUserID,
@@ -270,11 +270,11 @@ func TestScoreService_ProcessRoundScores(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockDB := scoredb.NewMockScoreDB(ctrl)
+			mockDB := scoredb.NewMockRepository(ctrl)
 
 			// Initialize service with No-Op implementations for dependencies.
 			s := &ScoreService{
-				ScoreDB: mockDB,
+				repo:    mockDB,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,

@@ -8,13 +8,11 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/mock/gomock"
 )
 
@@ -33,8 +31,6 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 	}
 
 	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
 
 	tests := []struct {
 		name            string
@@ -53,7 +49,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundtypes.Round{
 							ID:          testRoundID,
 							Title:       testTitle,
@@ -80,7 +76,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Failure: &roundevents.RoundRetrievalFailedPayloadV1{
 							GuildID: testGuildID,
 							RoundID: testRoundID,
@@ -103,7 +99,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					fmt.Errorf("database connection error"),
 				)
 			},
@@ -119,12 +115,12 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{},
+					results.OperationResult{},
 					nil,
 				)
 			},
 			payload:       testPayload,
-			wantErr:       true,
+			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
@@ -135,14 +131,16 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
 					},
 					nil,
 				)
 			},
 			payload: testPayload,
-			wantErr: true,
+			wantErr: false,
+			wantResultLen: 1,
+			wantResultTopic: roundevents.RoundRetrievedV1,
 		},
 		{
 			name: "Successfully retrieve minimal round data",
@@ -152,7 +150,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundtypes.Round{
 							ID:      testRoundID,
 							Title:   testTitle,
@@ -176,7 +174,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					testGuildID,
 					testRoundID,
 				).Return(
-					roundservice.RoundOperationResult{
+					results.OperationResult{
 						Success: &roundtypes.Round{
 							ID:          testRoundID,
 							Title:       testTitle,
@@ -217,10 +215,8 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 			tt.mockSetup(mockRoundService)
 
 			h := &RoundHandlers{
-				roundService: mockRoundService,
-				logger:       logger,
-				tracer:       tracer,
-				metrics:      metrics,
+				service: mockRoundService,
+				logger:  logger,
 			}
 
 			ctx := context.Background()
