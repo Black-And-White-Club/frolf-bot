@@ -7,6 +7,31 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// DeletionStatus represents the lifecycle state of a guild config deletion.
+// Stored as VARCHAR(20) with a CHECK constraint in the database.
+type DeletionStatus string
+
+const (
+	DeletionStatusNone      DeletionStatus = "none"
+	DeletionStatusPending   DeletionStatus = "pending"
+	DeletionStatusCompleted DeletionStatus = "completed"
+	DeletionStatusFailed    DeletionStatus = "failed"
+)
+
+// IsValid returns true if the status is a known valid value.
+func (s DeletionStatus) IsValid() bool {
+	switch s {
+	case DeletionStatusNone, DeletionStatusPending, DeletionStatusCompleted, DeletionStatusFailed:
+		return true
+	}
+	return false
+}
+
+// String implements the Stringer interface.
+func (s DeletionStatus) String() string {
+	return string(s)
+}
+
 // GuildConfig is the Bun ORM model for the guild_configs table.
 type GuildConfig struct {
 	bun.BaseModel `bun:"table:guild_configs,alias:g"`
@@ -16,8 +41,8 @@ type GuildConfig struct {
 	UpdatedAt time.Time           `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 	IsActive  bool                `bun:"is_active,notnull,default:true"`
 
-	// Tracks deletion lifecycle. Plain string with default to avoid pointer noise.
-	DeletionStatus string `bun:"deletion_status,type:deletion_status_enum,notnull,default:'none'"`
+	// Tracks deletion lifecycle. VARCHAR(20) with CHECK constraint.
+	DeletionStatus DeletionStatus `bun:"deletion_status,type:varchar(20),notnull,default:'none'"`
 
 	// Discord resource IDs
 	SignupChannelID      string `bun:"signup_channel_id,nullzero,type:varchar(20)"`
