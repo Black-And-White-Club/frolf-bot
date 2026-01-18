@@ -8,119 +8,50 @@ import (
 )
 
 func init() {
+	// Ensure the name here matches your filename (e.g., 20260118_refine_guild_configs)
 	Migrations.MustRegister(
 		func(ctx context.Context, db *bun.DB) error {
-			fmt.Println("Refining guild_configs schema (enum to varchar migration)...")
+			fmt.Println("Executing robust refinement of guild_configs...")
 
-			// Check if deletion_status column is currently an enum type
-			// This handles existing installs that ran the old migration with enum
-			var isEnum bool
-			err := db.QueryRowContext(ctx, `
-				SELECT EXISTS (
-					SELECT 1 FROM information_schema.columns c
-					JOIN pg_type t ON c.udt_name = t.typname
-					WHERE c.table_name = 'guild_configs'
-					AND c.column_name = 'deletion_status'
-					AND t.typtype = 'e'
-				)
-			`).Scan(&isEnum)
-			if err != nil {
-				return fmt.Errorf("failed to check deletion_status column type: %w", err)
-			}
+			_, err := db.ExecContext(ctx, `
+				-- 1. Unlock the column by dropping defaults/constraints
+				ALTER TABLE guild_configs ALTER COLUMN deletion_status DROP DEFAULT;
+				ALTER TABLE guild_configs DROP CONSTRAINT IF EXISTS deletion_status_check;
 
-			if isEnum {
-				fmt.Println("Converting deletion_status from enum to varchar...")
+				-- 2. Force conversion to varchar(20)
+				-- We cast to text first to break the enum bond
+				ALTER TABLE guild_configs 
+				ALTER COLUMN deletion_status TYPE varchar(20) 
+				USING deletion_status::text;
 
-				// Convert enum to varchar, preserving existing values
-				_, err = db.ExecContext(ctx, `
-					-- Drop any existing constraint first
-					ALTER TABLE guild_configs
-					DROP CONSTRAINT IF EXISTS deletion_status_check;
+				-- 3. Set standard defaults and constraints
+				ALTER TABLE guild_configs ALTER COLUMN deletion_status SET DEFAULT 'none';
+				UPDATE guild_configs SET deletion_status = 'none' WHERE deletion_status IS NULL;
+				ALTER TABLE guild_configs ALTER COLUMN deletion_status SET NOT NULL;
 
-					-- Convert column from enum to varchar
-					ALTER TABLE guild_configs
-					ALTER COLUMN deletion_status TYPE varchar(20)
-					USING deletion_status::text;
-
-					-- Set default and NOT NULL
-					ALTER TABLE guild_configs
-					ALTER COLUMN deletion_status SET DEFAULT 'none';
-
-					ALTER TABLE guild_configs
-					ALTER COLUMN deletion_status SET NOT NULL;
-
-					-- Add CHECK constraint
-					ALTER TABLE guild_configs
-					ADD CONSTRAINT deletion_status_check
+				ALTER TABLE guild_configs ADD CONSTRAINT deletion_status_check 
 					CHECK (deletion_status IN ('none', 'pending', 'completed', 'failed'));
 
-					-- Clean up the old enum type
-					DROP TYPE IF EXISTS deletion_status_enum;
-				`)
-				if err != nil {
-					return fmt.Errorf("failed to convert deletion_status to varchar: %w", err)
-				}
-				fmt.Println("deletion_status converted to varchar successfully")
-			} else {
-				fmt.Println("deletion_status is already varchar, ensuring constraint exists...")
+				-- 4. Fix signup_emoji length (important for custom Discord emojis)
+				ALTER TABLE guild_configs ALTER COLUMN signup_emoji TYPE varchar(64);
 
-				// Ensure CHECK constraint exists (idempotent)
-				_, err = db.ExecContext(ctx, `
-					DO $$
-					BEGIN
-						IF NOT EXISTS (
-							SELECT 1 FROM pg_constraint
-							WHERE conname = 'deletion_status_check'
-						) THEN
-							ALTER TABLE guild_configs
-							ADD CONSTRAINT deletion_status_check
-							CHECK (deletion_status IN ('none', 'pending', 'completed', 'failed'));
-						END IF;
-					END $$;
-				`)
-				if err != nil {
-					return fmt.Errorf("failed to ensure deletion_status check constraint: %w", err)
-				}
-
-				// Also drop the enum type if it exists (cleanup)
-				_, err = db.ExecContext(ctx, `
-					DROP TYPE IF EXISTS deletion_status_enum;
-				`)
-				if err != nil {
-					return fmt.Errorf("failed to drop deletion_status_enum: %w", err)
-				}
-			}
-
-			// Expand signup_emoji to handle custom Discord emojis like <:frolf:123456789012345678>
-			_, err = db.ExecContext(ctx, `
-				ALTER TABLE guild_configs
-				ALTER COLUMN signup_emoji TYPE varchar(64);
+				-- 5. Final cleanup of the old type
+				DROP TYPE IF EXISTS deletion_status_enum CASCADE;
 			`)
 			if err != nil {
-				return fmt.Errorf("failed to expand signup_emoji length: %w", err)
+				return fmt.Errorf("migration failed: %w", err)
 			}
 
-			fmt.Println("guild_configs schema refined successfully")
+			fmt.Println("guild_configs refined successfully")
 			return nil
 		},
 		func(ctx context.Context, db *bun.DB) error {
-			fmt.Println("Rolling back guild_configs schema refinement...")
-
-			// Note: We cannot easily recreate the enum from varchar
-			// This rollback just removes the constraint and shrinks emoji column
+			// Rollback: remove constraint and shrink emoji column
 			_, err := db.ExecContext(ctx, `
-				ALTER TABLE guild_configs
-				DROP CONSTRAINT IF EXISTS deletion_status_check;
-
-				ALTER TABLE guild_configs
-				ALTER COLUMN signup_emoji TYPE varchar(10);
+				ALTER TABLE guild_configs DROP CONSTRAINT IF EXISTS deletion_status_check;
+				ALTER TABLE guild_configs ALTER COLUMN signup_emoji TYPE varchar(10);
 			`)
-			if err != nil {
-				return fmt.Errorf("failed to rollback schema changes: %w", err)
-			}
-
-			fmt.Println("guild_configs schema rollback completed")
-			return nil
+			return err
 		},
 	)
 }
