@@ -8,6 +8,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.85 h1:HoDzkK9zOHGnuOO2g0NR4kyievLmEcQAYUW/c0X0NUw=
 github.com/Black-And-White-Club/frolf-bot-shared v0.0.85/go.mod h1:6hzh3+eWUntRzXDxB9gAFK6cOMAaqkgdxmrbTfF5ZeQ=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.86 h1:EUXBm4d7ILY/KWbGMC5qUHd2fTOVqf62qfAMFPGqm7c=
+github.com/Black-And-White-Club/frolf-bot-shared v0.0.86/go.mod h1:6hzh3+eWUntRzXDxB9gAFK6cOMAaqkgdxmrbTfF5ZeQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/ThreeDotsLabs/watermill v1.5.1 h1:t5xMivyf9tpmU3iozPqyrCZXHvoV1XQDfihas4sV0fY=
