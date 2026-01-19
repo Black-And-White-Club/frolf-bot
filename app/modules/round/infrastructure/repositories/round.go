@@ -640,14 +640,24 @@ func (r *Impl) GetEventMessageID(ctx context.Context, guildID sharedtypes.GuildI
 func (r *Impl) UpdateRoundsAndParticipants(ctx context.Context, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
 	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		for _, update := range updates {
-			// Only update the participants column, not the entire round
-			_, err := tx.NewUpdate().
-				Model((*roundtypes.Round)(nil)).
+			// Only update the participants column, not the entire round.
+			// Use the DB model (Round) so Bun has the table/column tags available.
+			res, err := tx.NewUpdate().
+				Model(&Round{}).
 				Set("participants = ?", update.Participants).
 				Where("id = ? AND guild_id = ?", update.RoundID, guildID).
 				Exec(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to update participants for round %s: %w", update.RoundID, err)
+			}
+
+			// Ensure at least one row was affected; otherwise the update silently did nothing
+			rowsAffected, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("failed to determine rows affected for round %s: %w", update.RoundID, err)
+			}
+			if rowsAffected == 0 {
+				return fmt.Errorf("no rows updated for round %s", update.RoundID)
 			}
 		}
 		return nil
