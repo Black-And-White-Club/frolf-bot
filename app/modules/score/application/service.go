@@ -130,19 +130,44 @@ func (s *ScoreService) withTelemetry(
 	// then it's a true system error that should be propagated.
 	if err != nil && result.Failure == nil {
 		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
-		s.logger.ErrorContext(ctx, "Error in "+operationName,
-			attr.RoundID("round_id", roundID),
+		s.logger.ErrorContext(ctx, "Operation failed with error",
 			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.RoundID("round_id", roundID),
 			attr.Error(wrappedErr),
+			attr.Any("result_has_failure", result.Failure != nil),
 		)
 		s.metrics.RecordOperationFailure(ctx, operationName, roundID)
 		span.RecordError(wrappedErr)
 		return results.OperationResult{}, wrappedErr // Return empty result and wrapped error
 	}
 
+	// Check for business logic failures even when err is nil
+	if result.Failure != nil {
+		s.logger.WarnContext(ctx, "Operation returned failure result",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.RoundID("round_id", roundID),
+			attr.Any("failure_payload", result.Failure),
+			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+		)
+		// Note: Not recording as operation failure in metrics since err is nil
+		// and the operation technically succeeded (business validation failed)
+	}
+
 	// If there was an error but a Failure payload was populated, or no error occurred,
 	// log success and return the result.
 	if err == nil || result.Failure != nil { // This condition explicitly handles both success and handled business failures
+		// Log successful operations at debug level with result type
+		if result.Success != nil {
+			s.logger.InfoContext(ctx, "Operation completed successfully",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("operation", operationName),
+				attr.RoundID("round_id", roundID),
+				attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
+			)
+		}
+
 		s.logger.InfoContext(ctx, operationName+" completed successfully",
 			attr.String("operation", operationName),
 			attr.RoundID("round_id", roundID),

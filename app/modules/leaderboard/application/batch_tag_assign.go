@@ -42,9 +42,9 @@ func (s *LeaderboardService) executeBatchLogic(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-)(results.OperationResult, error) {
+) (results.OperationResult, error) {
 
-	s.logInfoContext(ctx, "Executing funnel logic",
+	s.logger.InfoContext(ctx, "Executing funnel logic",
 		attr.String("source", string(source)),
 		attr.String("update_id", updateID.String()),
 		attr.Int("request_count", len(requests)),
@@ -85,7 +85,7 @@ func (s *LeaderboardService) executeBatchLogic(
 		if holderID, occupied := tagToUserMap[req.TagNumber]; occupied {
 			// CONFLICT: Tag held by someone NOT in this update batch
 			if !requestingUsers[holderID] {
-				s.logInfoContext(ctx, "Tag conflict detected, redirection to Saga required",
+				s.logger.InfoContext(ctx, "Tag conflict detected, redirection to Saga required",
 					attr.Int("tag", int(req.TagNumber)),
 					attr.String("requestor", string(req.UserID)),
 					attr.String("current_holder", string(holderID)),

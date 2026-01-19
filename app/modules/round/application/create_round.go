@@ -33,6 +33,11 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		errs := s.roundValidator.ValidateRoundInput(input)
 		if len(errs) > 0 {
 			s.metrics.RecordValidationError(ctx)
+			s.logger.WarnContext(ctx, "Round validation failed",
+				attr.String("user_id", string(payload.UserID)),
+				attr.Any("validation_errors", errs),
+				attr.String("title", string(payload.Title)),
+			)
 			return results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        payload.UserID,
@@ -51,6 +56,12 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		)
 		if err != nil {
 			s.metrics.RecordTimeParsingError(ctx)
+			s.logger.WarnContext(ctx, "Time parsing failed",
+				attr.String("user_id", string(payload.UserID)),
+				attr.String("start_time_input", payload.StartTime),
+				attr.String("timezone", string(payload.Timezone)),
+				attr.Error(err),
+			)
 			return results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        payload.UserID,
@@ -65,6 +76,12 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
 		if parsedTime.Before(time.Now().UTC()) {
 			s.metrics.RecordValidationError(ctx)
+			s.logger.WarnContext(ctx, "Start time is in the past",
+				attr.String("user_id", string(payload.UserID)),
+				attr.Time("parsed_time", parsedTime),
+				attr.Time("current_time", time.Now().UTC()),
+				attr.String("title", string(payload.Title)),
+			)
 			return results.OperationResult{
 				Failure: &roundevents.RoundValidationFailedPayloadV1{
 					UserID:        payload.UserID,

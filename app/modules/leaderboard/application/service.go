@@ -83,13 +83,13 @@ func (s *LeaderboardService) withTelemetry(
 	}()
 
 	// Log operation start
-	s.logInfoContext(ctx, "Operation triggered", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
+	s.logger.InfoContext(ctx, "Operation triggered", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
 
 	// Panic recovery
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in %s: %v", operationName, r)
-			s.logErrorContext(ctx, "Critical panic recovered", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(err))
+			s.logger.ErrorContext(ctx, "Critical panic recovered", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(err))
 			if s.metrics != nil {
 				s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
 			}
@@ -102,7 +102,13 @@ func (s *LeaderboardService) withTelemetry(
 	result, err = op(ctx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
-		s.logErrorContext(ctx, "Operation failed", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(wrappedErr))
+		s.logger.ErrorContext(ctx, "Operation failed with error",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("guild_id", string(guildID)),
+			attr.Error(wrappedErr),
+			attr.Any("result_has_failure", result.Failure != nil),
+		)
 		if s.metrics != nil {
 			s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
 		}
@@ -110,7 +116,30 @@ func (s *LeaderboardService) withTelemetry(
 		return result, wrappedErr
 	}
 
-	s.logInfoContext(ctx, operationName+" completed successfully", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
+	// Check for business logic failures even when err is nil
+	if result.Failure != nil {
+		s.logger.WarnContext(ctx, "Operation returned failure result",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("guild_id", string(guildID)),
+			attr.Any("failure_payload", result.Failure),
+			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+		)
+		// Note: Not recording as operation failure in metrics since err is nil
+		// and the operation technically succeeded (business validation failed)
+	}
+
+	// Log successful operations at debug level with result type
+	if result.Success != nil {
+		s.logger.InfoContext(ctx, "Operation completed successfully",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("guild_id", string(guildID)),
+			attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
+		)
+	}
+
+	s.logger.InfoContext(ctx, operationName+" completed successfully", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
 	if s.metrics != nil {
 		s.metrics.RecordOperationSuccess(ctx, operationName, "LeaderboardService")
 	}
@@ -146,7 +175,7 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 		return err
 	}
 
-	s.logInfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
+	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
 
 	empty := &leaderboarddb.Leaderboard{
 		LeaderboardData: leaderboardtypes.LeaderboardData{},
@@ -159,18 +188,4 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
 	}
 	return nil
-}
-
-// logInfoContext is a nil-safe wrapper for tests.
-func (s *LeaderboardService) logInfoContext(ctx context.Context, msg string, args ...any) {
-	if s.logger != nil {
-		s.logger.InfoContext(ctx, msg, args...)
-	}
-}
-
-// logErrorContext is a nil-safe wrapper for error logging used in tests.
-func (s *LeaderboardService) logErrorContext(ctx context.Context, msg string, args ...any) {
-	if s.logger != nil {
-		s.logger.ErrorContext(ctx, msg, args...)
-	}
 }

@@ -91,14 +91,39 @@ func (s *UserService) withTelemetry(
 	result, err = op(ctx)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
-		s.logger.ErrorContext(ctx, "Operation failed",
+		s.logger.ErrorContext(ctx, "Operation failed with error",
 			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
 			attr.String("user_id", string(userID)),
 			attr.Error(wrappedErr),
+			attr.Any("result_has_failure", result.Failure != nil),
 		)
 		s.metrics.RecordOperationFailure(ctx, operationName, userID)
 		span.RecordError(wrappedErr)
 		return result, wrappedErr
+	}
+
+	// Check for business logic failures even when err is nil
+	if result.Failure != nil {
+		s.logger.WarnContext(ctx, "Operation returned failure result",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("user_id", string(userID)),
+			attr.Any("failure_payload", result.Failure),
+			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+		)
+		// Note: Not recording as operation failure in metrics since err is nil
+		// and the operation technically succeeded (business validation failed)
+	}
+
+	// Log successful operations at debug level with result type
+	if result.Success != nil {
+		s.logger.InfoContext(ctx, "Operation completed successfully",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("user_id", string(userID)),
+			attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
+		)
 	}
 
 	s.metrics.RecordOperationSuccess(ctx, operationName, userID)
