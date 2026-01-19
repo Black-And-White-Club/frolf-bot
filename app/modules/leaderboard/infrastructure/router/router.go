@@ -101,6 +101,71 @@ type handlerDeps struct {
 	metrics    handlerwrapper.ReturningMetrics
 }
 
+// registerFanOutHandler is a specialized helper for handlers that return multiple messages
+// intended for different topics. It intercepts the results and publishes them individually
+// via the EventBus to ensure they land on the correct NATS subjects.
+func registerFanOutHandler[T any](
+	deps handlerDeps,
+	topic string,
+	handler func(context.Context, *T) ([]handlerwrapper.Result, error),
+) {
+	handlerName := "leaderboard." + topic
+
+	// 1. Get the standard wrapped handler (handles JSON, tracing, etc.)
+	wrappedHandler := handlerwrapper.WrapTransformingTyped(
+		handlerName,
+		deps.logger,
+		deps.tracer,
+		deps.helper,
+		deps.metrics,
+		handler,
+	)
+
+	// 2. Create the Dispatcher Interceptor
+	dispatcher := func(msg *message.Message) ([]*message.Message, error) {
+		// Run the business logic
+		results, err := wrappedHandler(msg)
+		if err != nil {
+			return nil, err
+		}
+
+		// 3. Loop through every result and publish to its specific topic
+		for _, outMsg := range results {
+			// Extract the topic from the metadata set by mapSuccessResults
+			targetTopic := outMsg.Metadata.Get("topic")
+			if targetTopic == "" {
+				targetTopic = outMsg.Metadata.Get("Topic")
+			}
+
+			if targetTopic != "" {
+				// Use the eventbus to publish so we get all our standard logs/metrics
+				if err := deps.publisher.Publish(targetTopic, outMsg); err != nil {
+					deps.logger.Error("fan-out publish failed",
+						"topic", targetTopic,
+						"error", err,
+					)
+					return nil, err
+				}
+			} else {
+				deps.logger.Warn("message skipped: no topic metadata found", "message_id", outMsg.UUID)
+			}
+		}
+
+		// 4. Return nil so the Watermill Router doesn't try to publish anything
+		return nil, nil
+	}
+
+	// Register the dispatcher to the router
+	deps.router.AddHandler(
+		handlerName,
+		topic,
+		deps.subscriber,
+		"", // Default output topic is ignored
+		deps.publisher,
+		dispatcher,
+	)
+}
+
 // registerHandler is a generic helper to reduce boilerplate when adding topics to the router.
 func registerHandler[T any](
 	deps handlerDeps,
@@ -136,21 +201,24 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 		logger:     r.logger,
 		tracer:     r.tracer,
 		helper:     r.helper,
-		metrics:    nil, // Handlers return slices of results handled by the wrapper
+		metrics:    nil,
 	}
 
-	// MUTATIONS: Handlers that change leaderboard state and trigger the Traffic Cop/Saga
+	// MUTATIONS: Handlers that change leaderboard state
 	registerHandler(deps, leaderboardevents.LeaderboardUpdateRequestedV1, handlers.HandleLeaderboardUpdateRequested)
 	registerHandler(deps, leaderboardevents.TagSwapRequestedV1, handlers.HandleTagSwapRequested)
-	registerHandler(deps, sharedevents.LeaderboardBatchTagAssignmentRequestedV1, handlers.HandleBatchTagAssignmentRequested)
 
-	// READS: Handlers that query the current state without mutation
+	// SPECIAL CASE: Use registerFanOutHandler for Batch Tag Assignments
+	// because it triggers both Leaderboard events and Round sync events.
+	registerFanOutHandler(deps, sharedevents.LeaderboardBatchTagAssignmentRequestedV1, handlers.HandleBatchTagAssignmentRequested)
+
+	// READS: Handlers that query the current state
 	registerHandler(deps, leaderboardevents.GetLeaderboardRequestedV1, handlers.HandleGetLeaderboardRequest)
 	registerHandler(deps, sharedevents.DiscordTagLookupRequestedV1, handlers.HandleGetTagByUserIDRequest)
 	registerHandler(deps, sharedevents.RoundTagLookupRequestedV1, handlers.HandleRoundGetTagRequest)
 	registerHandler(deps, sharedevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)
 
-	// INFRASTRUCTURE: Handlers managing module lifecycle or configuration
+	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)
 
 	return nil
