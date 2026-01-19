@@ -204,7 +204,6 @@ func (env *TestEnvironment) CheckContainerHealth() error {
 	return nil
 }
 
-
 // Cleanup tears down all resources created for testing
 func (env *TestEnvironment) Cleanup() {
 	log.Println("Cleaning up test environment...")
@@ -234,7 +233,6 @@ func (env *TestEnvironment) Cleanup() {
 	globalPool.Release()
 	log.Println("Cleanup complete.")
 }
-
 
 // configureLocalDockerAutodetect sets minimal Testcontainers overrides for Colima environments
 // to make the integration suite plug-and-play. It only applies when:

@@ -25,9 +25,9 @@ import (
 )
 
 var (
-	testEnv               *testutils.TestEnvironment
-	testEnvErr            error
-	testEnvOnce           sync.Once
+	testEnv             *testutils.TestEnvironment
+	testEnvErr          error
+	testEnvOnce         sync.Once
 	standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
 )
 

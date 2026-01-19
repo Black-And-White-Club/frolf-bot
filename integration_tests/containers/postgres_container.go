@@ -61,7 +61,7 @@ func SetupPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, s
 		testcontainers.WithConfigModifier(func(config *container.Config) {
 			config.Cmd = []string{
 				"postgres",
-				"-c", "max_connections=300",  // Increased from default 100 to handle many test connections
+				"-c", "max_connections=300", // Increased from default 100 to handle many test connections
 			}
 		}),
 		testcontainers.WithHostConfigModifier(func(hostConfig *container.HostConfig) {

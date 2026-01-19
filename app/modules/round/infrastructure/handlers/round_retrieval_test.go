@@ -137,9 +137,9 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 					nil,
 				)
 			},
-			payload: testPayload,
-			wantErr: false,
-			wantResultLen: 1,
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundRetrievedV1,
 		},
 		{

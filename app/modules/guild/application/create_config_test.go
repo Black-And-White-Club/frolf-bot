@@ -43,13 +43,13 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		mockSetup    func(*guilddbmocks.MockRepository)
-		config       *guildtypes.GuildConfig
-		wantSuccess  bool
-		wantFailure  bool
-		wantErr      error
-		failReason   string
+		name        string
+		mockSetup   func(*guilddbmocks.MockRepository)
+		config      *guildtypes.GuildConfig
+		wantSuccess bool
+		wantFailure bool
+		wantErr     error
+		failReason  string
 	}{
 		{
 			name: "success",
@@ -115,15 +115,15 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			failReason:  "signup channel ID required",
 		},
 		{
-			name:      "nil config",
-			mockSetup: func(m *guilddbmocks.MockRepository) {},
-			config:    nil,
+			name:        "nil config",
+			mockSetup:   func(m *guilddbmocks.MockRepository) {},
+			config:      nil,
 			wantFailure: true,
 			failReason:  ErrNilConfig.Error(),
 		},
 		{
-			name:        "empty guild ID",
-			mockSetup:   func(m *guilddbmocks.MockRepository) {},
+			name:      "empty guild ID",
+			mockSetup: func(m *guilddbmocks.MockRepository) {},
 			config: &guildtypes.GuildConfig{
 				GuildID:              "",
 				SignupChannelID:      "signup-chan",

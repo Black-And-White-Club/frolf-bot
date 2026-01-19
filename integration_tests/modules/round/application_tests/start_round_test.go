@@ -96,7 +96,7 @@ func TestProcessRoundStart(t *testing.T) {
 				StartTime: nil,
 				ChannelID: "",
 			},
-			expectedError:         false,           // Service uses failure payload instead of error
+			expectedError:         false,   // Service uses failure payload instead of error
 			expectedErrorContains: "round", // Error from GetRound
 			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
@@ -131,7 +131,7 @@ func TestProcessRoundStart(t *testing.T) {
 				StartTime: nil,
 				ChannelID: "",
 			},
-			expectedError:         false,           // Service uses failure payload instead of error
+			expectedError:         false,   // Service uses failure payload instead of error
 			expectedErrorContains: "round", // Updated to match the actual error from GetRound
 			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {

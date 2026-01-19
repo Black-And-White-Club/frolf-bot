@@ -28,12 +28,12 @@ func TestUserHandlers_HandleUserRoleUpdateRequest(t *testing.T) {
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name         string
-		payload      *userevents.UserRoleUpdateRequestedPayloadV1
-		mockSetup    func()
-		wantLen      int
-		wantTopic    string
-		wantErr      bool
+		name      string
+		payload   *userevents.UserRoleUpdateRequestedPayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successfully handle UserRoleUpdateRequest",

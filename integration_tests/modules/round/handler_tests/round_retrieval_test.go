@@ -29,7 +29,10 @@ func TestHandleGetRoundRequest(t *testing.T) {
 				data := NewTestData()
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				init := NewTestData()
@@ -78,7 +81,10 @@ func TestHandleGetRoundRequest(t *testing.T) {
 				response := roundtypes.ResponseAccept
 				tagNumber := sharedtypes.TagNumber(1)
 				roundID := helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, data.UserID, response, &tagNumber)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -124,7 +130,10 @@ func TestHandleGetRoundRequest(t *testing.T) {
 				data := NewTestData()
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -164,7 +173,10 @@ func TestHandleGetRoundRequest(t *testing.T) {
 				data := NewTestData()
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateFinalized)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()

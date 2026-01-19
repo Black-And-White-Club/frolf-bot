@@ -115,4 +115,3 @@ func BenchmarkGenerateUpdatedSnapshot_XLarge(b *testing.B) {
 		_ = svc.GenerateUpdatedSnapshot(current, reqs)
 	}
 }
-

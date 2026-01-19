@@ -70,7 +70,7 @@ func TestUserService_GetUser(t *testing.T) {
 					Return(nil, userdbtypes.ErrNotFound)
 			},
 			expectedOpResult: results.FailureResult(&userevents.GetUserFailedPayloadV1{UserID: testUserID, Reason: "user not found"}),
-			expectedErr: nil,
+			expectedErr:      nil,
 		},
 		{
 			name: "Database error retrieving user",

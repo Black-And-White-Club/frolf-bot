@@ -33,13 +33,13 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		mockSetup      func(*roundmocks.MockService)
-		payload        *roundevents.CreateRoundRequestedPayloadV1
-		wantErr        bool
-		wantResultLen  int
+		name            string
+		mockSetup       func(*roundmocks.MockService)
+		payload         *roundevents.CreateRoundRequestedPayloadV1
+		wantErr         bool
+		wantResultLen   int
 		wantResultTopic string
-		expectedErrMsg string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Successfully handle CreateRoundRequest",
@@ -107,9 +107,9 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					fmt.Errorf("internal error"),
 				)
 			},
-			payload:         testPayload,
-			wantErr:         true,
-			expectedErrMsg:  "internal error",
+			payload:        testPayload,
+			wantErr:        true,
+			expectedErrMsg: "internal error",
 		},
 		{
 			name: "Unknown result returns empty results",
@@ -124,9 +124,9 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 					nil,
 				)
 			},
-			payload:        testPayload,
-			wantErr:        false,
-			wantResultLen:  0,
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 0,
 		},
 	}
 

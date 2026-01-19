@@ -184,7 +184,7 @@ func TestHandleRoundFinalized(t *testing.T) {
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
 				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, deps.DB)
-				return struct{
+				return struct {
 					id sharedtypes.RoundID
 					r  roundtypes.Round
 				}{roundID, existingRound}

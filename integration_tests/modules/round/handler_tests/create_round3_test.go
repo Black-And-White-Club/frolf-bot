@@ -32,7 +32,7 @@ func TestHandleRoundEventMessageIDUpdate(t *testing.T) {
 		timeout                time.Duration
 	}{
 		{
-			name: "Success - Update Valid Round Message ID",
+			name:    "Success - Update Valid Round Message ID",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				// Create a round in DB for this test

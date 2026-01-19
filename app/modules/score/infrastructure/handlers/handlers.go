@@ -38,8 +38,8 @@ func mapOperationResult(
 	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
 	for i, hr := range handlerResults {
 		wrapperResults[i] = handlerwrapper.Result{
-			Topic:   hr.Topic,
-			Payload: hr.Payload,
+			Topic:    hr.Topic,
+			Payload:  hr.Payload,
 			Metadata: hr.Metadata,
 		}
 	}

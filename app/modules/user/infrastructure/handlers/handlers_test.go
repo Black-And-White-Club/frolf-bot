@@ -31,4 +31,3 @@ func TestNewUserHandlers(t *testing.T) {
 		t.Fatal("Expected non-nil handlers even with nil dependencies")
 	}
 }
-

@@ -24,7 +24,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		timeout                time.Duration
 	}{
 		{
-			name: "Success - Update Title Only",
+			name:    "Success - Update Title Only",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -62,7 +62,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Description Only",
+			name:    "Success - Update Description Only",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -99,7 +99,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Location Only",
+			name:    "Success - Update Location Only",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -136,7 +136,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Start Time Only",
+			name:    "Success - Update Start Time Only",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -174,7 +174,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Event Type Only",
+			name:    "Success - Update Event Type Only",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -211,7 +211,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Multiple Fields",
+			name:    "Success - Update Multiple Fields",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -255,7 +255,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Round with Existing Participants",
+			name:    "Success - Update Round with Existing Participants",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -294,7 +294,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Round Not Found",
+			name:    "Failure - Round Not Found",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -329,7 +329,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Invalid JSON Message",
+			name:    "Failure - Invalid JSON Message",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))

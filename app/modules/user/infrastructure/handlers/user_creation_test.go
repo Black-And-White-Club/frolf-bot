@@ -29,12 +29,12 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name         string
-		payload      *userevents.UserSignupRequestedPayloadV1
-		mockSetup    func()
-		wantLen      int
-		wantTopic    string
-		wantErr      bool
+		name      string
+		payload   *userevents.UserSignupRequestedPayloadV1
+		mockSetup func()
+		wantLen   int
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name: "Successful signup with tag",

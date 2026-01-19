@@ -24,7 +24,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 		timeout                time.Duration
 	}{
 		{
-			name: "Success - All Scores Submitted (Single Participant)",
+			name:    "Success - All Scores Submitted (Single Participant)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -67,7 +67,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - All Scores Submitted (Multiple Participants)",
+			name:    "Success - All Scores Submitted (Multiple Participants)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -117,7 +117,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Not All Scores Submitted (Single Participant Without Score)",
+			name:    "Success - Not All Scores Submitted (Single Participant Without Score)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -162,7 +162,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Not All Scores Submitted (Multiple Missing Scores)",
+			name:    "Success - Not All Scores Submitted (Multiple Missing Scores)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -213,7 +213,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Last Score Submitted Triggers All Scores Submitted",
+			name:    "Success - Last Score Submitted Triggers All Scores Submitted",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -263,7 +263,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Round Not Found",
+			name:    "Failure - Round Not Found",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -298,7 +298,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			timeout: 700 * time.Millisecond,
 		},
 		{
-			name: "Failure - Invalid JSON Message",
+			name:    "Failure - Invalid JSON Message",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))

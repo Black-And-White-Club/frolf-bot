@@ -10,9 +10,9 @@ import (
 // Repository defines the persistence contract for user data.
 //
 // Error semantics:
-//  - ErrNotFound: requested record does not exist (Get* methods)
-//  - ErrNoRowsAffected: UPDATE/DELETE matched no rows
-//  - other errors: infrastructure failures
+//   - ErrNotFound: requested record does not exist (Get* methods)
+//   - ErrNoRowsAffected: UPDATE/DELETE matched no rows
+//   - other errors: infrastructure failures
 type Repository interface {
 	// Global user operations
 	GetUserGlobal(ctx context.Context, userID sharedtypes.DiscordID) (*User, error)

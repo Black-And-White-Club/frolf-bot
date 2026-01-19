@@ -31,7 +31,10 @@ func TestHandleRoundReminder(t *testing.T) {
 				response := roundtypes.ResponseAccept
 				tagNumber := sharedtypes.TagNumber(1)
 				roundID := helper.CreateUpcomingRoundWithParticipantAndTagInDB(t, deps.DB, data.UserID, response, &tagNumber)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -75,7 +78,10 @@ func TestHandleRoundReminder(t *testing.T) {
 				data := NewTestData()
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -110,7 +116,10 @@ func TestHandleRoundReminder(t *testing.T) {
 				data := NewTestData()
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateUpcoming)
-				return struct{ RoundID sharedtypes.RoundID; UserID sharedtypes.DiscordID }{RoundID: roundID, UserID: data.UserID}
+				return struct {
+					RoundID sharedtypes.RoundID
+					UserID  sharedtypes.DiscordID
+				}{RoundID: roundID, UserID: data.UserID}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -180,7 +189,7 @@ func TestHandleRoundReminder(t *testing.T) {
 			timeout: 5 * time.Second,
 		},
 		{
-			name: "Failure - Invalid JSON Message",
+			name:    "Failure - Invalid JSON Message",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				invalidJSON := []byte("invalid json")

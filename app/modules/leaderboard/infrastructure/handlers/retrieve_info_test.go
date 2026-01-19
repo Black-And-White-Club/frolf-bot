@@ -37,13 +37,13 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Successfully get leaderboard",
 			mockSetup: func() {
-					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-						results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-							GuildID:     testGuildID,
-							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-						}),
-						nil,
-					)
+				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
+					results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
+						GuildID:     testGuildID,
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
+					}),
+					nil,
+				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -65,13 +65,13 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Service failure - no active leaderboard",
 			mockSetup: func() {
-					mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-						results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-							GuildID:     testGuildID,
-							Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-						}),
-						nil,
-					)
+				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
+					results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
+						GuildID:     testGuildID,
+						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
+					}),
+					nil,
+				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -162,7 +162,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 					fmt.Errorf("service error"),
 				)
 			},
-			payload:       testPayload,
+			payload: testPayload,
 			// Handler treats service errors as "not found" for this lookup and returns a not-found event
 			wantErr:       false,
 			wantResultLen: 1,

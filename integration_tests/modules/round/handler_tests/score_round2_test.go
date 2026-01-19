@@ -24,7 +24,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 		timeout                time.Duration
 	}{
 		{
-			name: "Success - Update Participant Score (Single Participant)",
+			name:    "Success - Update Participant Score (Single Participant)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -72,7 +72,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Participant Score (Multiple Participants)",
+			name:    "Success - Update Participant Score (Multiple Participants)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -126,7 +126,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Success - Update Score for Participant with Existing Score",
+			name:    "Success - Update Score for Participant with Existing Score",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -172,7 +172,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Round Not Found",
+			name:    "Failure - Round Not Found",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -207,7 +207,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Participant Not Found in Round",
+			name:    "Failure - Participant Not Found in Round",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -245,7 +245,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 			timeout: 500 * time.Millisecond,
 		},
 		{
-			name: "Failure - Invalid JSON Message",
+			name:    "Failure - Invalid JSON Message",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))

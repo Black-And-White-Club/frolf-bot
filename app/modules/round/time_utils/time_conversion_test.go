@@ -212,7 +212,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "ISO-8601 format YYYY-MM-DD HH:MM",
 			startTimeStr: "2027-06-20 18:00",
 			timezone:     "America/Chicago",
-			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // June 5, 2027 12:00 UTC (7 AM CDT)
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),         // June 5, 2027 12:00 UTC (7 AM CDT)
 			want:         time.Date(2027, 6, 20, 23, 0, 0, 0, time.UTC).Unix(), // June 20, 2027 6 PM CDT = June 20 23:00 UTC
 			wantErr:      false,
 		},
@@ -220,7 +220,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "ISO-8601 format YYYY-MM-DD HH:MM:SS",
 			startTimeStr: "2027-07-15 14:30:00",
 			timezone:     "America/New_York",
-			mockNow:      time.Date(2027, 7, 10, 12, 0, 0, 0, time.UTC),       // July 10, 2027
+			mockNow:      time.Date(2027, 7, 10, 12, 0, 0, 0, time.UTC),         // July 10, 2027
 			want:         time.Date(2027, 7, 15, 18, 30, 0, 0, time.UTC).Unix(), // July 15, 2027 2:30 PM EDT = 18:30 UTC
 			wantErr:      false,
 		},
@@ -228,7 +228,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "MM/DD/YYYY HH:MM format",
 			startTimeStr: "08/25/2027 09:15",
 			timezone:     "America/Los_Angeles",
-			mockNow:      time.Date(2027, 8, 20, 12, 0, 0, 0, time.UTC),       // Aug 20, 2027
+			mockNow:      time.Date(2027, 8, 20, 12, 0, 0, 0, time.UTC),         // Aug 20, 2027
 			want:         time.Date(2027, 8, 25, 16, 15, 0, 0, time.UTC).Unix(), // Aug 25, 2027 9:15 AM PDT = 16:15 UTC (DST)
 			wantErr:      false,
 		},
@@ -244,7 +244,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Today at 1030pm (no space)",
 			startTimeStr: "Today at 1030pm",
 			timezone:     "America/Chicago",
-			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC), // June 5, 2027 7:00 PM UTC = 2:00 PM CST
+			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC),        // June 5, 2027 7:00 PM UTC = 2:00 PM CST
 			want:         time.Date(2027, 6, 6, 3, 30, 0, 0, time.UTC).Unix(), // June 6, 2027 3:30 AM UTC = June 5, 10:30 PM CST
 			wantErr:      false,
 		},
@@ -252,7 +252,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Today at 1030 pm (with space)",
 			startTimeStr: "Today at 1030 pm",
 			timezone:     "America/Chicago",
-			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC), // June 5, 2027 7:00 PM UTC = 2:00 PM CST
+			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC),        // June 5, 2027 7:00 PM UTC = 2:00 PM CST
 			want:         time.Date(2027, 6, 6, 3, 30, 0, 0, time.UTC).Unix(), // June 6, 2027 3:30 AM UTC = June 5, 10:30 PM CST
 			wantErr:      false,
 		},
@@ -287,7 +287,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Simple time 3pm",
 			startTimeStr: "3pm",
 			timezone:     "CST",
-			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 7 AM CDT
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),        // 7 AM CDT
 			want:         time.Date(2027, 6, 5, 20, 0, 0, 0, time.UTC).Unix(), // 3 PM CDT same day
 			wantErr:      false,
 		},
@@ -295,7 +295,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Simple time 10am",
 			startTimeStr: "10am",
 			timezone:     "PDT",
-			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 5 AM PDT
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),        // 5 AM PDT
 			want:         time.Date(2027, 6, 5, 17, 0, 0, 0, time.UTC).Unix(), // 10 AM PDT same day
 			wantErr:      false,
 		},
@@ -303,7 +303,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Time with colon 5:30pm",
 			startTimeStr: "5:30pm",
 			timezone:     "America/New_York",
-			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 8 AM EDT
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),         // 8 AM EDT
 			want:         time.Date(2027, 6, 5, 21, 30, 0, 0, time.UTC).Unix(), // 5:30 PM EDT same day
 			wantErr:      false,
 		},
@@ -312,7 +312,7 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			name:         "Next Tuesday",
 			startTimeStr: "next Tuesday 3pm",
 			timezone:     "CST",
-			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // Saturday, June 5
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),        // Saturday, June 5
 			want:         time.Date(2027, 6, 8, 20, 0, 0, 0, time.UTC).Unix(), // Tuesday June 8, 3 PM CDT
 			wantErr:      false,
 		},

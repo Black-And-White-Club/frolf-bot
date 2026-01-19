@@ -266,4 +266,3 @@ func normalizeNullablePointer(val *string) *string {
 	normalized := strings.ToLower(strings.TrimSpace(*val))
 	return &normalized
 }
-
