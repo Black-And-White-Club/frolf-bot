@@ -73,13 +73,15 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		}
 
 		// Check if start time is in the past
-		parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
-		if parsedTime.Before(time.Now().UTC()) {
+		// Truncate both times to minute precision to match time parser behavior
+		parsedTime := time.Unix(parsedTimeUnix, 0).UTC().Truncate(time.Minute)
+		currentTime := time.Now().UTC().Truncate(time.Minute)
+		if parsedTime.Before(currentTime) {
 			s.metrics.RecordValidationError(ctx)
 			s.logger.WarnContext(ctx, "Start time is in the past",
 				attr.String("user_id", string(payload.UserID)),
 				attr.Time("parsed_time", parsedTime),
-				attr.Time("current_time", time.Now().UTC()),
+				attr.Time("current_time", currentTime),
 				attr.String("title", string(payload.Title)),
 			)
 			return results.OperationResult{
