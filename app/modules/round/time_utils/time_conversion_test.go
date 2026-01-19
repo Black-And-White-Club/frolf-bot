@@ -240,6 +240,100 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			want:         0,
 			wantErr:      true,
 		},
+		{
+			name:         "Today at 1030pm (no space)",
+			startTimeStr: "Today at 1030pm",
+			timezone:     "America/Chicago",
+			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC), // June 5, 2027 7:00 PM UTC = 2:00 PM CST
+			want:         time.Date(2027, 6, 6, 3, 30, 0, 0, time.UTC).Unix(), // June 6, 2027 3:30 AM UTC = June 5, 10:30 PM CST
+			wantErr:      false,
+		},
+		{
+			name:         "Today at 1030 pm (with space)",
+			startTimeStr: "Today at 1030 pm",
+			timezone:     "America/Chicago",
+			mockNow:      time.Date(2027, 6, 5, 19, 0, 0, 0, time.UTC), // June 5, 2027 7:00 PM UTC = 2:00 PM CST
+			want:         time.Date(2027, 6, 6, 3, 30, 0, 0, time.UTC).Unix(), // June 6, 2027 3:30 AM UTC = June 5, 10:30 PM CST
+			wantErr:      false,
+		},
+		// Test YYYY-MM-DD H:MM AM/PM format
+		{
+			name:         "ISO-8601 with AM/PM - morning",
+			startTimeStr: "2027-06-20 9:00 AM",
+			timezone:     "America/Chicago",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 20, 14, 0, 0, 0, time.UTC).Unix(), // 9 AM CDT = 14:00 UTC
+			wantErr:      false,
+		},
+		{
+			name:         "ISO-8601 with AM/PM - evening",
+			startTimeStr: "2027-06-20 6:00 PM",
+			timezone:     "America/Los_Angeles",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 21, 1, 0, 0, 0, time.UTC).Unix(), // 6 PM PDT = 01:00 UTC next day
+			wantErr:      false,
+		},
+		// Test MM/DD/YYYY H:MM AM/PM format
+		{
+			name:         "US date format with AM/PM",
+			startTimeStr: "08/25/2027 9:15 PM",
+			timezone:     "America/New_York",
+			mockNow:      time.Date(2027, 8, 20, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 8, 26, 1, 15, 0, 0, time.UTC).Unix(), // 9:15 PM EDT = 01:15 UTC next day
+			wantErr:      false,
+		},
+		// Test simple time formats (no date)
+		{
+			name:         "Simple time 3pm",
+			startTimeStr: "3pm",
+			timezone:     "CST",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 7 AM CDT
+			want:         time.Date(2027, 6, 5, 20, 0, 0, 0, time.UTC).Unix(), // 3 PM CDT same day
+			wantErr:      false,
+		},
+		{
+			name:         "Simple time 10am",
+			startTimeStr: "10am",
+			timezone:     "PDT",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 5 AM PDT
+			want:         time.Date(2027, 6, 5, 17, 0, 0, 0, time.UTC).Unix(), // 10 AM PDT same day
+			wantErr:      false,
+		},
+		{
+			name:         "Time with colon 5:30pm",
+			startTimeStr: "5:30pm",
+			timezone:     "America/New_York",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // 8 AM EDT
+			want:         time.Date(2027, 6, 5, 21, 30, 0, 0, time.UTC).Unix(), // 5:30 PM EDT same day
+			wantErr:      false,
+		},
+		// Test natural language variations
+		{
+			name:         "Next Tuesday",
+			startTimeStr: "next Tuesday 3pm",
+			timezone:     "CST",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC), // Saturday, June 5
+			want:         time.Date(2027, 6, 8, 20, 0, 0, 0, time.UTC).Unix(), // Tuesday June 8, 3 PM CDT
+			wantErr:      false,
+		},
+		{
+			name:         "Tomorrow at noon",
+			startTimeStr: "tomorrow at noon",
+			timezone:     "PDT",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 6, 19, 0, 0, 0, time.UTC).Unix(), // June 6 noon PDT = 19:00 UTC
+			wantErr:      false,
+		},
+		// Test variations with "at"
+		{
+			name:         "Tomorrow at 3pm",
+			startTimeStr: "tomorrow at 3pm",
+			timezone:     "CDT",
+			mockNow:      time.Date(2027, 6, 5, 12, 0, 0, 0, time.UTC),
+			want:         time.Date(2027, 6, 6, 20, 0, 0, 0, time.UTC).Unix(),
+			wantErr:      false,
+		},
+		// Test compact time without space before am/pm (already tested with 932am and 1030pm)
 	}
 
 	for _, tt := range tests {

@@ -84,13 +84,42 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 		return 0, fmt.Errorf("failed to load timezone: %s", userTimeZone)
 	}
 
-	// Normalize the input
-	startTimeStr = strings.ToLower(startTimeStr)
-	startTimeStr = strings.ReplaceAll(startTimeStr, "today ", "today at ")
+	// Log the original input for debugging
+	originalInput := startTimeStr
 
-	// Ensure time format includes a colon (e.g., "932am" → "9:32 AM")
-	timePattern := `(\d{1,2})(\d{2})(am|pm)`
-	startTimeStr = regexp.MustCompile(timePattern).ReplaceAllString(startTimeStr, "$1:$2 $3")
+	// Normalize the input
+	startTimeStrLower := strings.ToLower(startTimeStr)
+
+	// Ensure "today" is followed by "at" (but don't double it if already present)
+	if strings.Contains(startTimeStrLower, "today ") && !strings.Contains(startTimeStrLower, "today at") {
+		startTimeStr = strings.ReplaceAll(startTimeStr, "today ", "today at ")
+		startTimeStr = strings.ReplaceAll(startTimeStr, "Today ", "today at ")
+	}
+
+	// Ensure time format includes a colon (e.g., "932am" → "9:32 AM", "1030 pm" → "10:30 PM")
+	// The \s? handles optional space before am/pm
+	// Use case-insensitive regex and preserve the original AM/PM case by uppercasing it
+	timePattern := regexp.MustCompile(`(?i)(\d{1,2})(\d{2})\s?(am|pm)`)
+	startTimeStr = timePattern.ReplaceAllStringFunc(startTimeStr, func(match string) string {
+		// Extract parts and uppercase am/pm
+		parts := timePattern.FindStringSubmatch(match)
+		if len(parts) == 4 {
+			return fmt.Sprintf("%s:%s %s", parts[1], parts[2], strings.ToUpper(parts[3]))
+		}
+		return match
+	})
+
+	// After compact time normalization, lowercase for `when` parser compatibility
+	// but keep explicit formats working by trying them first
+	startTimeStrForWhen := strings.ToLower(startTimeStr)
+
+	// Log if the input was transformed
+	if originalInput != startTimeStr {
+		slog.Info("Time input normalized",
+			slog.String("original", originalInput),
+			slog.String("normalized", startTimeStr),
+			slog.String("timezone", userTimeZone))
+	}
 
 	// Try explicit date/time formats before using natural language parser
 	// These formats are more reliable for structured input
@@ -130,15 +159,15 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 	w := when.New(nil)
 	w.Add(en.All...)
 
-	// Try parsing with `when`
-	r, err := w.Parse(startTimeStr, clock.Now().In(loc))
+	// Try parsing with `when` using lowercase version for better compatibility
+	r, err := w.Parse(startTimeStrForWhen, clock.Now().In(loc))
 	if err != nil {
-		slog.Error("Error parsing time input with when", slog.String("input", startTimeStr), slog.Any("error", err))
+		slog.Error("Error parsing time input with when", slog.String("input", startTimeStrForWhen), slog.Any("error", err))
 	}
 	if r != nil {
 		parsedTime := r.Time.In(loc)
 		slog.Info("Parsed time using when natural language parser",
-			slog.String("input", startTimeStr),
+			slog.String("input", startTimeStrForWhen),
 			slog.String("parsed_time", parsedTime.Format(time.RFC3339)),
 			slog.String("timezone", loc.String()),
 		)
@@ -156,7 +185,7 @@ func (tp *TimeParser) ParseUserTimeInput(startTimeStr string, timezone roundtype
 	}
 
 	// If `when` fails, try manual parsing
-	slog.Warn("`when` failed to parse input, falling back to manual parsing", slog.String("input", startTimeStr))
+	slog.Warn("`when` failed to parse input, falling back to manual parsing", slog.String("input", startTimeStrForWhen))
 
 	// Try parsing as "Monday 9:32 AM"
 	manualTimeStr := fmt.Sprintf("%s %s", clock.Now().Weekday().String(), startTimeStr)
