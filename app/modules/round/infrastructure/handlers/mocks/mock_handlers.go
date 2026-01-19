@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -390,19 +389,19 @@ func (mr *MockHandlersMockRecorder) HandleRoundUpdateValidated(ctx, payload any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundUpdateValidated", reflect.TypeOf((*MockHandlers)(nil).HandleRoundUpdateValidated), ctx, payload)
 }
 
-// HandleScheduledRoundTagUpdate mocks base method.
-func (m *MockHandlers) HandleScheduledRoundTagUpdate(ctx context.Context, payload *leaderboardevents.TagUpdateForScheduledRoundsPayloadV1) ([]handlerwrapper.Result, error) {
+// HandleScheduledRoundTagSync mocks base method.
+func (m *MockHandlers) HandleScheduledRoundTagSync(ctx context.Context, payload *sharedevents.SyncRoundsTagRequestPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleScheduledRoundTagUpdate", ctx, payload)
+	ret := m.ctrl.Call(m, "HandleScheduledRoundTagSync", ctx, payload)
 	ret0, _ := ret[0].([]handlerwrapper.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// HandleScheduledRoundTagUpdate indicates an expected call of HandleScheduledRoundTagUpdate.
-func (mr *MockHandlersMockRecorder) HandleScheduledRoundTagUpdate(ctx, payload any) *gomock.Call {
+// HandleScheduledRoundTagSync indicates an expected call of HandleScheduledRoundTagSync.
+func (mr *MockHandlersMockRecorder) HandleScheduledRoundTagSync(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScheduledRoundTagUpdate", reflect.TypeOf((*MockHandlers)(nil).HandleScheduledRoundTagUpdate), ctx, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScheduledRoundTagSync", reflect.TypeOf((*MockHandlers)(nil).HandleScheduledRoundTagSync), ctx, payload)
 }
 
 // HandleScoreBulkUpdateRequest mocks base method.

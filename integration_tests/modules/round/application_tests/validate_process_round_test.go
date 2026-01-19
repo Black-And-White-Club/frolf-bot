@@ -191,8 +191,8 @@ func TestValidateAndProcessRound(t *testing.T) {
 					t.Errorf("Expected failure result of type *roundevents.RoundValidationFailedPayloadV1, but got %T", result.Failure)
 					return
 				}
-				// Updated expected error message to match actual output
-				expectedErrMsg := "could not recognize time format: not a real time string"
+				// Updated expected error message to match actual output from TimeParser
+				expectedErrMsg := "could not recognize time format 'not a real time string'. Supported formats: YYYY-MM-DD HH:MM, MM/DD/YYYY HH:MM, or natural language like 'tomorrow 5pm'"
 				if len(failurePayload.ErrorMessages) != 1 || failurePayload.ErrorMessages[0] != expectedErrMsg {
 					t.Errorf("Expected error message '%s', got '%v'", expectedErrMsg, failurePayload.ErrorMessages)
 				}

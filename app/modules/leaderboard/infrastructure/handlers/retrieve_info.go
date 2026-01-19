@@ -3,13 +3,11 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
 // HandleGetLeaderboardRequest returns the full current state.
@@ -54,47 +52,6 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 	}
 
 	return []handlerwrapper.Result{{Topic: topic, Payload: successPayload}}, nil
-}
-
-// mapSuccessResults is a private helper to build consistent batch completion events.
-func (h *LeaderboardHandlers) mapSuccessResults(
-	guildID sharedtypes.GuildID,
-	requestorID sharedtypes.DiscordID,
-	batchID string,
-	result results.OperationResult,
-	source string,
-) []handlerwrapper.Result {
-	// Expect the service to return a LeaderboardBatchTagAssignedPayloadV1
-	var assignments []leaderboardevents.TagAssignmentInfoV1
-	if result.IsSuccess() {
-		if payload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
-			assignments = payload.Assignments
-		}
-	}
-
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-	for _, a := range assignments {
-		changedTags[a.UserID] = a.TagNumber
-	}
-
-	// Build the batch-assigned payload using the handler-provided metadata
-	batchPayload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-		GuildID:          guildID,
-		RequestingUserID: requestorID,
-		BatchID:          batchID,
-		AssignmentCount:  len(assignments),
-		Assignments:      assignments,
-	}
-
-	return []handlerwrapper.Result{
-		{Topic: leaderboardevents.LeaderboardBatchTagAssignedV1, Payload: batchPayload},
-		{Topic: sharedevents.TagUpdateForScheduledRoundsV1, Payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
-			GuildID:     guildID,
-			ChangedTags: changedTags,
-			UpdatedAt:   time.Now().UTC(),
-			Source:      source,
-		}},
-	}
 }
 
 // HandleRoundGetTagRequest handles specialized tag lookups for the Round module.

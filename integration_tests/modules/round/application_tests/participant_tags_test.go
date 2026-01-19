@@ -53,7 +53,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				}
 			},
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
-				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+				success := res.Success.(*roundevents.ScheduledRoundsSyncedPayloadV1)
 
 				if len(success.UpdatedRounds) != 2 {
 					t.Errorf("Expected 2 updated rounds, got %d", len(success.UpdatedRounds))
@@ -80,7 +80,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				return guildID, map[sharedtypes.DiscordID]sharedtypes.TagNumber{"nonexistent": 999}
 			},
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
-				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+				success := res.Success.(*roundevents.ScheduledRoundsSyncedPayloadV1)
 				if success.Summary.RoundsUpdated != 0 {
 					t.Errorf("Expected 0 rounds updated, got %d", success.Summary.RoundsUpdated)
 				}
@@ -92,7 +92,7 @@ func TestUpdateScheduledRoundsWithNewTags(t *testing.T) {
 				return "test-guild", make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 			},
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, res results.OperationResult) {
-				success := res.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+				success := res.Success.(*roundevents.ScheduledRoundsSyncedPayloadV1)
 				if success.Summary.TotalRoundsProcessed != 0 {
 					t.Error("Expected 0 rounds processed for empty map")
 				}

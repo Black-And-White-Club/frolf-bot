@@ -3,7 +3,6 @@ package roundhandlers
 import (
 	"context"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -52,7 +51,7 @@ type Handlers interface {
 	HandleTagNumberLookupFailed(ctx context.Context, payload *sharedevents.RoundTagLookupFailedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Tag update handler
-	HandleScheduledRoundTagUpdate(ctx context.Context, payload *leaderboardevents.TagUpdateForScheduledRoundsPayloadV1) ([]handlerwrapper.Result, error)
+	HandleScheduledRoundTagSync(ctx context.Context, payload *sharedevents.SyncRoundsTagRequestPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Round retrieval handler
 	HandleGetRoundRequest(ctx context.Context, payload *roundevents.GetRoundRequestPayloadV1) ([]handlerwrapper.Result, error)

@@ -104,7 +104,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if result.Success == nil {
 					return false
 				}
-				payload, ok := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+				payload, ok := result.Success.(*roundevents.ScheduledRoundsSyncedPayloadV1)
 				if !ok {
 					return false
 				}
@@ -170,7 +170,7 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 				if result.Success == nil {
 					return false
 				}
-				payload, ok := result.Success.(*roundevents.TagsUpdatedForScheduledRoundsPayloadV1)
+				payload, ok := result.Success.(*roundevents.ScheduledRoundsSyncedPayloadV1)
 				if !ok {
 					return false
 				}

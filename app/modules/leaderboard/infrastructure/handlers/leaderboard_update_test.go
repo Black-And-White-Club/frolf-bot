@@ -212,7 +212,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 2,
-			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.TagUpdateForScheduledRoundsV1},
+			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.SyncRoundsTagRequestV1},
 		},
 	}
 
