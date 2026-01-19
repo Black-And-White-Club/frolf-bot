@@ -11,7 +11,6 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
-	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
@@ -19,7 +18,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -115,17 +113,6 @@ func (r *UserRouter) Configure(routerCtx context.Context, userService userservic
 
 	// Create user handlers with logger, tracer, and metrics
 	userHandlers := userhandlers.NewUserHandlers(userService, r.logger, r.tracer, r.helper, userMetrics)
-
-	// Add common middleware
-	r.Router.AddMiddleware(
-		middleware.CorrelationID,
-		r.middlewareHelper.CommonMetadataMiddleware("user"),
-		r.middlewareHelper.DiscordMetadataMiddleware(),
-		r.middlewareHelper.RoutingMetadataMiddleware(),
-		middleware.Recoverer,
-		middleware.Retry{MaxRetries: 3}.Middleware,
-		tracingfrolfbot.TraceHandler(r.tracer),
-	)
 
 	// Register the event handlers with the router, passing the routerCtx.
 	if err := r.registerHandlers(routerCtx, userHandlers); err != nil {

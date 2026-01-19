@@ -9,14 +9,12 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/handlers"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -88,15 +86,6 @@ func (r *LeaderboardRouter) Configure(
 		r.logger.Info("Adding Prometheus router metrics middleware for Leaderboard")
 		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
 	}
-
-	r.Router.AddMiddleware(
-		middleware.CorrelationID,
-		r.middlewareHelper.CommonMetadataMiddleware("leaderboard"),
-		r.middlewareHelper.DiscordMetadataMiddleware(),
-		r.middlewareHelper.RoutingMetadataMiddleware(),
-		middleware.Recoverer,
-		tracingfrolfbot.TraceHandler(r.tracer),
-	)
 
 	return r.RegisterHandlers(routerCtx, handlers)
 }
