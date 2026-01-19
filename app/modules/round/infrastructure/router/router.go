@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -171,7 +170,7 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	// Listen for leaderboard tag update events for scheduled rounds. The leaderboard
 	// service publishes TagUpdateForScheduledRoundsV1 when player tag numbers change;
 	// the round service should consume that topic to update upcoming rounds.
-	registerHandler(deps, leaderboardevents.TagUpdateForScheduledRoundsV1, h.HandleScheduledRoundTagUpdate)
+	registerHandler(deps, sharedevents.SyncRoundsTagRequestV1, h.HandleScheduledRoundTagSync)
 
 	registerHandler(deps, roundevents.GetRoundRequestedV1, h.HandleGetRoundRequest)
 	registerHandler(deps, roundevents.RoundReminderScheduledV1, h.HandleRoundReminder)

@@ -36,6 +36,10 @@ func NewLeaderboardService(
 	metrics leaderboardmetrics.LeaderboardMetrics,
 	tracer trace.Tracer,
 ) *LeaderboardService {
+
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &LeaderboardService{
 		repo:    repo,
 		logger:  logger,

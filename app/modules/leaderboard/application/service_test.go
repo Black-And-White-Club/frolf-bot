@@ -93,9 +93,6 @@ func TestNewLeaderboardService(t *testing.T) {
 				if leaderboardServiceImpl.repo != nil {
 					t.Errorf("repo should be nil")
 				}
-				if leaderboardServiceImpl.logger != nil {
-					t.Errorf("logger should be nil")
-				}
 				if leaderboardServiceImpl.metrics != nil {
 					t.Errorf("metrics should be nil")
 				}
@@ -230,17 +227,3 @@ func Test_withTelemetry(t *testing.T) {
 		})
 	}
 }
-
-// Helper to compare leaderboards without reflect
-func leaderboardsEqual(a, b leaderboardtypes.LeaderboardData) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].UserID != b[i].UserID || a[i].TagNumber != b[i].TagNumber {
-			return false
-		}
-	}
-	return true
-}
-

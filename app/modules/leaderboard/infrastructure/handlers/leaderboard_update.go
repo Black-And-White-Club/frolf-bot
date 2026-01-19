@@ -91,10 +91,9 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 			},
 		},
 		{
-			Topic: sharedevents.TagUpdateForScheduledRoundsV1,
-			Payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
+			Topic: sharedevents.SyncRoundsTagRequestV1,
+			Payload: &sharedevents.SyncRoundsTagRequestPayloadV1{
 				GuildID:     payload.GuildID,
-				RoundID:     payload.RoundID,
 				Source:      "leaderboard_update",
 				UpdatedAt:   time.Now().UTC(),
 				ChangedTags: changedTags,

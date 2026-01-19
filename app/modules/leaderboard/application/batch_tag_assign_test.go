@@ -3,6 +3,8 @@ package leaderboardservice
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -143,7 +145,7 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 
 			s := &LeaderboardService{
 				repo:    mockDB,
-				logger:  nil,
+				logger:  slog.New(slog.NewTextHandler(os.Stdout, nil)),
 				metrics: &leaderboardmetrics.NoOpMetrics{},
 				tracer:  tracer,
 			}

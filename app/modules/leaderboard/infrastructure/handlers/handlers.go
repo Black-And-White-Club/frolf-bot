@@ -3,9 +3,13 @@ package leaderboardhandlers
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -55,6 +59,47 @@ func mapOperationResult(
 	}
 
 	return wrapperResults
+}
+
+// mapSuccessResults is a private helper to build consistent batch completion events.
+func (h *LeaderboardHandlers) mapSuccessResults(
+	guildID sharedtypes.GuildID,
+	requestorID sharedtypes.DiscordID,
+	batchID string,
+	result results.OperationResult,
+	source sharedtypes.ServiceUpdateSource,
+) []handlerwrapper.Result {
+	var assignments []leaderboardevents.TagAssignmentInfoV1
+	if result.IsSuccess() {
+		if payload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
+			assignments = payload.Assignments
+		}
+	}
+
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
+	for _, a := range assignments {
+		changedTags[a.UserID] = a.TagNumber
+	}
+
+	return []handlerwrapper.Result{
+		{
+			Topic: leaderboardevents.LeaderboardBatchTagAssignedV1,
+			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
+				GuildID: guildID, RequestingUserID: requestorID, BatchID: batchID,
+				AssignmentCount: len(assignments), Assignments: assignments,
+			},
+		},
+		{
+			// THIS IS THE TRIGGER
+			Topic: sharedevents.SyncRoundsTagRequestV1,
+			Payload: &sharedevents.SyncRoundsTagRequestPayloadV1{
+				GuildID:     guildID,
+				ChangedTags: changedTags,
+				UpdatedAt:   time.Now().UTC(),
+				Source:      source,
+			},
+		},
+	}
 }
 
 // HandleGuildConfigCreated seeds an empty active leaderboard for the guild if missing.

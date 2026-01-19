@@ -23,12 +23,12 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 	}{
 		{
 			name:                   "Success - Tag Update for Single Round with Multiple Participants",
-			expectedOutgoingTopics: []string{roundevents.TagsUpdatedForScheduledRoundsV1},
+			expectedOutgoingTopics: []string{roundevents.ScheduledRoundsSyncedV1},
 			timeout:                5 * time.Second,
 		},
 		{
 			name:                   "Success - Tag Update for Multiple Rounds with Same Participant",
-			expectedOutgoingTopics: []string{roundevents.TagsUpdatedForScheduledRoundsV1},
+			expectedOutgoingTopics: []string{roundevents.ScheduledRoundsSyncedV1},
 			timeout:                5 * time.Second,
 		},
 		{
@@ -38,7 +38,7 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 		},
 		{
 			name:                   "Success - Tag Update Only Affects Upcoming Rounds",
-			expectedOutgoingTopics: []string{roundevents.TagsUpdatedForScheduledRoundsV1},
+			expectedOutgoingTopics: []string{roundevents.ScheduledRoundsSyncedV1},
 			timeout:                5 * time.Second,
 		},
 		{
@@ -104,7 +104,7 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 					case "Invalid JSON - Scheduled Round Tag Update Handler":
 						msg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 						msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-						testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.TagUpdateForScheduledRoundsV1, msg)
+						testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.SyncRoundsTagRequestV1, msg)
 						return msg
 					}
 
@@ -115,7 +115,7 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 					}
 					msg := message.NewMessage(uuid.New().String(), payloadBytes)
 					msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-					if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.TagUpdateForScheduledRoundsV1, msg); err != nil {
+					if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.SyncRoundsTagRequestV1, msg); err != nil {
 						t.Fatalf("Failed to publish message: %v", err)
 					}
 					return msg
@@ -123,19 +123,19 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 				ExpectedTopics: tc.expectedOutgoingTopics,
 				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 					if len(tc.expectedOutgoingTopics) == 0 {
-						successMsgs := receivedMsgs[roundevents.TagsUpdatedForScheduledRoundsV1]
+						successMsgs := receivedMsgs[roundevents.ScheduledRoundsSyncedV1]
 						if len(successMsgs) > 0 {
 							t.Errorf("Expected 0 messages, got %d", len(successMsgs))
 						}
 						return
 					}
 
-					msgs := receivedMsgs[roundevents.TagsUpdatedForScheduledRoundsV1]
+					msgs := receivedMsgs[roundevents.ScheduledRoundsSyncedV1]
 					if len(msgs) == 0 {
-						t.Fatalf("Expected at least one message on topic %q", roundevents.TagsUpdatedForScheduledRoundsV1)
+						t.Fatalf("Expected at least one message on topic %q", roundevents.ScheduledRoundsSyncedV1)
 					}
 
-					var payload roundevents.TagsUpdatedForScheduledRoundsPayloadV1
+					var payload roundevents.ScheduledRoundsSyncedPayloadV1
 					if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
 						t.Fatalf("Failed to unmarshal payload: %v", err)
 					}

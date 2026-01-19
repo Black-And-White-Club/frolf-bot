@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -16,13 +16,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
+func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	tn1 := sharedtypes.TagNumber(1)
 	tn2 := sharedtypes.TagNumber(13)
 
-	testPayload := &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
+	testPayload := &sharedevents.SyncRoundsTagRequestPayloadV1{
 		GuildID: testGuildID,
 		ChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 			sharedtypes.DiscordID("user1"): tn1,
@@ -35,7 +35,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 	tests := []struct {
 		name            string
 		mockSetup       func(*roundmocks.MockService)
-		payload         *leaderboardevents.TagUpdateForScheduledRoundsPayloadV1
+		payload         *sharedevents.SyncRoundsTagRequestPayloadV1
 		wantErr         bool
 		wantResultLen   int
 		wantResultTopic string
@@ -50,7 +50,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					results.OperationResult{
-						Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+						Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
 							UpdatedRounds: []roundevents.RoundUpdateInfoV1{
 								{
 									RoundID:             testRoundID,
@@ -73,7 +73,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.TagsUpdatedForScheduledRoundsV1,
+			wantResultTopic: roundevents.ScheduledRoundsSyncedV1,
 		},
 		{
 			name: "Service returns failure",
@@ -142,7 +142,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					nil,
 				)
 			},
-			payload: &leaderboardevents.TagUpdateForScheduledRoundsPayloadV1{
+			payload: &sharedevents.SyncRoundsTagRequestPayloadV1{
 				GuildID:     testGuildID,
 				ChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{},
 			},
@@ -158,7 +158,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 					gomock.Any(),
 				).Return(
 					results.OperationResult{
-						Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+						Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
 							UpdatedRounds: []roundevents.RoundUpdateInfoV1{}, // No rounds affected
 							Summary: roundevents.UpdateSummaryV1{
 								TotalRoundsProcessed: 0,
@@ -173,7 +173,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.TagsUpdatedForScheduledRoundsV1,
+			wantResultTopic: roundevents.ScheduledRoundsSyncedV1,
 		},
 		{
 			name: "Service returns unexpected payload type",
@@ -192,7 +192,7 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.TagsUpdatedForScheduledRoundsV1,
+			wantResultTopic: roundevents.ScheduledRoundsSyncedV1,
 		},
 	}
 
@@ -210,19 +210,19 @@ func TestRoundHandlers_HandleScheduledRoundTagUpdate(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			results, err := h.HandleScheduledRoundTagUpdate(ctx, tt.payload)
+			results, err := h.HandleScheduledRoundTagSync(ctx, tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleScheduledRoundTagUpdate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("HandleScheduledRoundTagSync() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleScheduledRoundTagUpdate() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
+				t.Errorf("HandleScheduledRoundTagSync() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
 			}
 			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleScheduledRoundTagUpdate() result length = %d, want %d", len(results), tt.wantResultLen)
+				t.Errorf("HandleScheduledRoundTagSync() result length = %d, want %d", len(results), tt.wantResultLen)
 			}
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
-				t.Errorf("HandleScheduledRoundTagUpdate() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+				t.Errorf("HandleScheduledRoundTagSync() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
 		})
 	}

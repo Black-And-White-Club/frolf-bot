@@ -6,9 +6,9 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 )
 
@@ -81,7 +81,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 		if len(changedTags) == 0 {
 			s.logger.InfoContext(ctx, "No tag changes to sync; skipping round updates")
 			return results.OperationResult{
-				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+				Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
 					GuildID: guildID,
 					Summary: roundevents.UpdateSummaryV1{GuildID: guildID},
 				},
@@ -110,7 +110,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 				attr.Int("total_upcoming", len(allUpcomingRounds)))
 
 			return results.OperationResult{
-				Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+				Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
 					GuildID: guildID,
 					Summary: roundevents.UpdateSummaryV1{
 						GuildID:              guildID,
@@ -162,7 +162,7 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 			attr.Int("total_users_synced", totalParticipantsUpdated))
 
 		return results.OperationResult{
-			Success: &roundevents.TagsUpdatedForScheduledRoundsPayloadV1{
+			Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
 				GuildID:       guildID,
 				UpdatedRounds: updatedRounds,
 				Summary: roundevents.UpdateSummaryV1{
