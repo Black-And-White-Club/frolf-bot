@@ -201,7 +201,7 @@ func (s *RoundService) IngestNormalizedScorecard(
 				UnmatchedPlayers: len(unmatchedPlayers),
 				SkippedPlayers:   unmatchedPlayers,
 				Scores:           finalScores,
-				RoundMode:        string(payload.Normalized.Mode),
+				RoundMode:        payload.Normalized.Mode,
 				EventMessageID:   payload.EventMessageID,
 				Timestamp:        time.Now().UTC(),
 			},
@@ -271,7 +271,7 @@ func (s *RoundService) ingestDoublesScorecard(ctx context.Context, payload round
 		Scores:             scores,
 		EventMessageID:     payload.EventMessageID,
 		Timestamp:          time.Now().UTC(),
-		RoundMode:          string(sharedtypes.RoundModeDoubles),
+		RoundMode:          sharedtypes.RoundModeDoubles,
 	}}, nil
 }
 

@@ -24,7 +24,7 @@ func (s *RoundService) ApplyImportedScores(
 		}
 
 		// --- Singles vs Teams ---
-		if payload.RoundMode == string(sharedtypes.RoundModeDoubles) || payload.RoundMode == string(sharedtypes.RoundModeTriples) {
+		if payload.RoundMode == sharedtypes.RoundModeDoubles || payload.RoundMode == sharedtypes.RoundModeTriples {
 			return s.applyTeamScores(ctx, payload)
 		}
 

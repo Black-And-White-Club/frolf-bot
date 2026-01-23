@@ -41,7 +41,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				GuildID:   guildID,
 				RoundID:   roundID,
 				ImportID:  importID,
-				RoundMode: string(sharedtypes.RoundModeSingles),
+				RoundMode: sharedtypes.RoundModeSingles,
 				Scores: []sharedtypes.ScoreInfo{
 					{UserID: u1, Score: score1},
 					{UserID: u2, Score: score2},
@@ -69,7 +69,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				GuildID:   guildID,
 				RoundID:   roundID,
 				ImportID:  importID,
-				RoundMode: string(sharedtypes.RoundModeSingles),
+				RoundMode: sharedtypes.RoundModeSingles,
 				Scores: []sharedtypes.ScoreInfo{
 					{UserID: u1, Score: score1},
 					{UserID: u2, Score: score2},
@@ -99,7 +99,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				GuildID:   guildID,
 				RoundID:   roundID,
 				ImportID:  importID,
-				RoundMode: string(sharedtypes.RoundModeSingles),
+				RoundMode: sharedtypes.RoundModeSingles,
 				Scores: []sharedtypes.ScoreInfo{
 					{UserID: u1, Score: score1},
 				},
@@ -121,7 +121,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				GuildID:   guildID,
 				RoundID:   roundID,
 				ImportID:  importID,
-				RoundMode: string(sharedtypes.RoundModeDoubles),
+				RoundMode: sharedtypes.RoundModeDoubles,
 				Scores: []sharedtypes.ScoreInfo{
 					{UserID: u1, Score: score1},
 				},
@@ -145,7 +145,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				GuildID:   guildID,
 				RoundID:   roundID,
 				ImportID:  importID,
-				RoundMode: string(sharedtypes.RoundModeDoubles),
+				RoundMode: sharedtypes.RoundModeDoubles,
 				Scores: []sharedtypes.ScoreInfo{
 					{UserID: u1, Score: score1},
 				},
@@ -254,7 +254,7 @@ func doublesPayload(guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, im
 		GuildID:   guildID,
 		RoundID:   roundID,
 		ImportID:  importID,
-		RoundMode: string(sharedtypes.RoundModeDoubles),
+		RoundMode: sharedtypes.RoundModeDoubles,
 		Scores: []sharedtypes.ScoreInfo{
 			{UserID: userID, Score: score},
 		},
