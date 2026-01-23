@@ -87,3 +87,37 @@ func extractScores(row []string, columnIndices []int) []int {
 
 	return scores
 }
+
+// SplitPlayerNames attempts to split a player/team name into individual player names.
+// It handles common separators used on UDisc scorecards like "+", "&", "/", and the word "and".
+func SplitPlayerNames(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+
+	// Normalize common separators to a single delimiter
+	normalized := s
+	// word " and " -> +
+	normalized = strings.ReplaceAll(normalized, " and ", " + ")
+	// ampersand variants
+	normalized = strings.ReplaceAll(normalized, "&", " + ")
+	// slashes
+	normalized = strings.ReplaceAll(normalized, "/", " + ")
+	// commas sometimes separate names
+	normalized = strings.ReplaceAll(normalized, ",", " + ")
+
+	parts := strings.Split(normalized, "+")
+	var out []string
+	for _, p := range parts {
+		n := strings.TrimSpace(p)
+		if n == "" {
+			continue
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return []string{s}
+	}
+	return out
+}

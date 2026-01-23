@@ -55,8 +55,8 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 							BaseRoundPayload: roundtypes.BaseRoundPayload{
 								RoundID:     testCreateRoundID,
 								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
+								Description: testDescription,
+								Location:    testLocation,
 								StartTime:   &testStartTime,
 								UserID:      testUserID,
 							},
@@ -172,8 +172,8 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 	testRound := roundtypes.Round{
 		ID:          testRoundID,
 		Title:       testTitle,
-		Description: &testDescription,
-		Location:    &testLocation,
+		Description: testDescription,
+		Location:    testLocation,
 		StartTime:   &testStartTime,
 		CreatedBy:   testUserID,
 	}
@@ -208,8 +208,8 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 							BaseRoundPayload: roundtypes.BaseRoundPayload{
 								RoundID:     testRoundID,
 								Title:       testTitle,
-								Description: &testDescription,
-								Location:    &testLocation,
+								Description: testDescription,
+								Location:    testLocation,
 								StartTime:   &testStartTime,
 								UserID:      testUserID,
 							},
@@ -327,8 +327,8 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 	testRound := &roundtypes.Round{
 		ID:          testRoundID,
 		Title:       testTitle,
-		Description: &testDescription,
-		Location:    &testLocation,
+		Description: testDescription,
+		Location:    testLocation,
 		StartTime:   &testStartTime,
 		CreatedBy:   testUserID,
 	}

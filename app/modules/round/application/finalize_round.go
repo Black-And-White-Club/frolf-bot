@@ -64,73 +64,60 @@ func (s *RoundService) FinalizeRound(ctx context.Context, payload roundevents.Al
 
 // NotifyScoreModule prepares the data needed by the Score Module after a round is finalized.
 func (s *RoundService) NotifyScoreModule(ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) (results.OperationResult, error) {
+
 	return s.withTelemetry(ctx, "NotifyScoreModule", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
-		// Use the round data directly from the payload
-		// The payload.RoundData is populated by AllScoresSubmittedPayloadV1 which has verified participants with scores
 		round := payload.RoundData
 
-		// Prepare the participant score data for the Score Module
-		// ONLY include participants who have actually submitted scores
+		roundMode := sharedtypes.RoundMode("SINGLES")
+		if len(round.Teams) > 0 {
+			roundMode = sharedtypes.RoundMode("DOUBLES")
+		}
+
 		scores := make([]sharedtypes.ScoreInfo, 0, len(round.Participants))
 		for _, p := range round.Participants {
-			// Skip participants without scores
 			if p.Score == nil {
-				s.logger.DebugContext(ctx, "Skipping participant without score",
-					attr.String("user_id", string(p.UserID)),
-					attr.StringUUID("round_id", payload.RoundID.String()),
-				)
 				continue
 			}
 
-			tagNumber := 0
-			if p.TagNumber != nil && *p.TagNumber != 0 {
-				tagNumber = int(*p.TagNumber)
+			// TagNumbers are meaningful only for singles
+			var tagPtr *sharedtypes.TagNumber
+			if roundMode == "SINGLES" && p.TagNumber != nil {
+				tag := *p.TagNumber
+				tagPtr = &tag
 			}
 
-			score := int(*p.Score) // We know p.Score is not nil here
-
-			tagNumberPtr := sharedtypes.TagNumber(tagNumber)
 			scores = append(scores, sharedtypes.ScoreInfo{
-				UserID:    sharedtypes.DiscordID(p.UserID),
-				TagNumber: &tagNumberPtr,
-				Score:     sharedtypes.Score(score),
+				UserID:    p.UserID,
+				TagNumber: tagPtr,
+				Score:     *p.Score,
 			})
-
-			s.logger.DebugContext(ctx, "Added participant score",
-				attr.String("user_id", string(p.UserID)),
-				attr.Int("score", score),
-				attr.Int("tag_number", tagNumber),
-				attr.StringUUID("round_id", payload.RoundID.String()),
-			)
 		}
 
-		// Check if we have any scores to process
 		if len(scores) == 0 {
-			s.logger.WarnContext(ctx, "No participants with scores found for round",
-				attr.StringUUID("round_id", payload.RoundID.String()),
-				attr.Int("total_participants", len(round.Participants)),
-			)
-			failurePayload := roundevents.RoundFinalizationErrorPayloadV1{
-				RoundID: payload.RoundID,
-				Error:   "no participants with submitted scores found",
-			}
-			return results.OperationResult{Failure: &failurePayload}, nil
+			return results.OperationResult{
+				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
+					RoundID: payload.RoundID,
+					Error:   "no participants with submitted scores found",
+				},
+			}, nil
 		}
 
-		// Prepare the success payload containing the request for the Score Module
-		processScoresPayload := sharedevents.ProcessRoundScoresRequestedPayloadV1{
-			GuildID: payload.GuildID,
-			// Use the authoritative RoundID from the event payload to avoid zero UUID writes
-			RoundID: payload.RoundID,
-			Scores:  scores,
+		out := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
+			GuildID:      payload.GuildID,
+			RoundID:      payload.RoundID,
+			Scores:       scores,
+			RoundMode:    roundMode,
+			Participants: round.Participants, // authoritative grouping source
 		}
-		s.logger.InfoContext(ctx, "Prepared score data for Score Module",
+
+		s.logger.InfoContext(ctx, "Prepared score processing request",
 			attr.StringUUID("round_id", payload.RoundID.String()),
-			attr.Int("participant_count_processed", len(scores)),
-			attr.Int("total_participants", len(round.Participants)),
+			attr.String("round_mode", string(roundMode)),
+			attr.Int("scores", len(scores)),
+			attr.Int("participants", len(round.Participants)),
 		)
 
-		return results.OperationResult{Success: &processScoresPayload}, nil
+		return results.OperationResult{Success: out}, nil
 	})
 }
 

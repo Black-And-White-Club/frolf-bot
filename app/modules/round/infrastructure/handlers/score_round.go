@@ -2,11 +2,14 @@ package roundhandlers
 
 import (
 	"context"
+	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/google/uuid"
 )
 
 // HandleScoreUpdateRequest handles requests to update a participant's score.
@@ -66,41 +69,87 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	ctx context.Context,
 	payload *roundevents.ParticipantScoreUpdatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+
 	h.logger.InfoContext(ctx, "HandleParticipantScoreUpdated called",
 		attr.String("round_id", payload.RoundID.String()),
 		attr.String("user_id", string(payload.UserID)),
 	)
 
+	// 1. Ask the domain service if the round is ready
 	result, err := h.service.CheckAllScoresSubmitted(ctx, *payload)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed", attr.Error(err))
 		return nil, err
 	}
 
+	// 2. Business failure
 	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "all scores submitted check failed",
-			attr.Any("failure", result.Failure),
-		)
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundFinalizationFailedV1, Payload: result.Failure},
+			{
+				Topic:   roundevents.RoundFinalizationFailedV1,
+				Payload: result.Failure,
+			},
 		}, nil
 	}
 
-	if result.Success != nil {
-		if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayloadV1); ok {
-			return []handlerwrapper.Result{
-				{Topic: roundevents.RoundAllScoresSubmittedV1, Payload: allScoresData},
-			}, nil
+	// 3. All scores submitted
+	if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayloadV1); ok {
+		scores := make([]sharedtypes.ScoreInfo, 0, len(allScoresData.Participants))
+
+		for _, p := range allScoresData.Participants {
+			if p.Score == nil {
+				continue
+			}
+
+			teamID := uuid.Nil
+			if p.TeamID != uuid.Nil {
+				teamID = p.TeamID
+			}
+
+			scores = append(scores, sharedtypes.ScoreInfo{
+				UserID:    p.UserID,
+				Score:     *p.Score,
+				TagNumber: p.TagNumber,
+				TeamID:    teamID,
+			})
 		}
 
-		if notAllScoresData, ok := result.Success.(*roundevents.ScoresPartiallySubmittedPayloadV1); ok {
-			return []handlerwrapper.Result{
-				{Topic: roundevents.RoundScoresPartiallySubmittedV1, Payload: notAllScoresData},
-			}, nil
-		}
+		return []handlerwrapper.Result{
 
-		return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from CheckAllScoresSubmitted"}
+			{
+				Topic:   roundevents.RoundAllScoresSubmittedV1,
+				Payload: allScoresData,
+			},
+		}, nil
 	}
 
-	return nil, sharedtypes.ValidationError{Message: "unexpected empty result from CheckAllScoresSubmitted service"}
+	// 4. Partial submission (unchanged behavior)
+	if partialData, ok := result.Success.(*roundevents.ScoresPartiallySubmittedPayloadV1); ok {
+		scoredTeams := make([]roundtypes.NormalizedTeam, 0)
+		remainingParticipants := make([]roundtypes.Participant, 0)
+
+		for _, p := range partialData.Participants {
+			if p.Score != nil && p.TeamID != uuid.Nil {
+				scoredTeams = append(scoredTeams, roundtypes.NormalizedTeam{
+					TeamID:  p.TeamID,
+					Members: []roundtypes.TeamMember{{UserID: &p.UserID, RawName: string(p.UserID)}},
+					Total:   int(*p.Score),
+				})
+			} else {
+				remainingParticipants = append(remainingParticipants, p)
+			}
+		}
+
+		partialData.Teams = scoredTeams
+		partialData.Participants = remainingParticipants
+
+		return []handlerwrapper.Result{
+			{
+				Topic:   roundevents.RoundScoresPartiallySubmittedV1,
+				Payload: partialData,
+			},
+		}, nil
+	}
+
+	return nil, fmt.Errorf("unexpected result from CheckAllScoresSubmitted")
 }

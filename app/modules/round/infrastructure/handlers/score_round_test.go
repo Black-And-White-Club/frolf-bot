@@ -360,13 +360,14 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 	logger := loggerfrolfbot.NoOpLogger
 
 	tests := []struct {
-		name            string
-		mockSetup       func(*roundmocks.MockService)
-		payload         *roundevents.ParticipantScoreUpdatedPayloadV1
-		wantErr         bool
-		wantResultLen   int
-		wantResultTopic string
-		expectedErrMsg  string
+		name             string
+		mockSetup        func(*roundmocks.MockService)
+		payload          *roundevents.ParticipantScoreUpdatedPayloadV1
+		wantErr          bool
+		wantResultLen    int
+		wantResultTopic  string
+		expectedErrMsg   string
+		wantResultTopics []string
 	}{
 		{
 			name: "All scores submitted - success path",
@@ -383,10 +384,12 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 					nil,
 				)
 			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundAllScoresSubmittedV1,
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 1,
+			wantResultTopics: []string{
+				roundevents.RoundAllScoresSubmittedV1,
+			},
 		},
 		{
 			name: "Not all scores submitted yet - partial path",
@@ -502,8 +505,10 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			if len(results) != tt.wantResultLen {
 				t.Errorf("HandleParticipantScoreUpdated() result length = %d, want %d", len(results), tt.wantResultLen)
 			}
-			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
-				t.Errorf("HandleParticipantScoreUpdated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			for i, topic := range tt.wantResultTopics {
+				if results[i].Topic != topic {
+					t.Errorf("HandleParticipantScoreUpdated() result topic[%d] = %v, want %v", i, results[i].Topic, topic)
+				}
 			}
 		})
 	}

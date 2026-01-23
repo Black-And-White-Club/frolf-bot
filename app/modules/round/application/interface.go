@@ -15,7 +15,6 @@ import (
 type Service interface {
 	// Create Round
 	ValidateAndProcessRoundWithClock(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (results.OperationResult, error)
-	ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (results.OperationResult, error)
 	StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (results.OperationResult, error)
 	UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 
@@ -61,9 +60,10 @@ type Service interface {
 	UpdateScheduledRoundsWithNewTags(ctx context.Context, guildID sharedtypes.GuildID, changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber) (results.OperationResult, error)
 
 	// Scorecard Import
+	ScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error)
 	CreateImportJob(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (results.OperationResult, error)
-	HandleScorecardURLRequested(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error)
 	ParseScorecard(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1, fileData []byte) (results.OperationResult, error)
-	IngestParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (results.OperationResult, error)
+	NormalizeParsedScorecard(ctx context.Context, parsed *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult, error)
+	IngestNormalizedScorecard(ctx context.Context, payload roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error)
 	ApplyImportedScores(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (results.OperationResult, error)
 }

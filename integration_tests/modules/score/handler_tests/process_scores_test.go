@@ -186,7 +186,12 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 				}
 
 				roundID := sharedtypes.RoundID(uuid.New())
-				payload := sharedevents.ProcessRoundScoresRequestedPayloadV1{GuildID: sharedtypes.GuildID("test-guild"), RoundID: roundID, Scores: scores}
+				payload := sharedevents.ProcessRoundScoresRequestedPayloadV1{
+					GuildID:   sharedtypes.GuildID("test-guild"),
+					RoundID:   roundID,
+					Scores:    scores,
+					RoundMode: sharedtypes.RoundModeSingles,
+				}
 				return publishProcessRoundScoresRequest(t, deps, payload)
 			},
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {

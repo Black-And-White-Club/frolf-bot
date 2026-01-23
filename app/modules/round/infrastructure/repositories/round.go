@@ -112,11 +112,14 @@ func toLocalRound(r *roundtypes.Round) *Round {
 	local := &Round{
 		ID:              r.ID,
 		Title:           r.Title,
+		Description:     r.Description,
+		Location:        r.Location,
 		EventType:       r.EventType,
 		Finalized:       r.Finalized,
 		CreatedBy:       r.CreatedBy,
 		State:           r.State,
 		Participants:    r.Participants,
+		Teams:           r.Teams,
 		EventMessageID:  r.EventMessageID,
 		GuildID:         r.GuildID,
 		ImportID:        r.ImportID,
@@ -133,12 +136,6 @@ func toLocalRound(r *roundtypes.Round) *Round {
 		ImportChannelID: r.ImportChannelID,
 	}
 
-	if r.Description != nil {
-		local.Description = *r.Description
-	}
-	if r.Location != nil {
-		local.Location = *r.Location
-	}
 	if r.StartTime != nil {
 		local.StartTime = *r.StartTime
 	}
@@ -150,14 +147,15 @@ func toSharedRound(r *Round) *roundtypes.Round {
 	return &roundtypes.Round{
 		ID:              r.ID,
 		Title:           r.Title,
-		Description:     &r.Description,
-		Location:        &r.Location,
+		Description:     r.Description,
+		Location:        r.Location,
 		EventType:       r.EventType,
 		StartTime:       &r.StartTime,
 		Finalized:       r.Finalized,
 		CreatedBy:       r.CreatedBy,
 		State:           r.State,
 		Participants:    r.Participants,
+		Teams:           r.Teams,
 		EventMessageID:  r.EventMessageID,
 		GuildID:         r.GuildID,
 		ImportID:        r.ImportID,
@@ -224,14 +222,15 @@ func convertToDomainRound(dbRound Round) *roundtypes.Round {
 	return &roundtypes.Round{
 		ID:              dbRound.ID,
 		Title:           dbRound.Title,
-		Description:     &dbRound.Description,
-		Location:        &dbRound.Location,
+		Description:     dbRound.Description,
+		Location:        dbRound.Location,
 		EventType:       dbRound.EventType,
 		StartTime:       &dbRound.StartTime,
 		Finalized:       dbRound.Finalized,
 		CreatedBy:       dbRound.CreatedBy,
 		State:           dbRound.State,
 		Participants:    dbRound.Participants,
+		Teams:           dbRound.Teams,
 		EventMessageID:  dbRound.EventMessageID,
 		GuildID:         dbRound.GuildID,
 		ImportID:        dbRound.ImportID,
@@ -260,11 +259,11 @@ func (r *Impl) UpdateRound(ctx context.Context, guildID sharedtypes.GuildID, rou
 	if round.Title != "" {
 		dbRound.Title = round.Title
 	}
-	if round.Description != nil && *round.Description != "" {
-		dbRound.Description = *round.Description
+	if round.Description != "" {
+		dbRound.Description = round.Description
 	}
-	if round.Location != nil && *round.Location != "" {
-		dbRound.Location = *round.Location
+	if round.Location != "" {
+		dbRound.Location = round.Location
 	}
 	if round.StartTime != nil {
 		dbRound.StartTime = *round.StartTime
@@ -567,11 +566,14 @@ func (r *Impl) GetRoundState(ctx context.Context, guildID sharedtypes.GuildID, r
 
 // GetParticipants retrieves all participants from a round.
 func (r *Impl) GetParticipants(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-	var round roundtypes.Round
+
+	var localRound Round
+
 	err := r.db.NewSelect().
-		Model(&round).
+		Model(&localRound).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Scan(ctx)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -579,7 +581,7 @@ func (r *Impl) GetParticipants(ctx context.Context, guildID sharedtypes.GuildID,
 		return nil, fmt.Errorf("failed to fetch round: %w", err)
 	}
 
-	return round.Participants, nil
+	return localRound.Participants, nil
 }
 
 // UpdateEventMessageID updates the EventMessageID(messageID) for an existing round.
@@ -606,14 +608,15 @@ func (r *Impl) UpdateEventMessageID(ctx context.Context, guildID sharedtypes.Gui
 	round := &roundtypes.Round{
 		ID:             dbRound.ID,
 		Title:          dbRound.Title,
-		Description:    &dbRound.Description,
-		Location:       &dbRound.Location,
+		Description:    dbRound.Description,
+		Location:       dbRound.Location,
 		EventType:      dbRound.EventType,
 		StartTime:      &dbRound.StartTime,
 		Finalized:      dbRound.Finalized,
 		CreatedBy:      dbRound.CreatedBy,
 		State:          dbRound.State,
 		Participants:   dbRound.Participants,
+		Teams:          dbRound.Teams,
 		EventMessageID: dbRound.EventMessageID,
 		GuildID:        dbRound.GuildID,
 	}

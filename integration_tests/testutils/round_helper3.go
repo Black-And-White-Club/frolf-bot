@@ -57,13 +57,13 @@ func (h *RoundTestHelper) CreateRoundWithParticipants(t *testing.T, db bun.IDB, 
 
 	// Make sure all required fields are set for DB insertion
 
-	if roundData.Description == nil {
+	if roundData.Description == "" {
 		desc := roundtypes.Description("Test round description")
-		roundData.Description = &desc
+		roundData.Description = desc
 	}
-	if roundData.Location == nil {
+	if roundData.Location == "" {
 		location := roundtypes.Location("Test Location")
-		roundData.Location = &location
+		roundData.Location = location
 	}
 	if roundData.StartTime == nil {
 		startTime := sharedtypes.StartTime(time.Now().Add(time.Hour))
@@ -74,8 +74,8 @@ func (h *RoundTestHelper) CreateRoundWithParticipants(t *testing.T, db bun.IDB, 
 	roundDB := &rounddb.Round{
 		ID:             roundData.ID,
 		Title:          roundData.Title,
-		Description:    *roundData.Description,
-		Location:       *roundData.Location,
+		Description:    roundData.Description,
+		Location:       roundData.Location,
 		EventType:      roundData.EventType,
 		StartTime:      *roundData.StartTime,
 		Finalized:      roundData.Finalized,

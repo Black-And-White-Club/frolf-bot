@@ -61,8 +61,8 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 			validateFn: func(t *testing.T, msg *message.Message) {
 				var p roundevents.RoundEntityUpdatedPayloadV1
 				_ = json.Unmarshal(msg.Payload, &p)
-				if p.Round.Description == nil || *p.Round.Description != "Updated description" {
-					t.Errorf("Description mismatch")
+				if p.Round.Description != "Updated description" {
+					t.Errorf("Description mismatch: got %v", p.Round.Description)
 				}
 			},
 		},

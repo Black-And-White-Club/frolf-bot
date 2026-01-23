@@ -56,6 +56,20 @@ func (mr *MockRepositoryMockRecorder) CreateRound(ctx, guildID, round any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRound", reflect.TypeOf((*MockRepository)(nil).CreateRound), ctx, guildID, round)
 }
 
+// CreateRoundGroups mocks base method.
+func (m *MockRepository) CreateRoundGroups(ctx context.Context, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRoundGroups", ctx, roundID, participants)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateRoundGroups indicates an expected call of CreateRoundGroups.
+func (mr *MockRepositoryMockRecorder) CreateRoundGroups(ctx, roundID, participants any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRoundGroups", reflect.TypeOf((*MockRepository)(nil).CreateRoundGroups), ctx, roundID, participants)
+}
+
 // DeleteRound mocks base method.
 func (m *MockRepository) DeleteRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) error {
 	m.ctrl.T.Helper()
@@ -208,6 +222,21 @@ func (m *MockRepository) RemoveParticipant(ctx context.Context, guildID sharedty
 func (mr *MockRepositoryMockRecorder) RemoveParticipant(ctx, guildID, roundID, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveParticipant", reflect.TypeOf((*MockRepository)(nil).RemoveParticipant), ctx, guildID, roundID, userID)
+}
+
+// RoundHasGroups mocks base method.
+func (m *MockRepository) RoundHasGroups(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RoundHasGroups", ctx, roundID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RoundHasGroups indicates an expected call of RoundHasGroups.
+func (mr *MockRepositoryMockRecorder) RoundHasGroups(ctx, roundID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundHasGroups", reflect.TypeOf((*MockRepository)(nil).RoundHasGroups), ctx, roundID)
 }
 
 // UpdateEventMessageID mocks base method.

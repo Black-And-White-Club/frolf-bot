@@ -37,10 +37,10 @@ func TestGetRound(t *testing.T) {
 
 				// Set the fields that are NOT in RoundOptions directly on the returned 'round' object
 				description := roundtypes.Description("This is a test round for GetRound.")
-				round.Description = &description
+				round.Description = description
 
 				location := roundtypes.Location("Test Course")
-				round.Location = &location
+				round.Location = location
 
 				eventType := roundtypes.EventType("Practice")
 				round.EventType = &eventType
@@ -131,16 +131,12 @@ func TestGetRound(t *testing.T) {
 				}
 
 				// Validate Description (pointer comparison and printing with %v)
-				if (retrievedRound.Description == nil && expectedRound.Description != nil) ||
-					(retrievedRound.Description != nil && expectedRound.Description == nil) ||
-					(retrievedRound.Description != nil && expectedRound.Description != nil && *retrievedRound.Description != *expectedRound.Description) {
+				if retrievedRound.Description != expectedRound.Description {
 					t.Errorf("Expected Description %v, got %v", expectedRound.Description, retrievedRound.Description)
 				}
 
 				// Validate Location (pointer comparison and printing with %v)
-				if (retrievedRound.Location == nil && expectedRound.Location != nil) ||
-					(retrievedRound.Location != nil && expectedRound.Location == nil) ||
-					(retrievedRound.Location != nil && expectedRound.Location != nil && *retrievedRound.Location != *expectedRound.Location) {
+				if retrievedRound.Location != expectedRound.Location {
 					t.Errorf("Expected Location %v, got %v", expectedRound.Location, retrievedRound.Location)
 				}
 

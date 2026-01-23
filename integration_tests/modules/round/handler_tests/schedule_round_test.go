@@ -217,8 +217,8 @@ func createScheduleRoundPayload(roundID sharedtypes.RoundID, title string, start
 		BaseRoundPayload: roundtypes.BaseRoundPayload{
 			RoundID:     roundID,
 			Title:       roundtypes.Title(title),
-			Description: &desc,
-			Location:    &loc,
+			Description: desc,
+			Location:    loc,
 			StartTime:   sharedStartTime,
 		},
 		EventMessageID: eventMessageID,

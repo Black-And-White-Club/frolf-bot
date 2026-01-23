@@ -53,7 +53,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 								GuildID: testGuildID,
 								RoundID: testRoundID,
-								Title:   testTitle,
+								Title:   &testTitle,
 							},
 						},
 					},
@@ -167,7 +167,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 			GuildID: testGuildID,
 			RoundID: testRoundID,
-			Title:   testTitle,
+			Title:   &testTitle,
 		},
 	}
 
@@ -176,7 +176,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 			GuildID:   testGuildID,
 			RoundID:   testRoundID,
-			Title:     testTitle,
+			Title:     &testTitle,
 			StartTime: &testStartTime,
 		},
 	}

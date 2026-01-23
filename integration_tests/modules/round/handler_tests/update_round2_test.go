@@ -92,7 +92,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
-				if result.Round.Description == nil || *result.Round.Description != "Updated description for the round" {
+				if result.Round.Description != "Updated description for the round" {
 					t.Errorf("Expected Description '%s', got %v", "Updated description for the round", result.Round.Description)
 				}
 			},
@@ -129,7 +129,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
-				if result.Round.Location == nil || *result.Round.Location != "Updated Course Location" {
+				if result.Round.Location != "Updated Course Location" {
 					t.Errorf("Expected Location '%s', got %v", "Updated Course Location", result.Round.Location)
 				}
 			},
@@ -392,7 +392,7 @@ func createRoundUpdateValidatedPayload(
 
 	// Set optional fields if provided
 	if title != nil {
-		requestPayload.Title = *title
+		requestPayload.Title = title
 	}
 	if description != nil {
 		requestPayload.Description = description

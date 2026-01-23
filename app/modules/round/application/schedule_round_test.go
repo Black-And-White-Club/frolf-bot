@@ -174,8 +174,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     testRoundID,
 					Title:       testRoundTitle,
-					Description: &testDescription,
-					Location:    &testLocation,
+					Description: testDescription,
+					Location:    testLocation,
 					StartTime:   startTimePtr(now.Add(tt.startTimeOffset)),
 				},
 			}

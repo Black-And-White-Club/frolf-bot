@@ -8,7 +8,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 
@@ -128,7 +127,8 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.ScorecardUploadedV1, h.HandleScorecardUploaded)
 	registerHandler(deps, roundevents.ScorecardURLRequestedV1, h.HandleScorecardURLRequested)
 	registerHandler(deps, roundevents.ScorecardParseRequestedV1, h.HandleParseScorecardRequest)
-	registerHandler(deps, userevents.UDiscMatchConfirmedV1, h.HandleUserMatchConfirmedForIngest)
+	registerHandler(deps, roundevents.ScorecardParsedForNormalizationV1, h.HandleScorecardParsedForNormalization)
+	registerHandler(deps, roundevents.ScorecardNormalizedV1, h.HandleScorecardNormalized)
 	registerHandler(deps, roundevents.ImportCompletedV1, h.HandleImportCompleted)
 
 	registerHandler(deps, roundevents.RoundCreationRequestedV1, h.HandleCreateRoundRequest)

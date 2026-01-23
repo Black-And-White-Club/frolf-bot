@@ -15,7 +15,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -449,6 +448,36 @@ func (mr *MockHandlersMockRecorder) HandleScoreUpdateValidated(ctx, payload any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScoreUpdateValidated", reflect.TypeOf((*MockHandlers)(nil).HandleScoreUpdateValidated), ctx, payload)
 }
 
+// HandleScorecardNormalized mocks base method.
+func (m *MockHandlers) HandleScorecardNormalized(ctx context.Context, payload *roundevents.ScorecardNormalizedPayloadV1) ([]handlerwrapper.Result, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleScorecardNormalized", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleScorecardNormalized indicates an expected call of HandleScorecardNormalized.
+func (mr *MockHandlersMockRecorder) HandleScorecardNormalized(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScorecardNormalized", reflect.TypeOf((*MockHandlers)(nil).HandleScorecardNormalized), ctx, payload)
+}
+
+// HandleScorecardParsedForNormalization mocks base method.
+func (m *MockHandlers) HandleScorecardParsedForNormalization(ctx context.Context, payload *roundevents.ParsedScorecardPayloadV1) ([]handlerwrapper.Result, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleScorecardParsedForNormalization", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleScorecardParsedForNormalization indicates an expected call of HandleScorecardParsedForNormalization.
+func (mr *MockHandlersMockRecorder) HandleScorecardParsedForNormalization(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleScorecardParsedForNormalization", reflect.TypeOf((*MockHandlers)(nil).HandleScorecardParsedForNormalization), ctx, payload)
+}
+
 // HandleScorecardURLRequested mocks base method.
 func (m *MockHandlers) HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	m.ctrl.T.Helper()
@@ -522,19 +551,4 @@ func (m *MockHandlers) HandleTagNumberNotFound(ctx context.Context, payload *sha
 func (mr *MockHandlersMockRecorder) HandleTagNumberNotFound(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTagNumberNotFound", reflect.TypeOf((*MockHandlers)(nil).HandleTagNumberNotFound), ctx, payload)
-}
-
-// HandleUserMatchConfirmedForIngest mocks base method.
-func (m *MockHandlers) HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayloadV1) ([]handlerwrapper.Result, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleUserMatchConfirmedForIngest", ctx, payload)
-	ret0, _ := ret[0].([]handlerwrapper.Result)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HandleUserMatchConfirmedForIngest indicates an expected call of HandleUserMatchConfirmedForIngest.
-func (mr *MockHandlersMockRecorder) HandleUserMatchConfirmedForIngest(ctx, payload any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleUserMatchConfirmedForIngest", reflect.TypeOf((*MockHandlers)(nil).HandleUserMatchConfirmedForIngest), ctx, payload)
 }

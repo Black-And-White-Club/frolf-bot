@@ -242,12 +242,17 @@ func (s *RoundService) UpdateParticipantScoresBulk(ctx context.Context, payload 
 			messageID = firstUpdate.MessageID
 		}
 
+		eventMessageID := round.EventMessageID
+		if messageID != "" {
+			eventMessageID = messageID
+		}
+
 		return results.OperationResult{
 			Success: &roundevents.RoundScoresBulkUpdatedPayloadV1{
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				ChannelID:      channelID,
-				EventMessageID: round.EventMessageID,
+				EventMessageID: eventMessageID,
 				Participants:   updatedParticipants,
 			},
 		}, nil
@@ -260,43 +265,87 @@ type CheckAllScoresSubmittedResult struct {
 	PayloadData        interface{} // Will hold AllScoresSubmittedPayloadV1 or ScoresPartiallySubmittedPayloadV1 data
 }
 
-// CheckAllScoresSubmitted checks if all participants in the round have submitted scores.
+// CheckAllScoresSubmitted checks if all participants (or teams) in the round have submitted scores.
+// Returns OperationResult containing either:
+// - ScoresPartiallySubmittedPayloadV1 (some participants/teams missing scores)
+// - AllScoresSubmittedPayloadV1 (all participants/teams have scores)
 func (s *RoundService) CheckAllScoresSubmitted(
 	ctx context.Context,
 	payload roundevents.ParticipantScoreUpdatedPayloadV1,
 ) (results.OperationResult, error) {
+
 	return s.withTelemetry(ctx, "CheckAllScoresSubmitted", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
+
+		var participantsWithScore []roundtypes.Participant
+		var missingParticipants []roundtypes.Participant
+
+		// 1. Split participants by score state
 		for _, p := range payload.Participants {
-			if p.Response == roundtypes.ResponseDecline {
-				continue
-			}
-			if p.Score == nil {
-				return results.OperationResult{
-					Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
-						GuildID:        payload.GuildID,
-						RoundID:        payload.RoundID,
-						UserID:         payload.UserID,
-						Score:          payload.Score,
-						EventMessageID: payload.EventMessageID,
-						Participants:   payload.Participants,
-					},
-				}, nil
+			if p.Score != nil || p.Response == roundtypes.ResponseDecline {
+				participantsWithScore = append(participantsWithScore, p)
+			} else {
+				missingParticipants = append(missingParticipants, p)
 			}
 		}
 
-		// Only happens ONCE
+		// 2. Build teams from participants (TeamID is canonical)
+		teamsByID := make(map[uuid.UUID]*roundtypes.NormalizedTeam)
+
+		for _, p := range participantsWithScore {
+			if p.TeamID == uuid.Nil || p.Score == nil {
+				continue
+			}
+
+			team, ok := teamsByID[p.TeamID]
+			if !ok {
+				team = &roundtypes.NormalizedTeam{
+					TeamID:  p.TeamID,
+					Members: []roundtypes.TeamMember{},
+				}
+				teamsByID[p.TeamID] = team
+			}
+
+			team.Total += int(*p.Score)
+			team.Members = append(team.Members, roundtypes.TeamMember{
+				UserID:  &p.UserID,
+				RawName: string(p.UserID),
+			})
+		}
+
+		teamsWithScore := make([]roundtypes.NormalizedTeam, 0, len(teamsByID))
+		for _, team := range teamsByID {
+			teamsWithScore = append(teamsWithScore, *team)
+		}
+
+		// 3. Partial submission
+		if len(missingParticipants) > 0 {
+			return results.OperationResult{
+				Success: &roundevents.ScoresPartiallySubmittedPayloadV1{
+					GuildID:        payload.GuildID,
+					RoundID:        payload.RoundID,
+					UserID:         payload.UserID,
+					Score:          payload.Score,
+					EventMessageID: payload.EventMessageID,
+					Participants:   participantsWithScore,
+					Teams:          teamsWithScore,
+				},
+			}, nil
+		}
+
+		// 4. All scores submitted → fetch round ONCE
 		round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
 		if err != nil {
 			return results.OperationResult{
 				Failure: &roundevents.RoundErrorPayloadV1{
 					GuildID: payload.GuildID,
 					RoundID: payload.RoundID,
-					Error:   err.Error(),
+					Error:   fmt.Sprintf("failed to fetch round: %v", err),
 				},
 			}, nil
 		}
 
-		round.Participants = payload.Participants
+		round.Participants = participantsWithScore
+		round.Teams = teamsWithScore
 
 		return results.OperationResult{
 			Success: &roundevents.AllScoresSubmittedPayloadV1{
@@ -304,7 +353,8 @@ func (s *RoundService) CheckAllScoresSubmitted(
 				RoundID:        payload.RoundID,
 				EventMessageID: payload.EventMessageID,
 				RoundData:      *round,
-				Participants:   payload.Participants,
+				Participants:   participantsWithScore,
+				Teams:          teamsWithScore,
 			},
 		}, nil
 	})

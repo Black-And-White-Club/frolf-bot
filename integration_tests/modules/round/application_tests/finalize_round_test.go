@@ -519,9 +519,10 @@ func TestNotifyScoreModule(t *testing.T) {
 				}
 
 				// Verify user6 (nil tag number but has score)
+				// TagNumber is only included when present and meaningful (no defaulting)
 				if score, exists := scoresByUser[sharedtypes.DiscordID("user6")]; exists {
-					if score.TagNumber == nil || int(*score.TagNumber) != 0 {
-						t.Errorf("Expected user6 tag number to default to 0, got %v", score.TagNumber)
+					if score.TagNumber != nil {
+						t.Errorf("Expected user6 tag number to be nil (not defaulted), got %v", score.TagNumber)
 					}
 					if int(score.Score) != 65 {
 						t.Errorf("Expected user6 score to be 65, got %d", score.Score)

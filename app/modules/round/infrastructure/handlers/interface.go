@@ -5,7 +5,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -65,7 +64,8 @@ type Handlers interface {
 	// Scorecard import handlers
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleScorecardParsedForNormalization(ctx context.Context, payload *roundevents.ParsedScorecardPayloadV1) ([]handlerwrapper.Result, error)
+	HandleScorecardNormalized(ctx context.Context, payload *roundevents.ScorecardNormalizedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleParseScorecardRequest(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
-	HandleUserMatchConfirmedForIngest(ctx context.Context, payload *userevents.UDiscMatchConfirmedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleImportCompleted(ctx context.Context, payload *roundevents.ImportCompletedPayloadV1) ([]handlerwrapper.Result, error)
 }

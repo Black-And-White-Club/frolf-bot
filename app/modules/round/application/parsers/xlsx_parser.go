@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // XLSXParser parses XLSX scorecard files
@@ -20,6 +21,17 @@ func (p *XLSXParser) Parse(data []byte) (*roundtypes.ParsedScorecard, error) {
 	// Try to parse as XLSX first using the core logic
 	parsed, err := parseXLSXCore(data)
 	if err == nil {
+		// Determine Mode based on whether we found any teams
+		for _, row := range parsed.PlayerScores {
+			if row.IsTeam {
+				parsed.Mode = sharedtypes.RoundModeDoubles
+				break
+			}
+		}
+		if parsed.Mode == "" {
+			parsed.Mode = sharedtypes.RoundModeSingles
+		}
+
 		return parsed, nil
 	}
 

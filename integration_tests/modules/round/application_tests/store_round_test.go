@@ -27,8 +27,8 @@ func TestStoreRound(t *testing.T) {
 			Round: roundtypes.Round{
 				ID:           sharedtypes.RoundID(uuid.New()),
 				Title:        roundtypes.Title("Test Round Title"),
-				Description:  &description,
-				Location:     &location,
+				Description:  description,
+				Location:     location,
 				EventType:    &eventType,
 				StartTime:    &startTime,
 				Finalized:    false,
@@ -71,11 +71,11 @@ func TestStoreRound(t *testing.T) {
 				if successPayload.Title != "Test Round Title" {
 					t.Errorf("Expected title 'Test Round Title', got '%s'", successPayload.Title)
 				}
-				if *successPayload.Description != "Test Description" {
-					t.Errorf("Expected description 'Test Description', got '%s'", *successPayload.Description)
+				if successPayload.Description != "Test Description" {
+					t.Errorf("Expected description 'Test Description', got '%s'", successPayload.Description)
 				}
-				if *successPayload.Location != "Test Location" {
-					t.Errorf("Expected location 'Test Location', got '%s'", *successPayload.Location)
+				if successPayload.Location != "Test Location" {
+					t.Errorf("Expected location 'Test Location', got '%s'", successPayload.Location)
 				}
 				if successPayload.UserID != sharedtypes.DiscordID("user_123") {
 					t.Errorf("Expected UserID 'user_123', got '%s'", successPayload.UserID)
@@ -93,11 +93,11 @@ func TestStoreRound(t *testing.T) {
 				if storedRound.Title != "Test Round Title" {
 					t.Errorf("Stored round title mismatch: expected 'Test Round Title', got '%s'", storedRound.Title)
 				}
-				if *storedRound.Description != "Test Description" {
-					t.Errorf("Stored round description mismatch: expected 'Test Description', got '%s'", *storedRound.Description)
+				if storedRound.Description != "Test Description" {
+					t.Errorf("Stored round description mismatch: expected 'Test Description', got '%s'", storedRound.Description)
 				}
-				if *storedRound.Location != "Test Location" {
-					t.Errorf("Stored round location mismatch: expected 'Test Location', got '%s'", *storedRound.Location)
+				if storedRound.Location != "Test Location" {
+					t.Errorf("Stored round location mismatch: expected 'Test Location', got '%s'", storedRound.Location)
 				}
 				if storedRound.CreatedBy != sharedtypes.DiscordID("user_123") {
 					t.Errorf("Stored round CreatedBy mismatch: expected 'user_123', got '%s'", storedRound.CreatedBy)
@@ -135,62 +135,6 @@ func TestStoreRound(t *testing.T) {
 				}
 				if failurePayload.UserID != sharedtypes.DiscordID("user_123") {
 					t.Errorf("Expected UserID 'user_123', got '%s'", failurePayload.UserID)
-				}
-			},
-			validateDBState: func(t *testing.T, deps *RoundTestDeps, expectedRoundID sharedtypes.RoundID) {
-				// No DB interaction expected for validation failures
-			},
-		},
-		{
-			name: "Validation failure - nil description in payload",
-			payload: func() roundevents.RoundEntityCreatedPayloadV1 {
-				p := createValidPayload()
-				p.Round.Description = nil // Nil description
-				return p
-			}(),
-			expectedError:   true,
-			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
-				if result.Failure == nil {
-					t.Errorf("Expected failure result, but got nil")
-					return
-				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayloadV1)
-				if !ok {
-					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
-					return
-				}
-				expectedErrMsg := "invalid round data"
-				if failurePayload.ErrorMessage != expectedErrMsg {
-					t.Errorf("Expected error message '%s', got '%s'", expectedErrMsg, failurePayload.ErrorMessage)
-				}
-			},
-			validateDBState: func(t *testing.T, deps *RoundTestDeps, expectedRoundID sharedtypes.RoundID) {
-				// No DB interaction expected for validation failures
-			},
-		},
-		{
-			name: "Validation failure - nil location in payload",
-			payload: func() roundevents.RoundEntityCreatedPayloadV1 {
-				p := createValidPayload()
-				p.Round.Location = nil // Nil location
-				return p
-			}(),
-			expectedError:   true,
-			expectedSuccess: false,
-			validateResult: func(t *testing.T, deps *RoundTestDeps, result results.OperationResult) {
-				if result.Failure == nil {
-					t.Errorf("Expected failure result, but got nil")
-					return
-				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundCreationFailedPayloadV1)
-				if !ok {
-					t.Errorf("Expected failure result of type *RoundCreationFailedPayload, but got %T", result.Failure)
-					return
-				}
-				expectedErrMsg := "invalid round data"
-				if failurePayload.ErrorMessage != expectedErrMsg {
-					t.Errorf("Expected error message '%s', got '%s'", expectedErrMsg, failurePayload.ErrorMessage)
 				}
 			},
 			validateDBState: func(t *testing.T, deps *RoundTestDeps, expectedRoundID sharedtypes.RoundID) {

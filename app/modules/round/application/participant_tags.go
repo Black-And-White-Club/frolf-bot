@@ -32,7 +32,7 @@ func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(
 
 			// If this specific user has a new tag from the Funnel/Saga, update it
 			if newTag, exists := changedTags[participant.UserID]; exists {
-				s.logger.DebugContext(ctx, "Syncing participant tag for upcoming round",
+				s.logger.InfoContext(ctx, "Syncing participant tag for upcoming round",
 					attr.RoundID("round_id", round.ID),
 					attr.String("user_id", string(participant.UserID)),
 					attr.Any("old_tag", participant.TagNumber),

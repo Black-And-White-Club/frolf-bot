@@ -167,18 +167,18 @@ func (g *TestDataGenerator) GenerateRound(createdBy DiscordID, participantCount 
 		})
 	}
 
-	var description *roundtypes.Description
+	var description roundtypes.Description
 	descStr := g.faker.Paragraph(1, 3, 3, "\n")
 	if descStr != "" {
 		d := roundtypes.Description(descStr)
-		description = &d
+		description = d
 	}
 
-	var location *roundtypes.Location
+	var location roundtypes.Location
 	locStr := g.faker.Address().Street
 	if locStr != "" {
 		l := roundtypes.Location(locStr)
-		location = &l
+		location = l
 	}
 
 	// --- FIX START: Ensure StartTime is always a non-zero value ---
@@ -375,17 +375,17 @@ func StartTimePtr(t time.Time) *sharedtypes.StartTime {
 	return &st
 }
 
-// RoundDescriptionPtr is a helper to create a pointer to roundtypes.Description.
-func RoundDescriptionPtr(s string) *roundtypes.Description {
-	d := roundtypes.Description(s)
-	return &d
-}
+// // RoundDescriptionPtr is a helper to create a pointer to roundtypes.Description.
+// func RoundDescriptionPtr(s string) roundtypes.Description {
+// 	d := roundtypes.Description(s)
+// 	return &d
+// }
 
-// RoundLocationPtr is a helper to create a pointer to roundtypes.Location.
-func RoundLocationPtr(s string) *roundtypes.Location {
-	l := roundtypes.Location(s)
-	return &l
-}
+// // RoundLocationPtr is a helper to create a pointer to roundtypes.Location.
+// func RoundLocationPtr(s string) roundtypes.Location {
+// 	l := roundtypes.Location(s)
+// 	return &l
+// }
 
 // RoundFinalizedPtr is a helper to create a pointer to roundtypes.Finalized.
 func RoundFinalizedPtr(b bool) *roundtypes.Finalized {

@@ -140,8 +140,8 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     testRoundID,
 					Title:       testTitle,
-					Description: func() *roundtypes.Description { d := roundtypes.Description("Test Description"); return &d }(),
-					Location:    func() *roundtypes.Location { l := roundtypes.Location("Test Location"); return &l }(),
+					Description: func() roundtypes.Description { d := roundtypes.Description("Test Description"); return d }(),
+					Location:    func() roundtypes.Location { l := roundtypes.Location("Test Location"); return l }(),
 					StartTime:   &testStartTime,
 					UserID:      testUserID,
 				},
