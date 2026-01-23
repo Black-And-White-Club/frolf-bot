@@ -90,11 +90,25 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 		}
 
 		// Total is the relative score from the +/- column
-		playerScores = append(playerScores, roundtypes.PlayerScoreRow{
-			PlayerName: playerName,
-			HoleScores: holeScores, // May be empty or incomplete - just for logging
-			Total:      relativeScore,
-		})
+		// If the player name represents a team (e.g., "Alec + Jess"), split into individuals
+		names := SplitPlayerNames(playerName)
+		if len(names) <= 1 {
+			playerScores = append(playerScores, roundtypes.PlayerScoreRow{
+				PlayerName: playerName,
+				HoleScores: holeScores,
+				Total:      relativeScore,
+			})
+		} else {
+			// This row represents a team/doubles entry. Create one PlayerScoreRow per teammate
+			// and set TeamMembers so downstream logic can detect a doubles-derived row.
+			for _, n := range names {
+				playerScores = append(playerScores, roundtypes.PlayerScoreRow{
+					PlayerName: n,
+					HoleScores: holeScores,
+					Total:      relativeScore,
+				})
+			}
+		}
 	}
 
 	if len(playerScores) == 0 {

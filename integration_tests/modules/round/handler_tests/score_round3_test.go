@@ -6,6 +6,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -50,19 +51,23 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundAllScoresSubmittedV1},
+			expectedOutgoingTopics: []string{sharedevents.ProcessRoundScoresRequestedV1, roundevents.RoundAllScoresSubmittedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundAllScoresSubmittedV1]
-				if len(msgs) == 0 {
+				allScoresMsgs := receivedMsgs[roundevents.RoundAllScoresSubmittedV1]
+				if len(allScoresMsgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundAllScoresSubmittedV1)
 				}
-				var payload roundevents.AllScoresSubmittedPayloadV1
-				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
-					t.Fatalf("Failed to unmarshal payload: %v", err)
+				var allScoresPayload roundevents.AllScoresSubmittedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(allScoresMsgs[0], &allScoresPayload); err != nil {
+					t.Fatalf("Failed to unmarshal AllScoresSubmittedPayloadV1: %v", err)
 				}
-				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
+				if allScoresPayload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Error("Expected RoundID to be set")
 				}
+				if len(allScoresPayload.Participants) != 1 {
+					t.Errorf("Expected 1 participant, got %d", len(allScoresPayload.Participants))
+				}
+
 			},
 			timeout: 500 * time.Millisecond,
 		},
@@ -112,6 +117,14 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Error("Expected RoundID to be set")
+				}
+				if len(payload.Participants) != 3 {
+					t.Errorf("Expected 3 participants, got %d", len(payload.Participants))
+				}
+				for _, p := range payload.Participants {
+					if p.Score == nil {
+						t.Errorf("Expected all participants to have scores, but participant %s has nil score", p.UserID)
+					}
 				}
 			},
 			timeout: 500 * time.Millisecond,
@@ -258,6 +271,9 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
 					t.Error("Expected RoundID to be set")
+				}
+				if len(payload.Participants) != 3 {
+					t.Errorf("Expected 3 participants, got %d", len(payload.Participants))
 				}
 			},
 			timeout: 500 * time.Millisecond,

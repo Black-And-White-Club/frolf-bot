@@ -344,7 +344,7 @@ func TestHandleRoundStarted(t *testing.T) {
 }
 
 // Helper functions for creating payloads - UNIQUE TO ROUND STARTED TESTS
-func createRoundStartedPayload(roundID sharedtypes.RoundID, title string, startTime *time.Time, location *roundtypes.Location) roundevents.RoundStartedPayloadV1 {
+func createRoundStartedPayload(roundID sharedtypes.RoundID, title string, startTime *time.Time, location roundtypes.Location) roundevents.RoundStartedPayloadV1 {
 	var sharedStartTime *sharedtypes.StartTime
 	if startTime != nil {
 		st := sharedtypes.StartTime(*startTime)

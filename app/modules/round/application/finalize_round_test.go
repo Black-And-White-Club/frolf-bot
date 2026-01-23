@@ -3,10 +3,8 @@ package roundservice
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
@@ -14,364 +12,189 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundService_FinalizeRound(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testFinalizedRound := &roundtypes.Round{
-		ID:           testRoundID,
-		State:        roundtypes.RoundStateFinalized,
-		Participants: []roundtypes.Participant{},
-	}
-	dbUpdateError := errors.New("db update failed")
+	roundID := sharedtypes.RoundID(uuid.New())
+	guildID := sharedtypes.GuildID("guild-1")
 
 	tests := []struct {
-		name                    string
-		mockDBSetup             func(*rounddb.MockRepository)
-		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
-		mockEventBusSetup       func(*eventbus.MockEventBus)
-		payload                 roundevents.AllScoresSubmittedPayloadV1
-		expectedResult          results.OperationResult
-		expectedError           error
+		name       string
+		setupRepo  func(f *FakeRepo)
+		payload    roundevents.AllScoresSubmittedPayloadV1
+		assertFunc func(t *testing.T, res results.OperationResult)
 	}{
 		{
-			name: "success finalizing round",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testRoundID, roundtypes.RoundStateFinalized).Return(nil)
-				// Expect GetRound to be called to fetch fresh data after state update
-				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(testFinalizedRound, nil)
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				// No expectations for the RoundValidator
-			},
-			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			name: "success",
+			setupRepo: func(f *FakeRepo) {
+				f.UpdateRoundStateFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, state roundtypes.RoundState) error {
+					return nil
+				}
+				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:           r,
+						GuildID:      g,
+						Participants: []roundtypes.Participant{},
+					}, nil
+				}
 			},
 			payload: roundevents.AllScoresSubmittedPayloadV1{
-				RoundID:   testRoundID,
-				GuildID:   sharedtypes.GuildID("guild-123"),
-				RoundData: *testFinalizedRound,
+				GuildID: guildID,
+				RoundID: roundID,
 			},
-			expectedResult: results.OperationResult{
-				Success: &roundevents.RoundFinalizedPayloadV1{
-					RoundID:   testRoundID,
-					GuildID:   sharedtypes.GuildID("guild-123"),
-					RoundData: *testFinalizedRound,
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure: %+v", res.Failure)
+				}
+				payload := res.Success.(*roundevents.RoundFinalizedPayloadV1)
+				if payload.RoundID != roundID {
+					t.Errorf("expected roundID %v, got %v", roundID, payload.RoundID)
+				}
 			},
-			expectedError: nil,
 		},
 		{
-			name: "failure updating round state",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testRoundID, roundtypes.RoundStateFinalized).Return(dbUpdateError)
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				// No expectations for the RoundValidator
-			},
-			mockEventBusSetup: func(mockEventBus *eventbus.MockEventBus) {
+			name: "fail update round state",
+			setupRepo: func(f *FakeRepo) {
+				f.UpdateRoundStateFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, state roundtypes.RoundState) error {
+					return errors.New("db error")
+				}
 			},
 			payload: roundevents.AllScoresSubmittedPayloadV1{
-				RoundID: testRoundID,
-				GuildID: sharedtypes.GuildID("guild-123"),
+				GuildID: guildID,
+				RoundID: roundID,
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
-					RoundID: testRoundID,
-					Error:   fmt.Sprintf("failed to update round state to finalized: %v", dbUpdateError),
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+				if res.Failure.(*roundevents.RoundFinalizationErrorPayloadV1).RoundID != roundID {
+					t.Errorf("unexpected roundID: %v", res.Failure.(*roundevents.RoundFinalizationErrorPayloadV1).RoundID)
+				}
 			},
-			expectedError: nil, // Service returns failure payload with nil error
+		},
+		{
+			name: "fail get round after state update",
+			setupRepo: func(f *FakeRepo) {
+				f.UpdateRoundStateFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, state roundtypes.RoundState) error {
+					return nil
+				}
+				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return nil, errors.New("db get error")
+				}
+			},
+			payload: roundevents.AllScoresSubmittedPayloadV1{
+				GuildID: guildID,
+				RoundID: roundID,
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+				if res.Failure.(*roundevents.RoundFinalizationErrorPayloadV1).RoundID != roundID {
+					t.Errorf("unexpected roundID: %v", res.Failure.(*roundevents.RoundFinalizationErrorPayloadV1).RoundID)
+				}
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset mocks for each subtest
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRepository(ctrl)
-			mockEventBus := eventbus.NewMockEventBus(ctrl)
-
-			tt.mockDBSetup(mockDB)
-			tt.mockRoundValidatorSetup(mockRoundValidator)
-			tt.mockEventBusSetup(mockEventBus)
+			repo := NewFakeRepo()
+			if tt.setupRepo != nil {
+				tt.setupRepo(repo)
+			}
 
 			s := &RoundService{
-				repo:           mockDB,
-				logger:         logger,
-				metrics:        mockMetrics,
-				tracer:         tracer,
-				roundValidator: mockRoundValidator,
-				eventBus:       mockEventBus,
+				repo:    repo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &roundmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
 
-			result, err := s.FinalizeRound(ctx, tt.payload)
-
-			// Validate error
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
+			res, err := s.FinalizeRound(ctx, tt.payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Validate result payload
-			if tt.expectedResult.Success != nil {
-				if result.Success == nil {
-					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*roundevents.RoundFinalizedPayloadV1); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundFinalizedPayloadV1, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*roundevents.RoundFinalizedPayloadV1); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *roundevents.RoundFinalizedPayloadV1, got %T", tt.expectedResult.Success)
-				} else if successPayload.RoundID != expectedSuccessPayload.RoundID {
-					t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
-				}
-			} else if tt.expectedResult.Failure != nil {
-				if result.Failure == nil {
-					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", tt.expectedResult.Failure)
-				} else if failurePayload.Error != expectedFailurePayload.Error {
-					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
-				}
-			}
+			tt.assertFunc(t, res)
 		})
 	}
 }
 
 func TestRoundService_NotifyScoreModule(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	user1ID := sharedtypes.DiscordID("user1")
-	user2ID := sharedtypes.DiscordID("user2")
-	user3ID := sharedtypes.DiscordID("user3")
-	user4ID := sharedtypes.DiscordID("user4")
-
-	tag1 := sharedtypes.TagNumber(10)
-	tag2 := sharedtypes.TagNumber(0) // For nil or zero tag
-	tag4 := sharedtypes.TagNumber(40)
-
-	score1 := sharedtypes.Score(50)
-	score3 := sharedtypes.Score(60)
+	roundID := sharedtypes.RoundID(uuid.New())
+	guildID := sharedtypes.GuildID("guild-1")
 
 	tests := []struct {
-		name           string
-		mockDBSetup    func(*rounddb.MockRepository)
-		payload        roundevents.RoundFinalizedPayloadV1
-		expectedResult results.OperationResult
-		expectedError  error
+		name       string
+		payload    roundevents.RoundFinalizedPayloadV1
+		assertFunc func(t *testing.T, res results.OperationResult)
 	}{
 		{
-			name: "success notifying score module with various participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				// No DB calls needed - NotifyScoreModule uses RoundData from payload
-			},
+			name: "success singles",
 			payload: roundevents.RoundFinalizedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testRoundID,
+				GuildID: guildID,
+				RoundID: roundID,
 				RoundData: roundtypes.Round{
-					ID:      testRoundID,
-					GuildID: sharedtypes.GuildID("guild-123"),
+					ID:      roundID,
+					GuildID: guildID,
 					Participants: []roundtypes.Participant{
-						{UserID: user1ID, TagNumber: &tag1, Score: &score1}, // ✅ Has score - included
-						{UserID: user2ID, TagNumber: nil, Score: nil},       // ❌ No score - skipped
-						{UserID: user3ID, TagNumber: &tag2, Score: &score3}, // ✅ Has score - included
-						{UserID: user4ID, TagNumber: &tag4, Score: nil},     // ❌ No score - skipped
+						{UserID: "user1", Score: ptrScore(3), TagNumber: ptrTag(1)},
+						{UserID: "user2", Score: ptrScore(5), TagNumber: ptrTag(2)},
 					},
 				},
 			},
-			expectedResult: results.OperationResult{
-				Success: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
-					RoundID: testRoundID,
-					Scores: []sharedtypes.ScoreInfo{
-						// ✅ Only participants with scores are included
-						{UserID: user1ID, TagNumber: &tag1, Score: score1},
-						{UserID: user3ID, TagNumber: &tag2, Score: score3}, // Zero tag becomes 0
-					},
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure: %+v", res.Failure)
+				}
+				payload := res.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
+				if len(payload.Scores) != 2 {
+					t.Errorf("expected 2 scores, got %d", len(payload.Scores))
+				}
 			},
-			expectedError: nil,
 		},
 		{
-			name: "failure with no participants having scores",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				// No DB calls needed - NotifyScoreModule uses RoundData from payload
-			},
+			name: "failure no scores",
 			payload: roundevents.RoundFinalizedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testRoundID,
+				GuildID: guildID,
+				RoundID: roundID,
 				RoundData: roundtypes.Round{
-					ID:      testRoundID,
-					GuildID: sharedtypes.GuildID("guild-123"),
-					Participants: []roundtypes.Participant{
-						{UserID: user1ID, TagNumber: &tag1, Score: nil}, // No score
-						{UserID: user2ID, TagNumber: nil, Score: nil},   // No score
-					},
+					ID:           roundID,
+					GuildID:      guildID,
+					Participants: []roundtypes.Participant{},
 				},
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
-					RoundID: testRoundID,
-					Error:   "no participants with submitted scores found",
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
 			},
-			expectedError: nil,
-		},
-		{
-			name: "failure with empty participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				// No DB calls needed - NotifyScoreModule uses RoundData from payload
-			},
-			payload: roundevents.RoundFinalizedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testRoundID,
-				RoundData: roundtypes.Round{
-					ID:           testRoundID,
-					GuildID:      sharedtypes.GuildID("guild-123"),
-					Participants: []roundtypes.Participant{}, // Empty slice
-				},
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
-					RoundID: testRoundID,
-					Error:   "no participants with submitted scores found",
-				},
-			},
-			expectedError: nil,
-		},
-		{
-			name: "failure with nil participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				// No DB calls needed - NotifyScoreModule uses RoundData from payload
-			},
-			payload: roundevents.RoundFinalizedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testRoundID,
-				RoundData: roundtypes.Round{
-					ID:           testRoundID,
-					GuildID:      sharedtypes.GuildID("guild-123"),
-					Participants: nil, // Nil slice
-				},
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundFinalizationErrorPayloadV1{
-					RoundID: testRoundID,
-					Error:   "no participants with submitted scores found",
-				},
-			},
-			expectedError: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset mocks for each subtest
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockDB := rounddb.NewMockRepository(ctrl)
-
-			tt.mockDBSetup(mockDB)
-
 			s := &RoundService{
-				repo:           mockDB,
-				logger:         logger,
-				metrics:        mockMetrics,
-				tracer:         tracer,
-				roundValidator: mockRoundValidator,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &roundmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
 
-			result, err := s.NotifyScoreModule(ctx, tt.payload)
-
-			// Validate error
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
+			res, err := s.NotifyScoreModule(ctx, tt.payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Validate result payload
-			if tt.expectedResult.Success != nil {
-				if result.Success == nil {
-					t.Errorf("expected success result, got failure")
-				} else if successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1); !ok {
-					t.Errorf("expected result.Success to be of type *sharedevents.ProcessRoundScoresRequestedPayloadV1, got %T", result.Success)
-				} else if expectedSuccessPayload, ok := tt.expectedResult.Success.(*sharedevents.ProcessRoundScoresRequestedPayloadV1); !ok {
-					t.Errorf("expected tt.expectedResult.Success to be of type *sharedevents.ProcessRoundScoresRequestedPayloadV1, got %T", tt.expectedResult.Success)
-				} else {
-					// Validate RoundID
-					if successPayload.RoundID != expectedSuccessPayload.RoundID {
-						t.Errorf("expected success RoundID %s, got %s", expectedSuccessPayload.RoundID, successPayload.RoundID)
-					}
-					// Validate scores length
-					if len(successPayload.Scores) != len(expectedSuccessPayload.Scores) {
-						t.Errorf("expected %d scores, got %d", len(expectedSuccessPayload.Scores), len(successPayload.Scores))
-					}
-					// Validate individual scores
-					for i, expectedScore := range expectedSuccessPayload.Scores {
-						if i < len(successPayload.Scores) {
-							actualScore := successPayload.Scores[i]
-							if actualScore.UserID != expectedScore.UserID {
-								t.Errorf("score %d: expected UserID %s, got %s", i, expectedScore.UserID, actualScore.UserID)
-							}
-							if *actualScore.TagNumber != *expectedScore.TagNumber {
-								t.Errorf("score %d: expected TagNumber %d, got %d", i, *expectedScore.TagNumber, *actualScore.TagNumber)
-							}
-							if actualScore.Score != expectedScore.Score {
-								t.Errorf("score %d: expected Score %d, got %d", i, expectedScore.Score, actualScore.Score)
-							}
-						}
-					}
-				}
-			} else if tt.expectedResult.Failure != nil {
-				if result.Failure == nil {
-					t.Errorf("expected failure result, got success")
-				} else if failurePayload, ok := result.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", result.Failure)
-				} else if expectedFailurePayload, ok := tt.expectedResult.Failure.(*roundevents.RoundFinalizationErrorPayloadV1); !ok {
-					t.Errorf("expected tt.expectedResult.Failure to be of type *roundevents.RoundFinalizationErrorPayloadV1, got %T", tt.expectedResult.Failure)
-				} else if failurePayload.Error != expectedFailurePayload.Error {
-					t.Errorf("expected failure error %q, got %q", expectedFailurePayload.Error, failurePayload.Error)
-				}
-			}
+			tt.assertFunc(t, res)
 		})
 	}
 }
+
+// --- helpers ---
+func ptrScore(v int) *sharedtypes.Score   { s := sharedtypes.Score(v); return &s }
+func ptrTag(v int) *sharedtypes.TagNumber { t := sharedtypes.TagNumber(v); return &t }

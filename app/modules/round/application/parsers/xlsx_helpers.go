@@ -219,7 +219,7 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 	// Detect relative score column
 	relativeScoreColIndex := detectRelativeScoreColumnXLSX(rows, nameColIndex)
 
-	// Get par scores if available (from par row)
+	// Get par scores if available
 	var parScores []int
 	if parRowIndex >= 0 && parRowIndex < len(rows) {
 		if holeStartColIdx >= 0 && holeStartColIdx < len(rows[parRowIndex]) {
@@ -228,13 +228,8 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 	}
 
 	for i, row := range rows {
-		if i == parRowIndex {
-			continue
-		}
-		if headerRowIndex >= 0 && i == headerRowIndex {
-			continue
-		}
-		if i == 0 {
+		// Skip headers and par rows
+		if i == parRowIndex || (headerRowIndex >= 0 && i == headerRowIndex) || i == 0 {
 			continue
 		}
 
@@ -242,23 +237,21 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 			continue
 		}
 
-		// Player name is at the same column index as "Par"
 		playerName := strings.TrimSpace(row[nameColIndex])
 		if playerName == "" {
 			continue
 		}
 
-		// Parse scores starting at holeStartColIdx
+		// Parse scores
 		if len(row) <= holeStartColIdx {
 			continue
 		}
 		scores, err := parseScoreRowXLSX(row[holeStartColIdx:])
 		if err != nil {
-			// Skip rows that don't look like player rows (e.g. headers)
-			continue
+			continue // Skip invalid rows
 		}
 
-		// Validate and pad hole count
+		// Validate hole count
 		if len(scores) < numHoles {
 			for len(scores) < numHoles {
 				scores = append(scores, 0)
@@ -267,31 +260,36 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 			scores = scores[:numHoles]
 		}
 
-		// Calculate the relative score (total to par)
+		// Calculate Total
 		total := 0
 		if relativeScoreColIndex != -1 && relativeScoreColIndex < len(row) {
-			// Try to extract from relative score column
 			relativeScoreStr := strings.TrimSpace(row[relativeScoreColIndex])
 			if relativeScoreStr != "" && relativeScoreStr != "-" {
 				relativeScoreStr = strings.TrimPrefix(relativeScoreStr, "+")
 				if val, err := strconv.Atoi(relativeScoreStr); err == nil {
 					total = val
 				} else {
-					// Fall back to calculating from holes and par
 					total = calculateRelativeScoreXLSX(scores, parScores)
 				}
 			} else {
 				total = calculateRelativeScoreXLSX(scores, parScores)
 			}
 		} else {
-			// No relative score column, calculate from holes and par
 			total = calculateRelativeScoreXLSX(scores, parScores)
 		}
 
+		// =========================================================
+		// DOUBLES DETECTION LOGIC
+		// =========================================================
+		teamNames := SplitPlayerNames(playerName)
+		isTeam := len(teamNames) > 1
+
 		players = append(players, roundtypes.PlayerScoreRow{
-			PlayerName: playerName,
+			PlayerName: playerName, // Keep raw "Alec + Jess"
 			HoleScores: scores,
 			Total:      total,
+			IsTeam:     isTeam,    // Flag this row
+			TeamNames:  teamNames, // Store the split names for the service
 		})
 	}
 

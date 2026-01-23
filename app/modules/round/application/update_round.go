@@ -127,7 +127,7 @@ func (s *RoundService) ValidateAndProcessRoundUpdateWithClock(ctx context.Contex
 
 		// Copy other fields if provided
 		if payload.Title != nil {
-			validatedPayload.Title = *payload.Title
+			validatedPayload.Title = payload.Title
 		}
 		if payload.Description != nil {
 			// Allocate new pointer to avoid dangling reference to input payload
@@ -155,79 +155,121 @@ func (s *RoundService) ValidateAndProcessRoundUpdate(ctx context.Context, payloa
 	return s.ValidateAndProcessRoundUpdateWithClock(ctx, payload, timeParser, roundutil.RealClock{})
 }
 
-// UpdateRoundEntity updates the round entity with the validated and parsed values
+// UpdateRoundEntity updates the round entity with validated and parsed values
 func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevents.RoundUpdateValidatedPayloadV1) (results.OperationResult, error) {
 	return s.withTelemetry(ctx, "UpdateRoundEntity", payload.RoundUpdateRequestPayload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
+		roundID := payload.RoundUpdateRequestPayload.RoundID
+		guildID := payload.RoundUpdateRequestPayload.GuildID
+
 		s.logger.InfoContext(ctx, "Updating round entity",
-			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
+			attr.RoundID("round_id", roundID),
 		)
 
-		// Create a round object with only the fields to update
+		// Step 1: Fetch current round to preserve required fields
+		currentRound, err := s.repo.GetRound(ctx, guildID, roundID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to fetch current round before update",
+				attr.RoundID("round_id", roundID),
+				attr.Error(err),
+			)
+			s.metrics.RecordDBOperationError(ctx, "GetRound")
+			return results.OperationResult{
+				Failure: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID: guildID,
+					Error:   fmt.Sprintf("failed to fetch current round: %v", err),
+				},
+			}, nil
+		}
+
+		// Step 2: Create update object starting with current required fields
 		updateRound := &roundtypes.Round{
-			ID: payload.RoundUpdateRequestPayload.RoundID,
+			ID:              roundID,
+			Title:           currentRound.Title,
+			Description:     currentRound.Description,
+			Location:        currentRound.Location,
+			StartTime:       currentRound.StartTime,
+			EventType:       currentRound.EventType,
+			ImportID:        currentRound.ImportID,
+			ImportStatus:    currentRound.ImportStatus,
+			ImportType:      currentRound.ImportType,
+			FileData:        currentRound.FileData,
+			FileName:        currentRound.FileName,
+			UDiscURL:        currentRound.UDiscURL,
+			ImportNotes:     currentRound.ImportNotes,
+			ImportError:     currentRound.ImportError,
+			ImportErrorCode: currentRound.ImportErrorCode,
+			ImportedAt:      currentRound.ImportedAt,
+			ImportUserID:    currentRound.ImportUserID,
+			ImportChannelID: currentRound.ImportChannelID,
+			Finalized:       currentRound.Finalized,
+			CreatedBy:       currentRound.CreatedBy,
+			State:           currentRound.State,
+			EventMessageID:  currentRound.EventMessageID,
+			Participants:    currentRound.Participants,
 		}
 
 		var updatedFields []string
 
-		// Only set fields that are being updated
-		if payload.RoundUpdateRequestPayload.Title != "" {
-			updateRound.Title = payload.RoundUpdateRequestPayload.Title
+		// Step 3: Overwrite only the fields provided by the user
+		if payload.RoundUpdateRequestPayload.Title != nil && *payload.RoundUpdateRequestPayload.Title != currentRound.Title {
+			updateRound.Title = *payload.RoundUpdateRequestPayload.Title
 			updatedFields = append(updatedFields, "title")
 		}
 		if payload.RoundUpdateRequestPayload.Description != nil {
-			// Allocate new pointer to avoid issues with shared memory
-			updateRound.Description = new(roundtypes.Description)
-			*updateRound.Description = *payload.RoundUpdateRequestPayload.Description
-			updatedFields = append(updatedFields, "description")
+			// Handle cases where currentRound.Description may be a value type (zero-value) instead of a pointer.
+			if currentRound.Description == (roundtypes.Description("")) || *payload.RoundUpdateRequestPayload.Description != currentRound.Description {
+				// Assign the value directly (current/updated struct uses value type for Description).
+				updateRound.Description = *payload.RoundUpdateRequestPayload.Description
+				updatedFields = append(updatedFields, "description")
+			}
 		}
 		if payload.RoundUpdateRequestPayload.Location != nil {
-			// Allocate new pointer to avoid issues with shared memory
-			updateRound.Location = new(roundtypes.Location)
-			*updateRound.Location = *payload.RoundUpdateRequestPayload.Location
-			updatedFields = append(updatedFields, "location")
+			// currentRound.Location is a value type; compare against its zero value instead of nil
+			if currentRound.Location == (roundtypes.Location("")) || *payload.RoundUpdateRequestPayload.Location != currentRound.Location {
+				// Assign the value directly (current/updated struct uses value type for Location).
+				updateRound.Location = *payload.RoundUpdateRequestPayload.Location
+				updatedFields = append(updatedFields, "location")
+			}
 		}
 		if payload.RoundUpdateRequestPayload.StartTime != nil {
-			// Allocate new pointer to avoid issues with shared memory
-			updateRound.StartTime = new(sharedtypes.StartTime)
-			*updateRound.StartTime = *payload.RoundUpdateRequestPayload.StartTime
-			updatedFields = append(updatedFields, "start_time")
+			if currentRound.StartTime == nil || *payload.RoundUpdateRequestPayload.StartTime != *currentRound.StartTime {
+				updateRound.StartTime = new(sharedtypes.StartTime)
+				*updateRound.StartTime = *payload.RoundUpdateRequestPayload.StartTime
+				updatedFields = append(updatedFields, "start_time")
+			}
 		}
 		if payload.RoundUpdateRequestPayload.EventType != nil {
-			updateRound.EventType = payload.RoundUpdateRequestPayload.EventType
-			updatedFields = append(updatedFields, "event_type")
+			if currentRound.EventType == nil || *payload.RoundUpdateRequestPayload.EventType != *currentRound.EventType {
+				updateRound.EventType = payload.RoundUpdateRequestPayload.EventType
+				updatedFields = append(updatedFields, "event_type")
+			}
 		}
 
-		// Ensure we have something to update
+		// Step 4: Ensure there is at least one field to update
 		if len(updatedFields) == 0 {
 			s.logger.WarnContext(ctx, "No fields to update after processing",
-				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
+				attr.RoundID("round_id", roundID),
 			)
 			return results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID:            payload.RoundUpdateRequestPayload.GuildID,
+					GuildID:            guildID,
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              "no valid fields to update",
 				},
 			}, nil
 		}
 
-		s.logger.InfoContext(ctx, "Applying selective round updates",
-			attr.ExtractCorrelationID(ctx),
-			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
-			attr.Any("updated_fields", updatedFields),
-		)
-
-		// Update only the specified fields in the database - using the Round struct
-		updatedRound, err := s.repo.UpdateRound(ctx, payload.RoundUpdateRequestPayload.GuildID, payload.RoundUpdateRequestPayload.RoundID, updateRound)
+		// Step 5: Update in DB
+		updatedRound, err := s.repo.UpdateRound(ctx, guildID, roundID, updateRound)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to update round entity",
-				attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
+				attr.RoundID("round_id", roundID),
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
 			return results.OperationResult{
 				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID:            payload.RoundUpdateRequestPayload.GuildID,
+					GuildID:            guildID,
 					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
 					Error:              fmt.Sprintf("failed to update round in database: %v", err),
 				},
@@ -236,16 +278,16 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, payload roundevent
 
 		s.metrics.RecordDBOperationSuccess(ctx, "UpdateRound")
 		s.logger.InfoContext(ctx, "Round entity updated successfully",
-			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
+			attr.RoundID("round_id", roundID),
 			attr.Any("updated_fields", updatedFields),
 		)
 
-		// Ensure GuildID is set on the returned round object
-		updatedRound.GuildID = payload.RoundUpdateRequestPayload.GuildID
+		// Step 6: Ensure GuildID is always set on returned round
+		updatedRound.GuildID = guildID
 
 		return results.OperationResult{
 			Success: &roundevents.RoundEntityUpdatedPayloadV1{
-				GuildID: payload.RoundUpdateRequestPayload.GuildID,
+				GuildID: guildID,
 				Round:   *updatedRound,
 			},
 		}, nil
@@ -331,7 +373,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, payload r
 		}
 
 		finalLocation := payload.Location
-		if finalLocation == nil {
+		if finalLocation == (roundtypes.Location("")) {
 			finalLocation = currentRound.Location
 		}
 

@@ -53,8 +53,8 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 						Success: &roundtypes.Round{
 							ID:          testRoundID,
 							Title:       testTitle,
-							Description: &testDescription,
-							Location:    &testLocation,
+							Description: testDescription,
+							Location:    testLocation,
 							StartTime:   &testStartTime,
 							CreatedBy:   testUserID,
 							GuildID:     testGuildID,
@@ -178,8 +178,8 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 						Success: &roundtypes.Round{
 							ID:          testRoundID,
 							Title:       testTitle,
-							Description: &testDescription,
-							Location:    &testLocation,
+							Description: testDescription,
+							Location:    testLocation,
 							StartTime:   &testStartTime,
 							CreatedBy:   testUserID,
 							GuildID:     testGuildID,

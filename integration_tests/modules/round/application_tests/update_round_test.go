@@ -50,8 +50,12 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if !ok {
 					t.Errorf("Expected *RoundUpdateValidatedPayload, got %T", returnedResult.Success)
 				}
-				if validatedPayload.RoundUpdateRequestPayload.Title != "New Title" {
-					t.Errorf("Expected title 'New Title', got '%s'", validatedPayload.RoundUpdateRequestPayload.Title)
+				if validatedPayload.RoundUpdateRequestPayload.Title == nil || string(*validatedPayload.RoundUpdateRequestPayload.Title) != "New Title" {
+					if validatedPayload.RoundUpdateRequestPayload.Title == nil {
+						t.Errorf("Expected title 'New Title', got nil")
+					} else {
+						t.Errorf("Expected title 'New Title', got '%s'", string(*validatedPayload.RoundUpdateRequestPayload.Title))
+					}
 				}
 				if validatedPayload.RoundUpdateRequestPayload.UserID != testUserID {
 					t.Errorf("Expected UserID '%s', got '%s'", testUserID, validatedPayload.RoundUpdateRequestPayload.UserID)
@@ -81,14 +85,26 @@ func TestValidateRoundUpdateRequest(t *testing.T) {
 				if !ok {
 					t.Errorf("Expected *RoundUpdateValidatedPayload, got %T", returnedResult.Success)
 				}
-				if validatedPayload.RoundUpdateRequestPayload.Title != "New Title" {
-					t.Errorf("Expected title 'New Title', got '%s'", validatedPayload.RoundUpdateRequestPayload.Title)
+				if validatedPayload.RoundUpdateRequestPayload.Title == nil || string(*validatedPayload.RoundUpdateRequestPayload.Title) != "New Title" {
+					if validatedPayload.RoundUpdateRequestPayload.Title == nil {
+						t.Errorf("Expected title 'New Title', got nil")
+					} else {
+						t.Errorf("Expected title 'New Title', got '%s'", string(*validatedPayload.RoundUpdateRequestPayload.Title))
+					}
 				}
-				if *validatedPayload.RoundUpdateRequestPayload.Description != "New Description" {
-					t.Errorf("Expected description 'New Description', got '%s'", *validatedPayload.RoundUpdateRequestPayload.Description)
+				if validatedPayload.RoundUpdateRequestPayload.Description == nil || string(*validatedPayload.RoundUpdateRequestPayload.Description) != "New Description" {
+					if validatedPayload.RoundUpdateRequestPayload.Description == nil {
+						t.Errorf("Expected description 'New Description', got nil")
+					} else {
+						t.Errorf("Expected description 'New Description', got '%s'", string(*validatedPayload.RoundUpdateRequestPayload.Description))
+					}
 				}
-				if *validatedPayload.RoundUpdateRequestPayload.Location != "New Location" {
-					t.Errorf("Expected location 'New Location', got '%s'", *validatedPayload.RoundUpdateRequestPayload.Location)
+				if validatedPayload.RoundUpdateRequestPayload.Location == nil || string(*validatedPayload.RoundUpdateRequestPayload.Location) != "New Location" {
+					if validatedPayload.RoundUpdateRequestPayload.Location == nil {
+						t.Errorf("Expected location 'New Location', got nil")
+					} else {
+						t.Errorf("Expected location 'New Location', got '%s'", string(*validatedPayload.RoundUpdateRequestPayload.Location))
+					}
 				}
 				if validatedPayload.RoundUpdateRequestPayload.StartTime == nil {
 					t.Errorf("Expected StartTime to be set")
@@ -253,14 +269,16 @@ func TestUpdateRoundEntity(t *testing.T) {
 			name: "Successful update of title",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				originalRound := &roundtypes.Round{
-					ID:        sharedtypes.RoundID(uuid.New()),
-					Title:     roundtypes.Title("Original Title"),
-					StartTime: roundtypes.StartTimePtr(time.Now().Add(24 * time.Hour)),
-					EventType: EventTypePtr(roundtypes.EventType("tournament")),
-					CreatedBy: testUserID,
-					State:     roundtypes.RoundState("UPCOMING"),
-					Finalized: false,
-					GuildID:   testGuildID,
+					ID:          sharedtypes.RoundID(uuid.New()),
+					Title:       roundtypes.Title("Original Title"),
+					Description: roundtypes.Description("Test Description"),
+					Location:    roundtypes.Location("Test Location"),
+					StartTime:   roundtypes.StartTimePtr(time.Now().Add(24 * time.Hour)),
+					EventType:   EventTypePtr(roundtypes.EventType("tournament")),
+					CreatedBy:   testUserID,
+					State:       roundtypes.RoundState("UPCOMING"),
+					Finalized:   false,
+					GuildID:     testGuildID,
 				}
 				err := deps.DB.CreateRound(ctx, testGuildID, originalRound)
 				if err != nil {
@@ -272,7 +290,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						GuildID: testGuildID,
 						RoundID: originalRound.ID,
-						Title:   roundtypes.Title("Updated Title"),
+						Title:   titlePtr("Updated Title"),
 						UserID:  testUserID,
 					},
 				}
@@ -296,16 +314,16 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected Round GuildID %s, got %s", testGuildID, entityUpdatedPayload.Round.GuildID)
 				}
 
-				if entityUpdatedPayload.Round.Title != "Updated Title" {
-					t.Errorf("Expected round title to be 'Updated Title', got '%s'", entityUpdatedPayload.Round.Title)
+				if entityUpdatedPayload.Round.Title != roundtypes.Title("Updated Title") {
+					t.Errorf("Expected round title to be 'Updated Title', got '%s'", string(entityUpdatedPayload.Round.Title))
 				}
 
 				updatedRoundInDB, err := deps.DB.GetRound(ctx, testGuildID, entityUpdatedPayload.Round.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch updated round from DB: %v", err)
 				}
-				if updatedRoundInDB.Title != "Updated Title" {
-					t.Errorf("Expected round in DB to have title 'Updated Title', got '%s'", updatedRoundInDB.Title)
+				if updatedRoundInDB.Title != roundtypes.Title("Updated Title") {
+					t.Errorf("Expected round in DB to have title 'Updated Title', got '%s'", string(updatedRoundInDB.Title))
 				}
 			},
 		},
@@ -315,8 +333,8 @@ func TestUpdateRoundEntity(t *testing.T) {
 				originalRound := &roundtypes.Round{
 					ID:          sharedtypes.RoundID(uuid.New()),
 					Title:       roundtypes.Title("Original Title"),
-					Description: roundtypes.DescriptionPtr("Old Desc"),
-					Location:    roundtypes.LocationPtr("Old Loc"),
+					Description: roundtypes.Description("Old Desc"),
+					Location:    roundtypes.Location("Old Loc"),
 					StartTime:   roundtypes.StartTimePtr(time.Now().Add(-24 * time.Hour)),
 					EventType:   EventTypePtr(roundtypes.EventType("casual")),
 					CreatedBy:   testUserID,
@@ -354,19 +372,19 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected GuildID %s, got %s", testGuildID, entityUpdatedPayload.GuildID)
 				}
 
-				if *entityUpdatedPayload.Round.Description != "New Description" {
-					t.Errorf("Expected description 'New Description', got '%s'", *entityUpdatedPayload.Round.Description)
+				if entityUpdatedPayload.Round.Description != roundtypes.Description("New Description") {
+					t.Errorf("Expected description 'New Description', got '%s'", string(entityUpdatedPayload.Round.Description))
 				}
-				if *entityUpdatedPayload.Round.Location != "New Location" {
-					t.Errorf("Expected location 'New Location', got '%s'", *entityUpdatedPayload.Round.Location)
+				if entityUpdatedPayload.Round.Location != roundtypes.Location("New Location") {
+					t.Errorf("Expected location 'New Location', got '%s'", string(entityUpdatedPayload.Round.Location))
 				}
 
 				updatedRoundInDB, err := deps.DB.GetRound(ctx, testGuildID, entityUpdatedPayload.Round.ID)
 				if err != nil {
 					t.Fatalf("Failed to fetch updated round from DB: %v", err)
 				}
-				if *updatedRoundInDB.Description != "New Description" {
-					t.Errorf("Expected round in DB description 'New Description', got '%s'", *updatedRoundInDB.Description)
+				if updatedRoundInDB.Description != roundtypes.Description("New Description") {
+					t.Errorf("Expected round in DB description 'New Description', got '%s'", string(updatedRoundInDB.Description))
 				}
 			},
 		},
@@ -374,14 +392,16 @@ func TestUpdateRoundEntity(t *testing.T) {
 			name: "Successful update of EventType",
 			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (roundevents.RoundUpdateValidatedPayloadV1, sharedtypes.RoundID) {
 				originalRound := &roundtypes.Round{
-					ID:        sharedtypes.RoundID(uuid.New()),
-					Title:     roundtypes.Title("Original Title"),
-					StartTime: roundtypes.StartTimePtr(time.Now().Add(24 * time.Hour)),
-					EventType: EventTypePtr(roundtypes.EventType("casual")),
-					CreatedBy: testUserID,
-					State:     roundtypes.RoundState("UPCOMING"),
-					Finalized: false,
-					GuildID:   testGuildID,
+					ID:          sharedtypes.RoundID(uuid.New()),
+					Title:       roundtypes.Title("Original Title"),
+					Description: roundtypes.Description("Test Description"),
+					Location:    roundtypes.Location("Test Location"),
+					StartTime:   roundtypes.StartTimePtr(time.Now().Add(24 * time.Hour)),
+					EventType:   EventTypePtr(roundtypes.EventType("casual")),
+					CreatedBy:   testUserID,
+					State:       roundtypes.RoundState("UPCOMING"),
+					Finalized:   false,
+					GuildID:     testGuildID,
 				}
 				_ = deps.DB.CreateRound(ctx, testGuildID, originalRound)
 
@@ -399,8 +419,11 @@ func TestUpdateRoundEntity(t *testing.T) {
 			},
 			expectedError: false,
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
+				if returnedResult.Success == nil {
+					t.Fatalf("Expected success result, but got nil")
+				}
 				entityUpdatedPayload := returnedResult.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
-				if entityUpdatedPayload.Round.EventType == nil || *entityUpdatedPayload.Round.EventType != "tournament" {
+				if entityUpdatedPayload.Round.EventType == nil || *entityUpdatedPayload.Round.EventType != roundtypes.EventType("tournament") {
 					t.Errorf("Expected EventType 'tournament', got %v", entityUpdatedPayload.Round.EventType)
 				}
 			},
@@ -414,14 +437,14 @@ func TestUpdateRoundEntity(t *testing.T) {
 					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
 						GuildID: testGuildID,
 						RoundID: roundID,
-						Title:   roundtypes.Title("New Title"),
+						Title:   titlePtr("New Title"),
 						UserID:  testUserID,
 					},
 				}
 				return payload, roundID
 			},
 			expectedError:            false,
-			expectedErrorMessagePart: "failed to update round in database",
+			expectedErrorMessagePart: "round not found",
 			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
 				if returnedResult.Failure == nil {
 					t.Fatalf("Expected failure result, but got nil")
@@ -436,7 +459,7 @@ func TestUpdateRoundEntity(t *testing.T) {
 					t.Errorf("Expected Failure GuildID %s, got %s", testGuildID, errorPayload.GuildID)
 				}
 
-				if !strings.Contains(errorPayload.Error, "failed to update round in database") {
+				if !strings.Contains(errorPayload.Error, "failed to fetch current round") {
 					t.Errorf("Expected error to contain 'failed to update round in database', got '%s'", errorPayload.Error)
 				}
 			},
@@ -607,8 +630,8 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				if schedulePayload.RoundID == (sharedtypes.RoundID{}) {
 					t.Errorf("Expected valid round ID, got zero value")
 				}
-				if schedulePayload.Title != "Rescheduled Round" {
-					t.Errorf("Expected title 'Rescheduled Round', got '%s'", schedulePayload.Title)
+				if schedulePayload.Title != roundtypes.Title("Rescheduled Round") {
+					t.Errorf("Expected title 'Rescheduled Round', got '%s'", string(schedulePayload.Title))
 				}
 			},
 		},
@@ -619,7 +642,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					ID:        sharedtypes.RoundID(uuid.New()),
 					Title:     roundtypes.Title("Location Update Round"),
 					StartTime: roundtypes.StartTimePtr(time.Now().Add(24 * time.Hour)),
-					Location:  roundtypes.LocationPtr("Old Location"),
+					Location:  roundtypes.Location("Old Location"),
 					EventType: EventTypePtr(roundtypes.EventType("casual")),
 					CreatedBy: testUserID,
 					State:     roundtypes.RoundState("UPCOMING"),
@@ -637,7 +660,7 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 					RoundID:   round.ID,
 					Title:     roundtypes.Title("Location Update Round"),
 					StartTime: (*sharedtypes.StartTime)(&newStartTime),
-					Location:  &newLocation,
+					Location:  newLocation,
 					GuildID:   "test-guild",
 				}
 				return payload, round.ID
@@ -658,8 +681,8 @@ func TestUpdateScheduledRoundEvents(t *testing.T) {
 				if schedulePayload.RoundID == (sharedtypes.RoundID{}) {
 					t.Errorf("Expected valid round ID, got zero value")
 				}
-				if schedulePayload.Title != "Location Update Round" {
-					t.Errorf("Expected title 'Location Update Round', got '%s'", schedulePayload.Title)
+				if schedulePayload.Title != roundtypes.Title("Location Update Round") {
+					t.Errorf("Expected title 'Location Update Round', got '%s'", string(schedulePayload.Title))
 				}
 			},
 		},

@@ -39,7 +39,7 @@ func NewRoundModule(
 	ctx context.Context,
 	cfg *config.Config,
 	obs observability.Observability,
-	roundDB rounddb.RoundDB,
+	roundDB rounddb.Repository,
 	db *bun.DB,
 	userDB userdb.UserDB,
 	eventBus eventbus.EventBus,

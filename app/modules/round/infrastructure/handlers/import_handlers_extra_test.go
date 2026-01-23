@@ -2,168 +2,176 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
-func TestRoundHandlers_HandleImportCompleted(t *testing.T) {
-	logger := loggerfrolfbot.NoOpLogger
+// =============================================================================
+// TEST: HandleScorecardURLRequested
+// =============================================================================
 
-	importID := "imp-1"
-	guildID := sharedtypes.GuildID("g-1")
-	roundID := sharedtypes.RoundID(uuid.New())
-
-	testPayload := &roundevents.ImportCompletedPayloadV1{
-		ImportID: importID,
-		GuildID:  guildID,
-		RoundID:  roundID,
-		Scores:   []sharedtypes.ScoreInfo{{UserID: sharedtypes.DiscordID("u1"), Score: 5}},
-	}
-
-	scorePointer := func(s sharedtypes.Score) *sharedtypes.Score {
-		return &s
+func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
+	ctx := context.Background()
+	payload := &roundevents.ScorecardURLRequestedPayloadV1{
+		UDiscURL: "https://udisc.com/export",
 	}
 
 	tests := []struct {
-		name            string
-		mockSetup       func(*roundmocks.MockService)
-		payload         *roundevents.ImportCompletedPayloadV1
-		wantErr         bool
-		wantResultLen   int
-		wantResultTopic string
-		expectedErrMsg  string
+		name         string
+		setupService func(s *FakeService)
+		expectTopic  string
 	}{
 		{
-			name: "FanOut messages successfully",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				finalParticipants := []roundtypes.Participant{
-					{UserID: sharedtypes.DiscordID("u1"), Score: scorePointer(sharedtypes.Score(5))},
+			name: "Success - URL Accepted",
+			setupService: func(s *FakeService) {
+				s.ScorecardURLRequestedFn = func(ctx context.Context, p roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error) {
+					return results.OperationResult{Success: &roundevents.ScorecardUploadedPayloadV1{}}, nil
 				}
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					results.OperationResult{
-						Success: &roundevents.ImportScoresAppliedPayloadV1{
-							GuildID:        guildID,
-							RoundID:        roundID,
-							ImportID:       importID,
-							Participants:   finalParticipants,
-							EventMessageID: "evt-1",
-						},
-					},
-					nil,
-				)
 			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundAllScoresSubmittedV1,
+			expectTopic: string(roundevents.ScorecardParseRequestedV1),
 		},
 		{
-			name: "Service failure produces ImportFailed",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					results.OperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{
-							GuildID:  guildID,
-							RoundID:  roundID,
-							ImportID: importID,
-							Error:    "all failed",
-						},
-					},
-					nil,
-				)
+			name: "Failure - Invalid URL format",
+			setupService: func(s *FakeService) {
+				s.ScorecardURLRequestedFn = func(ctx context.Context, p roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error) {
+					return results.OperationResult{
+						Failure: &roundevents.ImportFailedPayloadV1{ErrorCode: "INVALID_URL"},
+					}, nil
+				}
 			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.ImportFailedV1,
-		},
-		{
-			name: "No scores returns nil",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				// Service should NOT be called when there are no scores
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Times(0)
-			},
-			payload: &roundevents.ImportCompletedPayloadV1{
-				ImportID: importID,
-				GuildID:  guildID,
-				RoundID:  roundID,
-				Scores:   []sharedtypes.ScoreInfo{},
-			},
-			wantErr:       false,
-			wantResultLen: 0,
-		},
-		{
-			name: "Unexpected success type returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					results.OperationResult{Success: "not-the-right-type"},
-					nil,
-				)
-			},
-			payload:        testPayload,
-			wantErr:        true,
-			expectedErrMsg: "unexpected success payload type",
-		},
-		{
-			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ApplyImportedScores(gomock.Any(), gomock.Any()).Return(
-					results.OperationResult{},
-					fmt.Errorf("service error"),
-				)
-			},
-			payload:        testPayload,
-			wantErr:        true,
-			expectedErrMsg: "service error",
+			expectTopic: string(roundevents.ImportFailedV1),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			svc := NewFakeService()
+			tt.setupService(svc)
+			h := &RoundHandlers{service: svc}
 
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			res, err := h.HandleScorecardURLRequested(ctx, payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res[0].Topic != tt.expectTopic {
+				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
+			}
+		})
+	}
+}
 
-			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
-			}
+// =============================================================================
+// TEST: HandleScorecardParsedForNormalization
+// =============================================================================
 
-			results, err := h.HandleImportCompleted(context.Background(), tt.payload)
+func TestRoundHandlers_HandleScorecardParsedForNormalization(t *testing.T) {
+	ctx := context.Background()
+	payload := &roundevents.ParsedScorecardPayloadV1{
+		ImportID: "imp-1",
+		ParsedData: &roundtypes.ParsedScorecard{
+			PlayerScores: []roundtypes.PlayerScoreRow{{PlayerName: "Tester"}},
+		},
+	}
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleImportCompleted() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && tt.expectedErrMsg != "" && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleImportCompleted() error = %v, expected %v", err.Error(), tt.expectedErrMsg)
-			}
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleImportCompleted() result length = %d, want %d", len(results), tt.wantResultLen)
-			}
-			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
-				t.Errorf("HandleImportCompleted() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
-			}
-
-			// Verify result payload content for successful cases
-			if tt.wantResultLen > 0 && tt.wantResultTopic == roundevents.RoundAllScoresSubmittedV1 {
-				resultPayload, ok := results[0].Payload.(*roundevents.AllScoresSubmittedPayloadV1)
-				if !ok {
-					t.Errorf("HandleImportCompleted() payload type mismatch")
+	tests := []struct {
+		name         string
+		setupService func(s *FakeService)
+		expectTopic  string
+	}{
+		{
+			name: "Success - Data Normalized",
+			setupService: func(s *FakeService) {
+				s.NormalizeParsedScorecardFn = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult, error) {
+					// Verify metadata was mapped correctly from payload
+					if m.ImportID != "imp-1" {
+						return results.OperationResult{}, errors.New("metadata mismatch")
+					}
+					return results.OperationResult{Success: &roundevents.ScorecardNormalizedPayloadV1{}}, nil
 				}
-				if resultPayload.GuildID != guildID || resultPayload.RoundID != roundID {
-					t.Errorf("HandleImportCompleted() payload data mismatch")
+			},
+			expectTopic: string(roundevents.ScorecardNormalizedV1),
+		},
+		{
+			name: "Failure - Normalization Logic Error",
+			setupService: func(s *FakeService) {
+				s.NormalizeParsedScorecardFn = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult, error) {
+					return results.OperationResult{
+						Failure: &roundevents.ImportFailedPayloadV1{Error: "normalization failed"},
+					}, nil
 				}
+			},
+			expectTopic: string(roundevents.ImportFailedV1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewFakeService()
+			tt.setupService(svc)
+			h := &RoundHandlers{service: svc}
+
+			res, err := h.HandleScorecardParsedForNormalization(ctx, payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res[0].Topic != tt.expectTopic {
+				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// TEST: HandleScorecardNormalized
+// =============================================================================
+
+func TestRoundHandlers_HandleScorecardNormalized(t *testing.T) {
+	ctx := context.Background()
+	payload := &roundevents.ScorecardNormalizedPayloadV1{ImportID: "imp-1"}
+
+	tests := []struct {
+		name         string
+		setupService func(s *FakeService)
+		expectTopic  string
+	}{
+		{
+			name: "Success - Ingestion Complete",
+			setupService: func(s *FakeService) {
+				s.IngestNormalizedScorecardFn = func(ctx context.Context, p roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
+					return results.OperationResult{Success: &roundevents.ImportCompletedPayloadV1{}}, nil
+				}
+			},
+			expectTopic: string(roundevents.ImportCompletedV1),
+		},
+		{
+			name: "Failure - Name matching failed",
+			setupService: func(s *FakeService) {
+				s.IngestNormalizedScorecardFn = func(ctx context.Context, p roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
+					return results.OperationResult{
+						Failure: &roundevents.ImportFailedPayloadV1{ErrorCode: "MATCH_ERROR"},
+					}, nil
+				}
+			},
+			expectTopic: string(roundevents.ImportFailedV1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewFakeService()
+			tt.setupService(svc)
+			h := &RoundHandlers{service: svc}
+
+			res, err := h.HandleScorecardNormalized(ctx, payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res[0].Topic != tt.expectTopic {
+				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
 			}
 		})
 	}

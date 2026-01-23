@@ -78,8 +78,8 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 	roundDB := &rounddb.Round{
 		ID:           roundData.ID,
 		Title:        roundData.Title,
-		Description:  *roundData.Description,
-		Location:     *roundData.Location,
+		Description:  roundData.Description,
+		Location:     roundData.Location,
 		EventType:    roundData.EventType,
 		StartTime:    *roundData.StartTime,
 		Finalized:    roundData.Finalized,

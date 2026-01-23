@@ -26,8 +26,8 @@ func createValidRoundEntityCreatedPayload(userID sharedtypes.DiscordID) roundeve
 		Round: roundtypes.Round{
 			ID:          sharedtypes.RoundID(uuid.New()),
 			Title:       "Test Round",
-			Description: &description,
-			Location:    &location,
+			Description: description,
+			Location:    location,
 			StartTime:   &startTime,
 			CreatedBy:   userID,
 			State:       roundtypes.RoundStateUpcoming,
@@ -55,8 +55,8 @@ func createMinimalRoundEntityCreatedPayload(userID sharedtypes.DiscordID) rounde
 		Round: roundtypes.Round{
 			ID:          roundID,
 			Title:       "Quick Round",
-			Description: &description,
-			Location:    &location,
+			Description: description,
+			Location:    location,
 			StartTime:   &startTime,
 			CreatedBy:   userID,
 			State:       roundtypes.RoundStateUpcoming,

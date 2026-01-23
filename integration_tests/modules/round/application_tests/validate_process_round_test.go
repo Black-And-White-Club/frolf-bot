@@ -10,6 +10,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 )
 
 func TestValidateAndProcessRound(t *testing.T) {
@@ -59,11 +60,11 @@ func TestValidateAndProcessRound(t *testing.T) {
 				if successPayload.Round.Title != "Test Round 1" {
 					t.Errorf("Expected title 'Test Round 1', got '%s'", successPayload.Round.Title)
 				}
-				if *successPayload.Round.Description != "A test description" {
-					t.Errorf("Expected description 'A test description', got '%s'", *successPayload.Round.Description)
+				if successPayload.Round.Description != "A test description" {
+					t.Errorf("Expected description 'A test description', got '%s'", successPayload.Round.Description)
 				}
-				if *successPayload.Round.Location != "Test Location" {
-					t.Errorf("Expected location 'Test Location', got '%s'", *successPayload.Round.Location)
+				if successPayload.Round.Location != "Test Location" {
+					t.Errorf("Expected location 'Test Location', got '%s'", successPayload.Round.Location)
 				}
 				if successPayload.Round.CreatedBy != "user_123" {
 					t.Errorf("Expected CreatedBy 'user_123', got '%s'", successPayload.Round.CreatedBy)
@@ -297,10 +298,10 @@ func TestValidateAndProcessRound(t *testing.T) {
 				if successPayload.Round.Title != "Round with Optional Fields" {
 					t.Errorf("Expected title 'Round with Optional Fields', got '%s'", successPayload.Round.Title)
 				}
-				if successPayload.Round.Description == nil || *successPayload.Round.Description != "A valid description" {
+				if successPayload.Round.Description != "A valid description" {
 					t.Errorf("Expected description 'A valid description', got '%v'", successPayload.Round.Description)
 				}
-				if successPayload.Round.Location == nil || *successPayload.Round.Location != "A valid location" {
+				if successPayload.Round.Location != "A valid location" {
 					t.Errorf("Expected location 'A valid location', got '%v'", successPayload.Round.Location)
 				}
 			},
@@ -318,7 +319,7 @@ func TestValidateAndProcessRound(t *testing.T) {
 			}
 
 			// Call the service method.
-			result, err := deps.Service.ValidateAndProcessRound(deps.Ctx, tt.payload, roundtime.NewTimeParser())
+			result, err := deps.Service.ValidateAndProcessRoundWithClock(deps.Ctx, tt.payload, roundtime.NewTimeParser(), roundutil.RealClock{})
 
 			// Validate expected error.
 			if tt.expectedError {

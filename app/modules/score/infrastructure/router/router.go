@@ -10,7 +10,6 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
@@ -18,7 +17,6 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -85,16 +83,6 @@ func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreser
 	}
 
 	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper, scoreMetrics)
-
-	r.Router.AddMiddleware(
-		middleware.CorrelationID,
-		r.middlewareHelper.CommonMetadataMiddleware("score"),
-		r.middlewareHelper.DiscordMetadataMiddleware(),
-		r.middlewareHelper.RoutingMetadataMiddleware(),
-		middleware.Recoverer,
-		middleware.Retry{MaxRetries: 3}.Middleware,
-		tracingfrolfbot.TraceHandler(r.tracer),
-	)
 
 	// Pass the routerCtx to RegisterHandlers
 	if err := r.RegisterHandlers(routerCtx, scoreHandlers); err != nil {

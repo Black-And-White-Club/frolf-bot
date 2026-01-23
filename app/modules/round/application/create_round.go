@@ -24,8 +24,8 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		// Validate the round
 		input := roundtypes.CreateRoundInput{
 			Title:       payload.Title,
-			Description: &payload.Description,
-			Location:    &payload.Location,
+			Description: payload.Description,
+			Location:    payload.Location,
 			StartTime:   payload.StartTime,
 			UserID:      payload.UserID,
 		}
@@ -96,8 +96,8 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		roundObject := roundtypes.Round{
 			ID:           sharedtypes.RoundID(uuid.New()),
 			Title:        roundtypes.Title(payload.Title),
-			Description:  &payload.Description,
-			Location:     &payload.Location,
+			Description:  payload.Description,
+			Location:     payload.Location,
 			StartTime:    (*sharedtypes.StartTime)(&parsedTime),
 			CreatedBy:    payload.UserID,
 			State:        roundtypes.RoundStateUpcoming,
@@ -120,8 +120,8 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 		// Log round creation
 		s.logger.InfoContext(ctx, "Round object created",
 			attr.String("title", string(roundObject.Title)),
-			attr.String("description", string(*roundObject.Description)),
-			attr.String("location", string(*roundObject.Location)),
+			attr.String("description", string(roundObject.Description)),
+			attr.String("location", string(roundObject.Location)),
 			attr.Time("start_time", time.Time(*roundObject.StartTime)),
 			attr.String("created_by", string(roundObject.CreatedBy)),
 		)
@@ -132,16 +132,11 @@ func (s *RoundService) ValidateAndProcessRoundWithClock(ctx context.Context, pay
 	return result, err
 }
 
-// ValidateAndProcessRound keeps backward compatibility using the real clock.
-func (s *RoundService) ValidateAndProcessRound(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (results.OperationResult, error) {
-	return s.ValidateAndProcessRoundWithClock(ctx, payload, timeParser, roundutil.RealClock{})
-}
-
 // StoreRound stores a round in the database
 func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (results.OperationResult, error) {
 	result, err := s.withTelemetry(ctx, "StoreRound", payload.Round.ID, func(ctx context.Context) (results.OperationResult, error) {
 		// Validate round data
-		if payload.Round.Title == "" || payload.Round.Description == nil || payload.Round.Location == nil || payload.Round.StartTime == nil {
+		if payload.Round.Title == "" || payload.Round.Description == "" || payload.Round.Location == "" || payload.Round.StartTime == nil {
 			s.metrics.RecordValidationError(ctx)
 			return results.OperationResult{
 				Failure: &roundevents.RoundCreationFailedPayloadV1{
@@ -152,10 +147,6 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 		}
 
 		roundTypes := payload.Round
-		location := ""
-		if roundTypes.Location != nil {
-			location = string(*roundTypes.Location)
-		}
 
 		defaultType := roundtypes.DefaultEventType
 		roundTypes.EventType = &defaultType
@@ -175,24 +166,13 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 			GuildID:      guildID,
 		}
 
-		if roundDB.Description == nil || roundDB.Location == nil || roundDB.StartTime == nil {
+		if roundDB.StartTime == nil {
 			return results.OperationResult{
 				Failure: &roundevents.RoundCreationFailedPayloadV1{
 					UserID:       roundDB.CreatedBy,
-					ErrorMessage: "one or more required fields are nil",
+					ErrorMessage: "start time cannot be nil",
 				},
-			}, fmt.Errorf("nil field: desc=%v, loc=%v, start=%v", roundDB.Description, roundDB.Location, roundDB.StartTime)
-		}
-
-		// Safely dereference optional fields for logging
-		desc := ""
-		if roundDB.Description != nil {
-			desc = string(*roundDB.Description)
-		}
-
-		loc := ""
-		if roundDB.Location != nil {
-			loc = string(*roundDB.Location)
+			}, fmt.Errorf("nil field:  start=%v", roundDB.StartTime)
 		}
 
 		startTime := time.Time{}
@@ -202,8 +182,8 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 
 		s.logger.InfoContext(ctx, "About to create round in DB",
 			attr.String("title", string(roundDB.Title)),
-			attr.String("description", desc),
-			attr.String("location", loc),
+			attr.String("description", string(roundDB.Description)),
+			attr.String("location", string(roundDB.Location)),
 			attr.Time("start_time", startTime),
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)
@@ -220,16 +200,41 @@ func (s *RoundService) StoreRound(ctx context.Context, guildID sharedtypes.Guild
 		} else {
 			s.metrics.RecordDBOperationSuccess(ctx, "create_round")
 		}
+		// Immediately materialize participant groups (singles-safe)
+		hasGroups, err := s.repo.RoundHasGroups(ctx, roundDB.ID)
+		if err != nil {
+			return results.OperationResult{
+				Failure: &roundevents.RoundCreationFailedPayloadV1{
+					UserID:       roundDB.CreatedBy,
+					ErrorMessage: "failed checking round groups",
+				},
+			}, err
+		}
+
+		if !hasGroups {
+			if err := s.repo.CreateRoundGroups(
+				ctx,
+				roundDB.ID,
+				roundDB.Participants,
+			); err != nil {
+				return results.OperationResult{
+					Failure: &roundevents.RoundCreationFailedPayloadV1{
+						UserID:       roundDB.CreatedBy,
+						ErrorMessage: "failed creating round groups",
+					},
+				}, err
+			}
+		}
 
 		// Record successful round creation
-		s.metrics.RecordRoundCreated(ctx, location)
+		s.metrics.RecordRoundCreated(ctx, string(roundDB.Location))
 
 		// Log after storing
 		s.logger.InfoContext(ctx, "Round created successfully",
 			attr.StringUUID("round_id", roundDB.ID.String()),
 			attr.String("title", string(roundDB.Title)),
-			attr.String("description", string(*roundDB.Description)),
-			attr.String("location", string(*roundDB.Location)),
+			attr.String("description", string(roundDB.Description)),
+			attr.String("location", string(roundDB.Location)),
 			attr.Time("start_time", time.Time(*roundDB.StartTime)),
 			attr.String("created_by", string(roundDB.CreatedBy)),
 		)

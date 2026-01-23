@@ -2,7 +2,6 @@ package scoreservice
 
 import (
 	"context"
-	"time"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -26,11 +25,6 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		// Check if scores already exist for this round
 		existingScores, err := s.repo.GetScoresForRound(ctx, guildID, roundID)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to check existing scores",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-				attr.Error(err),
-			)
 			return ScoreOperationResult{
 				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
@@ -41,10 +35,6 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 		}
 
 		if len(existingScores) > 0 && !overwrite {
-			s.logger.WarnContext(ctx, "Scores already exist for round, overwrite not requested",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-			)
 			return ScoreOperationResult{
 				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
@@ -54,85 +44,48 @@ func (s *ScoreService) ProcessRoundScores(ctx context.Context, guildID sharedtyp
 			}, nil
 		}
 
+		// Process scores for storage (aggregating teams, tagging, etc.)
 		processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, scores)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to process scores for storage",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-				attr.Error(err),
-			)
-			s.logger.InfoContext(ctx, "Service returning: Error processing scores for storage",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-				attr.Error(err),
-			)
-			// Return a failure payload for business logic errors from ProcessScoresForStorage
 			return ScoreOperationResult{
 				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  err.Error(),
 				},
-			}, nil // Return nil error to indicate handled business failure
+			}, nil
 		}
 
-		tagMappings := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(processedScores))
-
-		extractStartTime := time.Now()
+		// Record tag mappings
+		tagMappings := make([]sharedtypes.TagMapping, 0, len(processedScores))
 		for _, scoreInfo := range processedScores {
 			if scoreInfo.TagNumber != nil {
-				tagMappings[scoreInfo.UserID] = *scoreInfo.TagNumber
+				tagMappings = append(tagMappings, sharedtypes.TagMapping{
+					DiscordID: scoreInfo.UserID,
+					TagNumber: *scoreInfo.TagNumber,
+				})
 				s.metrics.RecordPlayerTag(ctx, roundID, scoreInfo.UserID, scoreInfo.TagNumber)
 			}
 		}
 
-		s.metrics.RecordOperationAttempt(ctx, "ExtractTagInformation", roundID)
-		s.metrics.RecordOperationDuration(ctx, "ExtractTagInformation", time.Duration(time.Since(extractStartTime).Seconds()))
-
-		dbStart := time.Now()
+		// Log processed scores to the repository
 		if err := s.repo.LogScores(ctx, guildID, roundID, processedScores, "auto"); err != nil {
-			s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
-			s.logger.ErrorContext(ctx, "Failed to log scores to database",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-				attr.Error(err),
-			)
-			s.logger.InfoContext(ctx, "Service returning: Error logging scores to database",
-				attr.ExtractCorrelationID(ctx),
-				roundIDAttr,
-				attr.Error(err),
-			)
-			// Return a failure payload for business logic errors from LogScores
 			return ScoreOperationResult{
 				Failure: &sharedevents.ProcessRoundScoresFailedPayloadV1{
 					GuildID: guildID,
 					RoundID: roundID,
 					Reason:  err.Error(),
 				},
-			}, nil // Return nil error to indicate handled business failure
+			}, nil
 		}
-		s.metrics.RecordDBQueryDuration(ctx, time.Duration(time.Since(dbStart).Seconds()))
+
 		s.metrics.RecordScoreProcessingSuccess(ctx, roundID)
 
-		tagMappingPayload := make([]sharedtypes.TagMapping, 0, len(tagMappings))
-		for discordID, tagNumber := range tagMappings {
-			tagMappingPayload = append(tagMappingPayload, sharedtypes.TagMapping{
-				DiscordID: discordID,
-				TagNumber: tagNumber,
-			})
-		}
-
-		s.logger.InfoContext(ctx, "Service returning: Success with tag mappings",
-			attr.ExtractCorrelationID(ctx),
-			roundIDAttr,
-			attr.Int("num_tag_mappings", len(tagMappingPayload)),
-		)
-		// Wrap the tagMappingPayload in the expected success struct
 		return ScoreOperationResult{
 			Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
 				GuildID:     guildID,
 				RoundID:     roundID,
-				TagMappings: tagMappingPayload,
+				TagMappings: tagMappings,
 			},
 		}, nil
 	})

@@ -68,7 +68,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				round := &roundtypes.Round{
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
-					Location:       &testStartLocation,
+					Location:       testStartLocation,
 					StartTime:      &testStartRoundTime,
 					State:          roundtypes.RoundStateUpcoming,
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
@@ -85,7 +85,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testStartRoundID,
 				Title:     testRoundTitle,
-				Location:  &testStartLocation,
+				Location:  testStartLocation,
 				StartTime: &testStartRoundTime,
 			},
 			expectedResult: results.OperationResult{
@@ -93,7 +93,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					GuildID:   sharedtypes.GuildID("guild-123"),
 					RoundID:   testStartRoundID,
 					Title:     testRoundTitle,
-					Location:  &testStartLocation,
+					Location:  testStartLocation,
 					StartTime: &testStartRoundTime,
 					Participants: []roundevents.RoundParticipantV1{
 						{
@@ -139,7 +139,7 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				round := &roundtypes.Round{
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
-					Location:       &testStartLocation,
+					Location:       testStartLocation,
 					StartTime:      &testStartRoundTime,
 					State:          roundtypes.RoundStateUpcoming,
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
@@ -148,7 +148,6 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 
 				guildID := sharedtypes.GuildID("guild-123")
 				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testStartRoundID).Return(round, nil)
-				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
 				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
 			},
 			payload: roundevents.RoundStartedPayloadV1{
@@ -205,10 +204,8 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 							if actualPayload.Title != expectedPayload.Title {
 								t.Errorf("expected Title %v, got %v", expectedPayload.Title, actualPayload.Title)
 							}
-							if (actualPayload.Location == nil) != (expectedPayload.Location == nil) {
-								t.Errorf("expected Location nil status %v, got %v", expectedPayload.Location == nil, actualPayload.Location == nil)
-							} else if actualPayload.Location != nil && expectedPayload.Location != nil && *actualPayload.Location != *expectedPayload.Location {
-								t.Errorf("expected Location %v, got %v", *expectedPayload.Location, *actualPayload.Location)
+							if actualPayload.Location != expectedPayload.Location {
+								t.Errorf("expected Location %v, got %v", expectedPayload.Location, actualPayload.Location)
 							}
 							if (actualPayload.StartTime == nil) != (expectedPayload.StartTime == nil) {
 								t.Errorf("expected StartTime nil status %v, got %v", expectedPayload.StartTime == nil, actualPayload.StartTime == nil)

@@ -36,9 +36,9 @@ func TestProcessRoundReminder(t *testing.T) {
 				})
 
 				description := roundtypes.Description("This is a round for reminder testing.")
-				round.Description = &description
+				round.Description = description
 				location := roundtypes.Location("Test Location")
-				round.Location = &location
+				round.Location = location
 				eventType := roundtypes.EventType("Practice")
 				round.EventType = &eventType
 
@@ -110,7 +110,7 @@ func TestProcessRoundReminder(t *testing.T) {
 				if discordPayload.StartTime == nil {
 					t.Errorf("Expected StartTime to be set")
 				}
-				if discordPayload.Location == nil {
+				if discordPayload.Location == "" {
 					t.Errorf("Expected Location to be set")
 				}
 				if discordPayload.ReminderType != "24_HOUR_REMINDER" {
@@ -187,7 +187,7 @@ func TestProcessRoundReminder(t *testing.T) {
 					RoundID:        nonexistentRoundID,
 					RoundTitle:     "Non Existent Round",
 					StartTime:      testutils.StartTimePtr(time.Now().Add(24 * time.Hour)),
-					Location:       testutils.RoundLocationPtr("Nowhere"),
+					Location:       "Nowhere",
 					ReminderType:   "24_HOUR_REMINDER",
 					EventMessageID: "non_existent_event_message_id",
 				}

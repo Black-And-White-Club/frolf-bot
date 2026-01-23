@@ -50,7 +50,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 		RoundData: roundtypes.Round{
 			ID:             testRoundID,
 			Title:          testTitle,
-			Location:       &testLocation,
+			Location:       testLocation,
 			StartTime:      &testStartTime,
 			EventMessageID: testEventMessageID,
 			Participants:   testParticipants,
@@ -82,7 +82,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 							RoundData: roundtypes.Round{
 								ID:       testRoundID,
 								Title:    testTitle,
-								Location: &testLocation,
+								Location: testLocation,
 							},
 						},
 					},
@@ -153,7 +153,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 					RoundData: roundtypes.Round{
 						ID:             testRoundID,
 						Title:          testTitle,
-						Location:       &testLocation,
+						Location:       testLocation,
 						StartTime:      &testStartTime,
 						EventMessageID: testEventMessageID,
 						Participants:   testParticipants,
@@ -181,7 +181,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				RoundData: roundtypes.Round{
 					ID:             testRoundID,
 					Title:          testTitle,
-					Location:       &testLocation,
+					Location:       testLocation,
 					StartTime:      &testStartTime,
 					EventMessageID: testEventMessageID,
 					Participants:   testParticipants,

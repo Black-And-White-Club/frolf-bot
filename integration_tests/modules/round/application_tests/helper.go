@@ -33,7 +33,7 @@ var (
 
 type RoundTestDeps struct {
 	Ctx              context.Context
-	DB               rounddb.RoundDB
+	DB               rounddb.Repository
 	BunDB            *bun.DB
 	Service          roundservice.Service
 	QueueService     roundqueue.QueueService

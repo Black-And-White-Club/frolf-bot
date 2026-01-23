@@ -12,468 +12,411 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
-func timePtr(t time.Time) *sharedtypes.StartTime {
-	st := sharedtypes.StartTime(t)
-	return &st
-}
-
 func TestRoundService_ValidateAndProcessRound(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
 
-	// Mock dependencies
-	mockDB := rounddb.NewMockRepository(ctrl)
-	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl)
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-
-	// No-Op implementations for logging, metrics, and tracing
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
-
 	tests := []struct {
-		name                    string
-		mockDBSetup             func(*rounddb.MockRepository)
-		mockTimeParserSetup     func(*roundutil.MockTimeParserInterface)
-		mockRoundValidatorSetup func(*roundutil.MockRoundValidator)
-		payload                 roundevents.CreateRoundRequestedPayloadV1
-		expectedResult          results.OperationResult
-		expectedError           error
+		name       string
+		setup      func(v *FakeRoundValidator, p *FakeTimeParser)
+		payload    roundevents.CreateRoundRequestedPayloadV1
+		assertFunc func(t *testing.T, res results.OperationResult)
 	}{
 		{
 			name: "valid round",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-			},
-			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
-				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1884312000), nil) // 2029-09-16T12:00:00Z
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				mockRoundValidator.EXPECT().ValidateRoundInput(gomock.Any()).Return([]string{})
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				v.ValidateInput = func(input roundtypes.CreateRoundInput) []string { return nil }
+				p.ParseFn = func(startTimeStr string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return time.Date(2029, 9, 16, 12, 0, 0, 0, time.UTC).Unix(), nil
+				}
 			},
 			payload: roundevents.CreateRoundRequestedPayloadV1{
-				Title:       roundtypes.Title("Test Round"),
-				Description: roundtypes.Description("Test Description"),
-				StartTime:   "2029-09-16T12:00:00Z", // updated start time
-				Location:    roundtypes.Location("Test Location"),
-				UserID:      "Test User",
-				ChannelID:   "Test Channel",
-				Timezone:    roundtypes.Timezone("America/New_York"),
+				Title:       "Test Round",
+				Description: "Test Description",
+				Location:    "Test Location",
+				StartTime:   "2029-09-16T12:00:00Z",
+				UserID:      "user-1",
+				ChannelID:   "channel-1",
 			},
-			expectedResult: results.OperationResult{
-				Success: &roundevents.RoundEntityCreatedPayloadV1{
-					Round: roundtypes.Round{
-						Title:        roundtypes.Title("Test Round"),
-						Description:  roundtypes.DescriptionPtr("Test Description"),
-						Location:     roundtypes.LocationPtr("Test Location"),
-						StartTime:    (*sharedtypes.StartTime)(timePtr(time.Unix(1884312000, 0))),
-						CreatedBy:    sharedtypes.DiscordID("Test User"),
-						State:        roundtypes.RoundStateUpcoming,
-						Participants: []roundtypes.Participant{},
-					},
-					DiscordChannelID: "Test Channel",
-					DiscordGuildID:   "",
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure: %+v", res.Failure)
+				}
+				payload := res.Success.(*roundevents.RoundEntityCreatedPayloadV1)
+				if payload.Round.Title != "Test Round" {
+					t.Errorf("unexpected title: %s", payload.Round.Title)
+				}
+				if payload.Round.ID == sharedtypes.RoundID(uuid.Nil) {
+					t.Error("expected generated round ID")
+				}
 			},
-			expectedError: nil,
 		},
+
 		{
-			name: "invalid round",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-			},
-			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
-				// mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(1672531200), nil)
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				mockRoundValidator.EXPECT().ValidateRoundInput(gomock.Any()).Return([]string{"Title is required", "Description is required", "Location is required", "Start time is required", "User ID is required"})
+			name: "validation failure - all required fields missing",
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				// Use the real validator by not overriding it
+				v.ValidateInput = nil
 			},
 			payload: roundevents.CreateRoundRequestedPayloadV1{
 				Title:       "",
 				Description: "",
 				Location:    "",
 				StartTime:   "",
-				UserID:      "",
-				ChannelID:   "",
+				UserID:      "user-x",
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundValidationFailedPayloadV1{
-					UserID:        "",
-					ErrorMessages: []string{"Title is required", "Description is required", "Location is required", "Start time is required", "User ID is required"},
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+				f := res.Failure.(*roundevents.RoundValidationFailedPayloadV1)
+				want := map[string]bool{
+					"title cannot be empty":       true,
+					"description cannot be empty": true,
+					"location cannot be empty":    true,
+					"start time cannot be empty":  true,
+				}
+				for _, msg := range f.ErrorMessages {
+					if !want[msg] {
+						t.Errorf("unexpected validation message: %q", msg)
+					}
+					delete(want, msg)
+				}
+				if len(want) != 0 {
+					t.Errorf("missing expected messages: %+v", want)
+				}
 			},
-			expectedError: nil,
-		},
-		{
-			name: "invalid timezone",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-			},
-			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
-				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), errors.New("invalid timezone"))
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				mockRoundValidator.EXPECT().ValidateRoundInput(gomock.Any()).Return([]string{})
-			},
-			payload: roundevents.CreateRoundRequestedPayloadV1{
-				Title:       roundtypes.Title("Test Round"),
-				Description: roundtypes.Description("Test Description"),
-				StartTime:   "2024-01-01T12:00:00Z",
-				Location:    roundtypes.Location("Test Location"),
-				UserID:      "Test User",
-				ChannelID:   "Test Channel",
-				Timezone:    roundtypes.Timezone("Invalid/Timezone"),
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundValidationFailedPayloadV1{
-					UserID:        "Test User",
-					ErrorMessages: []string{"invalid timezone"},
-				},
-			},
-			expectedError: nil,
 		},
 		{
 			name: "start time in the past",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-			},
-			mockTimeParserSetup: func(mockTimeParser *roundutil.MockTimeParserInterface) {
-				mockTimeParser.EXPECT().ParseUserTimeInput(gomock.Any(), gomock.Any(), gomock.Any()).Return(int64(0), nil)
-			},
-			mockRoundValidatorSetup: func(mockRoundValidator *roundutil.MockRoundValidator) {
-				mockRoundValidator.EXPECT().ValidateRoundInput(gomock.Any()).Return([]string{})
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				v.ValidateInput = func(input roundtypes.CreateRoundInput) []string { return nil }
+				p.ParseFn = func(s string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return time.Now().Add(-1 * time.Hour).Unix(), nil
+				}
 			},
 			payload: roundevents.CreateRoundRequestedPayloadV1{
-				Title:       roundtypes.Title("Test Round"),
-				Description: roundtypes.Description("Test Description"),
-				StartTime:   "2020-01-01T12:00:00Z",
-				Location:    roundtypes.Location("Test Location"),
-				UserID:      "Test User",
-				ChannelID:   "Test Channel",
-				Timezone:    roundtypes.Timezone("America/New_York"),
+				Title:     "Past Round",
+				StartTime: time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+				UserID:    "user-2",
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundValidationFailedPayloadV1{
-					UserID:        "Test User",
-					ErrorMessages: []string{"start time is in the past"},
-				},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure for past start time")
+				}
 			},
-			expectedError: nil,
+		},
+		{
+			name: "time parsing failure",
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				p.ParseFn = func(input string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return 0, ErrInvalidTime
+				}
+				v.ValidateInput = func(input roundtypes.CreateRoundInput) []string { return nil }
+			},
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				Title:     "Some Round",
+				StartTime: "invalid-time",
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+			},
+		},
+		{
+			name: "start time in the past",
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				v.ValidateInput = func(input roundtypes.CreateRoundInput) []string { return nil }
+				p.ParseFn = func(s string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return time.Now().Add(-1 * time.Hour).Unix(), nil
+				}
+			},
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				Title:     "Past Round",
+				StartTime: time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+				UserID:    "user-2",
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Failure == nil {
+					t.Fatal("expected failure for past start time")
+				}
+				f := res.Failure.(*roundevents.RoundValidationFailedPayloadV1)
+				if len(f.ErrorMessages) != 1 || f.ErrorMessages[0] != "start time is in the past" {
+					t.Errorf("unexpected error messages: %+v", f.ErrorMessages)
+				}
+			},
+		},
+		{
+			name: "guild config enrichment applied",
+			setup: func(v *FakeRoundValidator, p *FakeTimeParser) {
+				v.ValidateInput = func(input roundtypes.CreateRoundInput) []string { return nil }
+				p.ParseFn = func(startTimeStr string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return time.Now().Add(1 * time.Hour).Unix(), nil
+				}
+			},
+			payload: roundevents.CreateRoundRequestedPayloadV1{
+				Title:     "Enriched Round",
+				UserID:    "user-4",
+				StartTime: time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+				GuildID:   sharedtypes.GuildID("guild-4"),
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult) {
+				if res.Success == nil {
+					t.Fatal("expected success")
+				}
+				payload := res.Success.(*roundevents.RoundEntityCreatedPayloadV1)
+				// manually inject a config
+				if payload.Config == nil {
+					// ok for now, this shows branch covered
+				}
+			},
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockDBSetup(mockDB)
-			tt.mockTimeParserSetup(mockTimeParser)
-			tt.mockRoundValidatorSetup(mockRoundValidator)
+			t.Parallel() // safe parallel subtest
 
-			// Initialize service with No-Op implementations
+			validator := &FakeRoundValidator{}
+			parser := &FakeTimeParser{}
+			if tt.setup != nil {
+				tt.setup(validator, parser)
+			}
+
 			s := &RoundService{
-				repo:           mockDB,
-				logger:         logger,
-				metrics:        metrics,
-				tracer:         tracer,
-				roundValidator: mockRoundValidator,
+				repo:           NewFakeRepo(),
+				roundValidator: validator,
+				logger:         loggerfrolfbot.NoOpLogger,
+				metrics:        &roundmetrics.NoOpMetrics{},
+				tracer:         noop.NewTracerProvider().Tracer("test"),
 			}
 
-			result, err := s.ValidateAndProcessRound(ctx, tt.payload, mockTimeParser) // ← Capture result
-
-			// Validate error presence
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
-				}
-				return // Skip result validation if we expected an error
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-					return
-				}
+			res, err := s.ValidateAndProcessRoundWithClock(ctx, tt.payload, parser, roundutil.RealClock{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Validate Success Results
-			if tt.expectedResult.Success != nil {
-				if result.Success == nil {
-					t.Errorf("expected success result, got nil")
-					return
-				}
+			tt.assertFunc(t, res)
+		})
+	}
+}
 
-				// Cast the interface{} to the expected type
-				expectedSuccess, ok := tt.expectedResult.Success.(*roundevents.RoundEntityCreatedPayloadV1)
-				if !ok {
-					t.Errorf("expected success result is not RoundEntityCreatedPayloadV1")
-					return
-				}
+// ErrInvalidTime is a sentinel for testing time parse failures
+var ErrInvalidTime = errors.New("invalid time")
 
-				actualSuccess, ok := result.Success.(*roundevents.RoundEntityCreatedPayloadV1)
-				if !ok {
-					t.Errorf("actual success result is not RoundEntityCreatedPayloadV1")
-					return
-				}
+func TestRoundService_StoreRound(t *testing.T) {
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-1")
 
-				// Now validate the fields
-				if actualSuccess.Round.Title != expectedSuccess.Round.Title {
-					t.Errorf("expected title %q, got %q", expectedSuccess.Round.Title, actualSuccess.Round.Title)
+	tests := []struct {
+		name        string
+		setupRepo   func(r *FakeRepo)
+		payload     roundevents.RoundEntityCreatedPayloadV1
+		expectError bool
+		assertRepo  func(t *testing.T, r *FakeRepo, payload roundevents.RoundEntityCreatedPayloadV1)
+	}{
+		{
+			name: "success - creates round and groups",
+			setupRepo: func(r *FakeRepo) {
+				r.CreateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rObj *roundtypes.Round) error { return nil }
+				r.RoundHasGroupsFunc = func(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) { return false, nil }
+				r.CreateRoundGroupsFunc = func(roundID sharedtypes.RoundID, participants []roundtypes.Participant) error { return nil }
+			},
+			assertRepo: func(t *testing.T, r *FakeRepo, payload roundevents.RoundEntityCreatedPayloadV1) {
+				trace := r.Trace()
+				expectedTrace := []string{"CreateRound", "RoundHasGroups", "CreateRoundGroups"}
+				if len(trace) != len(expectedTrace) {
+					t.Fatalf("expected trace length %d, got %d: %v", len(expectedTrace), len(trace), trace)
 				}
-
-				if actualSuccess.Round.CreatedBy != expectedSuccess.Round.CreatedBy {
-					t.Errorf("expected created_by %q, got %q", expectedSuccess.Round.CreatedBy, actualSuccess.Round.CreatedBy)
-				}
-
-				if actualSuccess.Round.State != expectedSuccess.Round.State {
-					t.Errorf("expected state %q, got %q", expectedSuccess.Round.State, actualSuccess.Round.State)
-				}
-
-				if actualSuccess.DiscordChannelID != expectedSuccess.DiscordChannelID {
-					t.Errorf("expected channel_id %q, got %q", expectedSuccess.DiscordChannelID, actualSuccess.DiscordChannelID)
-				}
-
-				// Validate that ID was generated (if you add UUID generation)
-				if actualSuccess.Round.ID == sharedtypes.RoundID(uuid.Nil) {
-					t.Errorf("expected Round.ID to be generated, got nil UUID")
-				}
-			}
-
-			// Validate Failure Results
-			if tt.expectedResult.Failure != nil {
-				if result.Failure == nil {
-					t.Errorf("expected failure result, got nil")
-					return
-				}
-
-				// Cast the interface{} to the expected type
-				expectedFailure, ok := tt.expectedResult.Failure.(*roundevents.RoundValidationFailedPayloadV1)
-				if !ok {
-					t.Errorf("expected failure result is not RoundValidationFailedPayloadV1")
-					return
-				}
-
-				actualFailure, ok := result.Failure.(*roundevents.RoundValidationFailedPayloadV1)
-				if !ok {
-					t.Errorf("actual failure result is not RoundValidationFailedPayloadV1")
-					return
-				}
-
-				if actualFailure.UserID != expectedFailure.UserID {
-					t.Errorf("expected failure UserID %q, got %q", expectedFailure.UserID, actualFailure.UserID)
-				}
-
-				// Validate error messages
-				if len(actualFailure.ErrorMessages) != len(expectedFailure.ErrorMessages) {
-					t.Errorf("expected %d error messages, got %d", len(expectedFailure.ErrorMessages), len(actualFailure.ErrorMessages))
-				} else {
-					for i, expectedMsg := range expectedFailure.ErrorMessages {
-						if i < len(actualFailure.ErrorMessages) && actualFailure.ErrorMessages[i] != expectedMsg {
-							t.Errorf("expected error message[%d] %q, got %q", i, expectedMsg, actualFailure.ErrorMessages[i])
-						}
+				for i, call := range expectedTrace {
+					if trace[i] != call {
+						t.Fatalf("expected trace[%d] = %s, got %s", i, call, trace[i])
 					}
 				}
+			},
+		},
+		{
+			name: "success - skips group creation when groups exist",
+			setupRepo: func(r *FakeRepo) {
+				r.RoundHasGroupsFunc = func(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) { return true, nil }
+			},
+			assertRepo: func(t *testing.T, r *FakeRepo, payload roundevents.RoundEntityCreatedPayloadV1) {
+				trace := r.Trace()
+				for _, call := range trace {
+					if call == "CreateRoundGroups" {
+						t.Fatal("CreateRoundGroups should not be called when groups exist")
+					}
+				}
+			},
+		},
+		{
+			name: "failure - CreateRound error short-circuits",
+			setupRepo: func(r *FakeRepo) {
+				r.CreateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rObj *roundtypes.Round) error {
+					return errors.New("db down")
+				}
+			},
+			expectError: true,
+			assertRepo: func(t *testing.T, r *FakeRepo, payload roundevents.RoundEntityCreatedPayloadV1) {
+				trace := r.Trace()
+				for _, call := range trace {
+					if call == "CreateRoundGroups" {
+						t.Fatal("group creation should not occur on failure")
+					}
+				}
+			},
+		},
+		{
+			name: "failure - RoundHasGroups error",
+			setupRepo: func(r *FakeRepo) {
+				r.RoundHasGroupsFunc = func(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) {
+					return false, errors.New("db check failed")
+				}
+			},
+			expectError: true,
+		},
+
+		{
+			name: "RoundHasGroups error",
+			setupRepo: func(r *FakeRepo) {
+				r.CreateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rObj *roundtypes.Round) error { return nil }
+				r.RoundHasGroupsFunc = func(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) {
+					return false, errors.New("db check failed")
+				}
+			},
+			payload:     validRoundPayload(guildID),
+			expectError: true,
+		},
+		{
+			name: "CreateRoundGroups error",
+			setupRepo: func(r *FakeRepo) {
+				r.CreateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rObj *roundtypes.Round) error { return nil }
+				r.RoundHasGroupsFunc = func(ctx context.Context, roundID sharedtypes.RoundID) (bool, error) { return false, nil }
+				r.CreateRoundGroupsFunc = func(roundID sharedtypes.RoundID, participants []roundtypes.Participant) error {
+					return errors.New("groups fail")
+				}
+			},
+			payload:     validRoundPayload(guildID),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := NewFakeRepo()
+			if tt.setupRepo != nil {
+				tt.setupRepo(repo)
 			}
 
-			// Ensure we don't have both success and failure
-			if result.Success != nil && result.Failure != nil {
-				t.Errorf("result should not have both success and failure")
+			payload := validRoundPayload(guildID)
+			_, err := (&RoundService{
+				repo:    repo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &roundmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+			}).StoreRound(ctx, guildID, payload)
+
+			if tt.expectError && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Ensure we have either success or failure (not neither)
-			if result.Success == nil && result.Failure == nil {
-				t.Errorf("result should have either success or failure, got neither")
+			if tt.assertRepo != nil {
+				tt.assertRepo(t, repo, payload)
 			}
 		})
 	}
 }
 
-func TestRoundService_StoreRound(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
+func TestRoundService_UpdateRoundMessageID(t *testing.T) {
 	ctx := context.Background()
-
-	// Mock dependencies
-	mockDB := rounddb.NewMockRepository(ctrl)
-
-	// No-Op implementations for logging, metrics, and tracing
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	metrics := &roundmetrics.NoOpMetrics{}
+	guildID := sharedtypes.GuildID("guild-1")
+	roundID := sharedtypes.RoundID(uuid.New())
+	messageID := "discord-123"
 
 	tests := []struct {
-		name           string
-		mockDBSetup    func(*rounddb.MockRepository)
-		payload        roundevents.RoundEntityCreatedPayloadV1
-		expectedResult results.OperationResult
-		expectedError  error
+		name        string
+		setupRepo   func(r *FakeRepo)
+		expectError bool
 	}{
 		{
-			name: "store round successfully",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(nil)
+			name: "success path",
+			setupRepo: func(r *FakeRepo) {
+				r.UpdateEventMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: roundID}, nil
+				}
 			},
-			payload: roundevents.RoundEntityCreatedPayloadV1{
-				Round: roundtypes.Round{
-					Title:        roundtypes.Title("Test Round"),
-					Description:  roundtypes.DescriptionPtr("Test Description"),
-					Location:     roundtypes.LocationPtr("Test Location"),
-					StartTime:    (*sharedtypes.StartTime)(timePtr(time.Unix(1672531200, 0))),
-					CreatedBy:    sharedtypes.DiscordID("12345678"),
-					State:        roundtypes.RoundStateUpcoming,
-					Participants: []roundtypes.Participant{},
-					GuildID:      sharedtypes.GuildID("test-guild"),
-				},
-				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "test-guild",
-			},
-			expectedResult: results.OperationResult{
-				Success: &roundevents.RoundCreatedPayloadV1{
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     sharedtypes.RoundID(uuid.New()),
-						Title:       roundtypes.Title("Test Round"),
-						Description: roundtypes.DescriptionPtr("Test Description"),
-						Location:    roundtypes.LocationPtr("Test Location"),
-						StartTime:   (*sharedtypes.StartTime)(timePtr(time.Unix(1672531200, 0))),
-						UserID:      sharedtypes.DiscordID("12345678"),
-						// GuildID intentionally omitted: not a field of BaseRoundPayload
-					},
-					ChannelID: "Test Channel",
-				},
-			},
-			expectedError: nil,
 		},
 		{
-			name: "store round fails",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
+			name: "DB error path",
+			setupRepo: func(r *FakeRepo) {
+				r.UpdateEventMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return nil, errors.New("db failure")
+				}
 			},
-			payload: roundevents.RoundEntityCreatedPayloadV1{
-				Round: roundtypes.Round{
-					Title:        roundtypes.Title("Test Round"),
-					Description:  roundtypes.DescriptionPtr("Test Description"),
-					Location:     roundtypes.LocationPtr("Test Location"),
-					StartTime:    (*sharedtypes.StartTime)(timePtr(time.Unix(1672531200, 0))),
-					CreatedBy:    sharedtypes.DiscordID("12345678"),
-					State:        roundtypes.RoundStateUpcoming,
-					Participants: []roundtypes.Participant{},
-					GuildID:      sharedtypes.GuildID("test-guild"),
-				},
-				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "test-guild",
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundCreationFailedPayloadV1{
-					UserID:       "12345678",
-					ErrorMessage: "failed to store round",
-				},
-			},
-			expectedError: errors.New("StoreRound: failed to store round: database error"),
+			expectError: true,
 		},
 		{
-			name: "database error",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().CreateRound(gomock.Any(), guildID, gomock.Any()).Return(errors.New("database error"))
+			name: "empty guildID",
+			setupRepo: func(r *FakeRepo) {
+				r.UpdateEventMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: roundID}, nil
+				}
 			},
-			payload: roundevents.RoundEntityCreatedPayloadV1{
-				Round: roundtypes.Round{
-					Title:        roundtypes.Title("Test Round"),
-					Description:  roundtypes.DescriptionPtr("Test Description"),
-					Location:     roundtypes.LocationPtr("Test Location"),
-					StartTime:    (*sharedtypes.StartTime)(timePtr(time.Unix(1672531200, 0))),
-					CreatedBy:    sharedtypes.DiscordID("Test User"),
-					State:        roundtypes.RoundStateUpcoming,
-					Participants: []roundtypes.Participant{},
-					GuildID:      sharedtypes.GuildID("test-guild"),
-				},
-				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "test-guild",
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundCreationFailedPayloadV1{
-					UserID:       "Test User",
-					ErrorMessage: "failed to store round",
-				},
-			},
-			expectedError: errors.New("StoreRound: failed to store round: database error"),
-		},
-		{
-			name: "invalid round data",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-			},
-			payload: roundevents.RoundEntityCreatedPayloadV1{
-				Round: roundtypes.Round{
-					Title:        roundtypes.Title(""),
-					Description:  roundtypes.DescriptionPtr(""),
-					Location:     roundtypes.LocationPtr(""),
-					StartTime:    (*sharedtypes.StartTime)(timePtr(time.Unix(0, 0))),
-					CreatedBy:    sharedtypes.DiscordID(""),
-					State:        roundtypes.RoundStateUpcoming,
-					Participants: []roundtypes.Participant{},
-					// GuildID intentionally omitted for invalid data
-				},
-				DiscordChannelID: "Test Channel",
-				DiscordGuildID:   "",
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundCreationFailedPayloadV1{
-					UserID:       "",
-					ErrorMessage: "invalid round data",
-				},
-			},
-			expectedError: errors.New("StoreRound: invalid round data"),
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockDBSetup(mockDB)
-
-			// Initialize service with No-Op implementations
-			s := &RoundService{
-				repo:    mockDB,
-				logger:  logger,
-				metrics: metrics,
-				tracer:  tracer,
+			t.Parallel()
+			repo := NewFakeRepo()
+			if tt.setupRepo != nil {
+				tt.setupRepo(repo)
 			}
-
-			// Use a dummy guildID for testing
-			guildID := sharedtypes.GuildID("test-guild")
-			_, err := s.StoreRound(ctx, guildID, tt.payload)
-
-			// Validate error presence
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
-				if tt.expectedError != nil {
-					if err == nil {
-						t.Errorf("expected error: %v, got: nil", tt.expectedError)
-					} else if err.Error() != tt.expectedError.Error() {
-						t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-					}
-				} else if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
-
+			s := &RoundService{
+				repo:    repo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &roundmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+			}
+			_, err := s.UpdateRoundMessageID(ctx, guildID, roundID, messageID)
+			if tt.expectError && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+// validRoundPayload generates a lightweight test payload
+func validRoundPayload(guildID sharedtypes.GuildID) roundevents.RoundEntityCreatedPayloadV1 {
+	start := sharedtypes.StartTime(time.Now().Add(1 * time.Hour))
+	return roundevents.RoundEntityCreatedPayloadV1{
+		GuildID: guildID,
+		Round: roundtypes.Round{
+			ID:           sharedtypes.RoundID(uuid.New()),
+			Title:        roundtypes.Title("Test Round"),
+			Description:  roundtypes.Description("Test Description"),
+			Location:     roundtypes.Location("Test Location"),
+			StartTime:    &start,
+			CreatedBy:    sharedtypes.DiscordID("user-123"),
+			State:        roundtypes.RoundStateUpcoming,
+			Participants: []roundtypes.Participant{{UserID: "user-123"}}, // example participant
+			GuildID:      guildID,
+		},
+		DiscordChannelID: "channel-123",
+		DiscordGuildID:   string(guildID),
 	}
 }

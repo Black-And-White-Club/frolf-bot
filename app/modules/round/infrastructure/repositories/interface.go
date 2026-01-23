@@ -34,10 +34,6 @@ type Repository interface {
 	UpdateRoundsAndParticipants(ctx context.Context, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error
 	GetUpcomingRoundsByParticipant(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) ([]*roundtypes.Round, error)
 	UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error
+	CreateRoundGroups(ctx context.Context, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error
+	RoundHasGroups(ctx context.Context, roundID sharedtypes.RoundID) (bool, error)
 }
-
-// Type aliases for backward compatibility.
-type (
-	RoundDB     = Repository
-	RoundDBImpl = Impl
-)

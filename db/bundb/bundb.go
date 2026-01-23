@@ -21,7 +21,7 @@ import (
 // DBService satisfies the db.Database interface
 type DBService struct {
 	UserDB            userdb.Repository
-	RoundDB           rounddb.RoundDB
+	RoundDB           rounddb.Repository
 	ScoreDB           scoredb.ScoreDB
 	LeaderboardDB     leaderboarddb.LeaderboardDB
 	GuildDB           guilddb.Repository

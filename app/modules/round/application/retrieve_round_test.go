@@ -34,8 +34,8 @@ var (
 var testRound = roundtypes.Round{
 	ID:           testRoundID,
 	Title:        testTitle,
-	Description:  &testDesc,
-	Location:     &testLoc,
+	Description:  testDesc,
+	Location:     testLoc,
 	EventType:    &testEventType,
 	StartTime:    &testStartTime,
 	Finalized:    false,

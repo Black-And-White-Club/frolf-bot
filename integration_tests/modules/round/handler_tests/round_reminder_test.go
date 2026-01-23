@@ -253,7 +253,7 @@ func createRoundReminderPayload(roundID sharedtypes.RoundID, reminderType string
 		ReminderType:     reminderType,
 		RoundTitle:       roundtypes.Title("Test Round"),
 		StartTime:        sharedStartTime,
-		Location:         &location,
+		Location:         location,
 		UserIDs:          userIDs,
 		DiscordChannelID: "test-channel-123",
 		DiscordGuildID:   "test-guild-456",

@@ -24,50 +24,47 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	testScore := sharedtypes.Score(72)
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	testProcessRoundScoresRequestedPayloadV1 := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
-		GuildID: testGuildID,
-		RoundID: testRoundID,
-		Scores: []sharedtypes.ScoreInfo{
-			{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
-		},
+	basePayload := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
+		GuildID:   testGuildID,
+		RoundID:   testRoundID,
+		Scores:    []sharedtypes.ScoreInfo{{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber}},
+		Overwrite: true,
 	}
-
-	// Mock dependencies
-	mockScoreService := scoremocks.NewMockService(ctrl)
-
-	// no-op observability in handler tests
 
 	tests := []struct {
 		name           string
-		mockSetup      func()
 		payload        *sharedevents.ProcessRoundScoresRequestedPayloadV1
+		mockSetup      func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1)
 		wantErr        bool
 		expectedErrMsg string
 		checkResults   func(t *testing.T, results []handlerwrapper.Result)
 	}{
 		{
 			name: "Successfully handle ProcessRoundScoresRequest",
-			mockSetup: func() {
+			payload: func() *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
+				p := *basePayload
+				p.RoundMode = sharedtypes.RoundModeSingles
+				return &p
+			}(),
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testProcessRoundScoresRequestedPayloadV1.Scores,
-					gomock.Any(),
+					payload.GuildID,
+					payload.RoundID,
+					payload.Scores,
+					payload.Overwrite,
 				).Return(
 					scoreservice.ScoreOperationResult{
 						Success: &sharedevents.ProcessRoundScoresSucceededPayloadV1{
-							GuildID: testGuildID,
-							RoundID: testRoundID,
+							GuildID: payload.GuildID,
+							RoundID: payload.RoundID,
 							TagMappings: []sharedtypes.TagMapping{
 								{DiscordID: testUserID, TagNumber: testTagNumber},
 							},
 						},
-					},
-					nil,
+					}, nil,
 				)
 			},
-			payload: testProcessRoundScoresRequestedPayloadV1,
 			wantErr: false,
 			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
 				if len(results) != 1 {
@@ -95,37 +92,35 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Nil payload",
-			mockSetup: func() {
-				// No expectations - handler returns early
+			name:    "Nil payload",
+			payload: nil,
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
+				// No expectations
 			},
-			payload:        nil,
 			wantErr:        true,
 			expectedErrMsg: "payload is nil",
 		},
 		{
 			name: "Service failure in ProcessRoundScores",
-			mockSetup: func() {
+			payload: func() *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
+				p := *basePayload
+				p.RoundMode = sharedtypes.RoundModeSingles
+				return &p
+			}(),
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
 				failurePayload := &sharedevents.ProcessRoundScoresFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
 					Reason:  "internal service error",
 				}
-
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testProcessRoundScoresRequestedPayloadV1.Scores,
-					gomock.Any(),
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: failurePayload,
-					},
-					nil,
-				)
+					payload.GuildID,
+					payload.RoundID,
+					payload.Scores,
+					payload.Overwrite,
+				).Return(scoreservice.ScoreOperationResult{Failure: failurePayload}, nil)
 			},
-			payload: testProcessRoundScoresRequestedPayloadV1,
 			wantErr: false,
 			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
 				if len(results) != 1 {
@@ -145,57 +140,60 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 		},
 		{
 			name: "Unknown result from ProcessRoundScores",
-			mockSetup: func() {
+			payload: func() *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
+				p := *basePayload
+				p.RoundMode = sharedtypes.RoundModeSingles
+				return &p
+			}(),
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testProcessRoundScoresRequestedPayloadV1.Scores,
-					gomock.Any(),
-				).Return(
-					scoreservice.ScoreOperationResult{}, // Neither success nor failure
-					nil,
-				)
+					payload.GuildID,
+					payload.RoundID,
+					payload.Scores,
+					payload.Overwrite,
+				).Return(scoreservice.ScoreOperationResult{
+					Success: "wrong type", // Simulate an unexpected success type
+				}, nil)
 			},
-			payload:        testProcessRoundScoresRequestedPayloadV1,
 			wantErr:        true,
-			expectedErrMsg: "unexpected result from service: expected ProcessRoundScoresSucceededPayloadV1",
+			expectedErrMsg: "unexpected success payload type",
 		},
 		{
 			name: "Service returns direct error",
-			mockSetup: func() {
+			payload: func() *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
+				p := *basePayload
+				p.RoundMode = sharedtypes.RoundModeSingles
+				return &p
+			}(),
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testProcessRoundScoresRequestedPayloadV1.Scores,
-					gomock.Any(),
-				).Return(
-					scoreservice.ScoreOperationResult{}, // No failure payload
-					fmt.Errorf("direct service error"),  // Direct error
-				)
+					payload.GuildID,
+					payload.RoundID,
+					payload.Scores,
+					payload.Overwrite,
+				).Return(scoreservice.ScoreOperationResult{}, fmt.Errorf("direct service error"))
 			},
-			payload:        testProcessRoundScoresRequestedPayloadV1,
 			wantErr:        true,
 			expectedErrMsg: "direct service error",
 		},
 		{
 			name: "Service returns wrong failure payload type",
-			mockSetup: func() {
+			payload: func() *sharedevents.ProcessRoundScoresRequestedPayloadV1 {
+				p := *basePayload
+				p.RoundMode = sharedtypes.RoundModeSingles
+				return &p
+			}(),
+			mockSetup: func(mockScoreService *scoremocks.MockService, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) {
 				mockScoreService.EXPECT().ProcessRoundScores(
 					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testProcessRoundScoresRequestedPayloadV1.Scores,
-					gomock.Any(),
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: "wrong type", // Wrong type, should be *ProcessRoundScoresFailedPayloadV1
-					},
-					nil,
-				)
+					payload.GuildID,
+					payload.RoundID,
+					payload.Scores,
+					payload.Overwrite,
+				).Return(scoreservice.ScoreOperationResult{Failure: "wrong type"}, nil)
 			},
-			payload:        testProcessRoundScoresRequestedPayloadV1,
 			wantErr:        true,
 			expectedErrMsg: "unexpected failure payload type from service",
 		},
@@ -203,7 +201,10 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			mockScoreService := scoremocks.NewMockService(ctrl)
+			if tt.mockSetup != nil && tt.payload != nil {
+				tt.mockSetup(mockScoreService, tt.payload)
+			}
 
 			h := &ScoreHandlers{
 				service: mockScoreService,

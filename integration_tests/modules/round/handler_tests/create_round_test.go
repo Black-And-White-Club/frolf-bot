@@ -133,7 +133,7 @@ func TestHandleCreateRoundRequest(t *testing.T) {
 					t.Errorf("Title mismatch: expected %s, got %s", "Weekly Frolf Championship", payload.Round.Title)
 				}
 
-				if payload.Round.Location == nil || *payload.Round.Location != roundtypes.Location("Central Park Course") {
+				if payload.Round.Location != roundtypes.Location("Central Park Course") {
 					t.Errorf("Location mismatch: expected %s, got %v", "Central Park Course", payload.Round.Location)
 				}
 
