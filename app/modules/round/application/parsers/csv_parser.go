@@ -18,7 +18,17 @@ func NewCSVParser() *CSVParser {
 }
 
 func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) {
-	reader := csv.NewReader(strings.NewReader(string(fileData)))
+	// 1. Preprocess: strip BOM, normalize line endings, detect delimiter
+	cleanedData, delimiter, err := preprocessCSVData(fileData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to preprocess CSV: %w", err)
+	}
+
+	// 2. Configure reader with detected delimiter
+	reader := csv.NewReader(strings.NewReader(cleanedData))
+	reader.Comma = delimiter
+	reader.FieldsPerRecord = -1 // Allow variable-length rows
+	reader.TrimLeadingSpace = true
 
 	rows, err := reader.ReadAll()
 	if err != nil {
@@ -29,14 +39,27 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 		return nil, fmt.Errorf("CSV must contain at least header and one data row")
 	}
 
-	header := rows[0]
+	// 3. Detect header row (may not be first row due to title rows)
+	headerRowIdx := detectHeaderRow(rows)
+	if headerRowIdx < 0 {
+		return nil, fmt.Errorf("no valid header row found in first 5 rows")
+	}
 
-	// Find the columns we care about
-	playerNameIdx := findColumn(header, []string{"playername", "player name", "player"})
-	relativeScoreIdx := findColumn(header, []string{"+/-"})
+	header := rows[headerRowIdx]
 
-	if relativeScoreIdx < 0 {
-		return nil, fmt.Errorf("CSV missing required '+/-' column")
+	// 4. Find columns with expanded alternatives
+	playerNameIdx := findColumn(header, []string{"playername", "player name", "player", "name"})
+	relativeScoreIdx := findColumn(header, []string{"+/-", "plusminus", "plus minus", "relative", "relative_score", "net", "to par", "topar"})
+	totalScoreIdx := findColumn(header, []string{"total", "score"})
+
+	// Prefer "+/-" if exists, fall back to "total"
+	scoreIdx := relativeScoreIdx
+	if scoreIdx < 0 {
+		scoreIdx = totalScoreIdx
+	}
+
+	if scoreIdx < 0 {
+		return nil, fmt.Errorf("CSV missing required score column (tried: +/-, total, score, relative)")
 	}
 
 	// Default to first column for player name if not found
@@ -44,26 +67,29 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 		playerNameIdx = 0
 	}
 
-	// Find hole columns for logging only
+	// Find hole columns for logging only (supports "1", "hole1", "h1" patterns)
 	holeColumns := findHoleColumns(header)
 
 	var playerScores []roundtypes.PlayerScoreRow
 	var parScores []int
 
-	// Check if first data row is Par
-	dataStartRow := 1
-	if len(rows) > 1 && isPARRow(rows[1][playerNameIdx]) {
+	// 5. Parse data rows starting after header
+	dataStartRow := headerRowIdx + 1
+
+	// Check if first data row after header is Par
+	if dataStartRow < len(rows) && len(rows[dataStartRow]) > playerNameIdx &&
+		isPARRow(rows[dataStartRow][playerNameIdx]) {
 		if len(holeColumns) > 0 {
-			parScores = extractScores(rows[1], holeColumns)
+			parScores = extractScores(rows[dataStartRow], holeColumns)
 		}
-		dataStartRow = 2
+		dataStartRow++
 	}
 
-	// Parse player scores
+	// 6. Parse player scores
 	for i := dataStartRow; i < len(rows); i++ {
 		row := rows[i]
 
-		if playerNameIdx >= len(row) || relativeScoreIdx >= len(row) {
+		if playerNameIdx >= len(row) || scoreIdx >= len(row) {
 			continue
 		}
 
@@ -72,15 +98,18 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 			continue
 		}
 
-		// CSV files ONLY extract from the +/- column
-		relativeScoreStr := strings.TrimSpace(row[relativeScoreIdx])
-		if relativeScoreStr == "" {
+		// Extract score from detected column
+		scoreStr := strings.TrimSpace(row[scoreIdx])
+		if scoreStr == "" {
 			continue
 		}
 
-		relativeScore, err := strconv.Atoi(relativeScoreStr)
+		// Handle scores with explicit + sign (e.g., "+5")
+		scoreStr = strings.TrimPrefix(scoreStr, "+")
+
+		relativeScore, err := strconv.Atoi(scoreStr)
 		if err != nil {
-			continue // Skip invalid relative scores
+			continue // Skip invalid scores
 		}
 
 		// Extract hole scores for logging only (may be empty/incomplete - that's fine)
@@ -89,7 +118,6 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 			holeScores = extractScores(row, holeColumns)
 		}
 
-		// Total is the relative score from the +/- column
 		// If the player name represents a team (e.g., "Alec + Jess"), split into individuals
 		names := SplitPlayerNames(playerName)
 		if len(names) <= 1 {
@@ -100,7 +128,6 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 			})
 		} else {
 			// This row represents a team/doubles entry. Create one PlayerScoreRow per teammate
-			// and set TeamMembers so downstream logic can detect a doubles-derived row.
 			for _, n := range names {
 				playerScores = append(playerScores, roundtypes.PlayerScoreRow{
 					PlayerName: n,

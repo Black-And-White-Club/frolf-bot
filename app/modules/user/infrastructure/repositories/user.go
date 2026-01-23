@@ -259,6 +259,69 @@ func (r *Impl) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID,
 	return uwm, nil
 }
 
+// FindByUDiscNameFuzzy searches for users by partial name match (LIKE query) within a guild.
+// Returns all matching users. Use this for fuzzy matching when exact match fails.
+func (r *Impl) FindByUDiscNameFuzzy(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error) {
+	// Create search pattern for SQL LIKE query
+	searchPattern := "%" + strings.ToLower(partialName) + "%"
+
+	// First, get all matching users
+	var users []*User
+	err := r.db.NewSelect().
+		Model(&users).
+		ColumnExpr("u.*").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("(LOWER(u.udisc_username) LIKE ? OR LOWER(u.udisc_name) LIKE ?)", searchPattern, searchPattern).
+		Where("gm.guild_id = ?", guildID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return []*UserWithMembership{}, nil
+		}
+		return nil, fmt.Errorf("userdb.FindByUDiscNameFuzzy: %w", err)
+	}
+
+	if len(users) == 0 {
+		return []*UserWithMembership{}, nil
+	}
+
+	// Now get memberships for all users
+	userIDs := make([]sharedtypes.DiscordID, len(users))
+	for i, u := range users {
+		userIDs[i] = u.UserID
+	}
+
+	var memberships []*GuildMembership
+	err = r.db.NewSelect().
+		Model(&memberships).
+		Where("user_id IN (?)", bun.In(userIDs)).
+		Where("guild_id = ?", guildID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.FindByUDiscNameFuzzy (memberships): %w", err)
+	}
+
+	// Build membership lookup map
+	membershipMap := make(map[sharedtypes.DiscordID]*GuildMembership)
+	for _, m := range memberships {
+		membershipMap[m.UserID] = m
+	}
+
+	// Combine users with their memberships
+	results := make([]*UserWithMembership, 0, len(users))
+	for _, u := range users {
+		if m, ok := membershipMap[u.UserID]; ok {
+			results = append(results, &UserWithMembership{
+				User:     u,
+				Role:     m.Role,
+				JoinedAt: m.JoinedAt,
+			})
+		}
+	}
+
+	return results, nil
+}
+
 func normalizeNullablePointer(val *string) *string {
 	if val == nil || *val == "" {
 		return nil

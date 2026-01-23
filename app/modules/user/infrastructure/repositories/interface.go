@@ -31,6 +31,7 @@ type Repository interface {
 	UpdateUserRole(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
+	FindByUDiscNameFuzzy(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
 }
 
 // Backwards-compatibility aliases for callers that used the old naming.

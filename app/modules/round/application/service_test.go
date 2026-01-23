@@ -26,6 +26,10 @@ func (testUserLookup) FindByNormalizedUDiscDisplayName(ctx context.Context, guil
 	return nil, nil
 }
 
+func (testUserLookup) FindByPartialUDiscName(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*UserIdentity, error) {
+	return nil, nil
+}
+
 func TestNewRoundService(t *testing.T) {
 	// Define test cases
 	tests := []struct {
