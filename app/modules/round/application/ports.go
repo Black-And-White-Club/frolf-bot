@@ -16,4 +16,5 @@ type UserIdentity struct {
 type UserLookup interface {
 	FindByNormalizedUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, normalizedUsername string) (*UserIdentity, error)
 	FindByNormalizedUDiscDisplayName(ctx context.Context, guildID sharedtypes.GuildID, normalizedDisplayName string) (*UserIdentity, error)
+	FindByPartialUDiscName(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*UserIdentity, error)
 }

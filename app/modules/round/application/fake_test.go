@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -19,11 +20,17 @@ import (
 type FakeUserLookup struct {
 	FindByUsernameFn func(name string) sharedtypes.DiscordID
 	FindByDisplayFn  func(name string) sharedtypes.DiscordID
+	FindByPartialFn  func(name string) []*UserIdentity
 }
 
 func (f *FakeUserLookup) FindByNormalizedUDiscUsername(ctx context.Context, g sharedtypes.GuildID, n string) (*UserIdentity, error) {
 	if f.FindByUsernameFn != nil {
+		// Try the normalized form first, then a best-effort title-cased form to
+		// accommodate test stubs that expect capitalized names (e.g., "Alice").
 		if id := f.FindByUsernameFn(n); id != "" {
+			return &UserIdentity{UserID: id}, nil
+		}
+		if id := f.FindByUsernameFn(strings.Title(n)); id != "" {
 			return &UserIdentity{UserID: id}, nil
 		}
 	}
@@ -32,11 +39,23 @@ func (f *FakeUserLookup) FindByNormalizedUDiscUsername(ctx context.Context, g sh
 
 func (f *FakeUserLookup) FindByNormalizedUDiscDisplayName(ctx context.Context, g sharedtypes.GuildID, n string) (*UserIdentity, error) {
 	if f.FindByDisplayFn != nil {
+		// Try the normalized form first, then a title-cased form to match test
+		// stubs which often provide capitalized display names.
 		if id := f.FindByDisplayFn(n); id != "" {
+			return &UserIdentity{UserID: id}, nil
+		}
+		if id := f.FindByDisplayFn(strings.Title(n)); id != "" {
 			return &UserIdentity{UserID: id}, nil
 		}
 	}
 	return nil, nil
+}
+
+func (f *FakeUserLookup) FindByPartialUDiscName(ctx context.Context, g sharedtypes.GuildID, n string) ([]*UserIdentity, error) {
+	if f.FindByPartialFn != nil {
+		return f.FindByPartialFn(n), nil
+	}
+	return []*UserIdentity{}, nil
 }
 
 // ------------------------

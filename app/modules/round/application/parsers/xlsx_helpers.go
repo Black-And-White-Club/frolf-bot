@@ -147,8 +147,8 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 				isLeaderboard = true
 			}
 
-			// Check for Hole 1
-			if holeStartIdx == -1 && (val == "hole1" || val == "hole 1" || val == "hole_1" || val == "1") {
+			// Check for Hole 1 (supports "hole1", "hole 1", "hole_1", "h1", "H1", "1")
+			if holeStartIdx == -1 && (val == "hole1" || val == "hole 1" || val == "hole_1" || val == "h1" || val == "1") {
 				holeStartIdx = c
 			}
 		}
@@ -308,13 +308,27 @@ func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int,
 // detectRelativeScoreColumnXLSX looks for a relative score column ("+/-", "round_relative_score", etc.)
 // in the header row or the first few rows of an XLSX sheet.
 func detectRelativeScoreColumnXLSX(rows [][]string, nameColIndex int) int {
+	// Expanded list of possible column names
+	possibleNames := []string{
+		"+/-", "plusminus", "plus minus", "relative", "relative_score",
+		"round_relative_score", "to_par", "topar", "net", "total", "score",
+	}
+
 	// Look for a header row (usually row 0 or close to it)
 	for i := 0; i < len(rows) && i < 3; i++ {
 		row := rows[i]
 		for j, cell := range row {
 			cellLower := strings.ToLower(strings.TrimSpace(cell))
-			if cellLower == "+/-" || cellLower == "round_relative_score" || cellLower == "relative_score" || cellLower == "to_par" {
-				return j
+			// Normalize: remove spaces, underscores, hyphens
+			cellNorm := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(cellLower, " ", ""), "_", ""), "-", "")
+
+			for _, name := range possibleNames {
+				nameLower := strings.ToLower(name)
+				nameNorm := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(nameLower, " ", ""), "_", ""), "-", "")
+
+				if cellLower == nameLower || cellNorm == nameNorm {
+					return j
+				}
 			}
 		}
 	}

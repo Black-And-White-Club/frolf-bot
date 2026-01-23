@@ -123,7 +123,8 @@ func (s *RoundService) IngestNormalizedScorecard(
 			for _, team := range payload.Normalized.Teams {
 				teamMatched := false
 				for _, member := range team.Members {
-					discordID := s.resolveUserID(ctx, payload.GuildID, member.RawName)
+					normalizedName := normalizeName(member.RawName)
+					discordID := s.resolveUserID(ctx, payload.GuildID, normalizedName)
 
 					// Prepare participant for DB group creation
 					groupsToCreate = append(groupsToCreate, roundtypes.Participant{
@@ -169,7 +170,8 @@ func (s *RoundService) IngestNormalizedScorecard(
 		} else {
 			// --- Singles mode ---
 			for _, p := range payload.Normalized.Players {
-				discordID := s.resolveUserID(ctx, payload.GuildID, p.DisplayName)
+				normalizedName := normalizeName(p.DisplayName)
+				discordID := s.resolveUserID(ctx, payload.GuildID, normalizedName)
 				if discordID == "" {
 					unmatchedPlayers = append(unmatchedPlayers, p.DisplayName)
 					continue
@@ -277,16 +279,42 @@ func (s *RoundService) ingestDoublesScorecard(ctx context.Context, payload round
 
 // resolveUserID attempts to match a normalized UDisc name to a Discord user ID.
 func (s *RoundService) resolveUserID(ctx context.Context, guildID sharedtypes.GuildID, normalizedName string) sharedtypes.DiscordID {
+	// Validation: Warn if called with non-normalized name
+	if normalizedName != normalizeName(normalizedName) {
+		s.logger.WarnContext(ctx, "resolveUserID called with non-normalized name",
+			attr.String("input", normalizedName))
+	}
+
 	if s.userLookup == nil {
 		return ""
 	}
+
+	// 1. Try exact username match
 	identity, err := s.userLookup.FindByNormalizedUDiscUsername(ctx, guildID, normalizedName)
 	if err == nil && identity != nil {
 		return identity.UserID
 	}
+
+	// 2. Try exact display name match
 	identity, err = s.userLookup.FindByNormalizedUDiscDisplayName(ctx, guildID, normalizedName)
 	if err == nil && identity != nil {
 		return identity.UserID
 	}
+
+	// 3. Try fuzzy match (ONLY if exactly 1 match)
+	identities, err := s.userLookup.FindByPartialUDiscName(ctx, guildID, normalizedName)
+	if err == nil && len(identities) == 1 {
+		s.logger.InfoContext(ctx, "Fuzzy match found",
+			attr.String("search_term", normalizedName),
+			attr.String("matched_user_id", string(identities[0].UserID)))
+		return identities[0].UserID
+	}
+
+	if len(identities) > 1 {
+		s.logger.WarnContext(ctx, "Ambiguous fuzzy match, skipping",
+			attr.String("search_term", normalizedName),
+			attr.Int("match_count", len(identities)))
+	}
+
 	return ""
 }

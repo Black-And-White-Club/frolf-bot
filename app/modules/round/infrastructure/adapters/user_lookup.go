@@ -41,3 +41,20 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context
 
 	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
 }
+
+func (a *UserLookupAdapter) FindByPartialUDiscName(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*roundservice.UserIdentity, error) {
+	users, err := a.userDB.FindByUDiscNameFuzzy(ctx, guildID, partialName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to UserIdentity slice
+	identities := make([]*roundservice.UserIdentity, 0, len(users))
+	for _, u := range users {
+		identities = append(identities, &roundservice.UserIdentity{
+			UserID: u.User.UserID,
+		})
+	}
+
+	return identities, nil
+}

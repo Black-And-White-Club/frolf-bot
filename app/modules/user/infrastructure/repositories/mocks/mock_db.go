@@ -85,6 +85,21 @@ func (mr *MockRepositoryMockRecorder) FindByUDiscName(ctx, guildID, name any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByUDiscName", reflect.TypeOf((*MockRepository)(nil).FindByUDiscName), ctx, guildID, name)
 }
 
+// FindByUDiscNameFuzzy mocks base method.
+func (m *MockRepository) FindByUDiscNameFuzzy(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByUDiscNameFuzzy", ctx, guildID, partialName)
+	ret0, _ := ret[0].([]*userdb.UserWithMembership)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByUDiscNameFuzzy indicates an expected call of FindByUDiscNameFuzzy.
+func (mr *MockRepositoryMockRecorder) FindByUDiscNameFuzzy(ctx, guildID, partialName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByUDiscNameFuzzy", reflect.TypeOf((*MockRepository)(nil).FindByUDiscNameFuzzy), ctx, guildID, partialName)
+}
+
 // FindByUDiscUsername mocks base method.
 func (m *MockRepository) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (*userdb.UserWithMembership, error) {
 	m.ctrl.T.Helper()
