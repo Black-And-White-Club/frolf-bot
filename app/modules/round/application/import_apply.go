@@ -146,7 +146,10 @@ func (s *RoundService) applyTeamScores(
 		return results.OperationResult{Failure: &roundevents.RoundErrorPayloadV1{Error: err.Error()}}, nil
 	}
 
-	round, _ := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
+	round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "Failed to get round for event message ID", attr.Error(err))
+	}
 
 	// Return standard applied payload so handler can trigger updates
 	return results.OperationResult{
