@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.0.90
+	github.com/Black-And-White-Club/frolf-bot-shared v0.0.92
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -30,7 +30,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
+// replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -76,7 +76,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/nats-io/nkeys v0.4.12 // indirect
+	github.com/nats-io/nkeys v0.4.14 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
