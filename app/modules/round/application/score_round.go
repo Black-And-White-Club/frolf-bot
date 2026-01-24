@@ -306,9 +306,18 @@ func (s *RoundService) CheckAllScoresSubmitted(
 			}
 
 			team.Total += int(*p.Score)
+			// Use RawName for display, handle guest users (empty UserID)
+			var userIDPtr *sharedtypes.DiscordID
+			if p.UserID != "" {
+				userIDPtr = &p.UserID
+			}
+			rawName := p.RawName
+			if rawName == "" && p.UserID != "" {
+				rawName = string(p.UserID)
+			}
 			team.Members = append(team.Members, roundtypes.TeamMember{
-				UserID:  &p.UserID,
-				RawName: string(p.UserID),
+				UserID:  userIDPtr,
+				RawName: rawName,
 			})
 		}
 

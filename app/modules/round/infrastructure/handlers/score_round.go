@@ -172,9 +172,18 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 
 		for _, p := range partialData.Participants {
 			if p.Score != nil && p.TeamID != uuid.Nil {
+				// Handle guest users (empty UserID)
+				var userIDPtr *sharedtypes.DiscordID
+				if p.UserID != "" {
+					userIDPtr = &p.UserID
+				}
+				rawName := p.RawName
+				if rawName == "" && p.UserID != "" {
+					rawName = string(p.UserID)
+				}
 				scoredTeams = append(scoredTeams, roundtypes.NormalizedTeam{
 					TeamID:  p.TeamID,
-					Members: []roundtypes.TeamMember{{UserID: &p.UserID, RawName: string(p.UserID)}},
+					Members: []roundtypes.TeamMember{{UserID: userIDPtr, RawName: rawName}},
 					Total:   int(*p.Score),
 				})
 			} else {

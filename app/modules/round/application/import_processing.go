@@ -156,7 +156,8 @@ func (s *RoundService) IngestNormalizedScorecard(
 
 					// Prepare participant for DB group creation
 					groupsToCreate = append(groupsToCreate, roundtypes.Participant{
-						UserID: discordID,
+						UserID:  discordID,
+						RawName: member.RawName,
 					})
 
 					if discordID != "" {
@@ -168,6 +169,13 @@ func (s *RoundService) IngestNormalizedScorecard(
 						matchedCount++
 						teamMatched = true
 					} else {
+						// Guest user - include with RawName but empty UserID
+						finalScores = append(finalScores, sharedtypes.ScoreInfo{
+							UserID:  "",
+							Score:   sharedtypes.Score(team.Total),
+							TeamID:  team.TeamID,
+							RawName: member.RawName,
+						})
 						unmatchedPlayers = append(unmatchedPlayers, member.RawName)
 					}
 				}

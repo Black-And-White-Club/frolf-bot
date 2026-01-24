@@ -133,6 +133,19 @@ func (s *RoundService) applyTeamScores(
 
 	// Update existing participants and add new ones from import
 	for _, sc := range payload.Scores {
+		// Guest users (empty UserID) are always added as new participants
+		if sc.UserID == "" {
+			score := sc.Score
+			existingParticipants = append(existingParticipants, roundtypes.Participant{
+				UserID:   "",
+				Score:    &score,
+				Response: roundtypes.ResponseAccept,
+				TeamID:   sc.TeamID,
+				RawName:  sc.RawName,
+			})
+			continue
+		}
+
 		if idx, exists := existingMap[sc.UserID]; exists {
 			// Update existing participant
 			score := sc.Score
@@ -187,6 +200,8 @@ func (s *RoundService) mapScoresToParticipants(scores []sharedtypes.ScoreInfo) [
 			UserID:   sc.UserID,
 			Score:    &score,
 			Response: roundtypes.ResponseAccept,
+			TeamID:   sc.TeamID,
+			RawName:  sc.RawName,
 		}
 	}
 	return participants
