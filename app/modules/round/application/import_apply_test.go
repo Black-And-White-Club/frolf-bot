@@ -94,7 +94,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 			expectSuccess: true,
 		},
 		{
-			name: "failure singles - no scores applied",
+			name: "singles - unmatched users added and persisted",
 			payload: roundevents.ImportCompletedPayloadV1{
 				GuildID:   guildID,
 				RoundID:   roundID,
@@ -105,6 +105,8 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				},
 			},
 			setupRepo: func(r *FakeRepo) {
+				// Simulate repository-level update error (legacy behavior) but
+				// Add/append path and batch persist should succeed by default.
 				r.UpdateParticipantScoreFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score) error {
 					return fmt.Errorf("db error")
 				}
@@ -112,8 +114,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 					return []roundtypes.Participant{}, nil
 				}
 			},
-			expectSuccess: false,
-			expectedError: "no scores were successfully applied",
+			expectSuccess: true,
 		},
 		{
 			name: "success doubles - batch update and completion check",
