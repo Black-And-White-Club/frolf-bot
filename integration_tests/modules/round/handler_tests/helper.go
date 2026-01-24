@@ -134,7 +134,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		testCtx,
 		env.Config,
 		observability.Observability{
-			Provider: &observability.Provider{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))},
+			Provider: &observability.Provider{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))},
 			Registry: &observability.Registry{RoundMetrics: &roundmetrics.NoOpMetrics{}, Tracer: noop.NewTracerProvider().Tracer("test")},
 		},
 		realDB,

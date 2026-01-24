@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -674,6 +675,11 @@ func (r *Impl) UpdateRoundsAndParticipants(ctx context.Context, guildID sharedty
 			for _, t := range teamsByID {
 				teams = append(teams, *t)
 			}
+
+			// Sort teams by TeamID for deterministic ordering
+			sort.Slice(teams, func(i, j int) bool {
+				return teams[i].TeamID.String() < teams[j].TeamID.String()
+			})
 
 			// Prepare update builder and set participants; conditionally set teams when available
 			upd := tx.NewUpdate().Model(&Round{}).Set("participants = ?", update.Participants)

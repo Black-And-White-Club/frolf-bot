@@ -43,86 +43,34 @@ func TestImportDoublesCreatesTeams(t *testing.T) {
 		t.Fatalf("failed to insert round: %v", err)
 	}
 
-	// Insert users for singles test so resolver can find them
-	// Use the user repository helpers to create global users and memberships
+	// Insert users matching fixture names so resolver can find them for doubles import
+	// The fixture has "Alec + Jace" and "Eff + Thao" - we create users for these names
 	urepo := userdb.NewRepository(deps.DB)
 	ctx := context.Background()
 
-	uidJace := sharedtypes.DiscordID("666666666666666666")
-	if err := urepo.CreateGlobalUser(ctx, &userdb.User{UserID: uidJace}); err != nil {
-		t.Fatalf("failed to create global user jace: %v", err)
-	}
-	uname := "jace"
-	if err := urepo.UpdateUDiscIdentityGlobal(ctx, uidJace, &uname, &uname); err != nil {
-		t.Fatalf("failed to update udisc identity for jace: %v", err)
-	}
-	if err := urepo.CreateGuildMembership(ctx, &userdb.GuildMembership{UserID: uidJace, GuildID: "test-guild", Role: "User"}); err != nil {
-		t.Fatalf("failed to create guild membership for jace: %v", err)
-	}
-
-	uidSam := sharedtypes.DiscordID("777777777777777777")
-	if err := urepo.CreateGlobalUser(ctx, &userdb.User{UserID: uidSam}); err != nil {
-		t.Fatalf("failed to create global user sam: %v", err)
-	}
-	sname := "sam"
-	if err := urepo.UpdateUDiscIdentityGlobal(ctx, uidSam, &sname, &sname); err != nil {
-		t.Fatalf("failed to update udisc identity for sam: %v", err)
-	}
-	if err := urepo.CreateGuildMembership(ctx, &userdb.GuildMembership{UserID: uidSam, GuildID: "test-guild", Role: "User"}); err != nil {
-		t.Fatalf("failed to create guild membership for sam: %v", err)
+	// Create users for the doubles fixture (Alec, Jace, Eff, Thao)
+	users := []struct {
+		id       string
+		username string
+		name     string
+	}{
+		{"111111111111111111", "alec", "Alec"},
+		{"222222222222222222", "jace", "Jace"},
+		{"333333333333333333", "eff", "Eff"},
+		{"444444444444444444", "thao", "Thao"},
 	}
 
-	// Insert users matching fixture names so resolver can find them
-	userA := &userdb.User{
-		UserID:        sharedtypes.DiscordID("444444444444444444"),
-		UDiscUsername: ptrString("jace"),
-		UDiscName:     ptrString("Jace"),
-	}
-	userB := &userdb.User{
-		UserID:        sharedtypes.DiscordID("555555555555555555"),
-		UDiscUsername: ptrString("sam"),
-		UDiscName:     ptrString("Sam"),
-	}
-	if _, err := deps.DB.NewInsert().Model(userA).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert userA: %v", err)
-	}
-	if _, err := deps.DB.NewInsert().Model(userB).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert userB: %v", err)
-	}
-	gmA := &userdb.GuildMembership{UserID: userA.UserID, GuildID: "test-guild", Role: "User"}
-	gmB := &userdb.GuildMembership{UserID: userB.UserID, GuildID: "test-guild", Role: "User"}
-	if _, err := deps.DB.NewInsert().Model(gmA).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert guild membership A: %v", err)
-	}
-	if _, err := deps.DB.NewInsert().Model(gmB).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert guild membership B: %v", err)
-	}
-
-	// For singles import we need users in the DB so name resolution succeeds.
-	// Create users 'jace' and 'sam' with guild memberships.
-	user1 := &userdb.User{
-		UserID:        sharedtypes.DiscordID("111111111111111111"),
-		UDiscUsername: ptrString("jace"),
-		UDiscName:     ptrString("Jace"),
-	}
-	user2 := &userdb.User{
-		UserID:        sharedtypes.DiscordID("222222222222222222"),
-		UDiscUsername: ptrString("sam"),
-		UDiscName:     ptrString("Sam"),
-	}
-	if _, err := deps.DB.NewInsert().Model(user1).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert user1: %v", err)
-	}
-	if _, err := deps.DB.NewInsert().Model(user2).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert user2: %v", err)
-	}
-	gm1 := &userdb.GuildMembership{UserID: user1.UserID, GuildID: "test-guild", Role: "User"}
-	gm2 := &userdb.GuildMembership{UserID: user2.UserID, GuildID: "test-guild", Role: "User"}
-	if _, err := deps.DB.NewInsert().Model(gm1).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert guild membership 1: %v", err)
-	}
-	if _, err := deps.DB.NewInsert().Model(gm2).Exec(context.Background()); err != nil {
-		t.Fatalf("failed to insert guild membership 2: %v", err)
+	for _, u := range users {
+		uid := sharedtypes.DiscordID(u.id)
+		if err := urepo.CreateGlobalUser(ctx, &userdb.User{UserID: uid}); err != nil {
+			t.Fatalf("failed to create global user %s: %v", u.username, err)
+		}
+		if err := urepo.UpdateUDiscIdentityGlobal(ctx, uid, &u.username, &u.name); err != nil {
+			t.Fatalf("failed to update udisc identity for %s: %v", u.username, err)
+		}
+		if err := urepo.CreateGuildMembership(ctx, &userdb.GuildMembership{UserID: uid, GuildID: "test-guild", Role: "User"}); err != nil {
+			t.Fatalf("failed to create guild membership for %s: %v", u.username, err)
+		}
 	}
 
 	genericCase := testutils.TestCase{
