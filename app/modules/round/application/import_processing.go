@@ -29,19 +29,31 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 			}, nil
 		}
 
+		// Infer mode if not set by parser
+		mode := data.Mode
+		if mode == "" {
+			mode = sharedtypes.RoundModeSingles
+			for _, p := range data.PlayerScores {
+				if len(p.TeamNames) > 1 || p.IsTeam {
+					mode = sharedtypes.RoundModeDoubles
+					break
+				}
+			}
+		}
+
 		// 1. Initialize the Normalized structure defined in your roundtypes
 		normalizedRound := roundtypes.NormalizedScorecard{
 			ID:        uuid.NewString(), // Internal ID for this normalization instance
 			RoundID:   meta.RoundID,
 			GuildID:   meta.GuildID,
 			ImportID:  meta.ImportID,
-			Mode:      data.Mode, // Uses the Mode (SINGLES/DOUBLES) from the parser
+			Mode:      mode,
 			ParScores: cloneInts(data.ParScores),
 			CreatedAt: time.Now().UTC(),
 		}
 
 		// 2. Map PlayerScoreRow to NormalizedPlayer or NormalizedTeam
-		if data.Mode == sharedtypes.RoundModeDoubles {
+		if mode == sharedtypes.RoundModeDoubles {
 			for _, p := range data.PlayerScores {
 
 				teamID := uuid.New()
@@ -90,7 +102,7 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 		}
 
 		s.logger.InfoContext(ctx, "Normalization complete",
-			attr.String("mode", string(data.Mode)),
+			attr.String("mode", string(mode)),
 			attr.Int("player_count", len(data.PlayerScores)),
 		)
 

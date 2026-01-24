@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -50,8 +51,18 @@ func parseXLSXCore(data []byte) (*roundtypes.ParsedScorecard, error) {
 		return nil, err
 	}
 
+	// Detect mode: if any player has TeamNames set, it's doubles
+	mode := sharedtypes.RoundModeSingles
+	for _, p := range playerScores {
+		if len(p.TeamNames) > 1 || p.IsTeam {
+			mode = sharedtypes.RoundModeDoubles
+			break
+		}
+	}
+
 	return &roundtypes.ParsedScorecard{
 		ParScores:    parScores,
 		PlayerScores: playerScores,
+		Mode:         mode,
 	}, nil
 }

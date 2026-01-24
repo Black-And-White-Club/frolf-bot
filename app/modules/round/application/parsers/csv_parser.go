@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 )
 
 // ================ CSV Parser ================
@@ -127,14 +128,14 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 				Total:      relativeScore,
 			})
 		} else {
-			// This row represents a team/doubles entry. Create one PlayerScoreRow per teammate
-			for _, n := range names {
-				playerScores = append(playerScores, roundtypes.PlayerScoreRow{
-					PlayerName: n,
-					HoleScores: holeScores,
-					Total:      relativeScore,
-				})
-			}
+			// This row represents a team/doubles entry
+			playerScores = append(playerScores, roundtypes.PlayerScoreRow{
+				PlayerName: playerName,
+				HoleScores: holeScores,
+				Total:      relativeScore,
+				IsTeam:     true,
+				TeamNames:  names,
+			})
 		}
 	}
 
@@ -142,8 +143,18 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 		return nil, fmt.Errorf("no valid player scores found in CSV")
 	}
 
+	// Detect mode: if any player has TeamNames set, it's doubles
+	mode := sharedtypes.RoundModeSingles
+	for _, p := range playerScores {
+		if len(p.TeamNames) > 1 || p.IsTeam {
+			mode = sharedtypes.RoundModeDoubles
+			break
+		}
+	}
+
 	return &roundtypes.ParsedScorecard{
 		PlayerScores: playerScores,
-		ParScores:    parScores, // May be empty - just for logging
+		ParScores:    parScores,
+		Mode:         mode,
 	}, nil
 }
