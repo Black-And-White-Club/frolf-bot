@@ -32,25 +32,15 @@ func (s *RoundService) ApplyImportedScores(
 	})
 }
 
-// applySinglesScores remains mostly unchanged
+// applySinglesScores applies scores for singles mode imports.
+// For singles: only add participants when a matched user (with guild_membership) is found.
+// Do not create guest participants for singles; only add matched guild_membership users.
 func (s *RoundService) applySinglesScores(
 	ctx context.Context,
 	payload roundevents.ImportCompletedPayloadV1,
 ) (results.OperationResult, error) {
-	updatedCount := 0
-	for _, scoreInfo := range payload.Scores {
-		err := s.repo.UpdateParticipantScore(ctx, payload.GuildID, payload.RoundID, scoreInfo.UserID, scoreInfo.Score)
-		if err != nil {
-			s.logger.WarnContext(ctx, "Failed to update participant score",
-				attr.String("user_id", string(scoreInfo.UserID)),
-				attr.Error(err),
-			)
-			continue
-		}
-		updatedCount++
-	}
-
-	participants, err := s.repo.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+	// Get existing participants to check for duplicates and update in place
+	existingParticipants, err := s.repo.GetParticipants(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
 		return results.OperationResult{
 			Failure: &roundevents.ImportFailedPayloadV1{
@@ -59,11 +49,49 @@ func (s *RoundService) applySinglesScores(
 				ImportID:  payload.ImportID,
 				UserID:    payload.UserID,
 				ChannelID: payload.ChannelID,
-				Error:     fmt.Sprintf("failed to get updated participants: %v", err),
+				Error:     fmt.Sprintf("failed to get existing participants: %v", err),
 				ErrorCode: "DB_ERROR",
 				Timestamp: time.Now().UTC(),
 			},
 		}, nil
+	}
+
+	// Build map of existing participants by UserID for deduplication
+	existingMap := make(map[sharedtypes.DiscordID]int)
+	for i, p := range existingParticipants {
+		if p.UserID != "" {
+			existingMap[p.UserID] = i
+		}
+	}
+
+	updatedCount := 0
+	for _, scoreInfo := range payload.Scores {
+		// Do not create guest participants for singles; only add matched guild_membership users.
+		// If UserID is empty, this is an unmatched/guest player - skip entirely for singles.
+		if scoreInfo.UserID == "" {
+			s.logger.DebugContext(ctx, "Skipping guest user in singles import (no guest participants for singles)",
+				attr.String("raw_name", scoreInfo.RawName),
+			)
+			continue
+		}
+
+		// UserID is present, meaning resolveUserID found a match (user has guild_membership)
+		score := scoreInfo.Score
+		if idx, exists := existingMap[scoreInfo.UserID]; exists {
+			// Update existing participant's score
+			existingParticipants[idx].Score = &score
+			existingParticipants[idx].Response = roundtypes.ResponseAccept
+		} else {
+			// Add new participant - user wasn't RSVP'd but is in the scorecard and has guild_membership
+			existingParticipants = append(existingParticipants, roundtypes.Participant{
+				UserID:   scoreInfo.UserID,
+				Score:    &score,
+				Response: roundtypes.ResponseAccept,
+			})
+			// Update map to prevent duplicates within same import
+			existingMap[scoreInfo.UserID] = len(existingParticipants) - 1
+		}
+		updatedCount++
 	}
 
 	if updatedCount == 0 {
@@ -76,6 +104,27 @@ func (s *RoundService) applySinglesScores(
 				ChannelID: payload.ChannelID,
 				Error:     "no scores were successfully applied",
 				ErrorCode: "NO_UPDATES",
+				Timestamp: time.Now().UTC(),
+			},
+		}, nil
+	}
+
+	// Persist participants using existing repository method for consistent team derivation
+	updates := []roundtypes.RoundUpdate{{
+		RoundID:      payload.RoundID,
+		Participants: existingParticipants,
+	}}
+
+	if err := s.repo.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
+		return results.OperationResult{
+			Failure: &roundevents.ImportFailedPayloadV1{
+				GuildID:   payload.GuildID,
+				RoundID:   payload.RoundID,
+				ImportID:  payload.ImportID,
+				UserID:    payload.UserID,
+				ChannelID: payload.ChannelID,
+				Error:     fmt.Sprintf("failed to persist participants: %v", err),
+				ErrorCode: "DB_ERROR",
 				Timestamp: time.Now().UTC(),
 			},
 		}, nil
@@ -97,7 +146,7 @@ func (s *RoundService) applySinglesScores(
 			GuildID:        payload.GuildID,
 			RoundID:        payload.RoundID,
 			ImportID:       payload.ImportID,
-			Participants:   participants,
+			Participants:   existingParticipants,
 			EventMessageID: round.EventMessageID,
 			Timestamp:      time.Now().UTC(),
 		},

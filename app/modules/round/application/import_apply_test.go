@@ -94,7 +94,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 			expectSuccess: true,
 		},
 		{
-			name: "failure singles - no scores applied",
+			name: "singles - matched users added and persisted via batch update",
 			payload: roundevents.ImportCompletedPayloadV1{
 				GuildID:   guildID,
 				RoundID:   roundID,
@@ -105,15 +105,18 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				},
 			},
 			setupRepo: func(r *FakeRepo) {
-				r.UpdateParticipantScoreFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score) error {
-					return fmt.Errorf("db error")
-				}
+				// New code path uses GetParticipants + UpdateRoundsAndParticipants
 				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
 					return []roundtypes.Participant{}, nil
 				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, u []roundtypes.RoundUpdate) error {
+					return nil
+				}
+				r.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{}, nil
+				}
 			},
-			expectSuccess: false,
-			expectedError: "no scores were successfully applied",
+			expectSuccess: true,
 		},
 		{
 			name: "success doubles - batch update and completion check",

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -643,15 +644,51 @@ func (r *Impl) GetEventMessageID(ctx context.Context, guildID sharedtypes.GuildI
 func (r *Impl) UpdateRoundsAndParticipants(ctx context.Context, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
 	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		for _, update := range updates {
-			// Only update the participants column, not the entire round.
-			// Use the DB model (Round) so Bun has the table/column tags available.
-			res, err := tx.NewUpdate().
-				Model(&Round{}).
-				Set("participants = ?", update.Participants).
-				Where("id = ? AND guild_id = ?", update.RoundID, guildID).
-				Exec(ctx)
+			// Build teams derived from participants when TeamID is present.
+			teamsByID := make(map[uuid.UUID]*roundtypes.NormalizedTeam)
+			for _, p := range update.Participants {
+				if p.TeamID == uuid.Nil {
+					continue
+				}
+				t, ok := teamsByID[p.TeamID]
+				if !ok {
+					t = &roundtypes.NormalizedTeam{TeamID: p.TeamID, Members: []roundtypes.TeamMember{}}
+					teamsByID[p.TeamID] = t
+				}
+				// accumulate total if score present
+				if p.Score != nil {
+					t.Total += int(*p.Score)
+				}
+				// build member entry (handle guests)
+				var userPtr *sharedtypes.DiscordID
+				if p.UserID != "" {
+					userPtr = &p.UserID
+				}
+				rawName := p.RawName
+				if rawName == "" && p.UserID != "" {
+					rawName = string(p.UserID)
+				}
+				t.Members = append(t.Members, roundtypes.TeamMember{UserID: userPtr, RawName: rawName})
+			}
+
+			teams := make([]roundtypes.NormalizedTeam, 0, len(teamsByID))
+			for _, t := range teamsByID {
+				teams = append(teams, *t)
+			}
+
+			// Sort teams by TeamID for deterministic ordering
+			sort.Slice(teams, func(i, j int) bool {
+				return teams[i].TeamID.String() < teams[j].TeamID.String()
+			})
+
+			// Prepare update builder and set participants; conditionally set teams when available
+			upd := tx.NewUpdate().Model(&Round{}).Set("participants = ?", update.Participants)
+			if len(teams) > 0 {
+				upd = upd.Set("teams = ?", teams)
+			}
+			res, err := upd.Where("id = ? AND guild_id = ?", update.RoundID, guildID).Exec(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to update participants for round %s: %w", update.RoundID, err)
+				return fmt.Errorf("failed to update participants/teams for round %s: %w", update.RoundID, err)
 			}
 
 			// Ensure at least one row was affected; otherwise the update silently did nothing

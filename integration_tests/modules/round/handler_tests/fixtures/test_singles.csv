@@ -1,0 +1,4 @@
+PlayerName,CourseName,LayoutName,StartDate,EndDate,Total,+/-,RoundRating,Hole1,Hole2,Hole3,Hole4,Hole5,Hole6,Hole7,Hole8,Hole9,Hole10,Hole11,Hole12,Hole13,Hole14,Hole15,Hole16,Hole17,Hole18
+Par,Thompson Park,Main,2026-01-10 0900,2026-01-10 1000,54,,,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+Jace,Thompson Park,Main,2026-01-10 0900,2026-01-10 1000,50,-4,200,2,3,4,3,3,2,2,3,4,2,4,3,2,4,3,3,2,3
+Sam,Thompson Park,Main,2026-01-10 0900,2026-01-10 1000,55,0,210,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
