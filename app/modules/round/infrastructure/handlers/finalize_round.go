@@ -44,6 +44,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		StartTime:      fetchedRound.StartTime,
 		Location:       fetchedRound.Location,
 		Participants:   payload.Participants,
+		Teams:          payload.Teams,
 		EventMessageID: fetchedRound.EventMessageID,
 	}
 

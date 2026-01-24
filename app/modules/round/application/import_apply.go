@@ -125,15 +125,29 @@ func (s *RoundService) applyTeamScores(
 		}
 	}
 
-	scoreMap := make(map[sharedtypes.DiscordID]sharedtypes.Score)
-	for _, sc := range payload.Scores {
-		scoreMap[sc.UserID] = sc.Score
+	// Build map of existing participants by UserID
+	existingMap := make(map[sharedtypes.DiscordID]int)
+	for i, p := range existingParticipants {
+		existingMap[p.UserID] = i
 	}
 
-	for i := range existingParticipants {
-		if score, ok := scoreMap[existingParticipants[i].UserID]; ok {
-			existingParticipants[i].Score = &score
-			existingParticipants[i].Response = roundtypes.ResponseAccept
+	// Update existing participants and add new ones from import
+	for _, sc := range payload.Scores {
+		if idx, exists := existingMap[sc.UserID]; exists {
+			// Update existing participant
+			score := sc.Score
+			existingParticipants[idx].Score = &score
+			existingParticipants[idx].Response = roundtypes.ResponseAccept
+			existingParticipants[idx].TeamID = sc.TeamID
+		} else {
+			// Add new participant (user wasn't RSVP'd but is in the scorecard)
+			score := sc.Score
+			existingParticipants = append(existingParticipants, roundtypes.Participant{
+				UserID:   sc.UserID,
+				Score:    &score,
+				Response: roundtypes.ResponseAccept,
+				TeamID:   sc.TeamID,
+			})
 		}
 	}
 

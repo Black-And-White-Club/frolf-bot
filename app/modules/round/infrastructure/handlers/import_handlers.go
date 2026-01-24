@@ -115,8 +115,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 				GuildID:        applied.GuildID,
 				RoundID:        applied.RoundID,
 				EventMessageID: applied.EventMessageID,
-				// The service logic in CheckAllScoresSubmitted will pull the
-				// full current state from the DB for this round.
+				Participants:   applied.Participants,
 			},
 		},
 	}, nil

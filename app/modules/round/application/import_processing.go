@@ -163,6 +163,7 @@ func (s *RoundService) IngestNormalizedScorecard(
 						finalScores = append(finalScores, sharedtypes.ScoreInfo{
 							UserID: discordID,
 							Score:  sharedtypes.Score(team.Total),
+							TeamID: team.TeamID,
 						})
 						matchedCount++
 						teamMatched = true
