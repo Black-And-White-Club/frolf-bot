@@ -129,12 +129,13 @@ func (p *CSVParser) Parse(fileData []byte) (*roundtypes.ParsedScorecard, error) 
 			})
 		} else {
 			// This row represents a team/doubles entry
+			// Note: names slice contains individual player names after splitting
 			playerScores = append(playerScores, roundtypes.PlayerScoreRow{
 				PlayerName: playerName,
 				HoleScores: holeScores,
 				Total:      relativeScore,
 				IsTeam:     true,
-				TeamNames:  names,
+				TeamNames:  names, // e.g., ["Alec", "Jace"]
 			})
 		}
 	}

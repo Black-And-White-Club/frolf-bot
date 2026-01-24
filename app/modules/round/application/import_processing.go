@@ -65,16 +65,29 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 				}
 
 				for _, name := range p.TeamNames {
+					trimmedName := strings.TrimSpace(name)
 					team.Members = append(team.Members, roundtypes.TeamMember{
-						RawName: strings.TrimSpace(name),
+						RawName: trimmedName,
 					})
+					s.logger.InfoContext(ctx, "Added team member from TeamNames",
+						attr.String("raw_name", trimmedName),
+						attr.String("team_id", teamID.String()))
 				}
 
 				if len(team.Members) == 0 && p.PlayerName != "" {
+					trimmedName := strings.TrimSpace(p.PlayerName)
 					team.Members = append(team.Members, roundtypes.TeamMember{
-						RawName: strings.TrimSpace(p.PlayerName),
+						RawName: trimmedName,
 					})
+					s.logger.InfoContext(ctx, "Added team member from PlayerName fallback",
+						attr.String("raw_name", trimmedName),
+						attr.String("team_id", teamID.String()))
 				}
+
+				s.logger.InfoContext(ctx, "Created team",
+					attr.String("team_id", teamID.String()),
+					attr.Int("member_count", len(team.Members)),
+					attr.Int("total_score", team.Total))
 
 				normalizedRound.Teams = append(normalizedRound.Teams, team)
 			}
@@ -136,6 +149,9 @@ func (s *RoundService) IngestNormalizedScorecard(
 				teamMatched := false
 				for _, member := range team.Members {
 					normalizedName := normalizeName(member.RawName)
+					s.logger.InfoContext(ctx, "Resolving team member",
+						attr.String("raw_name", member.RawName),
+						attr.String("normalized_name", normalizedName))
 					discordID := s.resolveUserID(ctx, payload.GuildID, normalizedName)
 
 					// Prepare participant for DB group creation
@@ -298,23 +314,45 @@ func (s *RoundService) resolveUserID(ctx context.Context, guildID sharedtypes.Gu
 	}
 
 	if s.userLookup == nil {
+		s.logger.WarnContext(ctx, "resolveUserID: userLookup is nil")
 		return ""
 	}
 
 	// 1. Try exact username match
 	identity, err := s.userLookup.FindByNormalizedUDiscUsername(ctx, guildID, normalizedName)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Username lookup error",
+			attr.String("search_term", normalizedName),
+			attr.String("error", err.Error()))
+	}
 	if err == nil && identity != nil {
+		s.logger.InfoContext(ctx, "Exact username match",
+			attr.String("search_term", normalizedName),
+			attr.String("user_id", string(identity.UserID)))
 		return identity.UserID
 	}
 
 	// 2. Try exact display name match
 	identity, err = s.userLookup.FindByNormalizedUDiscDisplayName(ctx, guildID, normalizedName)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Display name lookup error",
+			attr.String("search_term", normalizedName),
+			attr.String("error", err.Error()))
+	}
 	if err == nil && identity != nil {
+		s.logger.InfoContext(ctx, "Exact display name match",
+			attr.String("search_term", normalizedName),
+			attr.String("user_id", string(identity.UserID)))
 		return identity.UserID
 	}
 
 	// 3. Try fuzzy match (ONLY if exactly 1 match)
 	identities, err := s.userLookup.FindByPartialUDiscName(ctx, guildID, normalizedName)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Fuzzy lookup error",
+			attr.String("search_term", normalizedName),
+			attr.String("error", err.Error()))
+	}
 	if err == nil && len(identities) == 1 {
 		s.logger.InfoContext(ctx, "Fuzzy match found",
 			attr.String("search_term", normalizedName),
@@ -328,5 +366,7 @@ func (s *RoundService) resolveUserID(ctx context.Context, guildID sharedtypes.Gu
 			attr.Int("match_count", len(identities)))
 	}
 
+	s.logger.WarnContext(ctx, "No match found for user",
+		attr.String("search_term", normalizedName))
 	return ""
 }

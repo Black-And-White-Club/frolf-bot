@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -57,39 +58,38 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 		}
 	}
 
-	// 1. Call service (unchanged contract)
 	opResult, err := h.service.UpdateParticipantScoresBulk(ctx, *payload)
 	if err != nil {
-		return nil, err // infra error → retry
+		return nil, err
 	}
 
-	// 2. Always emit the authoritative domain event
 	resultsOut := mapOperationResult(
 		opResult,
 		roundevents.RoundScoresBulkUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
 	)
 
-	// 3. If domain failed, stop here
 	if !opResult.IsSuccess() {
 		return resultsOut, nil
 	}
 
-	// 4. SUCCESS CASE ONLY — emit projection / shared event
+	// 🔑 Extract authoritative success payload
+	successPayload, ok := opResult.Success.(*roundevents.RoundScoresBulkUpdatedPayloadV1)
+	if !ok {
+		return nil, errors.New("unexpected success payload type")
+	}
 
-	appliedCount := len(payload.Updates)
-
-	userIDs := make([]sharedtypes.DiscordID, 0, appliedCount)
+	userIDs := make([]sharedtypes.DiscordID, 0, len(payload.Updates))
 	for _, u := range payload.Updates {
 		userIDs = append(userIDs, u.UserID)
 	}
 
 	sharedPayload := &sharedevents.ScoreBulkUpdatedPayloadV1{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		AppliedCount:   appliedCount,
+		GuildID:        successPayload.GuildID,
+		RoundID:        successPayload.RoundID,
+		AppliedCount:   len(payload.Updates),
 		FailedCount:    0,
-		TotalRequested: appliedCount,
+		TotalRequested: len(payload.Updates),
 		UserIDsApplied: userIDs,
 	}
 
