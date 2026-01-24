@@ -20,7 +20,7 @@ func (RoundStartJob) Kind() string { return "round_start" }
 type RoundReminderJob struct {
 	GuildID   sharedtypes.GuildID                  `json:"guild_id"`
 	RoundID   sharedtypes.RoundID                  `json:"round_id"`
-	RoundData roundevents.DiscordReminderPayloadV1 `json:"round_data"` // ✅ Correct payload type
+	RoundData roundevents.DiscordReminderPayloadV1 `json:"round_data"`
 }
 
 // Kind returns the job type identifier for River
