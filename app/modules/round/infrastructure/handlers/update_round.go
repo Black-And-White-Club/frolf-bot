@@ -123,6 +123,13 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 			},
 		}
 
+		// Add guild-scoped version for PWA permission scoping
+		guildID := updatedPayload.GuildID
+		if guildID == "" && updatedPayload.Round.GuildID != "" {
+			guildID = updatedPayload.Round.GuildID
+		}
+		results = addGuildScopedResult(results, roundevents.RoundUpdatedV1, guildID)
+
 		// Check if we need to reschedule (only for time-sensitive fields)
 		if h.shouldRescheduleEvents(payload.RoundUpdateRequestPayload) {
 			h.logger.InfoContext(ctx, "scheduling round reschedule event",

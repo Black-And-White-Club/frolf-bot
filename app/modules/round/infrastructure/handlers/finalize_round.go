@@ -66,7 +66,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 
 	// We return two separate results. The Discord-bound event needs the message ID
 	// metadata to allow the Discord module to update/finalize the correct message.
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic:   roundevents.RoundFinalizedDiscordV1,
 			Payload: discordFinalizationPayload,
@@ -78,7 +78,12 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 			Topic:   roundevents.RoundFinalizedV1,
 			Payload: backendFinalizationPayload,
 		},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundFinalizedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleRoundFinalized handles the domain event after a round is finalized, notifying the score module.

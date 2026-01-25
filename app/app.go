@@ -15,12 +15,14 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/authcallout"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/guild"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/score"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/user"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/Black-And-White-Club/frolf-bot/pkg/jwt"
 	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -28,17 +30,19 @@ import (
 
 // App holds the application components.
 type App struct {
-	Config            *config.Config
-	Observability     observability.Observability
-	Router            *message.Router
-	UserModule        *user.Module
-	LeaderboardModule *leaderboard.Module
-	RoundModule       *round.Module
-	ScoreModule       *score.Module
-	GuildModule       *guild.Module
-	DB                *bundb.DBService
-	EventBus          eventbus.EventBus
-	Helpers           utils.Helpers
+	Config             *config.Config
+	Observability      observability.Observability
+	Router             *message.Router
+	UserModule         *user.Module
+	LeaderboardModule  *leaderboard.Module
+	RoundModule        *round.Module
+	ScoreModule        *score.Module
+	GuildModule        *guild.Module
+	AuthCalloutModule  *authcallout.Module
+	DB                 *bundb.DBService
+	EventBus           eventbus.EventBus
+	Helpers            utils.Helpers
+	JWTService         jwt.Service
 }
 
 func (app *App) GetHealthCheckers() []eventbus.HealthChecker {
@@ -101,6 +105,13 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 
 	app.Helpers = utils.NewHelper(app.Observability.Provider.Logger)
 
+	// Initialize JWT Service
+	app.JWTService = jwt.NewService(
+		cfg.JWT.Secret,
+		cfg.JWT.DefaultTTL,
+		cfg.JWT.PWABaseURL,
+	)
+
 	fmt.Println("DEBUG: App.Initialize finished successfully")
 	logger.Info("App Initialize finished")
 	return nil
@@ -146,6 +157,16 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
 	fmt.Println("DEBUG: Score module initialized successfully")
+
+	// Initialize auth callout module if enabled
+	if app.Config.AuthCallout.Enabled {
+		fmt.Println("DEBUG: Initializing auth callout module...")
+		if app.AuthCalloutModule, err = authcallout.NewModule(ctx, app.Config, app.Observability, app.JWTService, app.EventBus.GetNATSConnection()); err != nil {
+			app.Observability.Provider.Logger.Error("Failed to initialize auth callout module", attr.Error(err))
+			return fmt.Errorf("failed to initialize auth callout module: %w", err)
+		}
+		fmt.Println("DEBUG: Auth callout module initialized successfully")
+	}
 
 	fmt.Println("DEBUG: All modules initialized successfully")
 	return nil
@@ -256,6 +277,9 @@ func (app *App) Close() error {
 	}
 	if app.ScoreModule != nil {
 		app.ScoreModule.Close()
+	}
+	if app.AuthCalloutModule != nil {
+		app.AuthCalloutModule.Close()
 	}
 
 	if app.EventBus != nil {

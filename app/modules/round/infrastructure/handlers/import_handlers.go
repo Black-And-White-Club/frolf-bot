@@ -108,7 +108,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 		attr.Any("imported_user_ids", userIDs),
 	)
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic: roundevents.RoundParticipantScoreUpdatedV1,
 			Payload: &roundevents.ParticipantScoreUpdatedPayloadV1{
@@ -118,5 +118,10 @@ func (h *RoundHandlers) HandleImportCompleted(
 				Participants:   applied.Participants,
 			},
 		},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundParticipantScoreUpdatedV1, applied.GuildID)
+
+	return results, nil
 }

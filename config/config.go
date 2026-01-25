@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -14,6 +15,8 @@ import (
 type Config struct {
 	Postgres      PostgresConfig      `yaml:"postgres"`
 	NATS          NATSConfig          `yaml:"nats"`
+	JWT           JWTConfig           `yaml:"jwt"`
+	AuthCallout   AuthCalloutConfig   `yaml:"auth_callout"`
 	Observability ObservabilityConfig `yaml:"observability"`
 	// Discord     DiscordConfig      `yaml:"discord"`
 	// ... other configuration fields ...
@@ -27,6 +30,21 @@ type PostgresConfig struct {
 // NATSConfig holds NATS configuration.
 type NATSConfig struct {
 	URL string `yaml:"url"`
+}
+
+// JWTConfig holds JWT configuration.
+type JWTConfig struct {
+	Secret     string        `yaml:"secret"`
+	DefaultTTL time.Duration `yaml:"default_ttl"`
+	PWABaseURL string        `yaml:"pwa_base_url"`
+}
+
+// AuthCalloutConfig holds NATS auth callout configuration.
+type AuthCalloutConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	Subject       string `yaml:"subject"`
+	SigningKey    string `yaml:"signing_key"`
+	IssuerAccount string `yaml:"issuer_account"`
 }
 
 // ObservabilityConfig holds configuration for observability components
@@ -104,6 +122,29 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("OTLP_LOGS_ENABLED"); v != "" {
 		cfg.Observability.OTLPLogsEnabled = v == "true"
 	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.JWT.Secret = v
+	}
+	if v := os.Getenv("JWT_DEFAULT_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.JWT.DefaultTTL = d
+		}
+	}
+	if v := os.Getenv("PWA_BASE_URL"); v != "" {
+		cfg.JWT.PWABaseURL = v
+	}
+	if v := os.Getenv("AUTH_CALLOUT_ENABLED"); v != "" {
+		cfg.AuthCallout.Enabled = v == "true"
+	}
+	if v := os.Getenv("AUTH_CALLOUT_SUBJECT"); v != "" {
+		cfg.AuthCallout.Subject = v
+	}
+	if v := os.Getenv("AUTH_CALLOUT_SIGNING_KEY"); v != "" {
+		cfg.AuthCallout.SigningKey = v
+	}
+	if v := os.Getenv("AUTH_CALLOUT_ISSUER_ACCOUNT"); v != "" {
+		cfg.AuthCallout.IssuerAccount = v
+	}
 
 	return &cfg, nil
 }
@@ -157,6 +198,31 @@ func loadConfigFromEnv() (*Config, error) {
 	// if cfg.Discord.Token == "" {
 	// 	return nil, fmt.Errorf("DISCORD_TOKEN environment variable not set")
 	// }
+
+	// Load JWT settings
+	cfg.JWT.Secret = os.Getenv("JWT_SECRET")
+	jwtDefaultTTL := os.Getenv("JWT_DEFAULT_TTL")
+	if jwtDefaultTTL == "" {
+		cfg.JWT.DefaultTTL = 24 * time.Hour
+	} else {
+		var err error
+		cfg.JWT.DefaultTTL, err = time.ParseDuration(jwtDefaultTTL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JWT_DEFAULT_TTL value: %v", err)
+		}
+	}
+	pwaBaseURL := os.Getenv("PWA_BASE_URL")
+	if pwaBaseURL == "" {
+		cfg.JWT.PWABaseURL = "https://pwa.frolf-bot.com"
+	} else {
+		cfg.JWT.PWABaseURL = pwaBaseURL
+	}
+
+	// Load Auth Callout settings
+	cfg.AuthCallout.Enabled = os.Getenv("AUTH_CALLOUT_ENABLED") == "true"
+	cfg.AuthCallout.Subject = os.Getenv("AUTH_CALLOUT_SUBJECT")
+	cfg.AuthCallout.SigningKey = os.Getenv("AUTH_CALLOUT_SIGNING_KEY")
+	cfg.AuthCallout.IssuerAccount = os.Getenv("AUTH_CALLOUT_ISSUER_ACCOUNT")
 
 	return &cfg, nil
 }

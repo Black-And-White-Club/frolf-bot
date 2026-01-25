@@ -38,10 +38,15 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	results := mapOperationResult(result,
 		roundevents.RoundCreatedV1,
 		roundevents.RoundCreationFailedV1,
-	), nil
+	)
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundCreatedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleRoundEventMessageIDUpdate updates the round with the Discord message ID.

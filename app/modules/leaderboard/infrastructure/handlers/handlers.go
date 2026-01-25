@@ -2,6 +2,7 @@ package leaderboardhandlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -100,6 +101,41 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 			},
 		},
 	}
+}
+
+// addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.
+// This enables PWA consumers to subscribe with patterns like "leaderboard.updated.v1.{guild_id}".
+// Maintains backward compatibility by keeping the original non-scoped event.
+func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
+	// Convert guildID to string
+	var guildIDStr string
+	switch v := guildID.(type) {
+	case string:
+		guildIDStr = v
+	case fmt.Stringer:
+		guildIDStr = v.String()
+	default:
+		guildIDStr = fmt.Sprintf("%v", v)
+	}
+
+	if guildIDStr == "" {
+		return results
+	}
+
+	// Find the result with the matching base topic and duplicate it with guild suffix
+	for _, r := range results {
+		if r.Topic == baseTopic {
+			guildScopedTopic := fmt.Sprintf("%s.%s", baseTopic, guildIDStr)
+			guildScopedResult := handlerwrapper.Result{
+				Topic:    guildScopedTopic,
+				Payload:  r.Payload,
+				Metadata: r.Metadata,
+			}
+			return append(results, guildScopedResult)
+		}
+	}
+
+	return results
 }
 
 // HandleGuildConfigCreated seeds an empty active leaderboard for the guild if missing.

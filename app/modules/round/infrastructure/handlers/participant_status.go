@@ -159,9 +159,14 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 		}, nil
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{Topic: roundevents.RoundParticipantJoinedV1, Payload: result.Success},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundParticipantJoinedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleParticipantRemovalRequest handles the logic for removing a participant from a round.
@@ -276,7 +281,13 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	if err != nil {
 		return nil, err
 	}
-	return []handlerwrapper.Result{
+
+	results := []handlerwrapper.Result{
 		{Topic: roundevents.RoundParticipantJoinedV1, Payload: payload},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundParticipantJoinedV1, updatePayload.GuildID)
+
+	return results, nil
 }

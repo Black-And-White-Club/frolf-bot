@@ -40,10 +40,15 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	results := mapOperationResult(result,
 		roundevents.RoundParticipantScoreUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
-	), nil
+	)
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundParticipantScoreUpdatedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleScoreBulkUpdateRequest handles bulk score overrides for a round.

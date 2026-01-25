@@ -159,7 +159,7 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 			},
 			payload:         testPayload,
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundParticipantJoinedV1,
 		},
 		{

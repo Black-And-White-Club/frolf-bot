@@ -81,7 +81,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		changedTags[entry.UserID] = entry.TagNumber
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic: leaderboardevents.LeaderboardUpdatedV1,
 			Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
@@ -99,5 +99,10 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 				ChangedTags: changedTags,
 			},
 		},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, leaderboardevents.LeaderboardUpdatedV1, payload.GuildID)
+
+	return results, nil
 }

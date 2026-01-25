@@ -261,7 +261,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			payload:         testPayload,
 			ctx:             context.Background(),
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundDeletedV1,
 		},
 		{
@@ -283,7 +283,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			payload:         testPayload,
 			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundDeletedV1,
 			checkMetadata:   true,
 			expectedMetadata: map[string]string{

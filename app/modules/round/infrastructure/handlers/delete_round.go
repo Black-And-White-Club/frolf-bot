@@ -72,5 +72,8 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		}
 	}
 
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, roundevents.RoundDeletedV1, payload.GuildID)
+
 	return results, nil
 }

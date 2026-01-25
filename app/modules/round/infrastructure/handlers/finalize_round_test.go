@@ -91,7 +91,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 2, // Discord + Backend finalization
+			wantResultLen: 3, // Discord + Backend finalization + Guild-scoped
 		},
 		{
 			name: "Service returns finalization failure",
@@ -189,7 +189,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				Participants: testParticipants,
 			},
 			wantErr:       false,
-			wantResultLen: 2,
+			wantResultLen: 3,
 		},
 		{
 			name: "Payload with multiple participants",
@@ -250,7 +250,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantResultLen: 2,
+			wantResultLen: 3,
 		},
 	}
 
@@ -282,7 +282,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 			}
 
 			// Verify metadata for Discord message
-			if tt.wantResultLen == 2 {
+			if tt.wantResultLen == 3 {
 				if results[0].Topic != roundevents.RoundFinalizedDiscordV1 {
 					t.Errorf("First result should be Discord finalization, got %v", results[0].Topic)
 				}
@@ -291,6 +291,10 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				}
 				if results[1].Topic != roundevents.RoundFinalizedV1 {
 					t.Errorf("Second result should be backend finalization, got %v", results[1].Topic)
+				}
+				// Third result should be guild-scoped backend finalization
+				if results[2].Topic != "round.finalized.v1.guild-123" {
+					t.Errorf("Third result should be guild-scoped finalization, got %v", results[2].Topic)
 				}
 			}
 		})
