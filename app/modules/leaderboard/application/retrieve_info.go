@@ -4,124 +4,94 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"time"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
-// GetLeaderboard returns an OperationResult representing the current leaderboard.
-func (s *LeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
-	s.metrics.RecordLeaderboardGetAttempt(ctx, "LeaderboardService")
-
-	return s.withTelemetry(ctx, "GetLeaderboard", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		dbStartTime := time.Now()
-		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, guildID)
-		s.metrics.RecordLeaderboardGetDuration(ctx, "LeaderboardService", time.Since(dbStartTime))
-
-		if err != nil {
-			s.metrics.RecordLeaderboardGetFailure(ctx, "LeaderboardService")
-			return results.FailureResult(&leaderboardevents.GetLeaderboardFailedPayloadV1{
-				GuildID: guildID,
-				Reason:  "database error",
-			}), err
-		}
-
-		s.metrics.RecordLeaderboardGetSuccess(ctx, "LeaderboardService")
-
-		entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
-		copy(entries, leaderboard.LeaderboardData)
-
-		return results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-			GuildID:     guildID,
-			Leaderboard: entries,
-		}), nil
-	})
+// TagAvailabilityResult represents the detailed result of a tag availability check.
+type TagAvailabilityResult struct {
+	Available bool
+	Reason    string
 }
 
-// RoundGetTagByUserID returns a round-scoped tag lookup result payload.
-func (s *LeaderboardService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, payload sharedevents.RoundTagLookupRequestedPayloadV1) (results.OperationResult, error) {
-	tag, err := s.GetTagByUserID(ctx, guildID, payload.UserID)
+// GetLeaderboard returns the active leaderboard entries as domain types.
+func (s *LeaderboardService) GetLeaderboard(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) ([]leaderboardtypes.LeaderboardEntry, error) {
 
+	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
 	if err != nil {
-		return results.FailureResult(&sharedevents.RoundTagLookupResultPayloadV1{
-			ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: guildID},
-			UserID:             payload.UserID,
-			RoundID:            payload.RoundID,
-			TagNumber:          nil,
-			Found:              false,
-			OriginalResponse:   payload.Response,
-			OriginalJoinedLate: payload.JoinedLate,
-		}), nil
+		return nil, err
+	}
+	if leaderboard == nil {
+		return nil, leaderboarddb.ErrNoActiveLeaderboard
 	}
 
-	return results.SuccessResult(&sharedevents.RoundTagLookupResultPayloadV1{
-		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: guildID},
-		UserID:             payload.UserID,
-		RoundID:            payload.RoundID,
-		TagNumber:          &tag,
-		Found:              true,
-		OriginalResponse:   payload.Response,
-		OriginalJoinedLate: payload.JoinedLate,
-	}), nil
+	// Return a copy of entries
+	entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
+	copy(entries, leaderboard.LeaderboardData)
+	return entries, nil
 }
 
-// GetTagByUserID returns the tag number for a user or an error.
-func (s *LeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-	s.metrics.RecordTagGetAttempt(ctx, "LeaderboardService")
+// GetTagByUserID returns the tag number for a given user.
+func (s *LeaderboardService) GetTagByUserID(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (sharedtypes.TagNumber, error) {
 
-	dbStartTime := time.Now()
-	tagNumber, err := s.repo.GetTagByUserID(ctx, guildID, userID)
-	s.metrics.RecordTagGetDuration(ctx, "LeaderboardService", time.Since(dbStartTime))
-
+	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-			return 0, err
+		return 0, err
+	}
+
+	for _, entry := range leaderboard.LeaderboardData {
+		if entry.UserID == userID {
+			return entry.TagNumber, nil
 		}
-		return 0, fmt.Errorf("system error retrieving tag: %w", err)
 	}
 
-	if tagNumber == nil {
-		return 0, sql.ErrNoRows
-	}
-
-	s.metrics.RecordTagGetSuccess(ctx, "LeaderboardService")
-
-	return sharedtypes.TagNumber(*tagNumber), nil
+	return 0, sql.ErrNoRows
 }
 
-// CheckTagAvailability validates whether a tag can be assigned to a user.
+// RoundGetTagByUserID wraps GetTagByUserID for telemetry/results but still returns domain type.
+func (s *LeaderboardService) RoundGetTagByUserID(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (sharedtypes.TagNumber, error) {
+	return s.GetTagByUserID(ctx, guildID, userID)
+}
+
+// CheckTagAvailability returns domain result; handler converts it to payload.
 func (s *LeaderboardService) CheckTagAvailability(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	userID sharedtypes.DiscordID,
-	tagNumber *sharedtypes.TagNumber,
-) (sharedevents.TagAvailabilityCheckResultPayloadV1, *sharedevents.TagAvailabilityCheckFailedPayloadV1, error) {
-	if tagNumber == nil {
-		failure := &sharedevents.TagAvailabilityCheckFailedPayloadV1{
-			GuildID:   guildID,
-			UserID:    userID,
-			TagNumber: tagNumber,
-			Reason:    "tag number is required",
-		}
-		return sharedevents.TagAvailabilityCheckResultPayloadV1{}, failure, nil
-	}
+	tagNumber sharedtypes.TagNumber,
+) (TagAvailabilityResult, error) {
 
-	result, err := s.repo.CheckTagAvailability(ctx, guildID, userID, *tagNumber)
+	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
 	if err != nil {
-		return sharedevents.TagAvailabilityCheckResultPayloadV1{}, nil, err
+		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+			return TagAvailabilityResult{Available: false, Reason: "no active leaderboard"}, nil
+		}
+		return TagAvailabilityResult{}, err
 	}
 
-	return sharedevents.TagAvailabilityCheckResultPayloadV1{
-		GuildID:   guildID,
-		UserID:    userID,
-		TagNumber: tagNumber,
-		Available: result.Available,
-		Reason:    result.Reason,
-	}, nil, nil
+	available, reason := checkInternalAvailability(leaderboard, userID, tagNumber)
+	return TagAvailabilityResult{Available: available, Reason: reason}, nil
+}
+
+// Private helper function
+func checkInternalAvailability(l *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID, tag sharedtypes.TagNumber) (bool, string) {
+	for _, entry := range l.LeaderboardData {
+		if entry.TagNumber == tag && entry.UserID != userID {
+			return false, "tag is already taken"
+		}
+	}
+	return true, ""
 }

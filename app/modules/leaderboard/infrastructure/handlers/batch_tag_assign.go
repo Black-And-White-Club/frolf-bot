@@ -30,7 +30,7 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, fmt.Errorf("invalid batch_id format: %w", err)
 	}
 
-	result, err := h.service.ExecuteBatchTagAssignment(
+	resultData, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
@@ -52,5 +52,5 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, err
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, result, "batch_assignment"), nil
+	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, resultData, "batch_assignment"), nil
 }

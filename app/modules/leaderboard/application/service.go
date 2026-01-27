@@ -25,7 +25,7 @@ type LeaderboardService struct {
 	logger  *slog.Logger
 	metrics leaderboardmetrics.LeaderboardMetrics
 	tracer  trace.Tracer
-	db      *bun.DB // Keep for runInTx helper (justified deviation)
+	db      *bun.DB
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -49,18 +49,50 @@ func NewLeaderboardService(
 	}
 }
 
-// operationFunc is the signature for service operation functions.
-type operationFunc func(ctx context.Context) (results.OperationResult, error)
+// EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
+// This is an infrastructure setup method, so it returns standard error rather than OperationResult.
+func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
+	_, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+		return err
+	}
+
+	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
+
+	empty := &leaderboarddb.Leaderboard{
+		LeaderboardData: leaderboardtypes.LeaderboardData{},
+		IsActive:        true,
+		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
+		GuildID:         guildID,
+	}
+
+	if _, err := s.repo.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
+		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// Generic Helpers (Defined as functions because methods cannot have type params)
+// -----------------------------------------------------------------------------
+
+// operationFunc is the generic signature for service operation functions.
+type operationFunc[S any, F any] func(ctx context.Context) (results.OperationResult[S, F], error)
 
 // withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
-// This standardizes observability across all service methods.
-func (s *LeaderboardService) withTelemetry(
+// It is generic [S, F] to handle any return type safely.
+func withTelemetry[S any, F any](
+	s *LeaderboardService,
 	ctx context.Context,
 	operationName string,
 	guildID sharedtypes.GuildID,
-	op operationFunc,
-) (result results.OperationResult, err error) {
-	// Start span (nil-safe tracer)
+	op operationFunc[S, F],
+) (result results.OperationResult[S, F], err error) {
+
+	// Start span
 	var span trace.Span
 	if s.tracer != nil {
 		ctx, span = s.tracer.Start(ctx, operationName, trace.WithAttributes(
@@ -68,7 +100,6 @@ func (s *LeaderboardService) withTelemetry(
 			attribute.String("guild_id", string(guildID)),
 		))
 	} else {
-		// Use a no-op span from context when tracer is not provided (tests may pass nil)
 		span = trace.SpanFromContext(ctx)
 	}
 	defer span.End()
@@ -93,17 +124,24 @@ func (s *LeaderboardService) withTelemetry(
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in %s: %v", operationName, r)
-			s.logger.ErrorContext(ctx, "Critical panic recovered", attr.ExtractCorrelationID(ctx), attr.String("guild_id", string(guildID)), attr.Error(err))
+			s.logger.ErrorContext(ctx, "Critical panic recovered",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(guildID)),
+				attr.Error(err),
+			)
 			if s.metrics != nil {
 				s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
 			}
 			span.RecordError(err)
-			result = results.OperationResult{}
+			// Return zero value for result
+			result = results.OperationResult[S, F]{}
 		}
 	}()
 
 	// Execute operation
 	result, err = op(ctx)
+
+	// Handle Infrastructure Error
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
 		s.logger.ErrorContext(ctx, "Operation failed with error",
@@ -111,7 +149,6 @@ func (s *LeaderboardService) withTelemetry(
 			attr.String("operation", operationName),
 			attr.String("guild_id", string(guildID)),
 			attr.Error(wrappedErr),
-			attr.Any("result_has_failure", result.Failure != nil),
 		)
 		if s.metrics != nil {
 			s.metrics.RecordOperationFailure(ctx, operationName, "LeaderboardService")
@@ -120,30 +157,28 @@ func (s *LeaderboardService) withTelemetry(
 		return result, wrappedErr
 	}
 
-	// Check for business logic failures even when err is nil
-	if result.Failure != nil {
+	// Handle Domain Failure (Validation, etc)
+	if result.IsFailure() {
 		s.logger.WarnContext(ctx, "Operation returned failure result",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.String("guild_id", string(guildID)),
-			attr.Any("failure_payload", result.Failure),
-			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+			// We can dereference failure safely because IsFailure checked it
+			attr.Any("failure_payload", *result.Failure),
 		)
-		// Note: Not recording as operation failure in metrics since err is nil
-		// and the operation technically succeeded (business validation failed)
+		// Domain failures are NOT system failures, so we don't increment Failure metric
+		// or span.RecordError. They are successful "decisions" to reject.
 	}
 
-	// Log successful operations at debug level with result type
-	if result.Success != nil {
+	// Handle Success
+	if result.IsSuccess() {
 		s.logger.InfoContext(ctx, "Operation completed successfully",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.String("guild_id", string(guildID)),
-			attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
 		)
 	}
 
-	s.logger.InfoContext(ctx, operationName+" completed successfully", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
 	if s.metrics != nil {
 		s.metrics.RecordOperationSuccess(ctx, operationName, "LeaderboardService")
 	}
@@ -151,45 +186,24 @@ func (s *LeaderboardService) withTelemetry(
 	return result, nil
 }
 
-// runInTx is a helper to ensure service operations are atomic.
-// Justified deviation: Leaderboard requires multi-operation transactions.
-func (s *LeaderboardService) runInTx(ctx context.Context, fn func(ctx context.Context, db bun.IDB) (results.OperationResult, error)) (results.OperationResult, error) {
-	var result results.OperationResult
+// runInTx ensures the operation runs within a transaction.
+func runInTx[S any, F any](
+	s *LeaderboardService,
+	ctx context.Context,
+	fn func(ctx context.Context, db bun.IDB) (results.OperationResult[S, F], error),
+) (results.OperationResult[S, F], error) {
+
 	if s.db == nil {
-		var err error
-		result, err = fn(ctx, nil)
-		return result, err
+		return fn(ctx, nil)
 	}
+
+	var result results.OperationResult[S, F]
 
 	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		var err error
-		result, err = fn(ctx, tx)
-		return err
+		var txErr error
+		result, txErr = fn(ctx, tx)
+		return txErr
 	})
+
 	return result, err
-}
-
-// EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
-func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
-	_, err := s.repo.GetActiveLeaderboard(ctx, guildID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-		return err
-	}
-
-	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
-
-	empty := &leaderboarddb.Leaderboard{
-		LeaderboardData: leaderboardtypes.LeaderboardData{},
-		IsActive:        true,
-		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
-		GuildID:         guildID,
-	}
-
-	if _, err := s.repo.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
-		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
-	}
-	return nil
 }

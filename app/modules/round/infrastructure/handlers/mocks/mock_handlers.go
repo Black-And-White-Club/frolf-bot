@@ -16,6 +16,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	handlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -311,6 +312,21 @@ func (m *MockHandlers) HandleRoundFinalized(ctx context.Context, payload *rounde
 func (mr *MockHandlersMockRecorder) HandleRoundFinalized(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundFinalized", reflect.TypeOf((*MockHandlers)(nil).HandleRoundFinalized), ctx, payload)
+}
+
+// HandleRoundListRequest mocks base method.
+func (m *MockHandlers) HandleRoundListRequest(ctx context.Context, payload *handlers.RoundListRequest) ([]handlerwrapper.Result, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleRoundListRequest", ctx, payload)
+	ret0, _ := ret[0].([]handlerwrapper.Result)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HandleRoundListRequest indicates an expected call of HandleRoundListRequest.
+func (mr *MockHandlersMockRecorder) HandleRoundListRequest(ctx, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRoundListRequest", reflect.TypeOf((*MockHandlers)(nil).HandleRoundListRequest), ctx, payload)
 }
 
 // HandleRoundReminder mocks base method.

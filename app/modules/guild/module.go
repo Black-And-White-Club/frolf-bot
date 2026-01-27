@@ -15,6 +15,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/uptrace/bun"
 )
 
 // Module represents the guild module.
@@ -39,6 +40,7 @@ func NewGuildModule(
 	router *message.Router,
 	helpers utils.Helpers,
 	routerCtx context.Context,
+	db *bun.DB,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.GuildMetrics
@@ -47,7 +49,7 @@ func NewGuildModule(
 	logger.InfoContext(ctx, "guild.NewGuildModule initializing")
 
 	// 1. Initialize Service
-	service := guildservice.NewGuildService(guildRepo, logger, metrics, tracer)
+	service := guildservice.NewGuildService(guildRepo, logger, metrics, tracer, db)
 
 	// 2. Initialize Handlers
 	handlers := guildhandlers.NewGuildHandlers(service, logger, tracer, helpers, metrics)

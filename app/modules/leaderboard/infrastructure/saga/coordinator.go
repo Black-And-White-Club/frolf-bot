@@ -20,6 +20,9 @@ type SwapSagaCoordinator struct {
 	logger  *slog.Logger
 	service leaderboardservice.Service
 }
+type SagaCoordinator interface {
+	ProcessIntent(ctx context.Context, intent SwapIntent) error
+}
 
 func NewSwapSagaCoordinator(kv jetstream.KeyValue, service leaderboardservice.Service, logger *slog.Logger) *SwapSagaCoordinator {
 	return &SwapSagaCoordinator{

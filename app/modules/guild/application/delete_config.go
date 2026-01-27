@@ -2,42 +2,63 @@ package guildservice
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/uptrace/bun"
 )
 
-// DeleteGuildConfig performs a soft delete on a guild configuration.
-// Idempotent: deleting a non-existent or already-deleted config succeeds.
-func (s *GuildService) DeleteGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "DeleteGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		// Validate
-		if guildID == "" {
-			return deletionFailure(guildID, ErrInvalidGuildID), nil
-		}
+// DeleteGuildConfig performs a soft delete and returns the final state of the config.
+// Returns a GuildConfigResult for domain failures or an error for infrastructure issues.
+func (s *GuildService) DeleteGuildConfig(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) (GuildConfigResult, error) {
 
-		// Execute soft delete
-		// The repository handles idempotency (returns nil if already deleted)
-		if err := s.repo.DeleteConfig(ctx, guildID); err != nil {
-			// Infrastructure error - should retry
-			return deletionFailure(guildID, err), err
-		}
+	if guildID == "" {
+		// Return as a domain failure since the ID itself is invalid
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrInvalidGuildID), nil
+	}
 
-		// Success
-		// The event signals deletion intent. Discord worker uses ResourceState
-		// snapshot to clean up physical resources.
-		return results.SuccessResult(&guildevents.GuildConfigDeletedPayloadV1{
-			GuildID: guildID,
-		}), nil
+	// Named transaction function
+	deleteGuildConfigTx := func(ctx context.Context, db bun.IDB) (GuildConfigResult, error) {
+		return s.executeDeleteGuildConfig(ctx, db, guildID)
+	}
+
+	// Wrap with telemetry & transaction
+	result, err := withTelemetry(s, ctx, "DeleteGuildConfig", guildID, func(ctx context.Context) (GuildConfigResult, error) {
+		return runInTx(s, ctx, deleteGuildConfigTx)
 	})
+
+	if err != nil {
+		// Infrastructure error — handler can retry
+		return GuildConfigResult{}, fmt.Errorf("DeleteGuildConfig failed for %s: %w", guildID, err)
+	}
+
+	return result, nil
 }
 
-// deletionFailure creates a failure result for config deletion.
-func deletionFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
-	return results.FailureResult(&guildevents.GuildConfigDeletionFailedPayloadV1{
-		GuildID: guildID,
-		Reason:  err.Error(),
-	})
+// executeDeleteGuildConfig contains the core logic for the soft delete.
+func (s *GuildService) executeDeleteGuildConfig(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+) (GuildConfigResult, error) {
+
+	// Perform the soft delete (typically updates a deleted_at column or state)
+	if err := s.repo.DeleteConfig(ctx, db, guildID); err != nil {
+		// Infrastructure error
+		return GuildConfigResult{}, fmt.Errorf("failed to delete config in DB: %w", err)
+	}
+
+	// Fetch the final state (useful for cleanup events that need the IDs)
+	deletedConfig, err := s.repo.GetConfig(ctx, db, guildID)
+	if err != nil {
+		// Infrastructure error
+		return GuildConfigResult{}, fmt.Errorf("failed to fetch deleted config state: %w", err)
+	}
+
+	return results.SuccessResult[*guildtypes.GuildConfig, error](deletedConfig), nil
 }

@@ -2,7 +2,8 @@ package leaderboardhandlers
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
+	"errors"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -15,15 +16,23 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	ctx context.Context,
 	payload *leaderboardevents.GetLeaderboardRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.GetLeaderboard(ctx, payload.GuildID)
+	leaderboard, err := h.service.GetLeaderboard(ctx, payload.GuildID)
 	if err != nil {
-		return nil, err
+		return []handlerwrapper.Result{{
+			Topic: leaderboardevents.GetLeaderboardFailedV1,
+			Payload: &leaderboardevents.GetLeaderboardFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  err.Error(),
+			},
+		}}, nil
 	}
 
-	return mapOperationResult(result,
-		leaderboardevents.GetLeaderboardResponseV1,
-		leaderboardevents.GetLeaderboardFailedV1,
-	), nil
+	resp := &leaderboardevents.GetLeaderboardResponsePayloadV1{
+		GuildID:     payload.GuildID,
+		Leaderboard: leaderboard,
+	}
+
+	return []handlerwrapper.Result{{Topic: leaderboardevents.GetLeaderboardResponseV1, Payload: resp}}, nil
 }
 
 // HandleGetTagByUserIDRequest performs a single tag lookup.
@@ -40,10 +49,11 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 	}
 
 	successPayload := &sharedevents.DiscordTagLookupResultPayloadV1{
-		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: payload.GuildID},
-		UserID:        payload.UserID,
-		TagNumber:     tagPtr,
-		Found:         found,
+		ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
+		RequestingUserID: payload.RequestingUserID,
+		UserID:           payload.UserID,
+		TagNumber:        tagPtr,
+		Found:            found,
 	}
 
 	topic := sharedevents.LeaderboardTagLookupSucceededV1
@@ -59,49 +69,33 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(
 	ctx context.Context,
 	payload *sharedevents.RoundTagLookupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	// 1. Call specialized Round lookup in the Service
-	result, err := h.service.RoundGetTagByUserID(ctx, payload.GuildID, *payload)
+	tag, err := h.service.RoundGetTagByUserID(ctx, payload.GuildID, payload.UserID)
 
-	// 2. SYSTEM FAILURE (e.g., DB Connection Lost) -> Trigger Watermill Retry
 	if err != nil {
+		// Not found -> NotFound event
+		if errors.Is(err, sql.ErrNoRows) {
+			p := &sharedevents.RoundTagLookupResultPayloadV1{
+				ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: payload.GuildID},
+				UserID:             payload.UserID,
+				RoundID:            payload.RoundID,
+				TagNumber:          nil,
+				Found:              false,
+				OriginalResponse:   payload.Response,
+				OriginalJoinedLate: payload.JoinedLate,
+			}
+			return []handlerwrapper.Result{{Topic: sharedevents.RoundTagLookupNotFoundV1, Payload: p}}, nil
+		}
 		return nil, err
 	}
 
-	// 3. DOMAIN FAILURE -> ACK and send Failure Event (single-topic behavior retained)
-	if result.IsFailure() {
-		var reason string
-		if p, ok := result.Failure.(*sharedevents.RoundTagLookupFailedPayloadV1); ok {
-			reason = p.Reason
-		} else {
-			reason = fmt.Sprintf("%v", result.Failure)
-		}
-
-		return []handlerwrapper.Result{
-			{
-				Topic: sharedevents.RoundTagLookupFailedV1,
-				Payload: &sharedevents.RoundTagLookupFailedPayloadV1{
-					ScopedGuildID: sharedevents.ScopedGuildID{GuildID: payload.GuildID},
-					UserID:        payload.UserID,
-					RoundID:       payload.RoundID,
-					Reason:        reason,
-				},
-			},
-		}, nil
+	p := &sharedevents.RoundTagLookupResultPayloadV1{
+		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: payload.GuildID},
+		UserID:             payload.UserID,
+		RoundID:            payload.RoundID,
+		TagNumber:          &tag,
+		Found:              true,
+		OriginalResponse:   payload.Response,
+		OriginalJoinedLate: payload.JoinedLate,
 	}
-
-	// 4. SUCCESS Path: Expect a RoundTagLookupResultPayloadV1
-	if result.IsSuccess() {
-		if p, ok := result.Success.(*sharedevents.RoundTagLookupResultPayloadV1); ok {
-			topic := sharedevents.RoundTagLookupFoundV1
-			if !p.Found {
-				topic = sharedevents.RoundTagLookupNotFoundV1
-			}
-			return []handlerwrapper.Result{{Topic: topic, Payload: p}}, nil
-		}
-		// Unexpected success payload
-		return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
-	}
-
-	// All success/failure paths handled above; should not reach here.
-	return nil, nil
+	return []handlerwrapper.Result{{Topic: sharedevents.RoundTagLookupFoundV1, Payload: p}}, nil
 }

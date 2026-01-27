@@ -22,6 +22,39 @@ func NewRepository(db bun.IDB) Repository {
 	return &Impl{db: db}
 }
 
+// UpdateFields represents the updateable fields of a guild config.
+// Pointer fields distinguish "not provided" (nil) from "set to zero value".
+// This enables clean partial updates without full object replacement.
+type UpdateFields struct {
+	SignupChannelID      *string
+	SignupMessageID      *string
+	EventChannelID       *string
+	LeaderboardChannelID *string
+	UserRoleID           *string
+	EditorRoleID         *string
+	AdminRoleID          *string
+	SignupEmoji          *string
+	AutoSetupCompleted   *bool
+	SetupCompletedAt     *int64 // Unix nano timestamp
+}
+
+// IsEmpty reports whether any fields are set for update.
+func (u *UpdateFields) IsEmpty() bool {
+	if u == nil {
+		return true
+	}
+	return u.SignupChannelID == nil &&
+		u.SignupMessageID == nil &&
+		u.EventChannelID == nil &&
+		u.LeaderboardChannelID == nil &&
+		u.UserRoleID == nil &&
+		u.EditorRoleID == nil &&
+		u.AdminRoleID == nil &&
+		u.SignupEmoji == nil &&
+		u.AutoSetupCompleted == nil &&
+		u.SetupCompletedAt == nil
+}
+
 // upsertSetColumns defines fields to overwrite on a conflict (SaveConfig).
 // Includes deletion_status/resource_state to handle re-activations.
 var upsertSetColumns = []string{
@@ -32,10 +65,16 @@ var upsertSetColumns = []string{
 	"deletion_status", "resource_state",
 }
 
+// --- READ METHODS ---
+
 // GetConfig retrieves an active guild configuration by ID.
-func (r *Impl) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+func (r *Impl) GetConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+	if db == nil {
+		db = r.db
+	}
+
 	model := new(GuildConfig)
-	err := r.db.NewSelect().
+	err := db.NewSelect().
 		Model(model).
 		Where("guild_id = ? AND is_active = true", guildID).
 		Scan(ctx)
@@ -49,17 +88,24 @@ func (r *Impl) GetConfig(ctx context.Context, guildID sharedtypes.GuildID) (*gui
 	return toSharedModel(model), nil
 }
 
+// --- WRITE METHODS ---
+
 // SaveConfig creates or re-activates a guild configuration.
-func (r *Impl) SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) error {
+func (r *Impl) SaveConfig(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error {
+	if db == nil {
+		db = r.db
+	}
+
 	dbModel := toDBModel(config)
 	dbModel.IsActive = true
 	dbModel.UpdatedAt = time.Now().UTC()
 	dbModel.DeletionStatus = "none"
 
-	q := r.db.NewInsert().
+	q := db.NewInsert().
 		Model(dbModel).
 		On("CONFLICT (guild_id) DO UPDATE")
 
+	// Reuse existing upsert columns logic
 	for _, col := range upsertSetColumns {
 		q = q.Set("? = EXCLUDED.?", bun.Ident(col), bun.Ident(col))
 	}
@@ -71,16 +117,19 @@ func (r *Impl) SaveConfig(ctx context.Context, config *guildtypes.GuildConfig) e
 }
 
 // UpdateConfig applies partial updates to an active guild configuration.
-func (r *Impl) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, updates *UpdateFields) error {
+func (r *Impl) UpdateConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *UpdateFields) error {
 	if updates == nil || updates.IsEmpty() {
 		return nil
 	}
+	if db == nil {
+		db = r.db
+	}
 
-	q := r.db.NewUpdate().
+	q := db.NewUpdate().
 		Table("guild_configs").
 		Where("guild_id = ? AND is_active = true", guildID)
 
-	// Apply only non-nil fields
+	// Apply partial updates
 	if updates.SignupChannelID != nil {
 		q = q.Set("signup_channel_id = ?", *updates.SignupChannelID)
 	}
@@ -126,47 +175,48 @@ func (r *Impl) UpdateConfig(ctx context.Context, guildID sharedtypes.GuildID, up
 	return nil
 }
 
-// DeleteConfig performs a soft delete with resource state capture.
-func (r *Impl) DeleteConfig(ctx context.Context, guildID sharedtypes.GuildID) error {
-	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		model := new(GuildConfig)
+// DeleteConfig performs a soft delete.
+// Note: Transaction handling is removed here as it should be managed by the Service.
+func (r *Impl) DeleteConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error {
+	if db == nil {
+		db = r.db
+	}
 
-		if err := tx.NewSelect().Model(model).Where("guild_id = ? AND is_active = true", guildID).Scan(ctx); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				// Idempotent: no error if already deleted or doesn't exist
-				return nil
-			}
-			return fmt.Errorf("guilddb.DeleteConfig select: %w", err)
+	model := new(GuildConfig)
+	if err := db.NewSelect().Model(model).Where("guild_id = ? AND is_active = true", guildID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
 		}
+		return fmt.Errorf("guilddb.DeleteConfig select: %w", err)
+	}
 
-		// Capture resource state snapshot for cleanup
-		rs := &ResourceState{
-			SignupChannelID:      model.SignupChannelID,
-			SignupMessageID:      model.SignupMessageID,
-			EventChannelID:       model.EventChannelID,
-			LeaderboardChannelID: model.LeaderboardChannelID,
-			UserRoleID:           model.UserRoleID,
-			EditorRoleID:         model.EditorRoleID,
-			AdminRoleID:          model.AdminRoleID,
-			Results:              make(map[string]DeletionResult),
-		}
+	// Capture resource state snapshot for cleanup
+	rs := &ResourceState{
+		SignupChannelID:      model.SignupChannelID,
+		SignupMessageID:      model.SignupMessageID,
+		EventChannelID:       model.EventChannelID,
+		LeaderboardChannelID: model.LeaderboardChannelID,
+		UserRoleID:           model.UserRoleID,
+		EditorRoleID:         model.EditorRoleID,
+		AdminRoleID:          model.AdminRoleID,
+		Results:              make(map[string]DeletionResult),
+	}
 
-		_, err := tx.NewUpdate().
-			Table("guild_configs").
-			Where("guild_id = ?", guildID).
-			Set("resource_state = ?", rs).
-			Set("deletion_status = 'pending'").
-			Set("is_active = false").
-			Set("updated_at = ?", time.Now().UTC()).
-			Set("signup_channel_id = NULL, signup_message_id = NULL, event_channel_id = NULL, leaderboard_channel_id = NULL").
-			Set("user_role_id = NULL, editor_role_id = NULL, admin_role_id = NULL").
-			Exec(ctx)
+	_, err := db.NewUpdate().
+		Table("guild_configs").
+		Where("guild_id = ?", guildID).
+		Set("resource_state = ?", rs).
+		Set("deletion_status = 'pending'").
+		Set("is_active = false").
+		Set("updated_at = ?", time.Now().UTC()).
+		Set("signup_channel_id = NULL, signup_message_id = NULL, event_channel_id = NULL, leaderboard_channel_id = NULL").
+		Set("user_role_id = NULL, editor_role_id = NULL, admin_role_id = NULL").
+		Exec(ctx)
 
-		if err != nil {
-			return fmt.Errorf("guilddb.DeleteConfig update: %w", err)
-		}
-		return nil
-	})
+	if err != nil {
+		return fmt.Errorf("guilddb.DeleteConfig update: %w", err)
+	}
+	return nil
 }
 
 // =============================================================================
@@ -272,21 +322,4 @@ func unixNanoToTime(nano int64) *time.Time {
 	}
 	t := time.Unix(0, nano).UTC()
 	return &t
-}
-
-// =============================================================================
-// Backward Compatibility Aliases
-// =============================================================================
-
-// Type aliases for backward compatibility.
-// TODO: Remove after updating all consumers.
-type (
-	GuildDB                 = Repository
-	GuildConfigUpdateFields = UpdateFields
-	GuildDBImpl             = Impl
-)
-
-// NewGuildDB is an alias for NewRepository for backward compatibility.
-func NewGuildDB(db bun.IDB) Repository {
-	return NewRepository(db)
 }

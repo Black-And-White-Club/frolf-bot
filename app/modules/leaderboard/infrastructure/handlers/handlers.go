@@ -10,10 +10,10 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	"go.opentelemetry.io/otel/trace"
@@ -22,14 +22,14 @@ import (
 // LeaderboardHandlers implements the Handlers interface for leaderboard events.
 type LeaderboardHandlers struct {
 	service         leaderboardservice.Service
-	sagaCoordinator *saga.SwapSagaCoordinator
+	sagaCoordinator saga.SagaCoordinator
 	helpers         utils.Helpers
 }
 
 // NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
 func NewLeaderboardHandlers(
 	service leaderboardservice.Service,
-	sagaCoordinator *saga.SwapSagaCoordinator,
+	sagaCoordinator saga.SagaCoordinator,
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	helpers utils.Helpers,
@@ -42,39 +42,20 @@ func NewLeaderboardHandlers(
 	}
 }
 
-// mapOperationResult converts a service OperationResult to handler Results.
-// For standard single-topic success/failure patterns.
-func mapOperationResult(
-	result results.OperationResult,
-	successTopic, failureTopic string,
-) []handlerwrapper.Result {
-	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
-
-	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
-	for i, hr := range handlerResults {
-		wrapperResults[i] = handlerwrapper.Result{
-			Topic:    hr.Topic,
-			Payload:  hr.Payload,
-			Metadata: hr.Metadata,
-		}
-	}
-
-	return wrapperResults
-}
-
 // mapSuccessResults is a private helper to build consistent batch completion events.
 func (h *LeaderboardHandlers) mapSuccessResults(
 	guildID sharedtypes.GuildID,
 	requestorID sharedtypes.DiscordID,
 	batchID string,
-	result results.OperationResult,
+	resultData leaderboardtypes.LeaderboardData,
 	source sharedtypes.ServiceUpdateSource,
 ) []handlerwrapper.Result {
-	var assignments []leaderboardevents.TagAssignmentInfoV1
-	if result.IsSuccess() {
-		if payload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
-			assignments = payload.Assignments
-		}
+	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(resultData))
+	for _, entry := range resultData {
+		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		})
 	}
 
 	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
@@ -86,8 +67,11 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 		{
 			Topic: leaderboardevents.LeaderboardBatchTagAssignedV1,
 			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-				GuildID: guildID, RequestingUserID: requestorID, BatchID: batchID,
-				AssignmentCount: len(assignments), Assignments: assignments,
+				GuildID:          guildID,
+				RequestingUserID: requestorID,
+				BatchID:          batchID,
+				AssignmentCount:  len(assignments),
+				Assignments:      assignments,
 			},
 		},
 		{

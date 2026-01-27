@@ -37,7 +37,7 @@ func NewLeaderboardModule(
 	cfg *config.Config,
 	obs observability.Observability,
 	db *bun.DB,
-	leaderboardDB leaderboarddb.LeaderboardDB,
+	leaderboardDB leaderboarddb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,

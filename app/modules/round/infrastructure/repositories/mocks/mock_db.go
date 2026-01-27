@@ -179,6 +179,26 @@ func (mr *MockRepositoryMockRecorder) GetRoundState(ctx, guildID, roundID any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRoundState", reflect.TypeOf((*MockRepository)(nil).GetRoundState), ctx, guildID, roundID)
 }
 
+// GetRoundsByGuildID mocks base method.
+func (m *MockRepository) GetRoundsByGuildID(ctx context.Context, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, guildID}
+	for _, a := range states {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetRoundsByGuildID", varargs...)
+	ret0, _ := ret[0].([]*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRoundsByGuildID indicates an expected call of GetRoundsByGuildID.
+func (mr *MockRepositoryMockRecorder) GetRoundsByGuildID(ctx, guildID any, states ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, guildID}, states...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRoundsByGuildID", reflect.TypeOf((*MockRepository)(nil).GetRoundsByGuildID), varargs...)
+}
+
 // GetUpcomingRounds mocks base method.
 func (m *MockRepository) GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
 	m.ctrl.T.Helper()

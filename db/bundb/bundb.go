@@ -23,7 +23,7 @@ type DBService struct {
 	UserDB            userdb.Repository
 	RoundDB           rounddb.Repository
 	ScoreDB           scoredb.ScoreDB
-	LeaderboardDB     leaderboarddb.LeaderboardDB
+	LeaderboardDB     leaderboarddb.Repository
 	GuildDB           guilddb.Repository
 	SharedDBInterface sharedinterface.GuildConfigReader
 	db                *bun.DB

@@ -3,90 +3,75 @@ package guildservice
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
-	"github.com/google/go-cmp/cmp"
+	"github.com/uptrace/bun"
 )
 
 // CreateGuildConfig creates a new guild configuration.
-// Idempotent: re-creating an identical config returns success.
-func (s *GuildService) CreateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
-	// Pre-validation (before telemetry)
+// Returns a GuildConfigResult for domain-level failures (validation/conflict)
+// or a non-nil error for infrastructure failures (DB down, network issues).
+func (s *GuildService) CreateGuildConfig(
+	ctx context.Context,
+	config *guildtypes.GuildConfig,
+) (GuildConfigResult, error) {
+
 	if config == nil {
-		return creationFailure("", ErrNilConfig), nil
+		return GuildConfigResult{}, ErrNilConfig
 	}
 
 	guildID := config.GuildID
 
-	return s.withTelemetry(ctx, "CreateGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		// Validate guild ID
-		if guildID == "" {
-			return creationFailure(guildID, ErrInvalidGuildID), nil
-		}
-
-		// Domain-level validation
-		if err := config.Validate(); err != nil {
-			return creationFailure(guildID, err), nil
-		}
-
-		// Check for existing configuration (idempotency)
-		existing, err := s.repo.GetConfig(ctx, guildID)
-		if err != nil && !errors.Is(err, guilddb.ErrNotFound) {
-			// Infrastructure error - should retry
-			return creationFailure(guildID, err), err
-		}
-
-		if existing != nil {
-			// Config exists - check if identical (idempotent success)
-			if configsEqual(existing, config) {
-				return results.SuccessResult(&guildevents.GuildConfigCreatedPayloadV1{
-					GuildID: guildID,
-					Config:  *existing,
-				}), nil
-			}
-			// Conflict - exists but differs
-			return creationFailure(guildID, ErrGuildConfigConflict), nil
-		}
-
-		// Save new configuration
-		if err := s.repo.SaveConfig(ctx, config); err != nil {
-			return creationFailure(guildID, err), err
-		}
-
-		return results.SuccessResult(&guildevents.GuildConfigCreatedPayloadV1{
-			GuildID: guildID,
-			Config:  *config,
-		}), nil
-	})
-}
-
-// creationFailure creates a failure result for config creation.
-func creationFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
-	return results.FailureResult(&guildevents.GuildConfigCreationFailedPayloadV1{
-		GuildID: guildID,
-		Reason:  err.Error(),
-	})
-}
-
-// configCmpOptions defines how to compare GuildConfig structs for idempotency checks.
-var configCmpOptions = []cmp.Option{
-	cmp.Comparer(func(a, b *time.Time) bool {
-		if a == nil || b == nil {
-			return a == b
-		}
-		return a.Equal(*b)
-	}),
-}
-
-// configsEqual performs a deep comparison between two configurations.
-func configsEqual(a, b *guildtypes.GuildConfig) bool {
-	if a == nil || b == nil {
-		return a == b
+	// Named transaction function for observability
+	createGuildConfigTx := func(ctx context.Context, db bun.IDB) (GuildConfigResult, error) {
+		return s.executeCreateGuildConfig(ctx, db, config)
 	}
-	return cmp.Equal(*a, *b, configCmpOptions...)
+
+	// Wrap with telemetry & transaction
+	result, err := withTelemetry(s, ctx, "CreateGuildConfig", guildID, func(ctx context.Context) (GuildConfigResult, error) {
+		return runInTx(s, ctx, createGuildConfigTx)
+	})
+
+	if err != nil {
+		// Infrastructure error (DB/network/etc.) — handler can retry
+		return GuildConfigResult{}, fmt.Errorf("CreateGuildConfig failed: %w", err)
+	}
+
+	// Domain result contains success/failure payload
+	return result, nil
+}
+
+// executeCreateGuildConfig contains the core business logic for creating a guild config.
+// Returns a domain FailureResult for validation/conflict, or a GuildConfigResult + error for infrastructure errors.
+func (s *GuildService) executeCreateGuildConfig(
+	ctx context.Context,
+	db bun.IDB,
+	config *guildtypes.GuildConfig,
+) (GuildConfigResult, error) {
+
+	if config.GuildID == "" {
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrInvalidGuildID), nil
+	}
+
+	if err := config.Validate(); err != nil {
+		return results.FailureResult[*guildtypes.GuildConfig, error](err), nil
+	}
+
+	existing, err := s.repo.GetConfig(ctx, db, config.GuildID)
+	if err != nil && !errors.Is(err, guilddb.ErrNotFound) {
+		return GuildConfigResult{}, fmt.Errorf("failed to get guild config for %s: %w", config.GuildID, err)
+	}
+
+	if existing != nil {
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrGuildConfigConflict), nil
+	}
+
+	if err := s.repo.SaveConfig(ctx, db, config); err != nil {
+		return GuildConfigResult{}, fmt.Errorf("failed to save guild config for %s: %w", config.GuildID, err)
+	}
+
+	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil
 }

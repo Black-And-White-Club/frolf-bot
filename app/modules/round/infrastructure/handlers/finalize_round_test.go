@@ -189,7 +189,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				Participants: testParticipants,
 			},
 			wantErr:       false,
-			wantResultLen: 3,
+			wantResultLen: 2, // No guild-scoped event when GuildID is empty
 		},
 		{
 			name: "Payload with multiple participants",

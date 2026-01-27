@@ -3,7 +3,6 @@ package leaderboardhandlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -35,7 +34,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		})
 	}
 
-	result, err := h.service.ExecuteBatchTagAssignment(
+	updatedData, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
@@ -56,24 +55,15 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		}
 		return nil, err
 	}
-
-	// Handle domain-level failures returned inside the OperationResult
-	if result.IsFailure() {
-		// No failure topic defined for this handler; ack and stop
-		return []handlerwrapper.Result{}, nil
+	// Build success events from returned leaderboard data
+	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(updatedData))
+	for _, entry := range updatedData {
+		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		})
 	}
 
-	// Expect success payload to contain assignment info
-	var assignments []leaderboardevents.TagAssignmentInfoV1
-	if result.IsSuccess() {
-		if payloadSuccess, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
-			assignments = payloadSuccess.Assignments
-		} else {
-			return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
-		}
-	}
-
-	// Build success events from assignments
 	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(assignments))
 	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(assignments))
 	for _, entry := range assignments {

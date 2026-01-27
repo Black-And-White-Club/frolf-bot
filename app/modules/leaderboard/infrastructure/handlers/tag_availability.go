@@ -12,37 +12,27 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 	ctx context.Context,
 	payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, failure, err := h.service.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, payload.TagNumber)
+	res, err := h.service.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, *payload.TagNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	if failure != nil {
-		return []handlerwrapper.Result{
-			{Topic: sharedevents.TagAvailabilityCheckFailedV1, Payload: failure},
-		}, nil
-	}
-
-	if result.Available {
+	if res.Available {
 		availablePayload := &sharedevents.TagAvailablePayloadV1{
-			GuildID:   result.GuildID,
-			UserID:    result.UserID,
-			TagNumber: *result.TagNumber,
+			GuildID:   payload.GuildID,
+			UserID:    payload.UserID,
+			TagNumber: *payload.TagNumber,
 		}
 
-		return []handlerwrapper.Result{
-			{Topic: sharedevents.TagAvailableV1, Payload: availablePayload},
-		}, nil
+		return []handlerwrapper.Result{{Topic: sharedevents.TagAvailableV1, Payload: availablePayload}}, nil
 	}
 
 	tagUnavailable := &sharedevents.TagUnavailablePayloadV1{
-		GuildID:   result.GuildID,
-		UserID:    result.UserID,
-		TagNumber: *result.TagNumber,
-		Reason:    result.Reason,
+		GuildID:   payload.GuildID,
+		UserID:    payload.UserID,
+		TagNumber: *payload.TagNumber,
+		Reason:    res.Reason,
 	}
 
-	return []handlerwrapper.Result{
-		{Topic: sharedevents.TagUnavailableV1, Payload: tagUnavailable},
-	}, nil
+	return []handlerwrapper.Result{{Topic: sharedevents.TagUnavailableV1, Payload: tagUnavailable}}, nil
 }

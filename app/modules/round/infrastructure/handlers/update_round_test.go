@@ -213,7 +213,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			},
 			payload:         testPayloadNoReschedule,
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
@@ -238,7 +238,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			},
 			payload:         testPayloadWithReschedule,
 			wantErr:         false,
-			wantResultLen:   2,
+			wantResultLen:   3, // Now returns original + guild-scoped + reschedule event
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
@@ -322,8 +322,9 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundUpdateValidated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
-			if tt.wantResultLen > 1 && results[1].Topic != roundevents.RoundScheduleUpdatedV1 {
-				t.Errorf("HandleRoundUpdateValidated() second result topic = %v, want %v", results[1].Topic, roundevents.RoundScheduleUpdatedV1)
+			// With guild-scoped events: [0] = original, [1] = guild-scoped, [2] = reschedule (if present)
+			if tt.wantResultLen == 3 && results[2].Topic != roundevents.RoundScheduleUpdatedV1 {
+				t.Errorf("HandleRoundUpdateValidated() third result topic = %v, want %v", results[2].Topic, roundevents.RoundScheduleUpdatedV1)
 			}
 		})
 	}

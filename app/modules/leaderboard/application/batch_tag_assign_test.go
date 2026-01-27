@@ -8,121 +8,102 @@ import (
 	"strings"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboarddbtypes "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
+	"github.com/uptrace/bun"
 )
 
 func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
+	guildID := sharedtypes.GuildID("test-guild")
+
 	tests := []struct {
-		name        string
-		mockDBSetup func(*leaderboarddb.MockRepository)
-		requests    []sharedtypes.TagAssignmentRequest
-		updateID    uuid.UUID
-		source      sharedtypes.ServiceUpdateSource
-		expectErr   bool
-		verify      func(t *testing.T, res results.OperationResult, err error)
+		name      string
+		setupFake func(*FakeLeaderboardRepo)
+		requests  []sharedtypes.TagAssignmentRequest
+		expectErr bool
+		verify    func(t *testing.T, data leaderboardtypes.LeaderboardData, err error)
 	}{
 		{
 			name: "successful batch updates leaderboard",
-			mockDBSetup: func(mockDB *leaderboarddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
-					LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "existing_user", TagNumber: 10}},
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					return &leaderboarddb.Leaderboard{
+						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "existing_user", TagNumber: 10}},
+					}, nil
 				}
-				updatedLeaderboard := &leaderboarddbtypes.Leaderboard{
-					LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user1", TagNumber: 1}, {UserID: "existing_user", TagNumber: 10}},
+				f.UpdateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, uID sharedtypes.RoundID, s sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
+					return &leaderboarddb.Leaderboard{LeaderboardData: data}, nil
 				}
-				mockDB.EXPECT().GetActiveLeaderboardIDB(gomock.Any(), gomock.Any(), guildID).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), guildID, gomock.Any(), gomock.Any(), gomock.Any()).Return(updatedLeaderboard, nil)
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
-			updateID:  uuid.New(),
-			source:    sharedtypes.ServiceUpdateSourceAdminBatch,
 			expectErr: false,
-			verify: func(t *testing.T, res results.OperationResult, err error) {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
+			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+				if len(data) != 2 {
+					t.Fatalf("expected 2 entries in leaderboard, got %d", len(data))
 				}
-				if !res.IsSuccess() {
-					t.Fatalf("expected success result, got failure: %v", res.Failure)
-				}
-				payload, ok := res.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected success payload type: %T", res.Success)
-				}
-				if len(payload.Assignments) != 2 {
-					t.Fatalf("expected 2 entries in leaderboard, got %d", len(payload.Assignments))
+				// Verify sorting (GenerateUpdatedSnapshot logic)
+				if data[0].TagNumber != 1 || data[1].TagNumber != 10 {
+					t.Errorf("leaderboard data not sorted correctly: %+v", data)
 				}
 			},
 		},
 		{
 			name: "swap needed returns TagSwapNeededError",
-			mockDBSetup: func(mockDB *leaderboarddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				// user1 wants tag 1 but target_user currently holds tag 1
-				currentLeaderboard := &leaderboarddbtypes.Leaderboard{
-					LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user1", TagNumber: 5}, {UserID: "target_user", TagNumber: 1}},
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					// user1 wants tag 1 but target_user currently holds tag 1
+					return &leaderboarddb.Leaderboard{
+						LeaderboardData: leaderboardtypes.LeaderboardData{
+							{UserID: "user1", TagNumber: 5},
+							{UserID: "target_user", TagNumber: 1},
+						},
+					}, nil
 				}
-				mockDB.EXPECT().GetActiveLeaderboardIDB(gomock.Any(), gomock.Any(), guildID).Return(currentLeaderboard, nil)
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
-			updateID:  uuid.New(),
-			source:    sharedtypes.ServiceUpdateSourceManual,
 			expectErr: true,
-			verify: func(t *testing.T, res results.OperationResult, err error) {
-				if err == nil {
-					t.Fatalf("expected TagSwapNeededError, got nil")
-				}
+			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
 				var tsn *TagSwapNeededError
 				if !errors.As(err, &tsn) {
 					t.Fatalf("expected TagSwapNeededError, got: %T %v", err, err)
+				}
+				if tsn.TargetUserID != "target_user" {
+					t.Errorf("expected conflict with target_user, got %s", tsn.TargetUserID)
 				}
 			},
 		},
 		{
 			name: "UpdateLeaderboard infrastructure error bubbles up",
-			mockDBSetup: func(mockDB *leaderboarddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				currentLeaderboard := &leaderboarddbtypes.Leaderboard{LeaderboardData: leaderboardtypes.LeaderboardData{}}
-				mockDB.EXPECT().GetActiveLeaderboardIDB(gomock.Any(), gomock.Any(), guildID).Return(currentLeaderboard, nil)
-				mockDB.EXPECT().UpdateLeaderboard(gomock.Any(), gomock.Any(), guildID, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("db failure"))
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					return &leaderboarddb.Leaderboard{LeaderboardData: leaderboardtypes.LeaderboardData{}}, nil
+				}
+				f.UpdateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, uID sharedtypes.RoundID, s sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
+					return nil, errors.New("db failure")
+				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
-			updateID:  uuid.New(),
-			source:    sharedtypes.ServiceUpdateSourceAdminBatch,
 			expectErr: true,
-			verify: func(t *testing.T, res results.OperationResult, err error) {
-				if err == nil || (!strings.Contains(err.Error(), "failed to commit update") && !strings.Contains(err.Error(), "db failure")) {
-					t.Fatalf("expected db error, got: %v", err)
+			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+				if !strings.Contains(err.Error(), "db failure") {
+					t.Fatalf("expected db failure error, got: %v", err)
 				}
 			},
 		},
 		{
-			name: "GetActiveLeaderboardIDB failure bubbles up",
-			mockDBSetup: func(mockDB *leaderboarddb.MockRepository) {
-				guildID := sharedtypes.GuildID("test-guild")
-				mockDB.EXPECT().GetActiveLeaderboardIDB(gomock.Any(), gomock.Any(), guildID).Return(nil, errors.New("no access"))
+			name: "GetActiveLeaderboard failure bubbles up",
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					return nil, errors.New("no access")
+				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
-			updateID:  uuid.New(),
-			source:    sharedtypes.ServiceUpdateSourceAdminBatch,
 			expectErr: true,
-			verify: func(t *testing.T, res results.OperationResult, err error) {
-				if err == nil {
-					t.Fatalf("expected fetch error, got nil")
-				}
-				// The service wraps operation errors with the operation name; accept either the original message
-				// or the wrapped form to keep tests robust across refactors.
-				if !(strings.Contains(err.Error(), "failed to fetch current leaderboard") || strings.Contains(err.Error(), "no access") || strings.Contains(err.Error(), "ExecuteBatchTagAssignment")) {
-					t.Fatalf("expected fetch error, got: %v", err)
+			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+				if !strings.Contains(err.Error(), "no access") {
+					t.Fatalf("expected no access error, got: %v", err)
 				}
 			},
 		},
@@ -130,31 +111,25 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			ctx := context.Background()
-			mockDB := leaderboarddb.NewMockRepository(ctrl)
-
-			// minimal no-op tracer since service requires it
-			tracer := noop.NewTracerProvider().Tracer("test")
-
-			if tt.mockDBSetup != nil {
-				tt.mockDBSetup(mockDB)
+			fakeRepo := NewFakeLeaderboardRepo()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
 			}
 
+			// Initialize service with fake repo
+			// Note: s.db is left nil so ExecuteBatchTagAssignment skips the real Bun transaction wrapper
 			s := &LeaderboardService{
-				repo:    mockDB,
-				logger:  slog.New(slog.NewTextHandler(os.Stdout, nil)),
-				metrics: &leaderboardmetrics.NoOpMetrics{},
-				tracer:  tracer,
+				repo:   fakeRepo,
+				logger: slog.New(slog.NewTextHandler(os.Stdout, nil)),
 			}
 
-			// call the refactored entrypoint
-			res, err := s.ExecuteBatchTagAssignment(ctx, sharedtypes.GuildID("test-guild"), tt.requests, sharedtypes.RoundID(tt.updateID), tt.source)
+			updateID := sharedtypes.RoundID(uuid.New())
+			source := sharedtypes.ServiceUpdateSourceAdminBatch
+
+			res, err := s.ExecuteBatchTagAssignment(context.Background(), guildID, tt.requests, updateID, source)
 
 			if tt.expectErr && err == nil {
-				t.Fatalf("expected error but got nil")
+				t.Fatal("expected error but got nil")
 			}
 			if !tt.expectErr && err != nil {
 				t.Fatalf("unexpected error: %v", err)

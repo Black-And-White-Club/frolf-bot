@@ -7,244 +7,141 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("test-guild")
 	testSortedParticipantTags := []string{
 		"1:12345678901234567", // 1st place
 		"2:12345678901234568", // 2nd place
 	}
 
 	testPayload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+		GuildID:               testGuildID,
 		RoundID:               testRoundID,
 		SortedParticipantTags: testSortedParticipantTags,
 		Source:                "round",
 		UpdateID:              testRoundID.String(),
 	}
 
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
 	tests := []struct {
 		name          string
-		mockSetup     func()
+		setupFake     func(f *FakeService, s *FakeSagaCoordinator)
 		payload       *leaderboardevents.LeaderboardUpdateRequestedPayloadV1
 		wantErr       bool
 		wantResultLen int
 		wantTopics    []string
+		verifySaga    func(t *testing.T, s *FakeSagaCoordinator)
 	}{
 		{
 			name: "Successfully handle LeaderboardUpdateRequested",
-			mockSetup: func() {
-				expectedRequests := []sharedtypes.TagAssignmentRequest{
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234567"),
-						TagNumber: sharedtypes.TagNumber(1),
-					},
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234568"),
-						TagNumber: sharedtypes.TagNumber(2),
-					},
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return leaderboardtypes.LeaderboardData{
+						{UserID: "12345678901234567", TagNumber: 1},
+						{UserID: "12345678901234568", TagNumber: 2},
+					}, nil
 				}
-
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(), // GuildID
-					expectedRequests,
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(
-					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-						Assignments: []leaderboardevents.TagAssignmentInfoV1{
-							{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(1)},
-							{UserID: sharedtypes.DiscordID("12345678901234568"), TagNumber: sharedtypes.TagNumber(2)},
-						},
-					}),
-					nil,
-				)
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 2,
-			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, leaderboardevents.TagUpdateForScheduledRoundsV1},
+			wantResultLen: 3,
+			wantTopics: []string{
+				leaderboardevents.LeaderboardUpdatedV1,                                     // 0: Global
+				sharedevents.SyncRoundsTagRequestV1,                                        // 1: Sync
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, "test-guild"), // 2: Scoped
+			},
 		},
 		{
-			name: "Invalid tag format - missing colon",
-			mockSetup: func() {
-				// Handler will call ExecuteBatchTagAssignment with empty requests; return an error to simulate validation
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(),
-					[]sharedtypes.TagAssignmentRequest{},
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(results.OperationResult{}, fmt.Errorf("invalid tags"))
+			name: "Tag Swap Required - Triggers Saga",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return nil, &leaderboardservice.TagSwapNeededError{
+						RequestorID: "12345678901234567",
+						CurrentTag:  5,
+						TargetTag:   1,
+					}
+				}
+			},
+			payload:       testPayload,
+			wantErr:       false, // Handler returns empty results, not an error, when starting a saga
+			wantResultLen: 0,
+			verifySaga: func(t *testing.T, s *FakeSagaCoordinator) {
+				if len(s.CapturedIntents) != 1 {
+					t.Errorf("Expected 1 saga intent, got %d", len(s.CapturedIntents))
+				}
+			},
+		},
+		{
+			name: "Service Infrastructure Error",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return nil, fmt.Errorf("database down")
+				}
+			},
+			payload:       testPayload,
+			wantErr:       true,
+			wantResultLen: 0,
+		},
+		{
+			name: "Invalid tag format in payload - skips bad entries",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					// Verify only the valid tag was passed to the service
+					if len(requests) != 1 {
+						return nil, fmt.Errorf("expected 1 request, got %d", len(requests))
+					}
+					return leaderboardtypes.LeaderboardData{{UserID: "12345", TagNumber: 1}}, nil
+				}
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+				GuildID:               testGuildID,
 				RoundID:               testRoundID,
-				SortedParticipantTags: []string{"12345678901234567"}, // Missing colon
-				Source:                "round",
-				UpdateID:              testRoundID.String(),
+				SortedParticipantTags: []string{"invalid_format", "1:12345"},
 			},
-			wantErr:       true,
-			wantResultLen: 0,
-		},
-		{
-			name: "Invalid tag number format",
-			mockSetup: func() {
-				// Handler will parse tag number into 0 on invalid format and call service with that request
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(),
-					[]sharedtypes.TagAssignmentRequest{{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(0)}},
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(results.OperationResult{}, fmt.Errorf("invalid tag number"))
-			},
-			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
-				RoundID:               testRoundID,
-				SortedParticipantTags: []string{"invalid:12345678901234567"},
-				Source:                "round",
-				UpdateID:              testRoundID.String(),
-			},
-			wantErr:       true,
-			wantResultLen: 0,
-		},
-		{
-			name: "Service error in ProcessTagAssignments",
-			mockSetup: func() {
-				expectedRequests := []sharedtypes.TagAssignmentRequest{
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234567"),
-						TagNumber: sharedtypes.TagNumber(1),
-					},
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234568"),
-						TagNumber: sharedtypes.TagNumber(2),
-					},
-				}
-
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(), // GuildID
-					expectedRequests,
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("internal service error"),
-				)
-			},
-			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
-		},
-		{
-			name: "Service failure with domain error payload",
-			mockSetup: func() {
-				expectedRequests := []sharedtypes.TagAssignmentRequest{
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234567"),
-						TagNumber: sharedtypes.TagNumber(1),
-					},
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234568"),
-						TagNumber: sharedtypes.TagNumber(2),
-					},
-				}
-
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(), // GuildID
-					expectedRequests,
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(
-					results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{
-						Reason: "tag assignment validation failed",
-					}),
-					nil,
-				)
-			},
-			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 0, // Handler returns empty array for domain failures
-			wantTopics:    []string{},
-		},
-		{
-			name: "Unexpected service result - neither success nor failure",
-			mockSetup: func() {
-				expectedRequests := []sharedtypes.TagAssignmentRequest{
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234567"),
-						TagNumber: sharedtypes.TagNumber(1),
-					},
-					{
-						UserID:    sharedtypes.DiscordID("12345678901234568"),
-						TagNumber: sharedtypes.TagNumber(2),
-					},
-				}
-
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					gomock.Any(),
-					expectedRequests,
-					testRoundID,
-					sharedtypes.ServiceUpdateSourceProcessScores,
-				).Return(
-					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-						Assignments: []leaderboardevents.TagAssignmentInfoV1{
-							{UserID: sharedtypes.DiscordID("12345678901234567"), TagNumber: sharedtypes.TagNumber(1)},
-							{UserID: sharedtypes.DiscordID("12345678901234568"), TagNumber: sharedtypes.TagNumber(2)},
-						},
-					}),
-					nil,
-				)
-			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 2,
-			wantTopics:    []string{leaderboardevents.LeaderboardUpdatedV1, sharedevents.SyncRoundsTagRequestV1},
+			wantResultLen: 3,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeService()
+			fakeSaga := NewFakeSagaCoordinator()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeSvc, fakeSaga)
+			}
 
 			h := &LeaderboardHandlers{
-				service: mockLeaderboardService,
+				service:         fakeSvc,
+				sagaCoordinator: fakeSaga,
 			}
 
-			ctx := context.Background()
-			results, err := h.HandleLeaderboardUpdateRequested(ctx, tt.payload)
+			res, err := h.HandleLeaderboardUpdateRequested(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleLeaderboardUpdateRequested() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("HandleLeaderboardUpdateRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleLeaderboardUpdateRequested() result length = %d, want %d", len(results), tt.wantResultLen)
+			if len(res) != tt.wantResultLen {
+				t.Errorf("Result length = %d, want %d", len(res), tt.wantResultLen)
 			}
 
 			if !tt.wantErr && len(tt.wantTopics) > 0 {
-				for i, wantTopic := range tt.wantTopics {
-					if i >= len(results) {
-						t.Errorf("HandleLeaderboardUpdateRequested() missing result at index %d", i)
-						continue
-					}
-					if results[i].Topic != wantTopic {
-						t.Errorf("HandleLeaderboardUpdateRequested() result[%d].Topic = %s, want %s", i, results[i].Topic, wantTopic)
+				for i, topic := range tt.wantTopics {
+					if i < len(res) && res[i].Topic != topic {
+						t.Errorf("Result[%d] topic = %s, want %s", i, res[i].Topic, topic)
 					}
 				}
+			}
+
+			if tt.verifySaga != nil {
+				tt.verifySaga(t, fakeSaga)
 			}
 		})
 	}

@@ -58,7 +58,9 @@ type FakeService struct {
 
 	// Retrieve Round
 	GetRoundFn func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error)
+	// Get rounds for a guild
 
+	GetRoundsForGuildFn func(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
 	// Schedule Round Events
 	ScheduleRoundEventsFn func(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (results.OperationResult, error)
 
@@ -262,6 +264,14 @@ func (f *FakeService) GetRound(ctx context.Context, g sharedtypes.GuildID, r sha
 		return f.GetRoundFn(ctx, g, r)
 	}
 	return results.OperationResult{}, nil
+}
+
+func (f *FakeService) GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+	f.record("GetRoundsForGuild")
+	if f.GetRoundsForGuildFn != nil {
+		return f.GetRoundsForGuildFn(ctx, guildID)
+	}
+	return []*roundtypes.Round{}, nil
 }
 
 func (f *FakeService) ScheduleRoundEvents(ctx context.Context, g sharedtypes.GuildID, p roundevents.RoundScheduledPayloadV1, m string) (results.OperationResult, error) {

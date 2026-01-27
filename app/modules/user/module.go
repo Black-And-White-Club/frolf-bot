@@ -14,6 +14,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/uptrace/bun"
 )
 
 // Module represents the user module.
@@ -35,11 +36,12 @@ func NewUserModule(
 	ctx context.Context, // Context for the module's lifecycle (e.g., from main)
 	cfg *config.Config,
 	obs observability.Observability,
-	userDB userdb.UserDB,
+	userDB userdb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router, // The shared Watermill router instance
 	helpers utils.Helpers,
 	routerCtx context.Context, // Context specifically for the router's Run method
+	db *bun.DB,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.UserMetrics
@@ -48,7 +50,7 @@ func NewUserModule(
 	logger.InfoContext(ctx, "user.NewUserModule called")
 
 	// Initialize user service
-	userService := userservice.NewUserService(userDB, logger, metrics, tracer)
+	userService := userservice.NewUserService(userDB, logger, metrics, tracer, db)
 
 	// Create a new Prometheus Registry for this module's router and metrics.
 	// This registry will be used by the router's metrics builder.

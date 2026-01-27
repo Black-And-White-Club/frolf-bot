@@ -6,16 +6,12 @@ import (
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
-	"go.uber.org/mock/gomock"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 )
 
 func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testRequestorID := sharedtypes.DiscordID("2468")
 	testTargetID := sharedtypes.DiscordID("13579")
 	testGuildID := sharedtypes.GuildID("9999")
@@ -26,116 +22,110 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 		TargetID:    testTargetID,
 	}
 
-	// Mock dependencies
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
 	tests := []struct {
 		name          string
-		mockSetup     func()
-		payload       *leaderboardevents.TagSwapRequestedPayloadV1
+		setupFake     func(f *FakeService, s *FakeSagaCoordinator)
 		wantErr       bool
 		wantResultLen int
 		wantTopic     string
 	}{
 		{
-			name: "Successfully handle TagSwapRequested",
-			mockSetup: func() {
-				// Target currently holds a tag 2
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
-				// Requestor currently holds tag 1
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(1), nil)
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					testGuildID,
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.SuccessResult(&leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-						GuildID: testGuildID,
-						Assignments: []leaderboardevents.TagAssignmentInfoV1{
-							{UserID: testRequestorID, TagNumber: 2},
-							{UserID: testTargetID, TagNumber: 1},
-						},
-					}),
-					nil,
-				)
+			name: "Successfully handle TagSwapRequested - Immediate Success",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				// Target currently holds tag 2
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+					if u == testTargetID {
+						return 2, nil
+					}
+					return 1, nil // Requestor holds 1
+				}
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, g sharedtypes.GuildID, r []sharedtypes.TagAssignmentRequest, u sharedtypes.RoundID, s sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return leaderboardtypes.LeaderboardData{
+						{UserID: testRequestorID, TagNumber: 2},
+						{UserID: testTargetID, TagNumber: 1},
+					}, nil
+				}
 			},
-			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 2,
+			wantResultLen: 2, // mapSuccessResults likely produces batch_assigned + tag_updated + guild_scoped
 			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
 		},
 		{
-			name: "Service error in TagSwapRequested",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
-				// Requestor tag lookup (handler collects but ignores error) - provide a value
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(1), nil)
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					testGuildID,
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(results.OperationResult{}, fmt.Errorf("internal service error"))
+			name: "Tag Swap Needed - Triggers Saga",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+					return 2, nil
+				}
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, g sharedtypes.GuildID, r []sharedtypes.TagAssignmentRequest, u sharedtypes.RoundID, src sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return nil, &leaderboardservice.TagSwapNeededError{
+						RequestorID: testRequestorID,
+						TargetTag:   2,
+						CurrentTag:  1,
+					}
+				}
 			},
-			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
+			wantErr:       false,
+			wantResultLen: 1,
+			wantTopic:     leaderboardevents.TagSwapProcessedV1,
 		},
 		{
-			name: "Service failure with non-error result",
-			mockSetup: func() {
-				// Target has no tag
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(0), fmt.Errorf("not found"))
+			name: "Target User Has No Tag",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+					return 0, fmt.Errorf("not found")
+				}
 			},
-			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
 			wantTopic:     leaderboardevents.TagSwapFailedV1,
 		},
 		{
-			name: "Unknown result from TagSwapRequested",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(2), nil)
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testGuildID, gomock.Any()).Return(sharedtypes.TagNumber(0), fmt.Errorf("not found"))
-				mockLeaderboardService.EXPECT().ExecuteBatchTagAssignment(
-					gomock.Any(),
-					testGuildID,
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(results.OperationResult{}, nil)
+			name: "Service Infrastructure Error",
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+					return 2, nil
+				}
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, g sharedtypes.GuildID, r []sharedtypes.TagAssignmentRequest, u sharedtypes.RoundID, src sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+					return nil, fmt.Errorf("database timeout")
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 2,
-			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
+			wantErr:       true,
+			wantResultLen: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeService()
+			fakeSaga := NewFakeSagaCoordinator()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeSvc, fakeSaga)
+			}
 
 			h := &LeaderboardHandlers{
-				service: mockLeaderboardService,
+				service:         fakeSvc,
+				sagaCoordinator: fakeSaga,
 			}
 
-			ctx := context.Background()
-			results, err := h.HandleTagSwapRequested(ctx, tt.payload)
+			res, err := h.HandleTagSwapRequested(context.Background(), testPayload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleTagSwapRequested() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("HandleTagSwapRequested() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleTagSwapRequested() result length = %d, want %d", len(results), tt.wantResultLen)
+			if len(res) != tt.wantResultLen {
+				t.Errorf("Result length = %d, want %d", len(res), tt.wantResultLen)
 			}
 
-			if !tt.wantErr && tt.wantResultLen > 0 && results[0].Topic != tt.wantTopic {
-				t.Errorf("HandleTagSwapRequested() topic = %s, want %s", results[0].Topic, tt.wantTopic)
+			if !tt.wantErr && len(res) > 0 && res[0].Topic != tt.wantTopic {
+				t.Errorf("First result topic = %s, want %s", res[0].Topic, tt.wantTopic)
+			}
+
+			// Specific verification for the Saga flow
+			if tt.wantTopic == leaderboardevents.TagSwapProcessedV1 {
+				if len(fakeSaga.CapturedIntents) == 0 {
+					t.Error("Expected saga coordinator to capture intent, but it was empty")
+				}
 			}
 		})
 	}

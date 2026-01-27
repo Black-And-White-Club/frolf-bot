@@ -221,7 +221,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			},
 			payload:         testPayload,
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundCreatedV1,
 		},
 		{

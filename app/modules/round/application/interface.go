@@ -52,6 +52,7 @@ type Service interface {
 
 	// Retrieve Round
 	GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error)
+	GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
 
 	// Schedule Round Events
 	ScheduleRoundEvents(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (results.OperationResult, error)

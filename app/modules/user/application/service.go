@@ -2,19 +2,20 @@ package userservice
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -25,6 +26,7 @@ type UserService struct {
 	logger  *slog.Logger
 	metrics usermetrics.UserMetrics
 	tracer  trace.Tracer
+	db      *bun.DB
 }
 
 // NewUserService creates a new UserService.
@@ -33,32 +35,62 @@ func NewUserService(
 	logger *slog.Logger,
 	metrics usermetrics.UserMetrics,
 	tracer trace.Tracer,
+	db *bun.DB,
 ) *UserService {
 	return &UserService{
 		repo:    repo,
 		logger:  logger,
 		metrics: metrics,
 		tracer:  tracer,
+		db:      db,
 	}
 }
 
-// operationFunc is the signature for service operation functions.
-type operationFunc func(ctx context.Context) (results.OperationResult, error)
+// operationFunc is the generic signature for service operation functions.
+type operationFunc[S any, F any] func(ctx context.Context) (results.OperationResult[S, F], error)
 
 // withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
-// This standardizes observability across all service methods.
-func (s *UserService) withTelemetry(
+func withTelemetry[S any, F any](
+	s *UserService,
 	ctx context.Context,
 	operationName string,
 	userID sharedtypes.DiscordID,
-	op operationFunc,
-) (result results.OperationResult, err error) {
+	op operationFunc[S, F],
+) (result results.OperationResult[S, F], err error) {
 
-	if ctx == nil {
-		ctx = context.Background()
+	// Start span
+	var span trace.Span
+	if s.tracer != nil {
+		ctx, span = s.tracer.Start(ctx, operationName, trace.WithAttributes(
+			attribute.String("operation", operationName),
+			attribute.String("user_id", string(userID)),
+		))
+	} else {
+		span = trace.SpanFromContext(ctx)
+	}
+	defer span.End()
+
+	// Record attempt
+	if s.metrics != nil {
+		s.metrics.RecordOperationAttempt(ctx, operationName, userID)
 	}
 
-	// Panic recovery MUST be registered early
+	// Track duration
+	startTime := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.RecordOperationDuration(ctx, operationName, time.Since(startTime), userID)
+		}
+	}()
+
+	// Log operation start
+	s.logger.InfoContext(ctx, "Operation triggered",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("operation", operationName),
+		attr.String("user_id", string(userID)),
+	)
+
+	// Panic recovery
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in %s: %v", operationName, r)
@@ -67,28 +99,18 @@ func (s *UserService) withTelemetry(
 				attr.String("user_id", string(userID)),
 				attr.Error(err),
 			)
-			s.metrics.RecordOperationFailure(ctx, operationName, userID)
-			result = results.OperationResult{}
+			if s.metrics != nil {
+				s.metrics.RecordOperationFailure(ctx, operationName, userID)
+			}
+			span.RecordError(err)
+			result = results.OperationResult[S, F]{}
 		}
 	}()
 
-	// Start span
-	ctx, span := s.tracer.Start(ctx, operationName,
-		trace.WithAttributes(
-			attribute.String("operation", operationName),
-			attribute.String("user_id", string(userID)),
-		),
-	)
-	defer span.End()
-
-	s.metrics.RecordOperationAttempt(ctx, operationName, userID)
-
-	startTime := time.Now()
-	defer func() {
-		s.metrics.RecordOperationDuration(ctx, operationName, time.Since(startTime), userID)
-	}()
-
+	// Execute operation
 	result, err = op(ctx)
+
+	// Handle Infrastructure Error
 	if err != nil {
 		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
 		s.logger.ErrorContext(ctx, "Operation failed with error",
@@ -96,173 +118,180 @@ func (s *UserService) withTelemetry(
 			attr.String("operation", operationName),
 			attr.String("user_id", string(userID)),
 			attr.Error(wrappedErr),
-			attr.Any("result_has_failure", result.Failure != nil),
 		)
-		s.metrics.RecordOperationFailure(ctx, operationName, userID)
+		if s.metrics != nil {
+			s.metrics.RecordOperationFailure(ctx, operationName, userID)
+		}
 		span.RecordError(wrappedErr)
 		return result, wrappedErr
 	}
 
-	// Check for business logic failures even when err is nil
-	if result.Failure != nil {
+	// Handle Domain Failure
+	if result.IsFailure() {
 		s.logger.WarnContext(ctx, "Operation returned failure result",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.String("user_id", string(userID)),
-			attr.Any("failure_payload", result.Failure),
-			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+			attr.Any("failure_payload", *result.Failure),
 		)
-		// Note: Not recording as operation failure in metrics since err is nil
-		// and the operation technically succeeded (business validation failed)
 	}
 
-	// Log successful operations at debug level with result type
-	if result.Success != nil {
+	// Handle Success
+	if result.IsSuccess() {
 		s.logger.InfoContext(ctx, "Operation completed successfully",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.String("user_id", string(userID)),
-			attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
 		)
 	}
 
-	s.metrics.RecordOperationSuccess(ctx, operationName, userID)
+	if s.metrics != nil {
+		s.metrics.RecordOperationSuccess(ctx, operationName, userID)
+	}
+
 	return result, nil
 }
 
-// MatchParsedScorecard performs exact matching of parsed scorecard player names to Discord users.
-// It first attempts normalized username, then normalized display name, and always returns a confirmed payload.
-// Unmatched players are skipped (no admin confirmation round-trip) and capped to a reasonable limit to guard against abuse.
-func (s *UserService) MatchParsedScorecard(ctx context.Context, payload roundevents.ParsedScorecardPayloadV1) (results.OperationResult, error) {
+// MatchResult holds the domain outcome of a scorecard matching operation.
+type MatchResult struct {
+	Mappings  []userevents.UDiscConfirmedMappingV1 // Or a domain-equivalent struct
+	Unmatched []string
+}
+
+func (s *UserService) MatchParsedScorecard(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+	playerNames []string,
+) (results.OperationResult[*MatchResult, error], error) {
+
+	matchOp := func(ctx context.Context, db bun.IDB) (results.OperationResult[*MatchResult, error], error) {
+		return s.executeMatchParsedScorecard(ctx, db, guildID, userID, playerNames)
+	}
+
+	result, err := withTelemetry(s, ctx, "MatchParsedScorecard", userID, func(ctx context.Context) (results.OperationResult[*MatchResult, error], error) {
+		return matchOp(ctx, s.db)
+	})
+
+	if err != nil {
+		return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("MatchParsedScorecard failed: %w", err)
+	}
+
+	return result, nil
+}
+
+func (s *UserService) executeMatchParsedScorecard(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+	_ sharedtypes.DiscordID,
+	playerNames []string,
+) (results.OperationResult[*MatchResult, error], error) {
 	const (
-		maxPlayers  = 512 // guardrail against oversized payloads
-		maxNameRune = 128 // avoid pathological player-name sizes
+		maxPlayers  = 512
+		maxNameRune = 128
 	)
 
-	return s.withTelemetry(ctx, "MatchParsedScorecard", payload.UserID, func(ctx context.Context) (results.OperationResult, error) {
-		if payload.ParsedData == nil {
-			return results.FailureResult(&struct{ Reason string }{Reason: "parsed_data is nil"}), errors.New("parsed_data is nil")
+	if len(playerNames) > maxPlayers {
+		return results.FailureResult[*MatchResult](fmt.Errorf("too many players: %d", len(playerNames))), nil
+	}
+
+	matchResult := &MatchResult{
+		Mappings:  []userevents.UDiscConfirmedMappingV1{},
+		Unmatched: []string{},
+	}
+
+	for _, rawName := range playerNames {
+		name := strings.TrimSpace(rawName)
+		if name == "" {
+			continue
 		}
 
-		if len(payload.ParsedData.PlayerScores) > maxPlayers {
-			return results.FailureResult(&struct{ Reason string }{Reason: fmt.Sprintf("too many players in payload: %d > %d", len(payload.ParsedData.PlayerScores), maxPlayers)}), nil
+		if len([]rune(name)) > maxNameRune {
+			matchResult.Unmatched = append(matchResult.Unmatched, name[:maxNameRune])
+			continue
+		}
+		norm := strings.ToLower(name)
+
+		// Try Username
+		user, err := s.repo.FindByUDiscUsername(ctx, db, guildID, norm)
+		if err != nil && !errors.Is(err, userdb.ErrNotFound) {
+			return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("error finding by username: %w", err)
 		}
 
-		var mappings []userevents.UDiscConfirmedMappingV1
-		var unmatched []string
-
-		for _, player := range payload.ParsedData.PlayerScores {
-			name := strings.TrimSpace(player.PlayerName)
-			if name == "" {
-				continue
+		// Try Name if not found
+		if user == nil || errors.Is(err, userdb.ErrNotFound) {
+			user, err = s.repo.FindByUDiscName(ctx, db, guildID, norm)
+			if err != nil && !errors.Is(err, userdb.ErrNotFound) {
+				return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("error finding by name: %w", err)
 			}
+		}
 
-			if len([]rune(name)) > maxNameRune {
-				// Skip absurdly long names to prevent log/processing abuse
-				s.logger.WarnContext(ctx, "Skipping player with overlength name",
-					attr.String("user_id", string(payload.GuildID)),
-					attr.String("round_id", payload.RoundID.String()),
-				)
-				unmatched = append(unmatched, name[:maxNameRune])
-				continue
-			}
-			norm := strings.ToLower(name)
-
-			// Try username first
-			user, err := s.repo.FindByUDiscUsername(ctx, payload.GuildID, norm)
-			if err != nil {
-				// Treat not-found as a benign absence and fall through to name fallback
-				if errors.Is(err, userdb.ErrNotFound) {
-					user = nil
-				} else {
-					return results.FailureResult(err), err
-				}
-			}
-			if user == nil {
-				// Try name fallback
-				user, err = s.repo.FindByUDiscName(ctx, payload.GuildID, norm)
-				if err != nil {
-					if errors.Is(err, userdb.ErrNotFound) {
-						user = nil
-					} else {
-						return results.FailureResult(err), err
-					}
-				}
-				if user == nil {
-					unmatched = append(unmatched, name)
-					continue
-				}
-			}
-
-			mappings = append(mappings, userevents.UDiscConfirmedMappingV1{
-				PlayerName:    player.PlayerName,
+		if user != nil {
+			matchResult.Mappings = append(matchResult.Mappings, userevents.UDiscConfirmedMappingV1{
+				PlayerName:    rawName,
 				DiscordUserID: user.User.UserID,
 			})
+		} else {
+			matchResult.Unmatched = append(matchResult.Unmatched, rawName)
 		}
+	}
 
-		if len(unmatched) > 0 {
-			s.logger.InfoContext(ctx, "Skipping unmatched UDisc players (no admin confirmation flow)",
-				attr.String("unmatched_players", strings.Join(unmatched, ",")),
-				attr.String("import_id", payload.ImportID),
-				attr.String("user_id", string(payload.GuildID)),
-				attr.String("round_id", payload.RoundID.String()),
-			)
-		}
-
-		return results.SuccessResult(&userevents.UDiscMatchConfirmedPayloadV1{
-			ImportID:     payload.ImportID,
-			GuildID:      payload.GuildID,
-			RoundID:      payload.RoundID,
-			UserID:       payload.UserID,
-			ChannelID:    payload.ChannelID,
-			Timestamp:    time.Now().UTC(),
-			Mappings:     mappings,
-			ParsedScores: &payload, // Include the parsed scorecard for round module ingestion
-		}), nil
-	})
+	return results.SuccessResult[*MatchResult, error](matchResult), nil
 }
 
-// UpdateUDiscIdentity sets UDisc username/name for a user (stores normalized, applies globally).
-func (s *UserService) UpdateUDiscIdentity(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, username *string, name *string) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "UpdateUDiscIdentity", userID, func(ctx context.Context) (results.OperationResult, error) {
-		// Normalize before passing to DB
-		normalizedUsername := normalizeStringPointer(username)
-		normalizedName := normalizeStringPointer(name)
+// UpdateUDiscIdentity sets UDisc username/name for a user globally.
+func (s *UserService) UpdateUDiscIdentity(
+	ctx context.Context,
+	userID sharedtypes.DiscordID,
+	username *string,
+	name *string,
+) (results.OperationResult[bool, error], error) {
 
-		if err := s.repo.UpdateUDiscIdentityGlobal(ctx, userID, normalizedUsername, normalizedName); err != nil {
-			return results.FailureResult(&struct{ Reason string }{Reason: fmt.Sprintf("failed to update udisc identity: %v", err)}), err
-		}
+	updateTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		return s.executeUpdateUDiscIdentity(ctx, db, userID, username, name)
+	}
 
-		s.logger.InfoContext(ctx, "Updated UDisc identity globally",
-			attr.String("user_id", string(userID)),
-			attr.String("udisc_username", safeString(normalizedUsername)),
-			attr.String("udisc_name", safeString(normalizedName)),
-		)
-
-		return results.SuccessResult(true), nil
+	result, err := withTelemetry(s, ctx, "UpdateUDiscIdentity", userID, func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		return runInTx(s, ctx, updateTx)
 	})
+
+	if err != nil {
+		return results.FailureResult[bool](err), fmt.Errorf("UpdateUDiscIdentity failed: %w", err)
+	}
+
+	return result, nil
 }
 
-// FindByUDiscUsername attempts to find a user by UDisc username within a guild.
-func (s *UserService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "FindByUDiscUsername", sharedtypes.DiscordID(""), func(ctx context.Context) (results.OperationResult, error) {
-		user, err := s.repo.FindByUDiscUsername(ctx, guildID, username)
-		if err != nil {
-			return results.FailureResult(err), err
-		}
-		return results.SuccessResult(user), nil
-	})
-}
+func (s *UserService) executeUpdateUDiscIdentity(
+	ctx context.Context,
+	db bun.IDB,
+	userID sharedtypes.DiscordID,
+	username *string,
+	name *string,
+) (results.OperationResult[bool, error], error) {
 
-// FindByUDiscName attempts to find a user by UDisc name within a guild.
-func (s *UserService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "FindByUDiscName", sharedtypes.DiscordID(""), func(ctx context.Context) (results.OperationResult, error) {
-		user, err := s.repo.FindByUDiscName(ctx, guildID, name)
-		if err != nil {
-			return results.FailureResult(err), err
+	if userID == "" {
+		return results.FailureResult[bool](ErrInvalidDiscordID), nil
+	}
+
+	updates := &userdb.UserUpdateFields{
+		UDiscUsername: normalizeStringPointer(username),
+		UDiscName:     normalizeStringPointer(name),
+	}
+
+	if updates.IsEmpty() {
+		return results.SuccessResult[bool, error](true), nil
+	}
+
+	if err := s.repo.UpdateGlobalUser(ctx, db, userID, updates); err != nil {
+		if errors.Is(err, userdb.ErrNoRowsAffected) {
+			return results.FailureResult[bool](userdb.ErrNotFound), nil
 		}
-		return results.SuccessResult(user), nil
-	})
+		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to update global user: %w", err)
+	}
+
+	return results.SuccessResult[bool, error](true), nil
 }
 
 func normalizeStringPointer(val *string) *string {
@@ -273,9 +302,26 @@ func normalizeStringPointer(val *string) *string {
 	return &normalized
 }
 
-func safeString(val *string) string {
-	if val == nil {
-		return ""
+// runInTx ensures the operation runs within a database transaction.
+// It matches the pattern used in GuildService but adapted for UserService.
+func runInTx[S any, F any](
+	s *UserService,
+	ctx context.Context,
+	fn func(ctx context.Context, db bun.IDB) (results.OperationResult[S, F], error),
+) (results.OperationResult[S, F], error) {
+
+	// Update this block to match GuildService
+	if s.db == nil {
+		return fn(ctx, nil)
 	}
-	return *val
+
+	var result results.OperationResult[S, F]
+
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var txErr error
+		result, txErr = fn(ctx, tx)
+		return txErr
+	})
+
+	return result, err
 }

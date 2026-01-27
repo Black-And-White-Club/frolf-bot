@@ -36,4 +36,5 @@ type Repository interface {
 	UpdateImportStatus(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error
 	CreateRoundGroups(ctx context.Context, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error
 	RoundHasGroups(ctx context.Context, roundID sharedtypes.RoundID) (bool, error)
+	GetRoundsByGuildID(ctx context.Context, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error)
 }

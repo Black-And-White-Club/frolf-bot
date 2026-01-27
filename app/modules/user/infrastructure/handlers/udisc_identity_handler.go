@@ -12,9 +12,9 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(
 	ctx context.Context,
 	payload *userevents.UpdateUDiscIdentityRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	// Service only wants UserID and identity fields
 	result, err := h.service.UpdateUDiscIdentity(
 		ctx,
-		payload.GuildID,
 		payload.UserID,
 		payload.Username,
 		payload.Name,

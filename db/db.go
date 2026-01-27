@@ -16,10 +16,10 @@ const (
 
 // DB provides methods for interacting with an underlying database or other storage mechanism.
 type Database interface {
-	leaderboarddb.LeaderboardDB
+	leaderboarddb.Repository
 	rounddb.Repository
 	scoredb.ScoreDB
-	userdb.UserDB
-	guilddb.GuildDB
+	userdb.Repository
+	guilddb.Repository
 	sharedinterface.GuildConfigReader
 }

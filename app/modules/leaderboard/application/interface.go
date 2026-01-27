@@ -3,9 +3,8 @@ package leaderboardservice
 import (
 	"context"
 
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
 // Service defines the contract for leaderboard operations.
@@ -21,19 +20,20 @@ type Service interface {
 		requests []sharedtypes.TagAssignmentRequest,
 		updateID sharedtypes.RoundID,
 		source sharedtypes.ServiceUpdateSource,
-	) (results.OperationResult, error)
+	) (leaderboardtypes.LeaderboardData, error)
 
-	// TagSwapRequested attempts an assignment and allows TagSwapNeededError to bubble up.
+	// TagSwapRequested attempts an assignment and returns the updated leaderboard data or an error.
 	TagSwapRequested(
 		ctx context.Context,
 		guildID sharedtypes.GuildID,
 		userID sharedtypes.DiscordID,
 		targetTag sharedtypes.TagNumber,
-	) (results.OperationResult, error)
+	) (leaderboardtypes.LeaderboardData, error)
 
 	// --- READS ---
 
-	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error)
+	// GetLeaderboard returns the active leaderboard entries as domain types.
+	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardtypes.LeaderboardEntry, error)
 
 	// GetTagByUserID returns the tag for a user or an error.
 	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error)
@@ -42,16 +42,16 @@ type Service interface {
 	RoundGetTagByUserID(
 		ctx context.Context,
 		guildID sharedtypes.GuildID,
-		payload sharedevents.RoundTagLookupRequestedPayloadV1,
-	) (results.OperationResult, error)
+		userID sharedtypes.DiscordID,
+	) (sharedtypes.TagNumber, error)
 
 	// CheckTagAvailability validates whether a tag can be assigned to a user.
 	CheckTagAvailability(
 		ctx context.Context,
 		guildID sharedtypes.GuildID,
 		userID sharedtypes.DiscordID,
-		tagNumber *sharedtypes.TagNumber,
-	) (sharedevents.TagAvailabilityCheckResultPayloadV1, *sharedevents.TagAvailabilityCheckFailedPayloadV1, error)
+		tagNumber sharedtypes.TagNumber,
+	) (TagAvailabilityResult, error)
 
 	// --- INFRASTRUCTURE ---
 	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error

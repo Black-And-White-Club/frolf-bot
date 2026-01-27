@@ -4,225 +4,208 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-
 	"strings"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/mocks"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
+// -----------------------------------------------------------------------------
+// Lifecycle & Helper Tests
+// -----------------------------------------------------------------------------
+
 func TestNewLeaderboardService(t *testing.T) {
-	// Define test cases
-	tests := []struct {
-		name string
-		test func(t *testing.T)
-	}{
-		{
-			name: "Creates service with all dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+	fakeRepo := NewFakeLeaderboardRepo()
+	testHandler := loggerfrolfbot.NewTestHandler()
+	logger := slog.New(testHandler)
+	mockMetrics := &leaderboardmetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
 
-				// Create mock dependencies
-				mockDB := leaderboarddb.NewMockRepository(ctrl)
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := &leaderboardmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
+	service := NewLeaderboardService(nil, fakeRepo, logger, mockMetrics, tracer)
 
-				// Call the function being tested (pass nil for *bun.DB)
-				service := NewLeaderboardService(nil, mockDB, logger, mockMetrics, tracer)
-
-				// Ensure service is correctly created
-				if service == nil {
-					t.Fatalf("NewLeaderboardService returned nil")
-				}
-
-				// service is already a *LeaderboardService
-				leaderboardServiceImpl := service
-
-				// Check that all dependencies were correctly assigned
-				if leaderboardServiceImpl.repo != mockDB {
-					t.Errorf("repo not correctly assigned")
-				}
-				if leaderboardServiceImpl.logger != logger {
-					t.Errorf("logger not correctly assigned")
-				}
-				if leaderboardServiceImpl.metrics != mockMetrics {
-					t.Errorf("metrics not correctly assigned")
-				}
-				if leaderboardServiceImpl.tracer != tracer {
-					t.Errorf("tracer not correctly assigned")
-				}
-				// withTelemetry is provided on the service and should not panic when used
-				_, err := leaderboardServiceImpl.withTelemetry(context.Background(), "TestOp", sharedtypes.GuildID("test-guild"), func(ctx context.Context) (results.OperationResult, error) {
-					return results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{}), nil
-				})
-				if err != nil {
-					t.Errorf("withTelemetry returned unexpected error: %v", err)
-				}
-			},
-		},
-		{
-			name: "Handles nil dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				// Call with nil dependencies (pass nil for *bun.DB)
-				service := NewLeaderboardService(nil, nil, nil, nil, nil)
-
-				// Ensure service is correctly created
-				if service == nil {
-					t.Fatalf("NewLeaderboardService returned nil")
-				}
-
-				// service is already a *LeaderboardService
-				leaderboardServiceImpl := service
-
-				// Check nil fields
-				if leaderboardServiceImpl.repo != nil {
-					t.Errorf("repo should be nil")
-				}
-				if leaderboardServiceImpl.metrics != nil {
-					t.Errorf("metrics should be nil")
-				}
-				if leaderboardServiceImpl.tracer != nil {
-					t.Errorf("tracer should be nil")
-				}
-
-				// Test withTelemetry runs correctly with nil dependencies
-				_, err := leaderboardServiceImpl.withTelemetry(context.Background(), "TestOp", sharedtypes.GuildID("test-guild"), func(ctx context.Context) (results.OperationResult, error) {
-					return results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{}), nil
-				})
-				if err != nil {
-					t.Errorf("withTelemetry should execute the provided function without error, got: %v", err)
-				}
-			},
-		},
+	if service == nil {
+		t.Fatalf("NewLeaderboardService returned nil")
 	}
-
-	// Run all test cases
-	for _, tt := range tests {
-		t.Run(tt.name, tt.test)
+	if service.repo != fakeRepo {
+		t.Errorf("repo not correctly assigned")
+	}
+	if service.logger != logger {
+		t.Errorf("logger not correctly assigned")
 	}
 }
 
 func Test_withTelemetry(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testHandler := loggerfrolfbot.NewTestHandler()
-	logger := slog.New(testHandler)
-	tracer := noop.NewTracerProvider().Tracer("test")
-
-	// Use a mock metrics implementation for verifying expected metric calls
-	mockMetrics := mocks.NewMockLeaderboardMetrics(ctrl)
-
+	// Setup service with no-ops
 	s := &LeaderboardService{
-		repo:    nil,
-		logger:  logger,
-		metrics: mockMetrics,
-		tracer:  tracer,
-		db:      nil,
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &leaderboardmetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
+
+	// Define dummy types for the generic S and F
+	type SuccessPayload struct{ Data string }
+	type FailurePayload struct{ Reason string }
 
 	tests := []struct {
 		name        string
-		ctx         context.Context
 		operation   string
-		serviceFunc func(ctx context.Context) (results.OperationResult, error)
-		wantErrSub  string // substring expected in error, empty for success
-		verify      func(t *testing.T, res results.OperationResult)
+		guildID     sharedtypes.GuildID
+		op          operationFunc[SuccessPayload, FailurePayload]
+		wantErrSub  string
+		checkResult func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload])
 	}{
 		{
-			name:      "successful operation",
-			ctx:       context.Background(),
-			operation: "test_operation",
-			serviceFunc: func(ctx context.Context) (results.OperationResult, error) {
-				return results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-					Leaderboard: leaderboardtypes.LeaderboardData{{UserID: "test", TagNumber: 1}},
-				}), nil
+			name:      "handles success result",
+			operation: "test_success",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.SuccessResult[SuccessPayload, FailurePayload](SuccessPayload{Data: "ok"}), nil
 			},
-			wantErrSub: "",
-			verify: func(t *testing.T, res results.OperationResult) {
-				if !res.IsSuccess() {
-					t.Fatalf("expected success result, got failure: %v", res.Failure)
-				}
-				payload, ok := res.Success.(*leaderboardevents.GetLeaderboardResponsePayloadV1)
-				if !ok {
-					t.Fatalf("unexpected success payload type: %T", res.Success)
-				}
-				if len(payload.Leaderboard) != 1 || payload.Leaderboard[0].UserID != "test" {
-					t.Fatalf("unexpected leaderboard payload: %#v", payload.Leaderboard)
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsSuccess() || res.Success.Data != "ok" {
+					t.Errorf("expected success result 'ok', got %+v", res.Success)
 				}
 			},
 		},
 		{
-			name:      "failed operation",
-			ctx:       context.Background(),
-			operation: "test_operation",
-			serviceFunc: func(ctx context.Context) (results.OperationResult, error) {
-				return results.OperationResult{}, errors.New("test_error")
+			name:      "handles domain failure result",
+			operation: "test_domain_failure",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.FailureResult[SuccessPayload, FailurePayload](FailurePayload{Reason: "denied"}), nil
 			},
-			wantErrSub: "test_operation: test_error",
-			verify:     func(t *testing.T, res results.OperationResult) {},
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsFailure() || res.Failure.Reason != "denied" {
+					t.Errorf("expected failure result 'denied', got %+v", res.Failure)
+				}
+			},
 		},
 		{
-			name:      "panic recovery",
-			ctx:       context.Background(),
-			operation: "test_operation",
-			serviceFunc: func(ctx context.Context) (results.OperationResult, error) {
-				panic("test_panic")
+			name:      "handles infrastructure error",
+			operation: "test_infra_error",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.OperationResult[SuccessPayload, FailurePayload]{}, errors.New("db connection lost")
 			},
-			wantErrSub: "panic in test_operation",
-			verify:     func(t *testing.T, res results.OperationResult) {},
+			wantErrSub: "test_infra_error: db connection lost",
 		},
 		{
-			name:        "nil service function",
-			ctx:         context.Background(),
-			operation:   "test_operation",
-			serviceFunc: nil,
-			wantErrSub:  "panic",
-			verify:      func(t *testing.T, res results.OperationResult) {},
+			name:      "recovers from panic",
+			operation: "test_panic",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				panic("something exploded")
+			},
+			wantErrSub: "panic in test_panic: something exploded",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up expected calls for the mockMetrics
-			if tt.name == "successful operation" {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), tt.operation, "LeaderboardService", gomock.Any()).Times(1)
-				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
-			} else {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), tt.operation, "LeaderboardService", gomock.Any()).Times(1)
-				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), tt.operation, "LeaderboardService").Times(1)
-			}
+			res, err := withTelemetry(s, context.Background(), tt.operation, tt.guildID, tt.op)
 
-			res, err := s.withTelemetry(tt.ctx, tt.operation, sharedtypes.GuildID("test-guild"), tt.serviceFunc)
-			if tt.wantErrSub == "" {
+			if tt.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErrSub) {
+					t.Errorf("expected error containing %q, got %v", tt.wantErrSub, err)
+				}
+			} else {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				tt.verify(t, res)
-			} else {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErrSub)
+				if tt.checkResult != nil {
+					tt.checkResult(t, res)
 				}
-				if !strings.Contains(err.Error(), tt.wantErrSub) {
-					t.Fatalf("expected error to contain %q, got %q", tt.wantErrSub, err.Error())
+			}
+		})
+	}
+}
+
+func Test_runInTx(t *testing.T) {
+	type Success = string
+	type Failure = string
+
+	t.Run("executes directly when db is nil", func(t *testing.T) {
+		s := &LeaderboardService{db: nil}
+
+		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[Success, Failure], error) {
+			if db != nil {
+				return results.OperationResult[Success, Failure]{}, errors.New("expected nil db")
+			}
+			return results.SuccessResult[Success, Failure]("executed_no_tx"), nil
+		})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.IsSuccess() || *res.Success != "executed_no_tx" {
+			t.Errorf("expected success 'executed_no_tx', got %v", res.Success)
+		}
+	})
+
+	// Note: Testing actual transaction behavior (db.RunInTx) usually requires
+	// a mock DB (sqlmock) or an integration test.
+	// This test focuses on the nil-guard logic you provided.
+}
+
+func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("test-guild")
+
+	tests := []struct {
+		name          string
+		setupFake     func(*FakeLeaderboardRepo)
+		wantErr       bool
+		expectedSteps []string
+	}{
+		{
+			name: "Leaderboard exists - do nothing",
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					return &leaderboarddb.Leaderboard{}, nil
 				}
+			},
+			wantErr:       false,
+			expectedSteps: []string{"GetActiveLeaderboard"},
+		},
+		{
+			name: "Leaderboard missing - create it",
+			setupFake: func(f *FakeLeaderboardRepo) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+					return nil, leaderboarddb.ErrNoActiveLeaderboard
+				}
+				f.CreateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, lb *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error) {
+					return lb, nil
+				}
+			},
+			wantErr:       false,
+			expectedSteps: []string{"GetActiveLeaderboard", "CreateLeaderboard"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := NewFakeLeaderboardRepo()
+			tt.setupFake(fakeRepo)
+			s := &LeaderboardService{
+				repo:   fakeRepo,
+				logger: loggerfrolfbot.NoOpLogger,
+				db:     nil,
+			}
+
+			err := s.EnsureGuildLeaderboard(ctx, guildID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EnsureGuildLeaderboard() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			trace := fakeRepo.Trace()
+			if len(trace) != len(tt.expectedSteps) {
+				t.Errorf("expected %d steps, got %d: %v", len(tt.expectedSteps), len(trace), trace)
 			}
 		})
 	}

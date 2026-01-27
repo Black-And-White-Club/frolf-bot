@@ -2,14 +2,13 @@ package leaderboardservice
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"slices"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
@@ -22,19 +21,24 @@ func (s *LeaderboardService) ExecuteBatchTagAssignment(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (results.OperationResult, error) {
+) (leaderboardtypes.LeaderboardData, error) {
 
-	return s.withTelemetry(ctx, "ExecuteBatchTagAssignment", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		// 1. Transactional Execution
-		return s.runInTx(ctx, func(ctx context.Context, db bun.IDB) (results.OperationResult, error) {
-			// 2. Call the internal logic helper
-			return s.executeBatchLogic(ctx, db, guildID, requests, updateID, source)
-		})
+	// Run within a DB transaction if we have a DB configured, otherwise execute directly.
+	if s.db == nil {
+		return s.executeBatchLogic(ctx, nil, guildID, requests, updateID, source)
+	}
+
+	var result leaderboardtypes.LeaderboardData
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var innerErr error
+		result, innerErr = s.executeBatchLogic(ctx, tx, guildID, requests, updateID, source)
+		return innerErr
 	})
+
+	return result, err
 }
 
 // executeBatchLogic contains the core "Funnel" logic.
-// It takes a bun.IDB so it can run inside or outside an existing transaction.
 func (s *LeaderboardService) executeBatchLogic(
 	ctx context.Context,
 	db bun.IDB,
@@ -42,7 +46,7 @@ func (s *LeaderboardService) executeBatchLogic(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (results.OperationResult, error) {
+) (leaderboardtypes.LeaderboardData, error) {
 
 	s.logger.InfoContext(ctx, "Executing funnel logic",
 		attr.String("source", string(source)),
@@ -50,99 +54,75 @@ func (s *LeaderboardService) executeBatchLogic(
 		attr.Int("request_count", len(requests)),
 	)
 
-	// 1. Get current state (IDB aware)
-	current, err := s.repo.GetActiveLeaderboardIDB(ctx, db, guildID)
+	current, err := s.repo.GetActiveLeaderboard(ctx, db, guildID)
 	if err != nil {
 		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
 			current = &leaderboarddb.Leaderboard{
 				LeaderboardData: leaderboardtypes.LeaderboardData{},
 			}
 		} else {
-			return results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
+			return nil, err
 		}
 	}
 	beforeData := current.LeaderboardData
 
 	// --- 2. CONFLICT DETECTION ---
-	// Map existing tags to users for ownership lookup
 	tagToUserMap := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID)
-	// Map users to their current tags for error metadata
 	userToTagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-
 	for _, entry := range beforeData {
 		tagToUserMap[entry.TagNumber] = entry.UserID
 		userToTagMap[entry.UserID] = entry.TagNumber
 	}
 
-	// Identify who is in the current batch to allow internal swaps
 	requestingUsers := make(map[sharedtypes.DiscordID]bool)
 	for _, req := range requests {
 		requestingUsers[req.UserID] = true
 	}
 
+	var conflicts []*TagSwapNeededError
+
 	for _, req := range requests {
-		// Does someone currently hold the tag we want?
 		if holderID, occupied := tagToUserMap[req.TagNumber]; occupied {
-			// CONFLICT: Tag held by someone NOT in this update batch
 			if !requestingUsers[holderID] {
-				s.logger.InfoContext(ctx, "Tag conflict detected, redirection to Saga required",
-					attr.Int("tag", int(req.TagNumber)),
-					attr.String("requestor", string(req.UserID)),
-					attr.String("current_holder", string(holderID)),
-				)
-
-				// Find the requestor's current tag to help the Saga map the chain
 				currentTag := userToTagMap[req.UserID]
-
-				return results.OperationResult{}, &TagSwapNeededError{
+				conflicts = append(conflicts, &TagSwapNeededError{
 					RequestorID:  req.UserID,
 					TargetUserID: holderID,
 					TargetTag:    req.TagNumber,
 					CurrentTag:   currentTag,
-				}
+				})
+
+				s.logger.InfoContext(ctx, "Tag conflict detected",
+					attr.Int("tag", int(req.TagNumber)),
+					attr.String("requestor", string(req.UserID)),
+					attr.String("current_holder", string(holderID)),
+				)
 			}
 		}
 	}
 
+	if len(conflicts) > 0 {
+		// Optionally, return the first conflict (compatible with current handler)
+		return nil, conflicts[0]
+	}
+
 	// --- 3. EXECUTION ---
-	// Generate updated snapshot (pure logic)
 	newData := s.GenerateUpdatedSnapshot(beforeData, requests)
 
-	// Atomic DB Write
-	updatedLB, err := s.repo.UpdateLeaderboard(
-		ctx,
-		db,
-		guildID,
-		newData,
-		updateID,
-		source,
-	)
+	updatedLB, err := s.repo.UpdateLeaderboard(ctx, db, guildID, newData, updateID, source)
 	if err != nil {
-		return results.FailureResult(&leaderboardevents.LeaderboardBatchTagAssignmentFailedPayloadV1{GuildID: guildID, Reason: "database error"}), err
+		return nil, err
 	}
 
-	// 4. Build success payload with leaderboard data
-	payload := &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
-		GuildID:         guildID,
-		AssignmentCount: len(updatedLB.LeaderboardData),
-		Assignments:     make([]leaderboardevents.TagAssignmentInfoV1, len(updatedLB.LeaderboardData)),
-	}
-
-	for i, entry := range updatedLB.LeaderboardData {
-		payload.Assignments[i] = leaderboardevents.TagAssignmentInfoV1{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
-		}
-	}
-
-	return results.SuccessResult(payload), nil
+	return updatedLB.LeaderboardData, nil
 }
 
-// GenerateUpdatedSnapshot remains public as it's a useful pure function for testing.
+// GenerateUpdatedSnapshot remains public and pure
 func (s *LeaderboardService) GenerateUpdatedSnapshot(
 	currentData leaderboardtypes.LeaderboardData,
 	requests []sharedtypes.TagAssignmentRequest,
 ) leaderboardtypes.LeaderboardData {
+
 	tagMap := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 	for _, entry := range currentData {
 		tagMap[entry.UserID] = entry.TagNumber
@@ -163,8 +143,14 @@ func (s *LeaderboardService) GenerateUpdatedSnapshot(
 		})
 	}
 
+	// Overflow-safe sorting
 	slices.SortFunc(newData, func(a, b leaderboardtypes.LeaderboardEntry) int {
-		return int(a.TagNumber - b.TagNumber)
+		if a.TagNumber < b.TagNumber {
+			return -1
+		} else if a.TagNumber > b.TagNumber {
+			return 1
+		}
+		return 0
 	})
 
 	return newData

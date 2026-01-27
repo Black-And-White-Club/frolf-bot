@@ -36,7 +36,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 	requestorTag, _ := h.service.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
 
 	// 3. Attempt the Funnel
-	result, err := h.service.ExecuteBatchTagAssignment(
+	resultData, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		[]sharedtypes.TagAssignmentRequest{
@@ -74,5 +74,5 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 	}
 
 	// 5. Success Path (Immediate Swap)
-	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", result, "tag_swap"), nil
+	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", resultData, "tag_swap"), nil
 }

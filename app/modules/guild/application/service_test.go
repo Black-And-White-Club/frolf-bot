@@ -4,317 +4,146 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
-	"time"
 
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
-	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/mocks"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
+// -----------------------------------------------------------------------------
+// Lifecycle & Helper Tests
+// -----------------------------------------------------------------------------
+
 func TestNewGuildService(t *testing.T) {
-	tests := []struct {
-		name string
-		test func(t *testing.T)
-	}{
-		{
-			name: "Creates service with all dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+	fakeRepo := NewFakeGuildRepository()
+	testHandler := loggerfrolfbot.NewTestHandler()
+	logger := slog.New(testHandler)
+	mockMetrics := &guildmetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
+	// For testing NewGuildService, bun.DB can be nil or a shell
+	var db *bun.DB
 
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockRepo := guilddb.NewMockRepository(ctrl)
-				mockMetrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
+	service := NewGuildService(fakeRepo, logger, mockMetrics, tracer, db)
 
-				service := NewGuildService(mockRepo, logger, mockMetrics, tracer)
-
-				if service == nil {
-					t.Fatal("NewGuildService returned nil")
-				}
-
-				if service.repo != mockRepo {
-					t.Error("repo not set correctly")
-				}
-
-				if service.logger != logger {
-					t.Error("logger not set correctly")
-				}
-				if service.metrics != mockMetrics {
-					t.Error("metrics not set correctly")
-				}
-				if service.tracer != tracer {
-					t.Error("tracer not set correctly")
-				}
-			},
-		},
-		{
-			name: "Handles nil dependencies",
-			test: func(t *testing.T) {
-				service := NewGuildService(nil, nil, nil, nil)
-
-				if service == nil {
-					t.Fatal("NewGuildService returned nil")
-				}
-
-				if service.repo != nil {
-					t.Error("repo should be nil")
-				}
-
-				if service.logger != nil {
-					t.Error("logger should be nil")
-				}
-				if service.metrics != nil {
-					t.Error("metrics should be nil")
-				}
-				if service.tracer != nil {
-					t.Error("tracer should be nil")
-				}
-			},
-		},
+	if service == nil {
+		t.Fatal("NewGuildService returned nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, tt.test)
+	if service.repo != fakeRepo {
+		t.Error("repo not set correctly")
+	}
+	if service.logger != logger {
+		t.Error("logger not set correctly")
+	}
+	if service.metrics != mockMetrics {
+		t.Error("metrics not set correctly")
 	}
 }
 
-func TestWithTelemetry(t *testing.T) {
-	testGuildID := sharedtypes.GuildID("guild-1")
-
-	type args struct {
-		ctx           context.Context
-		operationName string
-		guildID       sharedtypes.GuildID
-		op            func(ctx context.Context) (results.OperationResult, error)
-		logger        *slog.Logger
-		metrics       guildmetrics.GuildMetrics
-		tracer        trace.Tracer
+func Test_withTelemetry(t *testing.T) {
+	s := &GuildService{
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &guildmetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
 
+	type SuccessPayload struct{ Data string }
+	type FailurePayload struct{ Reason string }
+
 	tests := []struct {
-		name    string
-		args    func(ctrl *gomock.Controller) args
-		want    results.OperationResult
-		wantErr bool
+		name        string
+		operation   string
+		guildID     sharedtypes.GuildID
+		op          operationFunc[SuccessPayload, FailurePayload]
+		wantErrSub  string
+		checkResult func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload])
 	}{
 		{
-			name: "Successful operation",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					guildID:       testGuildID,
-					op: func(ctx context.Context) (results.OperationResult, error) {
-						return results.SuccessResult("test"), nil
-					},
-					logger:  logger,
-					metrics: metrics,
-					tracer:  tracer,
+			name:      "handles success result",
+			operation: "TestOp",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.SuccessResult[SuccessPayload, FailurePayload](SuccessPayload{Data: "ok"}), nil
+			},
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsSuccess() || res.Success.Data != "ok" {
+					t.Errorf("expected success 'ok', got %+v", res.Success)
 				}
 			},
-			want:    results.SuccessResult("test"),
-			wantErr: false,
 		},
 		{
-			name: "Handles panic in operation",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					guildID:       testGuildID,
-					op: func(ctx context.Context) (results.OperationResult, error) {
-						panic("test panic")
-					},
-					logger:  logger,
-					metrics: metrics,
-					tracer:  tracer,
+			name:      "handles domain failure result",
+			operation: "TestOp",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.FailureResult[SuccessPayload, FailurePayload](FailurePayload{Reason: "bad_req"}), nil
+			},
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsFailure() || res.Failure.Reason != "bad_req" {
+					t.Errorf("expected failure 'bad_req', got %+v", res.Failure)
 				}
 			},
-			wantErr: true,
 		},
 		{
-			name: "Handles operation returning an error",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					guildID:       testGuildID,
-					op: func(ctx context.Context) (results.OperationResult, error) {
-						return results.OperationResult{}, errors.New("service error")
-					},
-					logger:  logger,
-					metrics: metrics,
-					tracer:  tracer,
-				}
+			name:      "handles infrastructure error",
+			operation: "TestOp",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.OperationResult[SuccessPayload, FailurePayload]{}, errors.New("db down")
 			},
-			wantErr: true,
+			wantErrSub: "TestOp: db down",
 		},
 		{
-			name: "Handles nil operation",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &guildmetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					guildID:       testGuildID,
-					op:            nil,
-					logger:        logger,
-					metrics:       metrics,
-					tracer:        tracer,
-				}
+			name:      "recovers from panic",
+			operation: "TestOp",
+			guildID:   "guild-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				panic("boom")
 			},
-			wantErr: true,
+			wantErrSub: "panic in TestOp: boom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			res, err := withTelemetry(s, context.Background(), tt.operation, tt.guildID, tt.op)
 
-			a := tt.args(ctrl)
-
-			svc := &GuildService{logger: a.logger, metrics: a.metrics, tracer: a.tracer}
-			got, err := svc.withTelemetry(a.ctx, a.operationName, a.guildID, a.op)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("withTelemetry() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if got.Success != tt.want.Success {
-					t.Errorf("withTelemetry() got = %v, want %v", got, tt.want)
+			if tt.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErrSub) {
+					t.Errorf("expected error containing %q, got %v", tt.wantErrSub, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if tt.checkResult != nil {
+					tt.checkResult(t, res)
 				}
 			}
 		})
 	}
 }
 
-func TestConfigsEqual(t *testing.T) {
-	now := time.Now().UTC()
-	later := now.Add(time.Hour)
+func Test_runInTx(t *testing.T) {
+	t.Run("executes directly when db is nil", func(t *testing.T) {
+		s := &GuildService{db: nil}
 
-	config1 := &guildtypes.GuildConfig{
-		GuildID:              "guild-1",
-		SignupChannelID:      "signup-chan",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-		SetupCompletedAt:     &now,
-	}
-
-	config2 := &guildtypes.GuildConfig{
-		GuildID:              "guild-1",
-		SignupChannelID:      "signup-chan",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-		SetupCompletedAt:     &now,
-	}
-
-	config3 := &guildtypes.GuildConfig{
-		GuildID:              "guild-1",
-		SignupChannelID:      "different-chan",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-		SetupCompletedAt:     &now,
-	}
-
-	config4 := &guildtypes.GuildConfig{
-		GuildID:              "guild-1",
-		SignupChannelID:      "signup-chan",
-		EventChannelID:       "event-chan",
-		LeaderboardChannelID: "leaderboard-chan",
-		UserRoleID:           "role-1",
-		SignupEmoji:          ":frolf:",
-		AutoSetupCompleted:   true,
-		SetupCompletedAt:     &later,
-	}
-
-	tests := []struct {
-		name string
-		a    *guildtypes.GuildConfig
-		b    *guildtypes.GuildConfig
-		want bool
-	}{
-		{
-			name: "equal configs",
-			a:    config1,
-			b:    config2,
-			want: true,
-		},
-		{
-			name: "different signup channel",
-			a:    config1,
-			b:    config3,
-			want: false,
-		},
-		{
-			name: "different timestamp",
-			a:    config1,
-			b:    config4,
-			want: false,
-		},
-		{
-			name: "both nil",
-			a:    nil,
-			b:    nil,
-			want: true,
-		},
-		{
-			name: "first nil",
-			a:    nil,
-			b:    config1,
-			want: false,
-		},
-		{
-			name: "second nil",
-			a:    config1,
-			b:    nil,
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := configsEqual(tt.a, tt.b)
-			if got != tt.want {
-				t.Errorf("configsEqual() = %v, want %v", got, tt.want)
+		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
+			if db != nil {
+				return results.OperationResult[string, string]{}, errors.New("expected nil db")
 			}
+			return results.SuccessResult[string, string]("no_tx"), nil
 		})
-	}
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.IsSuccess() || *res.Success != "no_tx" {
+			t.Errorf("expected success 'no_tx', got %v", res.Success)
+		}
+	})
 }

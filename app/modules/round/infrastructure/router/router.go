@@ -176,6 +176,9 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.RoundReminderScheduledV1, h.HandleRoundReminder)
 	registerHandler(deps, roundevents.RoundEventMessageIDUpdatedV1, h.HandleDiscordMessageIDUpdated)
 
+	// PWA request/reply handlers (with wildcard for guild_id)
+	registerHandler(deps, "round.list.request.v1.>", h.HandleRoundListRequest)
+
 	return nil
 }
 

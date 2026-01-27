@@ -14,29 +14,45 @@ func (h *UserHandlers) HandleTagAvailable(
 	ctx context.Context,
 	payload *sharedevents.TagAvailablePayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.CreateUser(ctx, payload.GuildID, payload.UserID, &payload.TagNumber, nil, nil)
+	if payload == nil {
+		return nil, nil // Or return an error depending on your middleware strategy
+	}
+
+	// Call the updated service method.
+	// Note: udiscUsername and udiscName are passed as nil here
+	// as they aren't part of the TagAvailable payload.
+	result, err := h.service.CreateUser(
+		ctx,
+		payload.GuildID,
+		payload.UserID,
+		&payload.TagNumber,
+		nil,
+		nil,
+	)
 	if err != nil {
+		// Infrastructure failure (DB down, etc.)
 		return nil, err
 	}
 
+	// mapOperationResult handles converting SuccessResult to UserCreatedV1
+	// and FailureResult (domain errors) to UserCreationFailedV1.
 	return mapOperationResult(result,
 		userevents.UserCreatedV1,
 		userevents.UserCreationFailedV1,
 	), nil
 }
 
-// HandleTagUnavailable handles the TagUnavailable event.
+// HandleTagUnavailable remains largely the same as it doesn't call the service,
+// but ensured for consistency.
 func (h *UserHandlers) HandleTagUnavailable(
 	ctx context.Context,
 	payload *sharedevents.TagUnavailablePayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	// Ensure a default reason when none is provided
 	reason := strings.TrimSpace(payload.Reason)
 	if reason == "" {
 		reason = "tag not available"
 	}
 
-	// Create the UserCreationFailed payload directly - no service call needed
 	failedPayload := &userevents.UserCreationFailedPayloadV1{
 		GuildID:   payload.GuildID,
 		UserID:    payload.UserID,

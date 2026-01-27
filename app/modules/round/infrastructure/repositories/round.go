@@ -471,6 +471,32 @@ func (r *Impl) GetUpcomingRounds(ctx context.Context, guildID sharedtypes.GuildI
 	return rounds, nil
 }
 
+// GetRoundsByGuildID retrieves rounds for a guild with optional state filtering
+func (r *Impl) GetRoundsByGuildID(ctx context.Context, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error) {
+	query := r.db.NewSelect().
+		Model((*Round)(nil)).
+		Where("guild_id = ?", guildID)
+
+	// Add state filters if provided
+	if len(states) > 0 {
+		query = query.Where("state IN (?)", bun.In(states))
+	}
+
+	query = query.Order("start_time DESC")
+
+	var localRounds []*Round
+	err := query.Scan(ctx, &localRounds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rounds by guild: %w", err)
+	}
+
+	rounds := make([]*roundtypes.Round, len(localRounds))
+	for i, r := range localRounds {
+		rounds[i] = toSharedRound(r)
+	}
+	return rounds, nil
+}
+
 // GetUpcomingRoundsByParticipant retrieves upcoming rounds that contain a specific participant
 func (r *Impl) GetUpcomingRoundsByParticipant(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) ([]*roundtypes.Round, error) {
 	var localRounds []*Round

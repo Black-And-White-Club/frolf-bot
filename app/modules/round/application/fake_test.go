@@ -76,6 +76,7 @@ type FakeRepo struct {
 	UpdateParticipantScoreFunc      func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, score sharedtypes.Score) error
 	UpdateRoundsAndParticipantsFunc func(ctx context.Context, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error
 	UpdateRoundFunc                 func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error)
+	GetRoundsByGuildIDFunc          func(ctx context.Context, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error)
 }
 
 // NewFakeRepo creates a lightweight fake repo for unit tests
@@ -220,6 +221,14 @@ func (f *FakeRepo) UpdateParticipant(ctx context.Context, g sharedtypes.GuildID,
 
 func (f *FakeRepo) GetUpcomingRounds(ctx context.Context, g sharedtypes.GuildID) ([]*roundtypes.Round, error) {
 	return nil, nil
+}
+
+func (f *FakeRepo) GetRoundsByGuildID(ctx context.Context, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error) {
+	f.record("GetRoundsByGuildID")
+	if f.GetRoundsByGuildIDFunc != nil {
+		return f.GetRoundsByGuildIDFunc(ctx, guildID, states...)
+	}
+	return []*roundtypes.Round{}, nil
 }
 
 func (f *FakeRepo) GetParticipantsWithResponses(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, res ...string) ([]roundtypes.Participant, error) {

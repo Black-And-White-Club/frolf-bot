@@ -3,45 +3,52 @@ package guildservice
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
+	"github.com/uptrace/bun"
 )
 
-// GetGuildConfig retrieves the current guild configuration.
-func (s *GuildService) GetGuildConfig(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "GetGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		// Validate
-		if guildID == "" {
-			return retrievalFailure(guildID, ErrInvalidGuildID), nil
-		}
+// GetGuildConfig retrieves a guild configuration.
+func (s *GuildService) GetGuildConfig(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) (GuildConfigResult, error) {
+	if guildID == "" {
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrInvalidGuildID), nil
+	}
 
-		// Fetch from DB
-		config, err := s.repo.GetConfig(ctx, guildID)
-		if err != nil {
-			if errors.Is(err, guilddb.ErrNotFound) {
-				// Not found is a domain failure, not an infrastructure error
-				return retrievalFailure(guildID, ErrGuildConfigNotFound), nil
-			}
-			// Infrastructure error - should retry
-			return retrievalFailure(guildID, err), err
-		}
+	getTx := func(ctx context.Context, db bun.IDB) (GuildConfigResult, error) {
+		return s.executeGetGuildConfig(ctx, db, guildID)
+	}
 
-		// Success
-		return results.SuccessResult(&guildevents.GuildConfigRetrievedPayloadV1{
-			GuildID: guildID,
-			Config:  *config,
-		}), nil
+	result, err := withTelemetry(s, ctx, "GetGuildConfig", guildID, func(ctx context.Context) (GuildConfigResult, error) {
+		return runInTx(s, ctx, getTx)
 	})
+
+	if err != nil {
+		return GuildConfigResult{}, fmt.Errorf("GetGuildConfig failed for %s: %w", guildID, err)
+	}
+
+	return result, nil
 }
 
-// retrievalFailure creates a failure result for config retrieval.
-func retrievalFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
-	return results.FailureResult(&guildevents.GuildConfigRetrievalFailedPayloadV1{
-		GuildID: guildID,
-		Reason:  err.Error(),
-	})
+func (s *GuildService) executeGetGuildConfig(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+) (GuildConfigResult, error) {
+	config, err := s.repo.GetConfig(ctx, db, guildID)
+	if err != nil {
+		if errors.Is(err, guilddb.ErrNotFound) {
+			// Domain failure: The config simply doesn't exist
+			return results.FailureResult[*guildtypes.GuildConfig, error](ErrGuildConfigNotFound), nil
+		}
+		// Infra failure: DB is likely down
+		return GuildConfigResult{}, err
+	}
+	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil
 }

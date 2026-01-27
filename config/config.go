@@ -16,6 +16,7 @@ type Config struct {
 	Postgres      PostgresConfig      `yaml:"postgres"`
 	NATS          NATSConfig          `yaml:"nats"`
 	JWT           JWTConfig           `yaml:"jwt"`
+	PWA           PWAConfig           `yaml:"pwa"`
 	AuthCallout   AuthCalloutConfig   `yaml:"auth_callout"`
 	Observability ObservabilityConfig `yaml:"observability"`
 	// Discord     DiscordConfig      `yaml:"discord"`
@@ -34,17 +35,21 @@ type NATSConfig struct {
 
 // JWTConfig holds JWT configuration.
 type JWTConfig struct {
-	Secret     string        `yaml:"secret"`
-	DefaultTTL time.Duration `yaml:"default_ttl"`
-	PWABaseURL string        `yaml:"pwa_base_url"`
+	Secret     string        `yaml:"secret" env:"JWT_SECRET"`
+	DefaultTTL time.Duration `yaml:"default_ttl" env:"JWT_DEFAULT_TTL"`
+}
+
+// PWAConfig holds PWA configuration.
+type PWAConfig struct {
+	BaseURL string `yaml:"base_url" env:"PWA_BASE_URL"`
 }
 
 // AuthCalloutConfig holds NATS auth callout configuration.
 type AuthCalloutConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	Subject       string `yaml:"subject"`
-	SigningKey    string `yaml:"signing_key"`
-	IssuerAccount string `yaml:"issuer_account"`
+	Enabled     bool   `yaml:"enabled" env:"AUTH_CALLOUT_ENABLED"`
+	Subject     string `yaml:"subject" env:"AUTH_CALLOUT_SUBJECT"`
+	IssuerNKey  string `yaml:"issuer_nkey" env:"AUTH_CALLOUT_ISSUER_NKEY"`
+	SigningNKey string `yaml:"signing_nkey" env:"AUTH_CALLOUT_SIGNING_NKEY"`
 }
 
 // ObservabilityConfig holds configuration for observability components
@@ -131,7 +136,7 @@ func LoadConfig(filename string) (*Config, error) {
 		}
 	}
 	if v := os.Getenv("PWA_BASE_URL"); v != "" {
-		cfg.JWT.PWABaseURL = v
+		cfg.PWA.BaseURL = v
 	}
 	if v := os.Getenv("AUTH_CALLOUT_ENABLED"); v != "" {
 		cfg.AuthCallout.Enabled = v == "true"
@@ -139,11 +144,15 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("AUTH_CALLOUT_SUBJECT"); v != "" {
 		cfg.AuthCallout.Subject = v
 	}
-	if v := os.Getenv("AUTH_CALLOUT_SIGNING_KEY"); v != "" {
-		cfg.AuthCallout.SigningKey = v
+	if v := os.Getenv("AUTH_CALLOUT_ISSUER_NKEY"); v != "" {
+		cfg.AuthCallout.IssuerNKey = v
 	}
-	if v := os.Getenv("AUTH_CALLOUT_ISSUER_ACCOUNT"); v != "" {
-		cfg.AuthCallout.IssuerAccount = v
+	if v := os.Getenv("AUTH_CALLOUT_SIGNING_NKEY"); v != "" {
+		cfg.AuthCallout.SigningNKey = v
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &cfg, nil
@@ -213,18 +222,35 @@ func loadConfigFromEnv() (*Config, error) {
 	}
 	pwaBaseURL := os.Getenv("PWA_BASE_URL")
 	if pwaBaseURL == "" {
-		cfg.JWT.PWABaseURL = "https://pwa.frolf-bot.com"
+		cfg.PWA.BaseURL = "https://pwa.frolf-bot.com"
 	} else {
-		cfg.JWT.PWABaseURL = pwaBaseURL
+		cfg.PWA.BaseURL = pwaBaseURL
 	}
 
 	// Load Auth Callout settings
 	cfg.AuthCallout.Enabled = os.Getenv("AUTH_CALLOUT_ENABLED") == "true"
-	cfg.AuthCallout.Subject = os.Getenv("AUTH_CALLOUT_SUBJECT")
-	cfg.AuthCallout.SigningKey = os.Getenv("AUTH_CALLOUT_SIGNING_KEY")
-	cfg.AuthCallout.IssuerAccount = os.Getenv("AUTH_CALLOUT_ISSUER_ACCOUNT")
+	authCalloutSubject := os.Getenv("AUTH_CALLOUT_SUBJECT")
+	if authCalloutSubject == "" {
+		cfg.AuthCallout.Subject = "$SYS.REQ.USER.AUTH"
+	} else {
+		cfg.AuthCallout.Subject = authCalloutSubject
+	}
+	cfg.AuthCallout.IssuerNKey = os.Getenv("AUTH_CALLOUT_ISSUER_NKEY")
+	cfg.AuthCallout.SigningNKey = os.Getenv("AUTH_CALLOUT_SIGNING_NKEY")
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
+}
+
+// Validate validates the configuration.
+func (c *Config) Validate() error {
+	if c.AuthCallout.Enabled && c.JWT.Secret == "" {
+		return fmt.Errorf("JWT_SECRET required when auth callout is enabled")
+	}
+	return nil
 }
 
 func ToObsConfig(appCfg *Config) obs.Config {

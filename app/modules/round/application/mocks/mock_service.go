@@ -151,6 +151,21 @@ func (mr *MockServiceMockRecorder) GetRound(ctx, guildID, roundID any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRound", reflect.TypeOf((*MockService)(nil).GetRound), ctx, guildID, roundID)
 }
 
+// GetRoundsForGuild mocks base method.
+func (m *MockService) GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRoundsForGuild", ctx, guildID)
+	ret0, _ := ret[0].([]*roundtypes.Round)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRoundsForGuild indicates an expected call of GetRoundsForGuild.
+func (mr *MockServiceMockRecorder) GetRoundsForGuild(ctx, guildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRoundsForGuild", reflect.TypeOf((*MockService)(nil).GetRoundsForGuild), ctx, guildID)
+}
+
 // IngestNormalizedScorecard mocks base method.
 func (m *MockService) IngestNormalizedScorecard(ctx context.Context, payload roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
 	m.ctrl.T.Helper()

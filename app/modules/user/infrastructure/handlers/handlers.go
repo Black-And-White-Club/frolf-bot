@@ -18,27 +18,42 @@ type UserHandlers struct {
 }
 
 // NewUserHandlers creates a new UserHandlers instance.
-func NewUserHandlers(service userservice.Service, logger *slog.Logger, tracer trace.Tracer, helpers utils.Helpers, metrics usermetrics.UserMetrics) *UserHandlers {
+// Changed return type to Handlers interface to match guild module pattern.
+func NewUserHandlers(
+	service userservice.Service,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	helpers utils.Helpers,
+	metrics usermetrics.UserMetrics,
+) Handlers {
 	return &UserHandlers{
 		service: service,
 		helpers: helpers,
 	}
 }
 
-// mapOperationResult converts a service OperationResult to handler Results.
-func mapOperationResult(
-	result results.OperationResult,
+// mapOperationResult manually maps the generic OperationResult to handlerwrapper.Result.
+// Updated to use generics [S any, F any] and manual slice construction.
+func mapOperationResult[S any, F any](
+	result results.OperationResult[S, F],
 	successTopic, failureTopic string,
 ) []handlerwrapper.Result {
-	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+	var wrapperResults []handlerwrapper.Result
 
-	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
-	for i, hr := range handlerResults {
-		wrapperResults[i] = handlerwrapper.Result{
-			Topic:    hr.Topic,
-			Payload:  hr.Payload,
-			Metadata: hr.Metadata,
-		}
+	// Handle Success case
+	if result.Success != nil {
+		wrapperResults = append(wrapperResults, handlerwrapper.Result{
+			Topic:   successTopic,
+			Payload: result.Success,
+		})
+	}
+
+	// Handle Failure case
+	if result.Failure != nil {
+		wrapperResults = append(wrapperResults, handlerwrapper.Result{
+			Topic:   failureTopic,
+			Payload: result.Failure,
+		})
 	}
 
 	return wrapperResults
