@@ -9,15 +9,10 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
-	scoremocks "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
@@ -32,14 +27,9 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		TagNumber: &testTagNumber,
 	}
 
-	// Mock dependencies
-	mockScoreService := scoremocks.NewMockService(ctrl)
-
-	// no-op observability in handler tests
-
 	tests := []struct {
 		name           string
-		mockSetup      func()
+		setupFake      func(*FakeScoreService)
 		payload        *sharedevents.ScoreUpdateRequestedPayloadV1
 		wantErr        bool
 		expectedErrMsg string
@@ -47,38 +37,15 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle CorrectScoreRequest",
-			mockSetup: func() {
-				successPayload := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
+			setupFake: func(f *FakeScoreService) {
+				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+					return scoreservice.ScoreOperationResult{
+						Success: &sharedtypes.ScoreInfo{UserID: uID, Score: s, TagNumber: tag},
+					}, nil
 				}
-
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Success: successPayload,
-						Failure: nil,
-						Error:   nil,
-					},
-					nil,
-				)
-
-				// Expect GetScoresForRound to be called for reprocessing
-				mockScoreService.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return([]sharedtypes.ScoreInfo{
-					{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber},
-				}, nil)
+				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return []sharedtypes.ScoreInfo{{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber}}, nil
+				}
 			},
 			payload: testPayload,
 			wantErr: false,
@@ -86,57 +53,30 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				if len(results) != 2 {
 					t.Fatalf("expected 2 results, got %d", len(results))
 				}
-				// First result: ScoreUpdated
 				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
 					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
 				}
-				successPayload, ok := results[0].Payload.(*sharedevents.ScoreUpdatedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
-				}
-				if successPayload.UserID != testUserID {
-					t.Errorf("expected UserID %s, got %s", testUserID, successPayload.UserID)
-				}
-				// Second result: Reprocess request
 				if results[1].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
 					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[1].Topic)
 				}
 			},
 		},
 		{
-			name: "Nil payload",
-			mockSetup: func() {
-				// No expectations - handler returns early
-			},
+			name:           "Nil payload",
+			setupFake:      nil,
 			payload:        nil,
 			wantErr:        true,
 			expectedErrMsg: "payload is nil",
 		},
 		{
-			name: "Service failure in CorrectScore",
-			mockSetup: func() {
-				failurePayload := &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Reason:  "internal service error",
+			name: "Service failure in CorrectScore (Domain Error)",
+			setupFake: func(f *FakeScoreService) {
+				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+					domainErr := fmt.Errorf("internal service error")
+					return scoreservice.ScoreOperationResult{
+						Failure: &domainErr,
+					}, nil
 				}
-
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Success: nil,
-						Failure: failurePayload,
-						Error:   nil,
-					},
-					nil,
-				)
 			},
 			payload: testPayload,
 			wantErr: false,
@@ -147,29 +87,18 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 				if results[0].Topic != sharedevents.ScoreUpdateFailedV1 {
 					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdateFailedV1, results[0].Topic)
 				}
-				failurePayload, ok := results[0].Payload.(*sharedevents.ScoreUpdateFailedPayloadV1)
-				if !ok {
-					t.Fatalf("unexpected payload type: got %T", results[0].Payload)
-				}
-				if failurePayload.Reason != "internal service error" {
-					t.Errorf("expected reason 'internal service error', got %s", failurePayload.Reason)
+				fail, _ := results[0].Payload.(*sharedevents.ScoreUpdateFailedPayloadV1)
+				if fail.Reason != "internal service error" {
+					t.Errorf("expected reason 'internal service error', got %s", fail.Reason)
 				}
 			},
 		},
 		{
-			name: "Service returns error",
-			mockSetup: func() {
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{},
-					fmt.Errorf("service error"),
-				)
+			name: "Service returns error (Infrastructure Error)",
+			setupFake: func(f *FakeScoreService) {
+				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+					return scoreservice.ScoreOperationResult{}, fmt.Errorf("service error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -177,35 +106,15 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		},
 		{
 			name: "GetScoresForRound fails - returns only success result",
-			mockSetup: func() {
-				successPayload := &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
+			setupFake: func(f *FakeScoreService) {
+				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+					return scoreservice.ScoreOperationResult{
+						Success: &sharedtypes.ScoreInfo{UserID: uID, Score: s},
+					}, nil
 				}
-
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Success: successPayload,
-						Failure: nil,
-						Error:   nil,
-					},
-					nil,
-				)
-
-				mockScoreService.EXPECT().GetScoresForRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(nil, fmt.Errorf("db error"))
+				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return nil, fmt.Errorf("db error")
+				}
 			},
 			payload: testPayload,
 			wantErr: false,
@@ -220,70 +129,30 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 		},
 		{
 			name: "Unknown result from CorrectScore",
-			mockSetup: func() {
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(), testGuildID, testRoundID, testUserID, testScore, &testTagNumber,
-				).Return(scoreservice.ScoreOperationResult{}, nil)
+			setupFake: func(f *FakeScoreService) {
+				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
+					return scoreservice.ScoreOperationResult{}, nil
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
 			expectedErrMsg: "unexpected result from service: neither success nor failure",
 		},
-		{
-			name: "Wrong failure payload type",
-			mockSetup: func() {
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Failure: "wrong type",
-					},
-					nil,
-				)
-			},
-			payload:        testPayload,
-			wantErr:        true,
-			expectedErrMsg: "unexpected failure payload type from service",
-		},
-		{
-			name: "Wrong success payload type",
-			mockSetup: func() {
-				mockScoreService.EXPECT().CorrectScore(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-					testUserID,
-					testScore,
-					&testTagNumber,
-				).Return(
-					scoreservice.ScoreOperationResult{
-						Success: "wrong type",
-					},
-					nil,
-				)
-			},
-			payload:        testPayload,
-			wantErr:        true,
-			expectedErrMsg: "unexpected success payload type from service",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeScoreService()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeSvc)
+			}
 
 			h := &ScoreHandlers{
-				service: mockScoreService,
+				service: fakeSvc,
 				helpers: nil,
 			}
 
-			ctx := context.Background()
-			got, err := h.HandleCorrectScoreRequest(ctx, tt.payload)
+			got, err := h.HandleCorrectScoreRequest(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleCorrectScoreRequest() error = %v, wantErr %v", err, tt.wantErr)

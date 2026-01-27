@@ -10,144 +10,88 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
-// setupBenchmarkService creates a service with mocked dependencies for benchmarking
-func setupBenchmarkService(t *testing.B, mockDB *scoredb.MockRepository) *ScoreService {
-	logger := loggerfrolfbot.NoOpLogger
-	metrics := &scoremetrics.NoOpMetrics{}
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
+// setupBenchmarkService creates a service with the FakeScoreRepository
+func setupBenchmarkService(b *testing.B) (*ScoreService, *FakeScoreRepository) {
+	fakeRepo := NewFakeScoreRepository()
 
-	return &ScoreService{
-		repo:    mockDB,
-		logger:  logger,
-		metrics: metrics,
-		tracer:  tracer,
-		serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-			result, err := serviceFunc(ctx)
-			if err != nil {
-				return ScoreOperationResult{Error: err}, err
-			}
-			return result, nil
-		},
+	// Pre-configure the fake to always return success for the benchmark.
+	fakeRepo.GetScoresForRoundFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+		return nil, nil
 	}
+	fakeRepo.LogScoresFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID, s []sharedtypes.ScoreInfo, src string) error {
+		return nil
+	}
+
+	s := &ScoreService{
+		repo:    fakeRepo,
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &scoremetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
+	}
+	return s, fakeRepo
 }
 
-// generateScores creates test score data for benchmarking
+// generateScores creates dummy data for the benchmark
 func generateScores(count int, tagPercentage int) []sharedtypes.ScoreInfo {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	scores := make([]sharedtypes.ScoreInfo, count)
 
 	for i := 0; i < count; i++ {
-		// Create a basic score with random values
 		score := sharedtypes.ScoreInfo{
 			UserID: sharedtypes.DiscordID(fmt.Sprintf("%019d", 1000000000000000000+i)),
-			Score:  sharedtypes.Score(rng.Intn(20) - 5), // Scores from -5 to +14
+			Score:  sharedtypes.Score(rng.Intn(20) - 5),
 		}
-
-		// Add tag based on percentage
 		if rng.Intn(100) < tagPercentage {
-			tagNum := sharedtypes.TagNumber(rng.Intn(50) + 1) // Tags 1-50
+			tagNum := sharedtypes.TagNumber(rng.Intn(50) + 1)
 			score.TagNumber = &tagNum
 		}
-
 		scores[i] = score
 	}
-
 	return scores
 }
 
-// BenchmarkProcessRoundScores benchmarks the ProcessRoundScores method
 func BenchmarkProcessRoundScores(b *testing.B) {
 	ctx := context.Background()
 	guildID := sharedtypes.GuildID("guild-1234")
 	roundID := sharedtypes.RoundID(uuid.New())
 
-	// Test with different sizes of score sets
-	sizes := []int{10, 50, 100, 500, 1000}
+	sizes := []int{10, 100, 1000}
+	scenarios := []struct {
+		name string
+		pct  int
+	}{
+		{"Mixed50Pct", 50},
+		{"Untagged", 0},
+		{"Tagged", 100},
+	}
 
 	for _, size := range sizes {
-		// Mixed tagged/untagged scenario
-		b.Run(fmt.Sprintf("Size-%d-Mixed50Pct", size), func(b *testing.B) {
-			scores := generateScores(size, 50) // 50% tagged
+		for _, scenario := range scenarios {
+			b.Run(fmt.Sprintf("Size-%d-%s", size, scenario.name), func(b *testing.B) {
+				// 1. Setup Data
+				scores := generateScores(size, scenario.pct)
+				s, _ := setupBenchmarkService(b)
 
-			ctrl := gomock.NewController(b)
-			defer ctrl.Finish()
+				// 2. Run Benchmark
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					// result type is now results.OperationResult[ProcessRoundScoresResult, error]
+					res, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, true)
+					if err != nil {
+						b.Fatalf("unexpected error: %v", err)
+					}
 
-			mockDB := scoredb.NewMockRepository(ctrl)
-
-			// Configure mock DB to accept any scores
-			mockDB.EXPECT().
-				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
-				Return(nil).
-				AnyTimes()
-
-			s := setupBenchmarkService(b, mockDB)
-
-			b.ResetTimer() // Reset timer before the actual benchmark
-			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
-				if err != nil {
-					b.Fatalf("unexpected error: %v", err)
+					// Use the result to prevent the compiler from optimizing the call away
+					if res.Success != nil && len(res.Success.TagMappings) > size {
+						b.Fatal("impossible result")
+					}
 				}
-			}
-		})
-
-		// All untagged scenario
-		b.Run(fmt.Sprintf("Size-%d-Untagged", size), func(b *testing.B) {
-			scores := generateScores(size, 0) // 0% tagged
-
-			ctrl := gomock.NewController(b)
-			defer ctrl.Finish()
-
-			mockDB := scoredb.NewMockRepository(ctrl)
-
-			// Configure mock DB to accept any scores
-			mockDB.EXPECT().
-				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
-				Return(nil).
-				AnyTimes()
-
-			s := setupBenchmarkService(b, mockDB)
-
-			b.ResetTimer() // Reset timer before the actual benchmark
-			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
-				if err != nil {
-					b.Fatalf("unexpected error: %v", err)
-				}
-			}
-		})
-
-		// All tagged scenario
-		b.Run(fmt.Sprintf("Size-%d-Tagged", size), func(b *testing.B) {
-			scores := generateScores(size, 100) // 100% tagged
-
-			ctrl := gomock.NewController(b)
-			defer ctrl.Finish()
-
-			mockDB := scoredb.NewMockRepository(ctrl)
-
-			// Configure mock DB to accept any scores
-			mockDB.EXPECT().
-				LogScores(gomock.Any(), guildID, roundID, gomock.Any(), "auto").
-				Return(nil).
-				AnyTimes()
-
-			s := setupBenchmarkService(b, mockDB)
-
-			b.ResetTimer() // Reset timer before the actual benchmark
-			for i := 0; i < b.N; i++ {
-				_, err := s.ProcessRoundScores(ctx, guildID, roundID, scores, false)
-				if err != nil {
-					b.Fatalf("unexpected error: %v", err)
-				}
-			}
-		})
+			})
+		}
 	}
 }

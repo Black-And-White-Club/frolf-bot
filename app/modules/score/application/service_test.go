@@ -2,293 +2,151 @@ package scoreservice
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
+// -----------------------------------------------------------------------------
+// Lifecycle & Helper Tests
+// -----------------------------------------------------------------------------
+
 func TestNewScoreService(t *testing.T) {
-	// Define test cases
-	tests := []struct {
-		name string
-		test func(t *testing.T)
-	}{
-		{
-			name: "Creates service with all dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+	fakeRepo := NewFakeScoreRepository()
+	testHandler := loggerfrolfbot.NewTestHandler()
+	logger := slog.New(testHandler)
+	mockMetrics := &scoremetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
+	var db *bun.DB // bun.DB is fine as nil for simple assignment check
 
-				// Create mock dependencies
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockDB := scoredb.NewMockRepository(ctrl)
-				mockEventBus := eventbus.NewMockEventBus(ctrl)
-				mockMetrics := &scoremetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-				// Call the function being tested
-				service := NewScoreService(mockDB, mockEventBus, logger, mockMetrics, tracer)
+	service := NewScoreService(fakeRepo, nil, logger, mockMetrics, tracer, db)
 
-				// Ensure service is correctly created
-				if service == nil {
-					t.Fatalf("NewScoreService returned nil")
-				}
-
-				// Access the concrete type to override serviceWrapper
-				scoreServiceImpl, ok := service.(*ScoreService)
-				if !ok {
-					t.Fatalf("service is not of type *ScoreService")
-				}
-
-				// Override serviceWrapper to prevent unwanted tracing/logging/metrics calls
-				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-					return serviceFunc(ctx) // Just execute serviceFunc directly
-				}
-
-				// Check that all dependencies were correctly assigned
-				if scoreServiceImpl.repo != mockDB {
-					t.Errorf("Score DB not correctly assigned")
-				}
-				if scoreServiceImpl.EventBus != mockEventBus {
-					t.Errorf("eventBus not correctly assigned")
-				}
-				if scoreServiceImpl.logger != logger {
-					t.Errorf("logger not correctly assigned")
-				}
-				if scoreServiceImpl.metrics != mockMetrics {
-					t.Errorf("metrics not correctly assigned")
-				}
-				if scoreServiceImpl.tracer != tracer {
-					t.Errorf("tracer not correctly assigned")
-				}
-
-				// Ensure serviceWrapper is correctly set
-				if scoreServiceImpl.serviceWrapper == nil {
-					t.Errorf("serviceWrapper should not be nil")
-				}
-			},
-		},
-		{
-			name: "Handles nil dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				// Call with nil dependencies
-				service := NewScoreService(nil, nil, nil, nil, nil)
-
-				// Ensure service is correctly created
-				if service == nil {
-					t.Fatalf("NewScoreService returned nil")
-				}
-
-				// Access the concrete type to override serviceWrapper
-				scoreServiceImpl, ok := service.(*ScoreService)
-				if !ok {
-					t.Fatalf("service is not of type *ScoreService")
-				}
-
-				// Override serviceWrapper to avoid nil tracing/logger issues
-				scoreServiceImpl.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-					return serviceFunc(ctx) // Just execute serviceFunc directly
-				}
-
-				// Check nil fields
-				if scoreServiceImpl.repo != nil {
-					t.Errorf("Score DB should be nil")
-				}
-				if scoreServiceImpl.EventBus != nil {
-					t.Errorf("eventBus should be nil")
-				}
-				if scoreServiceImpl.logger != nil {
-					t.Errorf("logger should be nil")
-				}
-				if scoreServiceImpl.metrics != nil {
-					t.Errorf("metrics should be nil")
-				}
-				if scoreServiceImpl.tracer != nil {
-					t.Errorf("tracer should be nil")
-				}
-
-				// Ensure serviceWrapper is still set
-				if scoreServiceImpl.serviceWrapper == nil {
-					t.Errorf("serviceWrapper should not be nil")
-				}
-
-				// Test serviceWrapper runs correctly with nil dependencies
-				ctx := context.Background()
-				_, err := scoreServiceImpl.serviceWrapper(ctx, "TestOp", sharedtypes.RoundID(uuid.New()), func(ctx context.Context) (ScoreOperationResult, error) {
-					return ScoreOperationResult{Success: "test"}, nil
-				})
-				if err != nil {
-					t.Errorf("serviceWrapper should execute the provided function without error, got: %v", err)
-				}
-			},
-		},
+	if service == nil {
+		t.Fatal("NewScoreService returned nil")
 	}
-
-	// Run all test cases
-	for _, tt := range tests {
-		t.Run(tt.name, tt.test)
+	if service.repo != fakeRepo {
+		t.Error("repo not set correctly")
+	}
+	if service.logger != logger {
+		t.Error("logger not set correctly")
+	}
+	if service.metrics != mockMetrics {
+		t.Error("metrics not set correctly")
+	}
+	if service.db != db {
+		t.Error("db not set correctly")
 	}
 }
 
-func Test_serviceWrapper(t *testing.T) {
-	testRoundID := sharedtypes.RoundID(uuid.New())
-
-	type args struct {
-		ctx           context.Context
-		operationName string
-		roundID       sharedtypes.RoundID
-		serviceFunc   func(ctx context.Context) (ScoreOperationResult, error)
-		logger        *slog.Logger
-		metrics       scoremetrics.ScoreMetrics
-		tracer        trace.Tracer
+func Test_withTelemetry(t *testing.T) {
+	s := &ScoreService{
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &scoremetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
+
+	type SuccessPayload struct{ Data string }
+	type FailurePayload struct{ Reason string }
+
 	tests := []struct {
-		name    string
-		args    func(ctrl *gomock.Controller) args
-		want    ScoreOperationResult
-		wantErr bool
-		setup   func(a *args, ctx context.Context)
+		name        string
+		operation   string
+		roundID     sharedtypes.RoundID
+		op          operationFunc[SuccessPayload, FailurePayload]
+		wantErrSub  string
+		checkResult func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload])
 	}{
 		{
-			name: "Successful operation",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					roundID:       testRoundID,
-					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
-						return ScoreOperationResult{Success: "test"}, nil
-					},
-					logger:  logger,
-					metrics: mockMetrics,
-					tracer:  tracer,
-				}
+			name:      "handles success result",
+			operation: "ProcessScores",
+			roundID:   sharedtypes.RoundID(uuid.New()),
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.SuccessResult[SuccessPayload, FailurePayload](SuccessPayload{Data: "ok"}), nil
 			},
-			want:    ScoreOperationResult{Success: "test"},
-			wantErr: false,
-			setup: func(a *args, ctx context.Context) {
-				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger
-
-				// Mock metrics & logs
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
-				mockLogger.Info("TestOperation completed successfully", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "TestOperation", testRoundID)
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsSuccess() || res.Success.Data != "ok" {
+					t.Errorf("expected success 'ok', got %+v", res.Success)
+				}
 			},
 		},
 		{
-			name: "Handles panic in service function",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					roundID:       testRoundID,
-					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
-						panic("test panic") // Simulate a panic
-					},
-					logger:  logger,
-					metrics: mockMetrics,
-					tracer:  tracer,
-				}
+			name:      "handles domain failure result",
+			operation: "ProcessScores",
+			roundID:   sharedtypes.RoundID(uuid.New()),
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.FailureResult[SuccessPayload, FailurePayload](FailurePayload{Reason: "invalid"}), nil
 			},
-			wantErr: true,
-			setup: func(a *args, ctx context.Context) {
-				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
-				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsFailure() || res.Failure.Reason != "invalid" {
+					t.Errorf("expected failure 'invalid', got %+v", res.Failure)
+				}
 			},
 		},
 		{
-			name: "Handles service function returning an error",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := mocks.NewMockScoreMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					roundID:       testRoundID,
-					serviceFunc: func(ctx context.Context) (ScoreOperationResult, error) {
-						return ScoreOperationResult{}, fmt.Errorf("service error")
-					},
-					logger:  logger,
-					metrics: mockMetrics,
-					tracer:  tracer,
-				}
+			name:      "handles infrastructure error",
+			operation: "ProcessScores",
+			roundID:   sharedtypes.RoundID(uuid.New()),
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.OperationResult[SuccessPayload, FailurePayload]{}, errors.New("db connection lost")
 			},
-			wantErr: true,
-			setup: func(a *args, ctx context.Context) {
-				mockMetrics := a.metrics.(*mocks.MockScoreMetrics)
-				mockLogger := a.logger
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "TestOperation", testRoundID)
-				mockLogger.Info("TestOperation triggered", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "TestOperation", gomock.Any())
-				mockLogger.Error("Error in TestOperation", attr.String("operation", "TestOperation"), attr.String("round_id", testRoundID.String()))
-				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "TestOperation", testRoundID)
+			wantErrSub: "ProcessScores: db connection lost",
+		},
+		{
+			name:      "recovers from panic",
+			operation: "ProcessScores",
+			roundID:   sharedtypes.RoundID(uuid.New()),
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				panic("unexpected state")
 			},
+			wantErrSub: "panic in ProcessScores: unexpected state",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			res, err := withTelemetry(s, context.Background(), tt.operation, tt.roundID, tt.op)
 
-			// Initialize args using fresh mock controller
-			testArgs := tt.args(ctrl)
-
-			// Set up expectations
-			if tt.setup != nil {
-				tt.setup(&testArgs, testArgs.ctx)
-			}
-
-			// Run serviceWrapper
-			got, err := serviceWrapper(testArgs.ctx, testArgs.operationName, testArgs.roundID, testArgs.serviceFunc, testArgs.logger, testArgs.metrics, testArgs.tracer)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("serviceWrapper() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if got.Success != tt.want.Success {
-				t.Errorf("serviceWrapper() Success = %v, want %v", got.Success, tt.want.Success)
-			}
-			if got.Failure != tt.want.Failure {
-				t.Errorf("serviceWrapper() Failure = %v, want %v", got.Failure, tt.want.Failure)
+			if tt.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErrSub) {
+					t.Errorf("expected error containing %q, got %v", tt.wantErrSub, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if tt.checkResult != nil {
+					tt.checkResult(t, res)
+				}
 			}
 		})
 	}
+}
+
+func Test_runInTx(t *testing.T) {
+	t.Run("executes directly when db is nil", func(t *testing.T) {
+		s := &ScoreService{db: nil}
+
+		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
+			if db != nil {
+				return results.OperationResult[string, string]{}, errors.New("expected nil db when s.db is nil")
+			}
+			return results.SuccessResult[string, string]("no_tx_success"), nil
+		})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.IsSuccess() || *res.Success != "no_tx_success" {
+			t.Errorf("expected success 'no_tx_success', got %v", res.Success)
+		}
+	})
 }

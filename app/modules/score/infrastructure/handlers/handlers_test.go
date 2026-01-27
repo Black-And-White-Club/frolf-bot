@@ -1,64 +1,50 @@
 package scorehandlers
 
 import (
+	"log/slog"
 	"testing"
 
-	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application/mocks"
-	"go.uber.org/mock/gomock"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestNewScoreHandlers(t *testing.T) {
-	tests := []struct {
-		name string
-		test func(t *testing.T)
-	}{
-		{
-			name: "Creates handlers with all dependencies",
-			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+	// Arrange dependencies using Fakes and NoOps
+	fakeService := NewFakeScoreService()
+	logger := slog.Default() // Or use a NoOp logger if defined in your shared utils
+	tracer := noop.NewTracerProvider().Tracer("test")
+	metrics := &scoremetrics.NoOpMetrics{}
 
-				mockScoreService := scoreservice.NewMockService(ctrl)
-				handlers := NewScoreHandlers(mockScoreService, nil, nil, nil, nil)
+	t.Run("Initialize with all dependencies", func(t *testing.T) {
+		handlers := NewScoreHandlers(fakeService, logger, tracer, nil, metrics)
+		if handlers == nil {
+			t.Fatal("Expected non-nil handlers")
+		}
 
-				if handlers == nil {
-					t.Fatalf("NewScoreHandlers returned nil")
-				}
+		// Verify the underlying type matches and dependencies are assigned
+		scoreHandlers, ok := handlers.(*ScoreHandlers)
+		if !ok {
+			t.Error("Expected handlers to be of type *ScoreHandlers")
+		}
 
-				scoreHandlers := handlers.(*ScoreHandlers)
+		if scoreHandlers.service != fakeService {
+			t.Errorf("Expected service to be assigned to FakeScoreService")
+		}
+	})
 
-				if scoreHandlers.service != mockScoreService {
-					t.Errorf("service not correctly assigned")
-				}
-				if scoreHandlers.helpers != nil {
-					t.Errorf("helpers should be nil")
-				}
-			},
-		},
-		{
-			name: "Handles nil dependencies",
-			test: func(t *testing.T) {
-				handlers := NewScoreHandlers(nil, nil, nil, nil, nil)
+	t.Run("Initialize with nil dependencies", func(t *testing.T) {
+		// The factory should still return a struct instance even if fields are nil
+		handlersNil := NewScoreHandlers(nil, nil, nil, nil, nil)
+		if handlersNil == nil {
+			t.Fatal("Expected non-nil handlers even with nil dependencies")
+		}
 
-				if handlers == nil {
-					t.Fatalf("NewScoreHandlers returned nil")
-				}
-
-				scoreHandlers, ok := handlers.(*ScoreHandlers)
-				if !ok {
-					t.Fatalf("handlers is not of type *ScoreHandlers")
-				}
-				if scoreHandlers.service != nil {
-					t.Errorf("service should be nil")
-				}
-				if scoreHandlers.helpers != nil {
-					t.Errorf("helpers should be nil")
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, tt.test)
-	}
+		scoreHandlers, ok := handlersNil.(*ScoreHandlers)
+		if !ok {
+			t.Fatal("handlers is not of type *ScoreHandlers")
+		}
+		if scoreHandlers.service != nil {
+			t.Errorf("service should be nil")
+		}
+	})
 }

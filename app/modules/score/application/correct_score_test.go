@@ -3,16 +3,15 @@ package scoreservice
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/mocks"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
 func TestScoreService_CorrectScore(t *testing.T) {
@@ -22,228 +21,139 @@ func TestScoreService_CorrectScore(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testScore := sharedtypes.Score(10)
 	testTag := sharedtypes.TagNumber(1)
-	invalidTag := sharedtypes.TagNumber(-1)
 
-	// Use No-Op implementations
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &scoremetrics.NoOpMetrics{}
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
+	tracer := noop.NewTracerProvider().Tracer("test")
 
-	// Define test cases
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*scoredb.MockRepository)
 		userID         sharedtypes.DiscordID
 		score          sharedtypes.Score
 		tagNumber      *sharedtypes.TagNumber
-		expectedResult ScoreOperationResult
-		expectedError  error // This should be nil if the service returns a Failure payload
+		setupFake      func(*FakeScoreRepository)
+		expectInfraErr bool
+		verify         func(t *testing.T, res ScoreOperationResult, infraErr error, fake *FakeScoreRepository)
 	}{
 		{
-			name: "Successfully corrects score",
-			mockDBSetup: func(mockDB *scoredb.MockRepository) {
-				mockDB.EXPECT().
-					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
-					Return([]sharedtypes.ScoreInfo{}, nil)
-				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
-						UserID:    testUserID,
-						Score:     testScore,
-						TagNumber: nil,
-					}).
-					Return(nil)
-			},
+			name:      "success - corrects score and preserves existing tag",
 			userID:    testUserID,
 			score:     testScore,
 			tagNumber: nil,
-			expectedResult: ScoreOperationResult{
-				Success: &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
-				},
-			},
-			expectedError: nil,
-		},
-		{
-			name: "Preserves existing tag when none provided",
-			mockDBSetup: func(mockDB *scoredb.MockRepository) {
+			setupFake: func(f *FakeScoreRepository) {
 				existingTag := sharedtypes.TagNumber(7)
-				mockDB.EXPECT().
-					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
-					Return([]sharedtypes.ScoreInfo{{UserID: testUserID, Score: 12, TagNumber: &existingTag}}, nil)
-				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
-						UserID:    testUserID,
-						Score:     testScore,
-						TagNumber: &existingTag,
-					}).
-					Return(nil)
+				f.GetScoresForRoundFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return []sharedtypes.ScoreInfo{{UserID: testUserID, Score: 12, TagNumber: &existingTag}}, nil
+				}
+				f.UpdateOrAddScoreFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID, si sharedtypes.ScoreInfo) error {
+					return nil
+				}
 			},
-			userID:    testUserID,
-			score:     testScore,
-			tagNumber: nil,
-			expectedResult: ScoreOperationResult{
-				Success: &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
-				},
+			verify: func(t *testing.T, res ScoreOperationResult, infraErr error, fake *FakeScoreRepository) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if res.Success == nil {
+					t.Fatal("expected success result")
+				}
+
+				// Directly access fields
+				if res.Success.Score != testScore {
+					t.Errorf("expected score %d, got %d", testScore, res.Success.Score)
+				}
+
+				if res.Success.TagNumber == nil || *res.Success.TagNumber != 7 {
+					t.Errorf("expected preserved tag 7, got %v", res.Success.TagNumber)
+				}
 			},
-			expectedError: nil,
 		},
 		{
-			name: "Successfully corrects score with tag number",
-			mockDBSetup: func(mockDB *scoredb.MockRepository) {
-				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
-						UserID:    testUserID,
-						Score:     testScore,
-						TagNumber: &testTag,
-					}).
-					Return(nil)
+			name:      "domain failure - invalid score range",
+			userID:    testUserID,
+			score:     sharedtypes.Score(99), // Invalid > 72
+			tagNumber: &testTag,
+			verify: func(t *testing.T, res ScoreOperationResult, infraErr error, fake *FakeScoreRepository) {
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrInvalidScore) {
+					t.Errorf("expected ErrInvalidScore, got %v", res.Failure)
+				}
+				if len(fake.Trace()) > 0 {
+					t.Errorf("repo should not be called for invalid domain input")
+				}
 			},
+		},
+		{
+			name:      "infra failure - database error on update",
 			userID:    testUserID,
 			score:     testScore,
 			tagNumber: &testTag,
-			expectedResult: ScoreOperationResult{
-				Success: &sharedevents.ScoreUpdatedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Score:   testScore,
-				},
+			setupFake: func(f *FakeScoreRepository) {
+				f.UpdateOrAddScoreFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID, si sharedtypes.ScoreInfo) error {
+					return errors.New("db connection lost")
+				}
 			},
-			expectedError: nil,
+			expectInfraErr: true,
+			verify: func(t *testing.T, res ScoreOperationResult, infraErr error, fake *FakeScoreRepository) {
+				if infraErr == nil || !strings.Contains(infraErr.Error(), "db connection lost") {
+					t.Errorf("expected infra error 'db connection lost', got %v", infraErr)
+				}
+			},
 		},
 		{
-			name: "Fails due to database error",
-			mockDBSetup: func(mockDB *scoredb.MockRepository) {
-				mockDB.EXPECT().
-					GetScoresForRound(gomock.Any(), testGuildID, testRoundID).
-					Return([]sharedtypes.ScoreInfo{}, nil)
-				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
-						UserID:    testUserID,
-						Score:     testScore,
-						TagNumber: nil,
-					}).
-					Return(errors.New("database connection failed"))
-			},
+			name:      "success - update with new tag number",
 			userID:    testUserID,
 			score:     testScore,
-			tagNumber: nil,
-			expectedResult: ScoreOperationResult{
-				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Reason:  "database connection failed",
-				},
+			tagNumber: &testTag,
+			setupFake: func(f *FakeScoreRepository) {
+				f.UpdateOrAddScoreFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, rID sharedtypes.RoundID, si sharedtypes.ScoreInfo) error {
+					return nil
+				}
 			},
-			expectedError: nil, // Corrected: The service returns nil error for this case
-		},
-		{
-			name: "Fails due to invalid tag number",
-			mockDBSetup: func(mockDB *scoredb.MockRepository) {
-				mockDB.EXPECT().
-					UpdateOrAddScore(gomock.Any(), testGuildID, testRoundID, sharedtypes.ScoreInfo{
-						UserID:    testUserID,
-						Score:     testScore,
-						TagNumber: &invalidTag,
-					}).
-					Return(errors.New("invalid tag number"))
+			verify: func(t *testing.T, res ScoreOperationResult, infraErr error, fake *FakeScoreRepository) {
+				if infraErr != nil {
+					t.Fatalf("unexpected error: %v", infraErr)
+				}
+				// 1. Ensure Success is not nil
+				if res.Success == nil {
+					t.Fatal("expected success result, got nil")
+				}
+				// 2. Access directly (no type assertion needed because it's already *ScoreInfo)
+				success := res.Success
+
+				if success.TagNumber == nil {
+					t.Fatal("expected tag number to be set, but it was nil")
+				}
+				if *success.TagNumber != testTag {
+					t.Errorf("expected tag %d, got %d", testTag, *success.TagNumber)
+				}
 			},
-			userID:    testUserID,
-			score:     testScore,
-			tagNumber: &invalidTag,
-			expectedResult: ScoreOperationResult{
-				Failure: &sharedevents.ScoreUpdateFailedPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					UserID:  testUserID,
-					Reason:  "invalid tag number",
-				},
-			},
-			expectedError: nil, // Corrected: The service returns nil error for this case
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			fakeRepo := NewFakeScoreRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
 
-			mockDB := scoredb.NewMockRepository(ctrl)
-
-			// Initialize service with No-Op implementations
 			s := &ScoreService{
-				repo:    mockDB,
+				repo:    fakeRepo,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
-				serviceWrapper: func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-					// In test, simply call the service function directly without wrapping
-					return serviceFunc(ctx)
-				},
 			}
 
-			tt.mockDBSetup(mockDB)
+			res, err := s.CorrectScore(ctx, testGuildID, testRoundID, tt.userID, tt.score, tt.tagNumber)
 
-			gotResult, err := s.CorrectScore(ctx, testGuildID, testRoundID, tt.userID, tt.score, tt.tagNumber)
-
-			// Validate result
-			if (gotResult.Success != nil && tt.expectedResult.Success == nil) || (gotResult.Success == nil && tt.expectedResult.Success != nil) {
-				t.Errorf("Mismatched result success, got: %v, expected: %v", gotResult.Success, tt.expectedResult.Success)
-			} else if gotResult.Success != nil && tt.expectedResult.Success != nil {
-				successGot, okGot := gotResult.Success.(*sharedevents.ScoreUpdatedPayloadV1)
-				successExpected, okExpected := tt.expectedResult.Success.(*sharedevents.ScoreUpdatedPayloadV1)
-				if okGot && okExpected {
-					if successGot.GuildID != successExpected.GuildID {
-						t.Errorf("Mismatched GuildID, got: %v, expected: %v", successGot.GuildID, successExpected.GuildID)
-					}
-					if successGot.RoundID != successExpected.RoundID {
-						t.Errorf("Mismatched RoundID, got: %v, expected: %v", successGot.RoundID, successExpected.RoundID)
-					}
-					if successGot.UserID != successExpected.UserID {
-						t.Errorf("Mismatched UserID, got: %v, expected: %v", successGot.UserID, successExpected.UserID)
-					}
-					if successGot.Score != successExpected.Score {
-						t.Errorf("Mismatched Score, got: %v, expected: %v", successGot.Score, successExpected.Score)
-					}
-				}
+			if tt.expectInfraErr && err == nil {
+				t.Error("expected infrastructure error but got nil")
+			}
+			if !tt.expectInfraErr && err != nil {
+				t.Errorf("unexpected infrastructure error: %v", err)
 			}
 
-			if (gotResult.Failure != nil && tt.expectedResult.Failure == nil) || (gotResult.Failure == nil && tt.expectedResult.Failure != nil) {
-				t.Errorf("Mismatched result failure, got: %v, expected: %v", gotResult.Failure, tt.expectedResult.Failure)
-			} else if gotResult.Failure != nil && tt.expectedResult.Failure != nil {
-				failureGot, okGot := gotResult.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
-				failureExpected, okExpected := tt.expectedResult.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
-				if okGot && okExpected {
-					if failureGot.GuildID != failureExpected.GuildID {
-						t.Errorf("Mismatched GuildID, got: %v, expected: %v", failureGot.GuildID, failureExpected.GuildID)
-					}
-					if failureGot.RoundID != failureExpected.RoundID {
-						t.Errorf("Mismatched RoundID, got: %v, expected: %v", failureGot.RoundID, failureExpected.RoundID)
-					}
-					if failureGot.UserID != failureExpected.UserID {
-						t.Errorf("Mismatched UserID, got: %v, expected: %v", failureGot.UserID, failureExpected.UserID)
-					}
-					if failureGot.Reason != failureExpected.Reason {
-						t.Errorf("Mismatched error message, got: %v, expected: %v", failureGot.Reason, failureExpected.Reason)
-					}
-				}
-			}
-
-			// Validate error
-			if (err != nil) != (tt.expectedError != nil) {
-				t.Errorf("Unexpected error: %v", err)
-			} else if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
-				t.Errorf("Mismatched error message, got: %v, expected: %v", err.Error(), tt.expectedError.Error())
+			if tt.verify != nil {
+				tt.verify(t, res, err, fakeRepo)
 			}
 		})
 	}
