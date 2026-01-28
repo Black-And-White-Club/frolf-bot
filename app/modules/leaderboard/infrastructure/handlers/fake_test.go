@@ -5,6 +5,7 @@ import (
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 )
@@ -14,13 +15,13 @@ type FakeService struct {
 	trace []string
 
 	// Function fields allow per-test behavior configuration
-	ExecuteBatchTagAssignmentFunc func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error)
-	TagSwapRequestedFunc          func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (leaderboardtypes.LeaderboardData, error)
-	GetLeaderboardFunc            func(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardtypes.LeaderboardEntry, error)
-	GetTagByUserIDFunc            func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error)
-	RoundGetTagByUserIDFunc       func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error)
-	CheckTagAvailabilityFunc      func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (leaderboardservice.TagAvailabilityResult, error)
-	EnsureGuildLeaderboardFunc    func(ctx context.Context, guildID sharedtypes.GuildID) error
+	ExecuteBatchTagAssignmentFunc func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error)
+	TagSwapRequestedFunc          func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error)
+	GetLeaderboardFunc            func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
+	GetTagByUserIDFunc            func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
+	RoundGetTagByUserIDFunc       func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
+	CheckTagAvailabilityFunc      func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error)
+	EnsureGuildLeaderboardFunc    func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
 }
 
 func NewFakeService() *FakeService {
@@ -78,61 +79,61 @@ func (f *FakeService) ExecuteBatchTagAssignment(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (leaderboardtypes.LeaderboardData, error) {
+) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 	f.record("ExecuteBatchTagAssignment")
 	if f.ExecuteBatchTagAssignmentFunc != nil {
 		return f.ExecuteBatchTagAssignmentFunc(ctx, guildID, requests, updateID, source)
 	}
 	// Return empty domain data and nil error by default
-	return leaderboardtypes.LeaderboardData{}, nil
+	return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, nil
 }
 
-func (f *FakeService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (leaderboardtypes.LeaderboardData, error) {
+func (f *FakeService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 	f.record("TagSwapRequested")
 	if f.TagSwapRequestedFunc != nil {
 		return f.TagSwapRequestedFunc(ctx, guildID, userID, targetTag)
 	}
-	return leaderboardtypes.LeaderboardData{}, nil
+	return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, nil
 }
 
-func (f *FakeService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardtypes.LeaderboardEntry, error) {
+func (f *FakeService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 	f.record("GetLeaderboard")
 	if f.GetLeaderboardFunc != nil {
 		return f.GetLeaderboardFunc(ctx, guildID)
 	}
-	return []leaderboardtypes.LeaderboardEntry{}, nil
+	return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, nil
 }
 
-func (f *FakeService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+func (f *FakeService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
 	f.record("GetTagByUserID")
 	if f.GetTagByUserIDFunc != nil {
 		return f.GetTagByUserIDFunc(ctx, guildID, userID)
 	}
-	return 0, nil
+	return results.OperationResult[sharedtypes.TagNumber, error]{}, nil
 }
 
-func (f *FakeService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
+func (f *FakeService) RoundGetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
 	f.record("RoundGetTagByUserID")
 	if f.RoundGetTagByUserIDFunc != nil {
 		return f.RoundGetTagByUserIDFunc(ctx, guildID, userID)
 	}
-	return 0, nil
+	return results.OperationResult[sharedtypes.TagNumber, error]{}, nil
 }
 
-func (f *FakeService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (leaderboardservice.TagAvailabilityResult, error) {
+func (f *FakeService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
 	f.record("CheckTagAvailability")
 	if f.CheckTagAvailabilityFunc != nil {
 		return f.CheckTagAvailabilityFunc(ctx, guildID, userID, tagNumber)
 	}
-	return leaderboardservice.TagAvailabilityResult{}, nil
+	return results.OperationResult[leaderboardservice.TagAvailabilityResult, error]{}, nil
 }
 
-func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
+func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
 	f.record("EnsureGuildLeaderboard")
 	if f.EnsureGuildLeaderboardFunc != nil {
 		return f.EnsureGuildLeaderboardFunc(ctx, guildID)
 	}
-	return nil
+	return results.OperationResult[bool, error]{}, nil
 }
 
 // Ensure interface compliance

@@ -24,16 +24,14 @@ func NewRepository(db bun.IDB) Repository {
 // --- READ METHODS ---
 
 // GetActiveLeaderboard retrieves the current active leaderboard for a guild.
-func (r *Impl) GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*Leaderboard, error) {
-	// Fallback to default DB if nil is passed
+func (r *Impl) GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 	if db == nil {
 		db = r.db
 	}
 
-	leaderboard := new(Leaderboard)
+	model := new(Leaderboard)
 	err := db.NewSelect().
-		Model(leaderboard).
-		Column("id", "leaderboard_data", "is_active", "update_source", "update_id", "guild_id").
+		Model(model).
 		Where("is_active = ?", true).
 		Where("guild_id = ?", guildID).
 		Limit(1).
@@ -45,64 +43,49 @@ func (r *Impl) GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sha
 		}
 		return nil, fmt.Errorf("leaderboarddb.GetActiveLeaderboard: %w", err)
 	}
-	return leaderboard, nil
+	return toSharedModel(model), nil
 }
 
 // --- WRITE METHODS ---
 
-func (r *Impl) CreateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (*Leaderboard, error) {
+// SaveLeaderboard creates a new leaderboard version.
+// It deactivates any existing active leaderboard for the guild and inserts the new one.
+func (r *Impl) SaveLeaderboard(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error {
 	if db == nil {
 		db = r.db
 	}
-	leaderboard.GuildID = guildID
 
-	_, err := db.NewInsert().
-		Model(leaderboard).
-		Returning("*").
-		Exec(ctx)
-
-	if err != nil {
-		return nil, fmt.Errorf("leaderboarddb.CreateLeaderboard: %w", err)
-	}
-	return leaderboard, nil
-}
-
-func (r *Impl) UpdateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*Leaderboard, error) {
-	if db == nil {
-		db = r.db
-	}
+	dbModel := toDBModel(leaderboard)
+	dbModel.IsActive = true
 
 	// 1. Deactivate the current leaderboard
+	// We do this blindly to ensure only one is active.
 	_, err := db.NewUpdate().
 		Model((*Leaderboard)(nil)).
 		Set("is_active = ?", false).
 		Where("is_active = ?", true).
-		Where("guild_id = ?", guildID).
+		Where("guild_id = ?", dbModel.GuildID).
 		Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("leaderboarddb.UpdateLeaderboard.deactivate: %w", err)
+		return fmt.Errorf("leaderboarddb.SaveLeaderboard.deactivate: %w", err)
 	}
 
-	// 2. Create a new leaderboard
-	newLeaderboard := &Leaderboard{
-		LeaderboardData: leaderboardData,
-		IsActive:        true,
-		UpdateSource:    source,
-		UpdateID:        updateID,
-		GuildID:         guildID,
-	}
-
+	// 2. Insert the new leaderboard
 	_, err = db.NewInsert().
-		Model(newLeaderboard).
+		Model(dbModel).
 		Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("leaderboarddb.UpdateLeaderboard.insert: %w", err)
+		return fmt.Errorf("leaderboarddb.SaveLeaderboard.insert: %w", err)
 	}
 
-	return newLeaderboard, nil
+	// Update the shared model with the generated ID and UpdateID (if generated)
+	leaderboard.ID = dbModel.ID
+	leaderboard.UpdateID = dbModel.UpdateID
+
+	return nil
 }
 
-// The Service can call this alone, or as part of a larger transaction.
+// DeactivateLeaderboard deactivates a specific leaderboard by ID.
 func (r *Impl) DeactivateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error {
 	if db == nil {
 		db = r.db
@@ -113,25 +96,43 @@ func (r *Impl) DeactivateLeaderboard(ctx context.Context, db bun.IDB, guildID sh
 		Where("id = ?", leaderboardID).
 		Where("guild_id = ?", guildID).
 		Exec(ctx)
-	return err
+
+	if err != nil {
+		return fmt.Errorf("leaderboarddb.DeactivateLeaderboard: %w", err)
+	}
+	return nil
 }
 
-// --- DOMAIN LOGIC ON MODELS ---
+// =============================================================================
+// Model Conversion Helpers
+// =============================================================================
 
-func (l *Leaderboard) HasTagNumber(tagNumber sharedtypes.TagNumber) bool {
-	for _, entry := range l.LeaderboardData {
-		if entry.TagNumber != 0 && entry.TagNumber == tagNumber {
-			return true
-		}
+// toSharedModel converts the DB model to the shared domain type.
+func toSharedModel(l *Leaderboard) *leaderboardtypes.Leaderboard {
+	if l == nil {
+		return nil
 	}
-	return false
+	return &leaderboardtypes.Leaderboard{
+		ID:              l.ID,
+		LeaderboardData: l.LeaderboardData,
+		IsActive:        l.IsActive,
+		UpdateSource:    l.UpdateSource,
+		UpdateID:        l.UpdateID,
+		GuildID:         l.GuildID,
+	}
 }
 
-func (l *Leaderboard) HasUserID(userID sharedtypes.DiscordID) bool {
-	for _, entry := range l.LeaderboardData {
-		if entry.UserID == userID {
-			return true
-		}
+// toDBModel converts the shared domain type to the DB model.
+func toDBModel(l *leaderboardtypes.Leaderboard) *Leaderboard {
+	if l == nil {
+		return nil
 	}
-	return false
+	return &Leaderboard{
+		ID:              l.ID,
+		LeaderboardData: l.LeaderboardData,
+		IsActive:        l.IsActive,
+		UpdateSource:    l.UpdateSource,
+		UpdateID:        l.UpdateID,
+		GuildID:         l.GuildID,
+	}
 }

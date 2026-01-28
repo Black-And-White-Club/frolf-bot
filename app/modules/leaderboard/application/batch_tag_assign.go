@@ -2,13 +2,13 @@ package leaderboardservice
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"slices"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
@@ -21,21 +21,17 @@ func (s *LeaderboardService) ExecuteBatchTagAssignment(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (leaderboardtypes.LeaderboardData, error) {
+) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 
-	// Run within a DB transaction if we have a DB configured, otherwise execute directly.
-	if s.db == nil {
-		return s.executeBatchLogic(ctx, nil, guildID, requests, updateID, source)
+	// Named transaction function for observability
+	executeBatchTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+		return s.executeBatchLogic(ctx, db, guildID, requests, updateID, source)
 	}
 
-	var result leaderboardtypes.LeaderboardData
-	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		var innerErr error
-		result, innerErr = s.executeBatchLogic(ctx, tx, guildID, requests, updateID, source)
-		return innerErr
+	// Wrap with telemetry & transaction
+	return withTelemetry(s, ctx, "ExecuteBatchTagAssignment", guildID, func(ctx context.Context) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+		return runInTx(s, ctx, executeBatchTx)
 	})
-
-	return result, err
 }
 
 // executeBatchLogic contains the core "Funnel" logic.
@@ -46,7 +42,7 @@ func (s *LeaderboardService) executeBatchLogic(
 	requests []sharedtypes.TagAssignmentRequest,
 	updateID sharedtypes.RoundID,
 	source sharedtypes.ServiceUpdateSource,
-) (leaderboardtypes.LeaderboardData, error) {
+) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 
 	s.logger.InfoContext(ctx, "Executing funnel logic",
 		attr.String("source", string(source)),
@@ -57,11 +53,11 @@ func (s *LeaderboardService) executeBatchLogic(
 	current, err := s.repo.GetActiveLeaderboard(ctx, db, guildID)
 	if err != nil {
 		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-			current = &leaderboarddb.Leaderboard{
+			current = &leaderboardtypes.Leaderboard{
 				LeaderboardData: leaderboardtypes.LeaderboardData{},
 			}
 		} else {
-			return nil, err
+			return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, err
 		}
 	}
 	beforeData := current.LeaderboardData
@@ -102,19 +98,25 @@ func (s *LeaderboardService) executeBatchLogic(
 	}
 
 	if len(conflicts) > 0 {
-		// Optionally, return the first conflict (compatible with current handler)
-		return nil, conflicts[0]
+		// Return the first conflict as a domain failure
+		return results.FailureResult[leaderboardtypes.LeaderboardData, error](conflicts[0]), nil
 	}
 
 	// --- 3. EXECUTION ---
 	newData := s.GenerateUpdatedSnapshot(beforeData, requests)
 
-	updatedLB, err := s.repo.UpdateLeaderboard(ctx, db, guildID, newData, updateID, source)
-	if err != nil {
-		return nil, err
+	updatedLB := &leaderboardtypes.Leaderboard{
+		GuildID:         guildID,
+		LeaderboardData: newData,
+		UpdateSource:    source,
+		UpdateID:        updateID,
 	}
 
-	return updatedLB.LeaderboardData, nil
+	if err := s.repo.SaveLeaderboard(ctx, db, updatedLB); err != nil {
+		return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, err
+	}
+
+	return results.SuccessResult[leaderboardtypes.LeaderboardData, error](updatedLB.LeaderboardData), nil
 }
 
 // GenerateUpdatedSnapshot remains public and pure

@@ -6,6 +6,7 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -23,8 +24,10 @@ func (h *RoundHandlers) HandleScheduledRoundTagSync(
 	// 1. Update the Round module's database
 	result, err := h.service.UpdateScheduledRoundsWithNewTags(
 		ctx,
-		payload.GuildID,
-		payload.ChangedTags,
+		&roundtypes.UpdateScheduledRoundsWithNewTagsRequest{
+			GuildID:     payload.GuildID,
+			ChangedTags: payload.ChangedTags,
+		},
 	)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Internal error during round tag sync", attr.Error(err))

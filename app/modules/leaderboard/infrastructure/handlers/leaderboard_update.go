@@ -34,17 +34,20 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		})
 	}
 
-	updatedData, err := h.service.ExecuteBatchTagAssignment(
+	result, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
 		payload.RoundID,
 		sharedtypes.ServiceUpdateSourceProcessScores,
 	)
-
 	if err != nil {
+		return nil, err
+	}
+
+	if result.IsFailure() {
 		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(err, &swapErr) {
+		if errors.As(*result.Failure, &swapErr) {
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     swapErr.RequestorID,
 				CurrentTag: swapErr.CurrentTag,
@@ -53,8 +56,10 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 			})
 			return []handlerwrapper.Result{}, intentErr
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
+
+	updatedData := *result.Success
 	// Build success events from returned leaderboard data
 	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(updatedData))
 	for _, entry := range updatedData {

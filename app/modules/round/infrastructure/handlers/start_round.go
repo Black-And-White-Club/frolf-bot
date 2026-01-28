@@ -4,6 +4,8 @@ import (
 	"context"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -13,7 +15,12 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 	ctx context.Context,
 	payload *roundevents.RoundStartRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.ProcessRoundStart(ctx, payload.GuildID, payload.RoundID)
+	req := &roundtypes.StartRoundRequest{
+		GuildID: sharedtypes.GuildID(payload.GuildID),
+		RoundID: sharedtypes.RoundID(payload.RoundID),
+	}
+
+	result, err := h.service.StartRound(ctx, req)
 	if err != nil {
 		return nil, err
 	}

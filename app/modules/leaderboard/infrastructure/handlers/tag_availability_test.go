@@ -7,6 +7,7 @@ import (
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 )
 
@@ -31,10 +32,10 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				TagNumber: &testTagNumber,
 			},
 			setupFake: func(f *FakeService) {
-				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (leaderboardservice.TagAvailabilityResult, error) {
-					return leaderboardservice.TagAvailabilityResult{
+				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
+					return results.SuccessResult[leaderboardservice.TagAvailabilityResult, error](leaderboardservice.TagAvailabilityResult{
 						Available: true,
-					}, nil
+					}), nil
 				}
 			},
 			wantErr:   false,
@@ -57,11 +58,11 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				TagNumber: &testTagNumber,
 			},
 			setupFake: func(f *FakeService) {
-				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (leaderboardservice.TagAvailabilityResult, error) {
-					return leaderboardservice.TagAvailabilityResult{
+				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
+					return results.SuccessResult[leaderboardservice.TagAvailabilityResult, error](leaderboardservice.TagAvailabilityResult{
 						Available: false,
 						Reason:    "tag already taken",
-					}, nil
+					}), nil
 				}
 			},
 			wantErr:   false,
@@ -84,8 +85,8 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				TagNumber: &testTagNumber,
 			},
 			setupFake: func(f *FakeService) {
-				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (leaderboardservice.TagAvailabilityResult, error) {
-					return leaderboardservice.TagAvailabilityResult{}, fmt.Errorf("internal database error")
+				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
+					return results.OperationResult[leaderboardservice.TagAvailabilityResult, error]{}, fmt.Errorf("internal database error")
 				}
 			},
 			wantErr: true,

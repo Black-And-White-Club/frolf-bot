@@ -5,6 +5,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
@@ -29,9 +30,32 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(
 
 	clock := h.extractAnchorClock(ctx)
 
-	result, err := h.service.ValidateAndProcessRoundUpdateWithClock(ctx, *payload, roundtime.NewTimeParser(), clock)
+	req := &roundtypes.UpdateRoundRequest{
+		GuildID:   payload.GuildID,
+		RoundID:   payload.RoundID,
+		UserID:    payload.UserID,
+		StartTime: payload.StartTime,
+	}
+	if payload.Title != nil {
+		t := string(*payload.Title)
+		req.Title = &t
+	}
+	if payload.Description != nil {
+		d := string(*payload.Description)
+		req.Description = &d
+	}
+	if payload.Location != nil {
+		l := string(*payload.Location)
+		req.Location = &l
+	}
+	if payload.Timezone != nil {
+		tz := string(*payload.Timezone)
+		req.Timezone = &tz
+	}
+
+	result, err := h.service.ValidateRoundUpdateWithClock(ctx, req, roundtime.NewTimeParser(), clock)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "ValidateAndProcessRoundUpdateWithClock returned error",
+		h.logger.ErrorContext(ctx, "ValidateRoundUpdateWithClock returned error",
 			attr.RoundID("round_id", payload.RoundID),
 			attr.Error(err),
 		)
@@ -55,10 +79,29 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(
 		h.logger.InfoContext(ctx, "round update validation successful, publishing validated event",
 			attr.RoundID("round_id", payload.RoundID),
 		)
+
+		requestPayload := roundevents.RoundUpdateRequestPayloadV1{
+			GuildID:     payload.GuildID,
+			RoundID:     payload.RoundID,
+			UserID:      payload.UserID,
+			Title:       payload.Title,
+			Description: payload.Description,
+			Location:    payload.Location,
+		}
+
+		if (*result.Success).Round != nil && (*result.Success).Round.StartTime != nil {
+			requestPayload.StartTime = (*result.Success).Round.StartTime
+		}
+
+		eventPayload := &roundevents.RoundUpdateValidatedPayloadV1{
+			GuildID:                   payload.GuildID,
+			RoundUpdateRequestPayload: requestPayload,
+		}
+
 		return []handlerwrapper.Result{
 			{
 				Topic:   roundevents.RoundUpdateValidatedV1,
-				Payload: result.Success,
+				Payload: eventPayload,
 			},
 		}, nil
 	}
@@ -84,7 +127,27 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 		}()),
 	)
 
-	result, err := h.service.UpdateRoundEntity(ctx, *payload)
+	req := &roundtypes.UpdateRoundRequest{
+		GuildID:         payload.RoundUpdateRequestPayload.GuildID,
+		RoundID:         payload.RoundUpdateRequestPayload.RoundID,
+		UserID:          payload.RoundUpdateRequestPayload.UserID,
+		ParsedStartTime: payload.RoundUpdateRequestPayload.StartTime,
+	}
+	if payload.RoundUpdateRequestPayload.Title != nil {
+		t := string(*payload.RoundUpdateRequestPayload.Title)
+		req.Title = &t
+	}
+	if payload.RoundUpdateRequestPayload.Description != nil {
+		d := string(*payload.RoundUpdateRequestPayload.Description)
+		req.Description = &d
+	}
+	if payload.RoundUpdateRequestPayload.Location != nil {
+		l := string(*payload.RoundUpdateRequestPayload.Location)
+		req.Location = &l
+	}
+	// Timezone is not available in validated payload but not needed since we have ParsedStartTime
+
+	result, err := h.service.UpdateRoundEntity(ctx, req)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "UpdateRoundEntity returned error",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
@@ -107,9 +170,14 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 	}
 
 	if result.Success != nil {
-		updatedPayload, ok := result.Success.(*roundevents.RoundEntityUpdatedPayloadV1)
-		if !ok {
-			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from UpdateRoundEntity"}
+		// Use the result directly as it matches or map it if needed
+		// The service returns UpdateRoundResult which has Round.
+		// We need RoundEntityUpdatedPayloadV1.
+		// Assuming we can construct it or the result is compatible (it's not).
+		// We need to construct RoundEntityUpdatedPayloadV1.
+		updatedPayload := &roundevents.RoundEntityUpdatedPayloadV1{
+			GuildID: (*result.Success).Round.GuildID,
+			Round:   *(*result.Success).Round,
 		}
 
 		h.logger.InfoContext(ctx, "round entity update successful, publishing results",
@@ -160,15 +228,18 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(
 		guildID = payload.GuildID
 	}
 
-	schedulePayload := roundevents.RoundScheduleUpdatePayloadV1{
+	titleStr := string(payload.Round.Title)
+	locationStr := string(payload.Round.Location)
+
+	req := &roundtypes.UpdateScheduledRoundEventsRequest{
 		GuildID:   guildID,
 		RoundID:   payload.Round.ID,
-		Title:     payload.Round.Title,
+		Title:     &titleStr,
 		StartTime: payload.Round.StartTime,
-		Location:  payload.Round.Location,
+		Location:  &locationStr,
 	}
 
-	result, err := h.service.UpdateScheduledRoundEvents(ctx, schedulePayload)
+	result, err := h.service.UpdateScheduledRoundEvents(ctx, req)
 	if err != nil {
 		return nil, err
 	}

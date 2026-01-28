@@ -6,20 +6,28 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/uptrace/bun"
 )
 
 // UserLookupAdapter adapts the user repository to the round service UserLookup port.
 type UserLookupAdapter struct {
-	userDB userdb.UserDB
+	userDB userdb.Repository
+	db     bun.IDB
 }
 
 // NewUserLookupAdapter constructs a new adapter.
-func NewUserLookupAdapter(db userdb.UserDB) *UserLookupAdapter {
-	return &UserLookupAdapter{userDB: db}
+func NewUserLookupAdapter(userDB userdb.Repository, db bun.IDB) *UserLookupAdapter {
+	return &UserLookupAdapter{
+		userDB: userDB,
+		db:     db,
+	}
 }
 
-func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, normalizedUsername string) (*roundservice.UserIdentity, error) {
-	user, err := a.userDB.FindByUDiscUsername(ctx, guildID, normalizedUsername)
+func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedUsername string) (*roundservice.UserIdentity, error) {
+	if db == nil {
+		db = a.db
+	}
+	user, err := a.userDB.FindByUDiscUsername(ctx, db, guildID, normalizedUsername)
 	if err != nil {
 		if err == userdb.ErrNotFound {
 			return nil, nil
@@ -30,8 +38,11 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, g
 	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
 }
 
-func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
-	user, err := a.userDB.FindByUDiscName(ctx, guildID, normalizedDisplayName)
+func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
+	if db == nil {
+		db = a.db
+	}
+	user, err := a.userDB.FindByUDiscName(ctx, db, guildID, normalizedDisplayName)
 	if err != nil {
 		if err == userdb.ErrNotFound {
 			return nil, nil
@@ -42,8 +53,11 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context
 	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
 }
 
-func (a *UserLookupAdapter) FindByPartialUDiscName(ctx context.Context, guildID sharedtypes.GuildID, partialName string) ([]*roundservice.UserIdentity, error) {
-	users, err := a.userDB.FindByUDiscNameFuzzy(ctx, guildID, partialName)
+func (a *UserLookupAdapter) FindByPartialUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*roundservice.UserIdentity, error) {
+	if db == nil {
+		db = a.db
+	}
+	users, err := a.userDB.FindByUDiscNameFuzzy(ctx, db, guildID, partialName)
 	if err != nil {
 		return nil, err
 	}

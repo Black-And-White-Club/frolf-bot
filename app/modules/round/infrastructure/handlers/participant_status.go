@@ -10,82 +10,66 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-// Helper methods for clean type assertions within the handlers.
-func (h *RoundHandlers) toJoined(v any) (*roundevents.ParticipantJoinedPayloadV1, error) {
-	p, ok := v.(*roundevents.ParticipantJoinedPayloadV1)
-	if !ok {
-		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected ParticipantJoinedPayloadV1"}
-	}
-	return p, nil
-}
-
-func (h *RoundHandlers) toJoinError(v any) (*roundevents.RoundParticipantJoinErrorPayloadV1, error) {
-	p, ok := v.(*roundevents.RoundParticipantJoinErrorPayloadV1)
-	if !ok {
-		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected RoundParticipantJoinErrorPayloadV1"}
-	}
-	return p, nil
-}
-
-func (h *RoundHandlers) toTagLookupRequest(v any) (*sharedevents.RoundTagLookupRequestedPayloadV1, error) {
-	p, ok := v.(*sharedevents.RoundTagLookupRequestedPayloadV1)
-	if !ok {
-		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected RoundTagLookupRequestedPayloadV1 (shared payload)"}
-	}
-	return p, nil
-}
-
-func (h *RoundHandlers) toJoinRequest(v any) (*roundevents.ParticipantJoinRequestPayloadV1, error) {
-	p, ok := v.(*roundevents.ParticipantJoinRequestPayloadV1)
-	if !ok {
-		return nil, sharedtypes.ValidationError{Message: "unexpected payload type: expected ParticipantJoinRequestPayloadV1"}
-	}
-	return p, nil
-}
-
 // HandleParticipantJoinRequest processes the initial rsvp/join intent from a user.
 func (h *RoundHandlers) HandleParticipantJoinRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.CheckParticipantStatus(ctx, *payload)
+	req := &roundtypes.JoinRoundRequest{
+		GuildID:    payload.GuildID,
+		RoundID:    payload.RoundID,
+		UserID:     payload.UserID,
+		Response:   payload.Response,
+		TagNumber:  payload.TagNumber,
+		JoinedLate: payload.JoinedLate,
+	}
+
+	result, err := h.service.CheckParticipantStatus(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Safety check: ensure GuildID is propagated to outgoing payloads.
-	if result.Success != nil {
-		switch s := result.Success.(type) {
-		case *roundevents.ParticipantJoinValidationRequestPayloadV1:
-			if s.GuildID == "" {
-				s.GuildID = payload.GuildID
-			}
-		case *roundevents.ParticipantRemovalRequestPayloadV1:
-			if s.GuildID == "" {
-				s.GuildID = payload.GuildID
-			}
-		}
-	}
-
 	if result.Failure != nil {
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantStatusCheckErrorV1, Payload: result.Failure},
+			{
+				Topic: roundevents.RoundParticipantStatusCheckErrorV1,
+				Payload: &roundevents.ParticipantStatusCheckErrorPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					UserID:  payload.UserID,
+					Error:   (*result.Failure).Error(),
+				},
+			},
 		}, nil
 	}
 
-	switch successPayload := result.Success.(type) {
-	case *roundevents.ParticipantRemovalRequestPayloadV1:
+	checkResult := result.Success
+	switch (*checkResult).Action {
+	case "VALIDATE":
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantRemovalRequestedV1, Payload: successPayload},
+			{
+				Topic: roundevents.RoundParticipantJoinValidationRequestedV1,
+				Payload: &roundevents.ParticipantJoinValidationRequestPayloadV1{
+					GuildID:  (*checkResult).GuildID,
+					RoundID:  (*checkResult).RoundID,
+					UserID:   (*checkResult).UserID,
+					Response: (*checkResult).Response,
+				},
+			},
 		}, nil
-
-	case *roundevents.ParticipantJoinValidationRequestPayloadV1:
+	case "REMOVE":
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantJoinValidationRequestedV1, Payload: successPayload},
+			{
+				Topic: roundevents.RoundParticipantRemovalRequestedV1,
+				Payload: &roundevents.ParticipantRemovalRequestPayloadV1{
+					GuildID: (*checkResult).GuildID,
+					RoundID: (*checkResult).RoundID,
+					UserID:  (*checkResult).UserID,
+				},
+			},
 		}, nil
-
 	default:
-		return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from CheckParticipantStatus"}
+		return nil, sharedtypes.ValidationError{Message: "unexpected action from CheckParticipantStatus: " + (*checkResult).Action}
 	}
 }
 
@@ -94,30 +78,41 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinValidationRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.ValidateParticipantJoinRequest(ctx, roundevents.ParticipantJoinRequestPayloadV1{
+	req := &roundtypes.JoinRoundRequest{
+		GuildID:  payload.GuildID,
 		RoundID:  payload.RoundID,
 		UserID:   payload.UserID,
 		Response: payload.Response,
-		GuildID:  payload.GuildID,
-	})
+	}
+
+	result, err := h.service.ValidateParticipantJoinRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.Failure != nil {
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantJoinErrorV1, Payload: result.Failure},
+			{
+				Topic: roundevents.RoundParticipantJoinErrorV1,
+				Payload: &roundevents.RoundParticipantJoinErrorPayloadV1{
+					GuildID: payload.GuildID,
+					Error:   (*result.Failure).Error(),
+				},
+			},
 		}, nil
 	}
 
+	validatedReq := result.Success
+
 	// If user declined, bypass tag lookup and go straight to update.
-	if payload.Response == roundtypes.ResponseDecline {
-		updateRequest, err := h.toJoinRequest(result.Success)
-		if err != nil {
-			return nil, err
-		}
-		if updateRequest.GuildID == "" {
-			updateRequest.GuildID = payload.GuildID
+	if (*validatedReq).Response == roundtypes.ResponseDecline {
+		updateRequest := &roundevents.ParticipantJoinRequestPayloadV1{
+			GuildID:    (*validatedReq).GuildID,
+			RoundID:    (*validatedReq).RoundID,
+			UserID:     (*validatedReq).UserID,
+			Response:   (*validatedReq).Response,
+			TagNumber:  (*validatedReq).TagNumber,
+			JoinedLate: (*validatedReq).JoinedLate,
 		}
 		return []handlerwrapper.Result{
 			{Topic: roundevents.RoundParticipantStatusUpdateRequestedV1, Payload: updateRequest},
@@ -125,19 +120,17 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	}
 
 	// If Accept/Tentative, request a tag lookup from the leaderboard service.
-	tagLookupRequest, err := h.toTagLookupRequest(result.Success)
-	if err != nil {
-		return nil, err
+	tagLookupRequest := &sharedevents.RoundTagLookupRequestedPayloadV1{
+		ScopedGuildID: sharedevents.ScopedGuildID{
+			GuildID: (*validatedReq).GuildID,
+		},
+		RoundID:          (*validatedReq).RoundID,
+		UserID:           (*validatedReq).UserID,
+		Response:         (*validatedReq).Response,
+		OriginalResponse: (*validatedReq).Response,
+		JoinedLate:       (*validatedReq).JoinedLate,
 	}
 
-	tagLookupRequest.Response = payload.Response
-	tagLookupRequest.OriginalResponse = payload.Response
-
-	if tagLookupRequest.GuildID == "" {
-		tagLookupRequest.GuildID = payload.GuildID
-	}
-
-	// Publish the shared payload directly (we already accept the shared shape in `toTagLookupRequest`).
 	return []handlerwrapper.Result{
 		{Topic: sharedevents.RoundTagLookupRequestedV1, Payload: tagLookupRequest},
 	}, nil
@@ -148,19 +141,38 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.UpdateParticipantStatus(ctx, *payload)
+	req := &roundtypes.JoinRoundRequest{
+		GuildID:    payload.GuildID,
+		RoundID:    payload.RoundID,
+		UserID:     payload.UserID,
+		Response:   payload.Response,
+		TagNumber:  payload.TagNumber,
+		JoinedLate: payload.JoinedLate,
+	}
+
+	result, err := h.service.UpdateParticipantStatus(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.Failure != nil {
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantJoinErrorV1, Payload: result.Failure},
+			{
+				Topic: roundevents.RoundParticipantJoinErrorV1,
+				Payload: &roundevents.RoundParticipantJoinErrorPayloadV1{
+					GuildID:                payload.GuildID,
+					Error:                  (*result.Failure).Error(),
+					ParticipantJoinRequest: payload,
+				},
+			},
 		}, nil
 	}
 
+	round := result.Success
+	joinedPayload := h.createJoinedPayload(*round, payload.JoinedLate)
+
 	results := []handlerwrapper.Result{
-		{Topic: roundevents.RoundParticipantJoinedV1, Payload: result.Success},
+		{Topic: roundevents.RoundParticipantJoinedV1, Payload: joinedPayload},
 	}
 
 	// Add guild-scoped version for PWA permission scoping
@@ -174,19 +186,42 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	ctx context.Context,
 	payload *roundevents.ParticipantRemovalRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.ParticipantRemoval(ctx, *payload)
+	req := &roundtypes.JoinRoundRequest{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+		UserID:  payload.UserID,
+	}
+
+	result, err := h.service.ParticipantRemoval(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.Failure != nil {
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantRemovalErrorV1, Payload: result.Failure},
+			{
+				Topic: roundevents.RoundParticipantRemovalErrorV1,
+				Payload: &roundevents.ParticipantRemovalErrorPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					UserID:  payload.UserID,
+					Error:   (*result.Failure).Error(),
+				},
+			},
 		}, nil
 	}
 
+	round := result.Success
+	removedPayload := &roundevents.ParticipantRemovedPayloadV1{
+		GuildID:        (*round).GuildID,
+		RoundID:        (*round).ID,
+		UserID:         payload.UserID,
+		EventMessageID: (*round).EventMessageID,
+	}
+	removedPayload.AcceptedParticipants, removedPayload.DeclinedParticipants, removedPayload.TentativeParticipants = h.splitParticipants((*round).Participants)
+
 	return []handlerwrapper.Result{
-		{Topic: roundevents.RoundParticipantRemovedV1, Payload: result.Success},
+		{Topic: roundevents.RoundParticipantRemovedV1, Payload: removedPayload},
 	}, nil
 }
 
@@ -262,32 +297,32 @@ func (h *RoundHandlers) handleParticipantUpdate(
 	ctx context.Context,
 	updatePayload *roundevents.ParticipantJoinRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	updateResult, err := h.service.UpdateParticipantStatus(ctx, *updatePayload)
-	if err != nil {
-		return nil, err
-	}
+	return h.HandleParticipantStatusUpdateRequest(ctx, updatePayload)
+}
 
-	if updateResult.Failure != nil {
-		payload, err := h.toJoinError(updateResult.Failure)
-		if err != nil {
-			return nil, err
+func (h *RoundHandlers) createJoinedPayload(round *roundtypes.Round, joinedLate *bool) *roundevents.ParticipantJoinedPayloadV1 {
+	accepted, declined, tentative := h.splitParticipants(round.Participants)
+	return &roundevents.ParticipantJoinedPayloadV1{
+		GuildID:               round.GuildID,
+		RoundID:               round.ID,
+		AcceptedParticipants:  accepted,
+		DeclinedParticipants:  declined,
+		TentativeParticipants: tentative,
+		EventMessageID:        round.EventMessageID,
+		JoinedLate:            joinedLate,
+	}
+}
+
+func (h *RoundHandlers) splitParticipants(participants []roundtypes.Participant) (accepted, declined, tentative []roundtypes.Participant) {
+	for _, p := range participants {
+		switch p.Response {
+		case roundtypes.ResponseAccept:
+			accepted = append(accepted, p)
+		case roundtypes.ResponseDecline:
+			declined = append(declined, p)
+		case roundtypes.ResponseTentative:
+			tentative = append(tentative, p)
 		}
-		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundParticipantJoinErrorV1, Payload: payload},
-		}, nil
 	}
-
-	payload, err := h.toJoined(updateResult.Success)
-	if err != nil {
-		return nil, err
-	}
-
-	results := []handlerwrapper.Result{
-		{Topic: roundevents.RoundParticipantJoinedV1, Payload: payload},
-	}
-
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundParticipantJoinedV1, updatePayload.GuildID)
-
-	return results, nil
+	return
 }

@@ -12,7 +12,6 @@ import (
 type RoundListRequest struct {
 	GuildID string `json:"guild_id"`
 }
-)
 
 type Handlers interface {
 	// Round creation handlers

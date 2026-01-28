@@ -10,6 +10,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 )
 
@@ -29,10 +30,10 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Successfully get leaderboard",
 			setupFake: func(f *FakeService) {
-				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardtypes.LeaderboardEntry, error) {
-					return []leaderboardtypes.LeaderboardEntry{
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error]([]leaderboardtypes.LeaderboardEntry{
 						{UserID: "user-1", TagNumber: 1},
-					}, nil
+					}), nil
 				}
 			},
 			wantErr:       false,
@@ -42,8 +43,8 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Service error returns Failed event",
 			setupFake: func(f *FakeService) {
-				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardtypes.LeaderboardEntry, error) {
-					return nil, fmt.Errorf("database error")
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, fmt.Errorf("database error")
 				}
 			},
 			wantErr:       false, // Handler catches error and returns failure event
@@ -90,8 +91,8 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 		{
 			name: "Tag found",
 			setupFake: func(f *FakeService) {
-				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-					return 5, nil
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.SuccessResult[sharedtypes.TagNumber, error](5), nil
 				}
 			},
 			wantTopic: sharedevents.LeaderboardTagLookupSucceededV1,
@@ -100,8 +101,8 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 		{
 			name: "Tag not found",
 			setupFake: func(f *FakeService) {
-				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-					return 0, fmt.Errorf("not found")
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.OperationResult[sharedtypes.TagNumber, error]{}, fmt.Errorf("not found")
 				}
 			},
 			wantTopic: sharedevents.LeaderboardTagLookupNotFoundV1,
@@ -146,8 +147,8 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 		{
 			name: "Round tag found",
 			setupFake: func(f *FakeService) {
-				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-					return 10, nil
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.SuccessResult[sharedtypes.TagNumber, error](10), nil
 				}
 			},
 			wantErr:   false,
@@ -156,8 +157,9 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 		{
 			name: "Round tag not found (sql.ErrNoRows)",
 			setupFake: func(f *FakeService) {
-				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-					return 0, sql.ErrNoRows
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					err := sql.ErrNoRows
+					return results.FailureResult[sharedtypes.TagNumber, error](err), nil
 				}
 			},
 			wantErr:   false,
@@ -166,8 +168,8 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 		{
 			name: "Service error",
 			setupFake: func(f *FakeService) {
-				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (sharedtypes.TagNumber, error) {
-					return 0, fmt.Errorf("internal error")
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.OperationResult[sharedtypes.TagNumber, error]{}, fmt.Errorf("internal error")
 				}
 			},
 			wantErr: true,

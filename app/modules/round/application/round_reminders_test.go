@@ -3,28 +3,25 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
 var (
 	testReminderRoundID    = sharedtypes.RoundID(uuid.New())
-	testReminderRoundTitle = roundtypes.Title("Test Round")
-	testReminderLocation   = roundtypes.Location("Test Location")
-	testReminderStartTime  = sharedtypes.StartTime(time.Now())
+	testReminderRoundTitle = "Test Round"
+	testReminderLocation   = "Test Location"
+	testReminderStartTime  = time.Now()
 	testReminderType       = "Test Reminder Type"
 )
 
@@ -47,124 +44,157 @@ var (
 )
 
 func TestRoundService_ProcessRoundReminder(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
-	mockDB := rounddb.NewMockRepository(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
+	logger := slog.New(slog.NewTextHandler(nil, nil))
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-	mockEventBus := eventbus.NewMockEventBus(ctrl)
 	testDiscordMessageID := "12345"
 
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRepository)
-		payload        roundevents.DiscordReminderPayloadV1
-		expectedResult results.OperationResult
+		setup          func(*FakeRepo, *FakeGuildConfigProvider)
+		req            *roundtypes.ProcessRoundReminderRequest
+		expectedResult results.OperationResult[roundtypes.ProcessRoundReminderResult, error]
 		expectedError  error
+		verify         func(*testing.T, results.OperationResult[roundtypes.ProcessRoundReminderResult, error])
 	}{
 		{
 			name: "successful processing with participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant1, testParticipant2}, nil)
+			setup: func(f *FakeRepo, gcp *FakeGuildConfigProvider) {
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{testParticipant1, testParticipant2}, nil
+				}
 			},
-			payload: roundevents.DiscordReminderPayloadV1{
-				RoundID:        testReminderRoundID,
-				GuildID:        sharedtypes.GuildID("guild-123"),
-				RoundTitle:     testReminderRoundTitle,
-				StartTime:      &testReminderStartTime,
-				Location:       testReminderLocation,
-				ReminderType:   testReminderType,
-				EventMessageID: testDiscordMessageID,
+			req: &roundtypes.ProcessRoundReminderRequest{
+				RoundID:          testReminderRoundID,
+				GuildID:          sharedtypes.GuildID("guild-123"),
+				RoundTitle:       testReminderRoundTitle,
+				StartTime:        testReminderStartTime.String(),
+				Location:         testReminderLocation,
+				ReminderType:     testReminderType,
+				EventMessageID:   testDiscordMessageID,
+				DiscordChannelID: "channel-123",
 			},
-			expectedResult: results.OperationResult{
-				Success: roundevents.DiscordReminderPayloadV1{
-					RoundID:        testReminderRoundID,
-					RoundTitle:     testReminderRoundTitle,
-					StartTime:      &testReminderStartTime,
-					Location:       testReminderLocation,
-					UserIDs:        []sharedtypes.DiscordID{testParticipant1.UserID, testParticipant2.UserID},
-					ReminderType:   testReminderType,
-					EventMessageID: testDiscordMessageID,
+			expectedResult: results.OperationResult[roundtypes.ProcessRoundReminderResult, error]{
+				Success: &roundtypes.ProcessRoundReminderResult{
+					RoundID:          testReminderRoundID,
+					GuildID:          sharedtypes.GuildID("guild-123"),
+					RoundTitle:       testReminderRoundTitle,
+					StartTime:        testReminderStartTime.String(),
+					Location:         testReminderLocation,
+					UserIDs:          []sharedtypes.DiscordID{testParticipant1.UserID, testParticipant2.UserID},
+					ReminderType:     testReminderType,
+					EventMessageID:   testDiscordMessageID,
+					DiscordChannelID: "channel-123",
 				},
 			},
-			expectedError: nil,
 		},
 		{
-			name: "successful processing with no participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{testParticipant3}, nil)
+			name: "successful processing with enrichment",
+			setup: func(f *FakeRepo, gcp *FakeGuildConfigProvider) {
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{testParticipant1}, nil
+				}
+				gcp.GetConfigFunc = func(ctx context.Context, g sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+					return &guildtypes.GuildConfig{
+						EventChannelID: "enriched-channel",
+					}, nil
+				}
 			},
-			payload: roundevents.DiscordReminderPayloadV1{
+			req: &roundtypes.ProcessRoundReminderRequest{
 				RoundID:        testReminderRoundID,
 				GuildID:        sharedtypes.GuildID("guild-123"),
 				RoundTitle:     testReminderRoundTitle,
-				StartTime:      &testReminderStartTime,
+				StartTime:      testReminderStartTime.String(),
 				Location:       testReminderLocation,
 				ReminderType:   testReminderType,
 				EventMessageID: testDiscordMessageID,
 			},
-			expectedResult: results.OperationResult{
-				Success: roundevents.DiscordReminderPayloadV1{
-					RoundID:        testReminderRoundID,
-					GuildID:        sharedtypes.GuildID("guild-123"),
-					RoundTitle:     testReminderRoundTitle,
-					StartTime:      &testReminderStartTime,
-					Location:       testReminderLocation,
-					UserIDs:        []sharedtypes.DiscordID{},
-					ReminderType:   testReminderType,
-					EventMessageID: testDiscordMessageID,
+			expectedResult: results.OperationResult[roundtypes.ProcessRoundReminderResult, error]{
+				Success: &roundtypes.ProcessRoundReminderResult{
+					RoundID:          testReminderRoundID,
+					GuildID:          sharedtypes.GuildID("guild-123"),
+					RoundTitle:       testReminderRoundTitle,
+					StartTime:        testReminderStartTime.String(),
+					Location:         testReminderLocation,
+					UserIDs:          []sharedtypes.DiscordID{testParticipant1.UserID},
+					ReminderType:     testReminderType,
+					EventMessageID:   testDiscordMessageID,
+					DiscordChannelID: "enriched-channel",
 				},
 			},
-			expectedError: nil,
+		},
+		{
+			name: "successful processing with no matching participants",
+			setup: func(f *FakeRepo, gcp *FakeGuildConfigProvider) {
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{testParticipant3}, nil
+				}
+			},
+			req: &roundtypes.ProcessRoundReminderRequest{
+				RoundID:          testReminderRoundID,
+				GuildID:          sharedtypes.GuildID("guild-123"),
+				RoundTitle:       testReminderRoundTitle,
+				StartTime:        testReminderStartTime.String(),
+				Location:         testReminderLocation,
+				ReminderType:     testReminderType,
+				EventMessageID:   testDiscordMessageID,
+				DiscordChannelID: "channel-123",
+			},
+			expectedResult: results.OperationResult[roundtypes.ProcessRoundReminderResult, error]{
+				Success: &roundtypes.ProcessRoundReminderResult{
+					RoundID:          testReminderRoundID,
+					GuildID:          sharedtypes.GuildID("guild-123"),
+					RoundTitle:       testReminderRoundTitle,
+					StartTime:        testReminderStartTime.String(),
+					Location:         testReminderLocation,
+					UserIDs:          nil,
+					ReminderType:     testReminderType,
+					EventMessageID:   testDiscordMessageID,
+					DiscordChannelID: "channel-123",
+				},
+			},
 		},
 		{
 			name: "error retrieving participants",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetParticipants(gomock.Any(), guildID, testReminderRoundID).Return([]roundtypes.Participant{}, errors.New("database error"))
+			setup: func(f *FakeRepo, gcp *FakeGuildConfigProvider) {
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return nil, errors.New("database error")
+				}
 			},
-			payload: roundevents.DiscordReminderPayloadV1{
-				RoundID:        testReminderRoundID,
-				GuildID:        sharedtypes.GuildID("guild-123"),
-				RoundTitle:     testReminderRoundTitle,
-				StartTime:      &testReminderStartTime,
-				Location:       testReminderLocation,
-				ReminderType:   testReminderType,
-				EventMessageID: testDiscordMessageID,
+			req: &roundtypes.ProcessRoundReminderRequest{
+				RoundID:    testReminderRoundID,
+				GuildID:    sharedtypes.GuildID("guild-123"),
+				RoundTitle: testReminderRoundTitle,
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundErrorPayloadV1{ // Add pointer here
-					RoundID: testReminderRoundID,
-					Error:   "database error",
-				},
+			expectedResult: results.OperationResult[roundtypes.ProcessRoundReminderResult, error]{
+				Failure: ptr(errors.New("database error")),
 			},
-			expectedError: nil, // Change this to nil since you're handling errors in Failure
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockDBSetup(mockDB)
-
-			s := &RoundService{
-				repo:           mockDB,
-				logger:         logger,
-				metrics:        mockMetrics,
-				tracer:         tracer,
-				roundValidator: mockRoundValidator,
-				eventBus:       mockEventBus,
+			fakeRepo := &FakeRepo{}
+			fakeGCP := &FakeGuildConfigProvider{}
+			if tt.setup != nil {
+				tt.setup(fakeRepo, fakeGCP)
 			}
 
-			result, err := s.ProcessRoundReminder(ctx, tt.payload)
+			s := &RoundService{
+				repo:                fakeRepo,
+				logger:              logger,
+				metrics:             mockMetrics,
+				tracer:              tracer,
+				roundValidator:      &FakeRoundValidator{},
+				eventBus:            &FakeEventBus{},
+				parserFactory:       &StubFactory{},
+				guildConfigProvider: fakeGCP,
+			}
 
-			// Check error expectations
+			result, err := s.ProcessRoundReminder(ctx, tt.req)
+
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf("expected error: %v, got: nil", tt.expectedError)
@@ -175,27 +205,34 @@ func TestRoundService_ProcessRoundReminder(t *testing.T) {
 				t.Errorf("expected no error, got: %v", err)
 			}
 
-			// Check result expectations
 			if tt.expectedResult.Success != nil {
 				if result.Success == nil {
 					t.Errorf("expected success result, got nil")
+				} else {
+					if result.Success.RoundID != tt.expectedResult.Success.RoundID {
+						t.Errorf("expected RoundID: %v, got: %v", tt.expectedResult.Success.RoundID, result.Success.RoundID)
+					}
+					if len(result.Success.UserIDs) != len(tt.expectedResult.Success.UserIDs) {
+						t.Errorf("expected %d user IDs, got %d", len(tt.expectedResult.Success.UserIDs), len(result.Success.UserIDs))
+					}
+					if result.Success.DiscordChannelID != tt.expectedResult.Success.DiscordChannelID {
+						t.Errorf("expected DiscordChannelID: %q, got: %q", tt.expectedResult.Success.DiscordChannelID, result.Success.DiscordChannelID)
+					}
 				}
-				// Add detailed comparison of the DiscordReminderPayload if needed
 			}
 
 			if tt.expectedResult.Failure != nil {
 				if result.Failure == nil {
 					t.Errorf("expected failure result, got nil")
 				} else {
-					expectedFailure := tt.expectedResult.Failure.(*roundevents.RoundErrorPayloadV1)
-					actualFailure := result.Failure.(*roundevents.RoundErrorPayloadV1)
-					if expectedFailure.RoundID != actualFailure.RoundID {
-						t.Errorf("expected RoundID: %v, got: %v", expectedFailure.RoundID, actualFailure.RoundID)
-					}
-					if expectedFailure.Error != actualFailure.Error {
-						t.Errorf("expected Error: %v, got: %v", expectedFailure.Error, actualFailure.Error)
+					if (*result.Failure).Error() != (*tt.expectedResult.Failure).Error() {
+						t.Errorf("expected Error: %v, got: %v", (*tt.expectedResult.Failure).Error(), (*result.Failure).Error())
 					}
 				}
+			}
+
+			if tt.verify != nil {
+				tt.verify(t, result)
 			}
 		})
 	}

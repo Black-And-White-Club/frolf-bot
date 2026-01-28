@@ -9,6 +9,7 @@ import (
 
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
@@ -166,8 +167,8 @@ func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
 		{
 			name: "Leaderboard exists - do nothing",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
-					return &leaderboarddb.Leaderboard{}, nil
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
+					return &leaderboardtypes.Leaderboard{}, nil
 				}
 			},
 			wantErr:       false,
@@ -176,15 +177,15 @@ func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
 		{
 			name: "Leaderboard missing - create it",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 					return nil, leaderboarddb.ErrNoActiveLeaderboard
 				}
-				f.CreateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, lb *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error) {
-					return lb, nil
+				f.SaveLeaderboardFunc = func(ctx context.Context, db bun.IDB, lb *leaderboardtypes.Leaderboard) error {
+					return nil
 				}
 			},
 			wantErr:       false,
-			expectedSteps: []string{"GetActiveLeaderboard", "CreateLeaderboard"},
+			expectedSteps: []string{"GetActiveLeaderboard", "SaveLeaderboard"},
 		},
 	}
 
@@ -193,14 +194,20 @@ func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
 			fakeRepo := NewFakeLeaderboardRepo()
 			tt.setupFake(fakeRepo)
 			s := &LeaderboardService{
-				repo:   fakeRepo,
-				logger: loggerfrolfbot.NoOpLogger,
-				db:     nil,
+				repo:    fakeRepo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &leaderboardmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+				db:      nil,
 			}
 
-			err := s.EnsureGuildLeaderboard(ctx, guildID)
+			// Expect Success Result now
+			res, err := s.EnsureGuildLeaderboard(ctx, guildID)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("EnsureGuildLeaderboard() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && !res.IsSuccess() {
+				t.Errorf("expected success result")
 			}
 
 			trace := fakeRepo.Trace()

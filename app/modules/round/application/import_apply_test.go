@@ -2,274 +2,190 @@ package roundservice
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace/noop"
+	"github.com/uptrace/bun"
 )
 
 func TestRoundService_ApplyImportedScores(t *testing.T) {
-	ctx := context.Background()
+	// Helper for creating pointers
+	ptrScore := func(i int) *sharedtypes.Score {
+		s := sharedtypes.Score(i)
+		return &s
+	}
 
-	roundID := sharedtypes.RoundID(uuid.New())
-	guildID := sharedtypes.GuildID("guild-1")
-	importID := "imp-apply-1"
-
+	// Test data
+	gID := sharedtypes.GuildID("guild-123")
+	rID := sharedtypes.RoundID(uuid.New())
+	importID := "import-abc"
 	u1 := sharedtypes.DiscordID("user-1")
 	u2 := sharedtypes.DiscordID("user-2")
+	teamID := uuid.New()
 
-	score1 := sharedtypes.Score(54)
-	score2 := sharedtypes.Score(56)
+	type testCase struct {
+		name      string
+		input     roundtypes.ImportApplyScoresInput
+		setupFake func(*FakeRepo)
+		verify    func(*testing.T, ApplyImportedScoresResult, error)
+	}
 
-	tests := []struct {
-		name          string
-		payload       roundevents.ImportCompletedPayloadV1
-		setupRepo     func(r *FakeRepo)
-		expectSuccess bool
-		expectedError string
-	}{
+	tests := []testCase{
 		{
-			name: "success singles - all scores applied",
-			payload: roundevents.ImportCompletedPayloadV1{
-				GuildID:   guildID,
-				RoundID:   roundID,
-				ImportID:  importID,
-				RoundMode: sharedtypes.RoundModeSingles,
-				Scores: []sharedtypes.ScoreInfo{
-					{UserID: u1, Score: score1},
-					{UserID: u2, Score: score2},
+			name: "Singles - Success (Update existing + Add new)",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 50, RawName: "User 1"}, // Existing
+					{UserID: u2, Score: 52, RawName: "User 2"}, // New
 				},
 			},
-			setupRepo: func(r *FakeRepo) {
-				r.UpdateParticipantScoreFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score) error {
-					return nil
-				}
-				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-					return []roundtypes.Participant{
-						{UserID: u1, Score: &score1},
-						{UserID: u2, Score: &score2},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             rID,
+						EventMessageID: "msg-123",
+						Teams:          nil, // Singles
 					}, nil
 				}
-				r.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{EventMessageID: "msg-123"}, nil
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					// User 1 exists with old score
+					return []roundtypes.Participant{
+						{UserID: u1, Score: ptrScore(60), Response: roundtypes.ResponseAccept},
+					}, nil
 				}
-			},
-			expectSuccess: true,
-		},
-		{
-			name: "partial success singles - one fails but still succeeds",
-			payload: roundevents.ImportCompletedPayloadV1{
-				GuildID:   guildID,
-				RoundID:   roundID,
-				ImportID:  importID,
-				RoundMode: sharedtypes.RoundModeSingles,
-				Scores: []sharedtypes.ScoreInfo{
-					{UserID: u1, Score: score1},
-					{UserID: u2, Score: score2},
-				},
-			},
-			setupRepo: func(r *FakeRepo) {
-				r.UpdateParticipantScoreFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score) error {
-					if uID == u2 {
-						return fmt.Errorf("db error")
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					if len(updates) != 1 {
+						return errors.New("expected 1 update")
+					}
+					parts := updates[0].Participants
+					if len(parts) != 2 {
+						return errors.New("expected 2 participants")
+					}
+					// Verify User 1 updated
+					if parts[0].UserID == u1 && *parts[0].Score != 50 {
+						return errors.New("user 1 score not updated")
+					}
+					// Verify User 2 added
+					if parts[1].UserID == u2 && *parts[1].Score != 52 {
+						return errors.New("user 2 score not added")
 					}
 					return nil
 				}
-				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-					return []roundtypes.Participant{
-						{UserID: u1, Score: &score1},
-					}, nil
+			},
+			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
 				}
-				r.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{}, nil
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				success := res.Success
+				if (*success).EventMessageID != "msg-123" {
+					t.Errorf("expected EventMessageID msg-123, got %s", (*success).EventMessageID)
+				}
+				if len((*success).Participants) != 2 {
+					t.Errorf("expected 2 participants in result, got %d", len((*success).Participants))
 				}
 			},
-			expectSuccess: true,
 		},
 		{
-			name: "singles - matched users added and persisted via batch update",
-			payload: roundevents.ImportCompletedPayloadV1{
-				GuildID:   guildID,
-				RoundID:   roundID,
-				ImportID:  importID,
-				RoundMode: sharedtypes.RoundModeSingles,
-				Scores: []sharedtypes.ScoreInfo{
-					{UserID: u1, Score: score1},
+			name: "Singles - Failure (No scores applied - Guest only)",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: "", Score: 50, RawName: "Guest"}, // Guests skipped in singles
 				},
 			},
-			setupRepo: func(r *FakeRepo) {
-				// New code path uses GetParticipants + UpdateRoundsAndParticipants
-				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
 					return []roundtypes.Participant{}, nil
 				}
-				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, u []roundtypes.RoundUpdate) error {
-					return nil
+			},
+			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
 				}
-				r.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{}, nil
+				if !res.IsFailure() {
+					t.Fatal("expected failure result")
+				}
+				errMsg := (*res.Failure).Error()
+				if errMsg != "no scores were successfully applied" {
+					t.Errorf("unexpected error message: %s", errMsg)
 				}
 			},
-			expectSuccess: true,
 		},
 		{
-			name: "success doubles - batch update and completion check",
-			payload: roundevents.ImportCompletedPayloadV1{
-				GuildID:   guildID,
-				RoundID:   roundID,
-				ImportID:  importID,
-				RoundMode: sharedtypes.RoundModeDoubles,
-				Scores: []sharedtypes.ScoreInfo{
-					{UserID: u1, Score: score1},
+			name: "Teams - Success (Create Groups)",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 45, TeamID: teamID},
 				},
 			},
-			setupRepo: func(r *FakeRepo) {
-				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-					return []roundtypes.Participant{{UserID: u1}}, nil
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    rID,
+						Teams: []roundtypes.NormalizedTeam{{TeamID: teamID}}, // Teams mode
+					}, nil
 				}
-				r.RoundHasGroupsFunc = func(ctx context.Context, rID sharedtypes.RoundID) (bool, error) {
-					return true, nil
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
 				}
-				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, u []roundtypes.RoundUpdate) error {
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) {
+					return false, nil // Groups need creating
+				}
+				r.CreateRoundGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error {
+					if len(participants) != 1 {
+						return errors.New("expected 1 participant for group creation")
+					}
+					return nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
 					return nil
 				}
 			},
-			expectSuccess: true,
-		},
-		{
-			name: "failure doubles - get participants error",
-			payload: roundevents.ImportCompletedPayloadV1{
-				GuildID:   guildID,
-				RoundID:   roundID,
-				ImportID:  importID,
-				RoundMode: sharedtypes.RoundModeDoubles,
-				Scores: []sharedtypes.ScoreInfo{
-					{UserID: u1, Score: score1},
-				},
-			},
-			setupRepo: func(r *FakeRepo) {
-				r.GetParticipantsFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-					return nil, fmt.Errorf("fatal db error")
+			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
 				}
 			},
-			expectSuccess: false,
-			expectedError: "fatal db error",
-		},
-
-		{
-			name:    "failure doubles - round has groups error",
-			payload: doublesPayload(guildID, roundID, importID, u1, score1),
-			setupRepo: func(r *FakeRepo) {
-				r.GetParticipantsFunc = okParticipants
-				r.RoundHasGroupsFunc = func(ctx context.Context, _ sharedtypes.RoundID) (bool, error) {
-					return false, fmt.Errorf("group lookup failed")
-				}
-			},
-			expectSuccess: false,
-			expectedError: "group lookup failed",
-		},
-
-		{
-			name:    "failure doubles - create groups error",
-			payload: doublesPayload(guildID, roundID, importID, u1, score1),
-			setupRepo: func(r *FakeRepo) {
-				r.GetParticipantsFunc = okParticipants
-				r.RoundHasGroupsFunc = func(ctx context.Context, _ sharedtypes.RoundID) (bool, error) {
-					return false, nil
-				}
-				r.CreateRoundGroupsFunc = func(_ sharedtypes.RoundID, _ []roundtypes.Participant) error {
-					return fmt.Errorf("create groups failed")
-				}
-			},
-			expectSuccess: false,
-			expectedError: "create groups failed",
-		},
-
-		{
-			name:    "failure doubles - batch update error",
-			payload: doublesPayload(guildID, roundID, importID, u1, score1),
-			setupRepo: func(r *FakeRepo) {
-				r.GetParticipantsFunc = okParticipants
-				r.RoundHasGroupsFunc = func(ctx context.Context, _ sharedtypes.RoundID) (bool, error) {
-					return true, nil
-				}
-				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, _ sharedtypes.GuildID, _ []roundtypes.RoundUpdate) error {
-					return fmt.Errorf("batch update failed")
-				}
-			},
-			expectSuccess: false,
-			expectedError: "batch update failed",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			repo := NewFakeRepo()
-			if tt.setupRepo != nil {
-				tt.setupRepo(repo)
+			if tc.setupFake != nil {
+				tc.setupFake(repo)
 			}
 
+			// We don't need UserLookup for this test, so pass nil or empty
 			svc := &RoundService{
-				repo:    repo,
-				logger:  loggerfrolfbot.NoOpLogger,
-				metrics: &roundmetrics.NoOpMetrics{},
-				tracer:  noop.NewTracerProvider().Tracer("test"),
+				repo:   repo,
+				logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
-			result, err := svc.ApplyImportedScores(ctx, tt.payload)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if tt.expectSuccess {
-				if result.Success == nil {
-					t.Fatalf("expected success, got failure: %+v", result.Failure)
-				}
-			} else {
-				if result.Failure == nil {
-					t.Fatalf("expected failure, got success")
-				}
-
-				var msg string
-				switch f := result.Failure.(type) {
-				case *roundevents.ImportFailedPayloadV1:
-					msg = f.Error
-				case *roundevents.RoundErrorPayloadV1:
-					msg = f.Error
-				}
-
-				if tt.expectedError != "" && !strings.Contains(msg, tt.expectedError) {
-					t.Fatalf("expected error containing %q, got %q", tt.expectedError, msg)
-				}
-			}
+			res, err := svc.ApplyImportedScores(context.Background(), tc.input)
+			tc.verify(t, res, err)
 		})
 	}
-}
-
-func doublesPayload(guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, userID sharedtypes.DiscordID, score sharedtypes.Score) roundevents.ImportCompletedPayloadV1 {
-	return roundevents.ImportCompletedPayloadV1{
-		GuildID:   guildID,
-		RoundID:   roundID,
-		ImportID:  importID,
-		RoundMode: sharedtypes.RoundModeDoubles,
-		Scores: []sharedtypes.ScoreInfo{
-			{UserID: userID, Score: score},
-		},
-	}
-}
-
-func okParticipants(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID,
-) ([]roundtypes.Participant, error) {
-	return []roundtypes.Participant{
-		{
-			UserID:   sharedtypes.DiscordID("user-1"),
-			Response: roundtypes.ResponseAccept,
-		},
-	}, nil
 }

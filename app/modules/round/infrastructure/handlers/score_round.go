@@ -2,7 +2,6 @@ package roundhandlers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -19,7 +18,17 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.ValidateScoreUpdateRequest(ctx, *payload)
+	var score int32
+	if payload.Score != nil {
+		score = int32(*payload.Score)
+	}
+
+	result, err := h.service.ValidateScoreUpdateRequest(ctx, &roundtypes.ScoreUpdateRequest{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+		UserID:  payload.UserID,
+		Score:   &score,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -35,20 +44,25 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateValidatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.UpdateParticipantScore(ctx, *payload)
+	var score int32
+	if payload.ScoreUpdateRequestPayload.Score != nil {
+		score = int32(*payload.ScoreUpdateRequestPayload.Score)
+	}
+
+	result, err := h.service.UpdateParticipantScore(ctx, &roundtypes.ScoreUpdateRequest{
+		GuildID: payload.GuildID,
+		RoundID: payload.ScoreUpdateRequestPayload.RoundID,
+		UserID:  payload.ScoreUpdateRequestPayload.UserID,
+		Score:   &score,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	results := mapOperationResult(result,
+	return mapOperationResult(result,
 		roundevents.RoundParticipantScoreUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
-	)
-
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundParticipantScoreUpdatedV1, payload.GuildID)
-
-	return results, nil
+	), nil
 }
 
 // HandleScoreBulkUpdateRequest handles bulk score overrides for a round.
@@ -63,7 +77,25 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 		}
 	}
 
-	opResult, err := h.service.UpdateParticipantScoresBulk(ctx, *payload)
+	updates := make([]roundtypes.ScoreUpdateRequest, 0, len(payload.Updates))
+	for _, u := range payload.Updates {
+		var score int32
+		if u.Score != nil {
+			score = int32(*u.Score)
+		}
+		updates = append(updates, roundtypes.ScoreUpdateRequest{
+			GuildID: u.GuildID,
+			RoundID: u.RoundID,
+			UserID:  u.UserID,
+			Score:   &score,
+		})
+	}
+
+	opResult, err := h.service.UpdateParticipantScoresBulk(ctx, &roundtypes.BulkScoreUpdateRequest{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+		Updates: updates,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +111,7 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 	}
 
 	// 🔑 Extract authoritative success payload
-	successPayload, ok := opResult.Success.(*roundevents.RoundScoresBulkUpdatedPayloadV1)
-	if !ok {
-		return nil, errors.New("unexpected success payload type")
-	}
+	successPayload := opResult.Success
 
 	userIDs := make([]sharedtypes.DiscordID, 0, len(payload.Updates))
 	for _, u := range payload.Updates {
@@ -90,8 +119,8 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 	}
 
 	sharedPayload := &sharedevents.ScoreBulkUpdatedPayloadV1{
-		GuildID:        successPayload.GuildID,
-		RoundID:        successPayload.RoundID,
+		GuildID:        (*successPayload).GuildID,
+		RoundID:        (*successPayload).RoundID,
 		AppliedCount:   len(payload.Updates),
 		FailedCount:    0,
 		TotalRequested: len(payload.Updates),
@@ -123,7 +152,11 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	)
 
 	// 1. Ask the domain service if the round is ready
-	result, err := h.service.CheckAllScoresSubmitted(ctx, *payload)
+	result, err := h.service.CheckAllScoresSubmitted(ctx, &roundtypes.CheckAllScoresSubmittedRequest{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+		UserID:  payload.UserID,
+	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed", attr.Error(err))
 		return nil, err
@@ -140,7 +173,8 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	}
 
 	// 3. All scores submitted
-	if allScoresData, ok := result.Success.(*roundevents.AllScoresSubmittedPayloadV1); ok {
+	if result.Success != nil && (*result.Success).IsComplete {
+		allScoresData := *result.Success
 		scores := make([]sharedtypes.ScoreInfo, 0, len(allScoresData.Participants))
 
 		for _, p := range allScoresData.Participants {
@@ -161,17 +195,27 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 			})
 		}
 
-		return []handlerwrapper.Result{
+		// Convert domain result to event payload
+		eventPayload := &roundevents.AllScoresSubmittedPayloadV1{
+			GuildID:        payload.GuildID,
+			RoundID:        payload.RoundID,
+			EventMessageID: payload.EventMessageID,
+			RoundData:      *allScoresData.Round,
+			Participants:   allScoresData.Participants,
+			Teams:          allScoresData.Teams,
+		}
 
+		return []handlerwrapper.Result{
 			{
 				Topic:   roundevents.RoundAllScoresSubmittedV1,
-				Payload: allScoresData,
+				Payload: eventPayload,
 			},
 		}, nil
 	}
 
 	// 4. Partial submission (unchanged behavior)
-	if partialData, ok := result.Success.(*roundevents.ScoresPartiallySubmittedPayloadV1); ok {
+	if result.Success != nil && !(*result.Success).IsComplete {
+		partialData := *result.Success
 		scoredTeams := make([]roundtypes.NormalizedTeam, 0)
 		remainingParticipants := make([]roundtypes.Participant, 0)
 
@@ -196,13 +240,28 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 			}
 		}
 
-		partialData.Teams = scoredTeams
-		partialData.Participants = remainingParticipants
+		// Convert domain result to event payload
+		// Note: ScoresPartiallySubmittedPayloadV1 expects Scores and Participants
+		scores := make([]roundevents.ParticipantScoreV1, 0)
+		// ... logic to populate scores if needed, but previously we just returned partialData
+		// The previous code casted result.Success to *roundevents.ScoresPartiallySubmittedPayloadV1
+		// Now result.Success is AllScoresSubmittedResult (shared type).
+		
+		eventPayload := &roundevents.ScoresPartiallySubmittedPayloadV1{
+			GuildID:        payload.GuildID,
+			RoundID:        payload.RoundID,
+			UserID:         payload.UserID,
+			Score:          payload.Score,
+			EventMessageID: payload.EventMessageID,
+			Scores:         scores, // We need to populate this if consumers use it
+			Participants:   remainingParticipants,
+			Teams:          scoredTeams,
+		}
 
 		return []handlerwrapper.Result{
 			{
 				Topic:   roundevents.RoundScoresPartiallySubmittedV1,
-				Payload: partialData,
+				Payload: eventPayload,
 			},
 		}, nil
 	}

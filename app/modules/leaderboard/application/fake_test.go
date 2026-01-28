@@ -16,9 +16,8 @@ import (
 type FakeLeaderboardRepo struct {
 	trace []string
 
-	GetActiveLeaderboardFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error)
-	UpdateLeaderboardFunc     func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error)
-	CreateLeaderboardFunc     func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboard *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error)
+	GetActiveLeaderboardFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error)
+	SaveLeaderboardFunc       func(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error
 	DeactivateLeaderboardFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error
 }
 
@@ -34,7 +33,7 @@ func (f *FakeLeaderboardRepo) record(step string) {
 
 // --- Repository Interface Implementation ---
 
-func (f *FakeLeaderboardRepo) GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+func (f *FakeLeaderboardRepo) GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 	f.record("GetActiveLeaderboard")
 	if f.GetActiveLeaderboardFunc != nil {
 		return f.GetActiveLeaderboardFunc(ctx, db, guildID)
@@ -43,26 +42,12 @@ func (f *FakeLeaderboardRepo) GetActiveLeaderboard(ctx context.Context, db bun.I
 	return nil, leaderboarddb.ErrNoActiveLeaderboard
 }
 
-func (f *FakeLeaderboardRepo) UpdateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
-	f.record("UpdateLeaderboard")
-	if f.UpdateLeaderboardFunc != nil {
-		return f.UpdateLeaderboardFunc(ctx, db, guildID, data, updateID, source)
+func (f *FakeLeaderboardRepo) SaveLeaderboard(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error {
+	f.record("SaveLeaderboard")
+	if f.SaveLeaderboardFunc != nil {
+		return f.SaveLeaderboardFunc(ctx, db, leaderboard)
 	}
-	return &leaderboarddb.Leaderboard{
-		LeaderboardData: data,
-		GuildID:         guildID,
-		UpdateID:        updateID,
-		IsActive:        true,
-	}, nil
-}
-
-func (f *FakeLeaderboardRepo) CreateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, lb *leaderboarddb.Leaderboard) (*leaderboarddb.Leaderboard, error) {
-	f.record("CreateLeaderboard")
-	if f.CreateLeaderboardFunc != nil {
-		return f.CreateLeaderboardFunc(ctx, db, guildID, lb)
-	}
-	lb.GuildID = guildID
-	return lb, nil
+	return nil
 }
 
 func (f *FakeLeaderboardRepo) DeactivateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, id int64) error {

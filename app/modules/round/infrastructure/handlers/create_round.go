@@ -17,7 +17,18 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 ) ([]handlerwrapper.Result, error) {
 	clock := h.extractAnchorClock(ctx)
 
-	result, err := h.service.ValidateAndProcessRoundWithClock(ctx, *payload, roundtime.NewTimeParser(), clock)
+	req := &roundtypes.CreateRoundInput{
+		GuildID:     payload.GuildID,
+		Title:       roundtypes.Title(payload.Title),
+		Description: roundtypes.Description(payload.Description),
+		Location:    roundtypes.Location(payload.Location),
+		StartTime:   payload.StartTime,
+		Timezone:    string(payload.Timezone),
+		UserID:      payload.UserID,
+		ChannelID:   payload.ChannelID,
+	}
+
+	result, err := h.service.ValidateRoundCreationWithClock(ctx, req, roundtime.NewTimeParser(), clock)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +44,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	ctx context.Context,
 	payload *roundevents.RoundEntityCreatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.StoreRound(ctx, payload.GuildID, *payload)
+	result, err := h.service.StoreRound(ctx, &payload.Round, payload.GuildID)
 	if err != nil {
 		return nil, err
 	}

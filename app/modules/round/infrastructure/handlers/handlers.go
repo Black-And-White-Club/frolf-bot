@@ -34,11 +34,11 @@ func NewRoundHandlers(
 }
 
 // mapOperationResult converts a service OperationResult to handler Results.
-func mapOperationResult(
-	result results.OperationResult,
+func mapOperationResult[S any, F any](
+	result results.OperationResult[S, F],
 	successTopic, failureTopic string,
 ) []handlerwrapper.Result {
-	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+	handlerResults := result.ToHandlerResults(successTopic, failureTopic)
 
 	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
 	for i, hr := range handlerResults {

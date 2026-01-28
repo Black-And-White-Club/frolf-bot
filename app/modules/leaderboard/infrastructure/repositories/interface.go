@@ -18,12 +18,15 @@ import (
 //   - ErrNoRowsAffected: UPDATE/DELETE matched no rows
 //   - Other errors: Infrastructure failures (DB connection, query errors)
 type Repository interface {
-	// Read Methods
-	GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*Leaderboard, error)
+	// GetActiveLeaderboard retrieves the current active leaderboard for a guild.
+	// Returns ErrNoActiveLeaderboard if no active leaderboard exists.
+	GetActiveLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error)
 
-	// Write Methods (Atomic & Batch-Oriented)
-	// We pass bun.IDB so the service can control the transaction.
-	UpdateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboardData leaderboardtypes.LeaderboardData, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (*Leaderboard, error)
-	CreateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboard *Leaderboard) (*Leaderboard, error)
+	// SaveLeaderboard creates a new leaderboard version.
+	// It deactivates any existing active leaderboard for the guild and inserts the new one.
+	// This maintains the history of leaderboard states.
+	SaveLeaderboard(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error
+
+	// DeactivateLeaderboard deactivates a specific leaderboard by ID.
 	DeactivateLeaderboard(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, leaderboardID int64) error
 }

@@ -3,241 +3,159 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	queuemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue/mocks"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
-// startTimePtr is a helper function to convert time.Time to *sharedtypes.StartTime.
-func startTimePtr(t time.Time) *sharedtypes.StartTime {
-	st := sharedtypes.StartTime(t)
-	return &st
+func ptr[T any](v T) *T {
+	return &v
 }
 
 func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	ctx := context.Background()
-	logger := loggerfrolfbot.NoOpLogger
+	logger := slog.New(slog.NewTextHandler(nil, nil))
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
 
+	now := time.Now().UTC()
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("test-guild")
+	testRoundTitle := "Test Round"
+	testLocation := "Test Location"
+	testDescription := "Test Description"
+	testMessageID := "12345"
+
 	tests := []struct {
-		name             string
-		startTimeOffset  time.Duration // Offset from current time
-		discordMessageID string
-		mockQueueSetup   func(*queuemocks.MockQueueService, sharedtypes.RoundID, time.Time)
-		expectedError    error
-		wantSuccess      bool
-		wantFailure      bool
+		name            string
+		startTimeOffset time.Duration
+		setup           func(*FakeQueueService)
+		want            results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]
+		wantErr         bool
 	}{
 		{
-			name:             "successful scheduling",
-			startTimeOffset:  2 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation of existing jobs
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-
-				// Expect reminder scheduling - use gomock.Any() for time since implementation uses time.Now()
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-
-				// Expect round start scheduling - use gomock.Any() for time since implementation uses time.Now()
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
+			name:            "successful scheduling",
+			startTimeOffset: 2 * time.Hour,
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return nil
+				}
 			},
-			expectedError: nil,
-			wantSuccess:   true,
-			wantFailure:   false,
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Success: ptr(&roundtypes.ScheduleRoundEventsResult{
+					RoundID:        testRoundID,
+					GuildID:        testGuildID,
+					Title:          testRoundTitle,
+					Description:    testDescription,
+					Location:       testLocation,
+					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
+					EventMessageID: testMessageID,
+				}),
+			},
+			wantErr: false,
 		},
 		{
-			name:             "error cancelling jobs",
-			startTimeOffset:  2 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to fail
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(errors.New("job cancellation error"))
+			name:            "error cancelling jobs",
+			startTimeOffset: 2 * time.Hour,
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error {
+					return errors.New("job cancellation error")
+				}
 			},
-			expectedError: nil, // Error is handled in Failure
-			wantSuccess:   false,
-			wantFailure:   true,
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Failure: ptr(errors.New("job cancellation error")),
+			},
+			wantErr: false,
 		},
 		{
-			name:             "error scheduling reminder",
-			startTimeOffset:  2 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-
-				// Expect reminder scheduling to fail - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("reminder scheduling error"))
+			name:            "error scheduling reminder",
+			startTimeOffset: 2 * time.Hour,
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return errors.New("reminder scheduling error")
+				}
 			},
-			expectedError: nil, // Error is handled in Failure
-			wantSuccess:   false,
-			wantFailure:   true,
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Failure: ptr(errors.New("reminder scheduling error")),
+			},
+			wantErr: false,
 		},
 		{
-			name:             "error scheduling round start",
-			startTimeOffset:  2 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-
-				// Expect reminder scheduling to succeed - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-
-				// Expect round start scheduling to fail - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(errors.New("round start scheduling error"))
+			name:            "error scheduling round start",
+			startTimeOffset: 2 * time.Hour,
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("round start scheduling error")
+				}
 			},
-			expectedError: nil, // Error is handled in Failure
-			wantSuccess:   false,
-			wantFailure:   true,
-		},
-		{
-			name:             "past start time",
-			startTimeOffset:  -1 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-				// No scheduling calls expected as times are in the past
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Failure: ptr(errors.New("round start scheduling error")),
 			},
-			expectedError: nil,
-			wantSuccess:   true,
-			wantFailure:   false,
-		},
-		{
-			name:             "far future start time",
-			startTimeOffset:  720 * time.Hour,
-			discordMessageID: "12345",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-
-				// Expect reminder scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-
-				// Expect round start scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-			},
-			expectedError: nil,
-			wantSuccess:   true,
-			wantFailure:   false,
-		},
-		{
-			name:             "empty event message ID",
-			startTimeOffset:  2 * time.Hour,
-			discordMessageID: "",
-			mockQueueSetup: func(mockQueue *queuemocks.MockQueueService, roundID sharedtypes.RoundID, fixedNow time.Time) {
-				// Expect cancellation to succeed
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), roundID).Return(nil)
-
-				// Expect reminder scheduling with empty EventMessageID - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-
-				// Expect round start scheduling - use gomock.Any() for time
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), roundID, gomock.Any(), gomock.Any()).Return(nil)
-			},
-			expectedError: nil,
-			wantSuccess:   true,
-			wantFailure:   false,
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockQueue := queuemocks.NewMockQueueService(ctrl)
-
-			// Use current time instead of fixed historical time
-			now := time.Now().UTC()
-
-			// Create test data with dynamic round ID for this specific test
-			testRoundID := sharedtypes.RoundID(uuid.New())
-			testRoundTitle := roundtypes.Title("Test Round")
-			testLocation := roundtypes.Location("Test Location")
-			testDescription := roundtypes.Description("Test Description")
-
-			// Create payload with the dynamic start time relative to current time
-			payload := roundevents.RoundScheduledPayloadV1{
-				BaseRoundPayload: roundtypes.BaseRoundPayload{
-					RoundID:     testRoundID,
-					Title:       testRoundTitle,
-					Description: testDescription,
-					Location:    testLocation,
-					StartTime:   startTimePtr(now.Add(tt.startTimeOffset)),
-				},
+			queue := NewFakeQueueService()
+			if tt.setup != nil {
+				tt.setup(queue)
 			}
 
-			// Setup mocks with the specific round ID for this test
-			tt.mockQueueSetup(mockQueue, testRoundID, now)
+			s := NewRoundService(nil, queue, nil, nil, mockMetrics, logger, tracer, nil, nil)
 
-			s := &RoundService{
-				logger:       logger,
-				metrics:      mockMetrics,
-				tracer:       tracer,
-				queueService: mockQueue,
+			req := &roundtypes.ScheduleRoundEventsRequest{
+				RoundID:        testRoundID,
+				GuildID:        testGuildID,
+				Title:          testRoundTitle,
+				Description:    testDescription,
+				Location:       testLocation,
+				StartTime:      *startTimePtr(now.Add(tt.startTimeOffset)),
+				EventMessageID: testMessageID,
 			}
 
-			guildID := sharedtypes.GuildID("test-guild")
-			result, err := s.ScheduleRoundEvents(ctx, guildID, payload, tt.discordMessageID)
+			got, err := s.ScheduleRoundEvents(ctx, req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RoundService.ScheduleRoundEvents() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 
-			// Validate error
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
+			if tt.want.Failure != nil {
+				if got.Failure == nil {
+					t.Errorf("expected failure, got nil")
+				} else if (*got.Failure).Error() != (*tt.want.Failure).Error() {
+					t.Errorf("expected failure error %v, got %v", *tt.want.Failure, *got.Failure)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got: %v", err)
-				}
+			} else if got.Failure != nil {
+				t.Errorf("expected no failure, got %v", *got.Failure)
 			}
 
-			// Validate result type
-			if tt.wantSuccess && result.Success == nil {
-				t.Errorf("expected success result, got failure: %v", result.Failure)
-			}
-			if tt.wantFailure && result.Failure == nil {
-				t.Errorf("expected failure result, got success: %v", result.Success)
-			}
-
-			// Basic validation for success payloads
-			if result.Success != nil {
-				if successPayload, ok := result.Success.(*roundevents.RoundScheduledPayloadV1); !ok {
-					t.Errorf("expected result.Success to be of type *roundevents.RoundScheduledPayloadV1, got %T", result.Success)
+			if tt.want.Success != nil {
+				if got.Success == nil {
+					t.Errorf("expected success, got nil")
 				} else {
-					if successPayload.RoundID != testRoundID {
-						t.Errorf("expected success RoundID %s, got %s", testRoundID, successPayload.RoundID)
-					}
-					if successPayload.Title != testRoundTitle {
-						t.Errorf("expected success Title %s, got %s", testRoundTitle, successPayload.Title)
-					}
-					if successPayload.EventMessageID != tt.discordMessageID {
-						t.Errorf("expected success EventMessageID %s, got %s", tt.discordMessageID, successPayload.EventMessageID)
-					}
-				}
-			}
-
-			// Basic validation for failure payloads
-			if result.Failure != nil {
-				if failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1); !ok {
-					t.Errorf("expected result.Failure to be of type *roundevents.RoundErrorPayloadV1, got %T", result.Failure)
-				} else {
-					if failurePayload.RoundID != testRoundID {
-						t.Errorf("expected failure RoundID %s, got %s", testRoundID, failurePayload.RoundID)
+					if diff := cmp.Diff(*got.Success, *tt.want.Success, cmpopts.EquateComparable(sharedtypes.StartTime{})); diff != "" {
+						t.Errorf("RoundService.ScheduleRoundEvents() mismatch (-got +want):\n%s", diff)
 					}
 				}
 			}

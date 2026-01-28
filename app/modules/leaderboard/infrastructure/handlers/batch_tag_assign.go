@@ -30,17 +30,20 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, fmt.Errorf("invalid batch_id format: %w", err)
 	}
 
-	resultData, err := h.service.ExecuteBatchTagAssignment(
+	result, err := h.service.ExecuteBatchTagAssignment(
 		ctx,
 		payload.GuildID,
 		requests,
 		sharedtypes.RoundID(batchUUID),
 		sharedtypes.ServiceUpdateSourceAdminBatch,
 	)
-
 	if err != nil {
+		return nil, err
+	}
+
+	if result.IsFailure() {
 		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(err, &swapErr) {
+		if errors.As(*result.Failure, &swapErr) {
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     swapErr.RequestorID,
 				CurrentTag: swapErr.CurrentTag,
@@ -49,8 +52,8 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 			})
 			return []handlerwrapper.Result{}, intentErr
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, resultData, "batch_assignment"), nil
+	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment"), nil
 }

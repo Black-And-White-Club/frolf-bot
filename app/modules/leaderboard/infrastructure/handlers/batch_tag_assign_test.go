@@ -8,6 +8,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/google/uuid"
 )
@@ -25,11 +26,11 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Successfully assign batch tags",
 			setupFake: func(f *FakeService) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					// Service returns domain data (the slice of new assignments)
-					return leaderboardtypes.LeaderboardData{
+					return results.SuccessResult[leaderboardtypes.LeaderboardData, error](leaderboardtypes.LeaderboardData{
 						{UserID: "user-456", TagNumber: 1},
-					}, nil
+					}), nil
 				}
 			},
 			wantErr: false,
@@ -39,8 +40,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Service Infrastructure Error",
 			setupFake: func(f *FakeService) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
-					return nil, fmt.Errorf("connection refused")
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+					return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, fmt.Errorf("connection refused")
 				}
 			},
 			wantErr:       true,
@@ -49,12 +50,13 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name: "Tag Swap Required Error",
 			setupFake: func(f *FakeService) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
-					return nil, &leaderboardservice.TagSwapNeededError{
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+					err := error(&leaderboardservice.TagSwapNeededError{
 						RequestorID: "user-456",
 						CurrentTag:  5,
 						TargetTag:   1,
-					}
+					})
+					return results.FailureResult[leaderboardtypes.LeaderboardData, error](err), nil
 				}
 			},
 			wantErr:       false, // Should return empty results and hand off to saga

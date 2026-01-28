@@ -5,7 +5,7 @@ applyTo: "**/*.go,**/go.mod,**/go.sum"
 
 # Go Development Instructions
 
-Follow idiomatic Go practices and community standards when writing Go code. These instructions are based on [Effective Go](https://go.dev/doc/effective_go), [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments), and [Google's Go Style Guide](https://google.github.io/styleguide/go/).
+Follow idiomatic Go practices and community standards when writing Go code. These instructions are based on [Effective Go](https://go.dev/doc/effective_go), [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments), [Uber's Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md), and [Google's Go Style Guide](https://google.github.io/styleguide/go/).
 
 ## General Instructions
 

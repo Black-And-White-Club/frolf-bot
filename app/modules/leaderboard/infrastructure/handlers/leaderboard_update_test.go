@@ -9,6 +9,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/google/uuid"
 )
@@ -41,11 +42,11 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Successfully handle LeaderboardUpdateRequested",
 			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
-					return leaderboardtypes.LeaderboardData{
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+					return results.SuccessResult[leaderboardtypes.LeaderboardData, error](leaderboardtypes.LeaderboardData{
 						{UserID: "12345678901234567", TagNumber: 1},
 						{UserID: "12345678901234568", TagNumber: 2},
-					}, nil
+					}), nil
 				}
 			},
 			payload:       testPayload,
@@ -60,12 +61,13 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Tag Swap Required - Triggers Saga",
 			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
-					return nil, &leaderboardservice.TagSwapNeededError{
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+					err := error(&leaderboardservice.TagSwapNeededError{
 						RequestorID: "12345678901234567",
 						CurrentTag:  5,
 						TargetTag:   1,
-					}
+					})
+					return results.FailureResult[leaderboardtypes.LeaderboardData, error](err), nil
 				}
 			},
 			payload:       testPayload,
@@ -80,8 +82,8 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Service Infrastructure Error",
 			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
-					return nil, fmt.Errorf("database down")
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
+					return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, fmt.Errorf("database down")
 				}
 			},
 			payload:       testPayload,
@@ -91,12 +93,12 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		{
 			name: "Invalid tag format in payload - skips bad entries",
 			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
-				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (leaderboardtypes.LeaderboardData, error) {
+				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					// Verify only the valid tag was passed to the service
 					if len(requests) != 1 {
-						return nil, fmt.Errorf("expected 1 request, got %d", len(requests))
+						return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, fmt.Errorf("expected 1 request, got %d", len(requests))
 					}
-					return leaderboardtypes.LeaderboardData{{UserID: "12345", TagNumber: 1}}, nil
+					return results.SuccessResult[leaderboardtypes.LeaderboardData, error](leaderboardtypes.LeaderboardData{{UserID: "12345", TagNumber: 1}}), nil
 				}
 			},
 			payload: &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{

@@ -41,7 +41,7 @@ func NewRoundModule(
 	obs observability.Observability,
 	roundDB rounddb.Repository,
 	db *bun.DB,
-	userDB userdb.UserDB,
+	userDB userdb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -76,11 +76,12 @@ func NewRoundModule(
 		roundDB,
 		queueService,
 		eventBus,
-		roundadapters.NewUserLookupAdapter(userDB),
+		roundadapters.NewUserLookupAdapter(userDB, db),
 		metrics,
 		logger,
 		tracer,
 		roundValidator,
+		db,
 	)
 
 	prometheusRegistry := prometheus.NewRegistry()

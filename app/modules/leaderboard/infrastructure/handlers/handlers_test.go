@@ -8,6 +8,7 @@ import (
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -82,11 +83,11 @@ func TestLeaderboardHandlers_HandleGuildConfigCreated(t *testing.T) {
 		{
 			name: "Successfully ensures leaderboard",
 			setupFake: func(f *FakeService) {
-				f.EnsureGuildLeaderboardFunc = func(ctx context.Context, g sharedtypes.GuildID) error {
+				f.EnsureGuildLeaderboardFunc = func(ctx context.Context, g sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
 					if g != testGuildID {
-						return fmt.Errorf("wrong guild ID")
+						return results.OperationResult[bool, error]{}, fmt.Errorf("wrong guild ID")
 					}
-					return nil
+					return results.SuccessResult[bool, error](true), nil
 				}
 			},
 			wantErr: false,
@@ -94,8 +95,8 @@ func TestLeaderboardHandlers_HandleGuildConfigCreated(t *testing.T) {
 		{
 			name: "Service error bubbles up",
 			setupFake: func(f *FakeService) {
-				f.EnsureGuildLeaderboardFunc = func(ctx context.Context, g sharedtypes.GuildID) error {
-					return fmt.Errorf("infrastructure failure")
+				f.EnsureGuildLeaderboardFunc = func(ctx context.Context, g sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+					return results.OperationResult[bool, error]{}, fmt.Errorf("infrastructure failure")
 				}
 			},
 			wantErr: true,

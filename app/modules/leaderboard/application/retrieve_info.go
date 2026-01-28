@@ -7,6 +7,7 @@ import (
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 )
 
@@ -20,20 +21,23 @@ type TagAvailabilityResult struct {
 func (s *LeaderboardService) GetLeaderboard(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
-) ([]leaderboardtypes.LeaderboardEntry, error) {
+) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 
-	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
-	if err != nil {
-		return nil, err
-	}
-	if leaderboard == nil {
-		return nil, leaderboarddb.ErrNoActiveLeaderboard
-	}
+	return withTelemetry(s, ctx, "GetLeaderboard", guildID, func(ctx context.Context) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
+		if err != nil {
+			return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, err
+		}
+		if leaderboard == nil {
+			// This case might be unreachable if repo returns error for no active leaderboard, but keeping for safety
+			return results.FailureResult[[]leaderboardtypes.LeaderboardEntry, error](leaderboarddb.ErrNoActiveLeaderboard), nil
+		}
 
-	// Return a copy of entries
-	entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
-	copy(entries, leaderboard.LeaderboardData)
-	return entries, nil
+		// Return a copy of entries
+		entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
+		copy(entries, leaderboard.LeaderboardData)
+		return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error](entries), nil
+	})
 }
 
 // GetTagByUserID returns the tag number for a given user.
@@ -41,28 +45,32 @@ func (s *LeaderboardService) GetTagByUserID(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	userID sharedtypes.DiscordID,
-) (sharedtypes.TagNumber, error) {
+) (results.OperationResult[sharedtypes.TagNumber, error], error) {
 
-	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, entry := range leaderboard.LeaderboardData {
-		if entry.UserID == userID {
-			return entry.TagNumber, nil
+	return withTelemetry(s, ctx, "GetTagByUserID", guildID, func(ctx context.Context) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
+		if err != nil {
+			return results.OperationResult[sharedtypes.TagNumber, error]{}, err
 		}
-	}
 
-	return 0, sql.ErrNoRows
+		for _, entry := range leaderboard.LeaderboardData {
+			if entry.UserID == userID {
+				return results.SuccessResult[sharedtypes.TagNumber, error](entry.TagNumber), nil
+			}
+		}
+
+		return results.FailureResult[sharedtypes.TagNumber, error](sql.ErrNoRows), nil
+	})
 }
 
 // RoundGetTagByUserID wraps GetTagByUserID for telemetry/results but still returns domain type.
+// DEPRECATED: Use GetTagByUserID directly as it now includes telemetry.
+// Kept for interface compatibility but updated signature.
 func (s *LeaderboardService) RoundGetTagByUserID(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	userID sharedtypes.DiscordID,
-) (sharedtypes.TagNumber, error) {
+) (results.OperationResult[sharedtypes.TagNumber, error], error) {
 	return s.GetTagByUserID(ctx, guildID, userID)
 }
 
@@ -72,22 +80,24 @@ func (s *LeaderboardService) CheckTagAvailability(
 	guildID sharedtypes.GuildID,
 	userID sharedtypes.DiscordID,
 	tagNumber sharedtypes.TagNumber,
-) (TagAvailabilityResult, error) {
+) (results.OperationResult[TagAvailabilityResult, error], error) {
 
-	leaderboard, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
-	if err != nil {
-		if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-			return TagAvailabilityResult{Available: false, Reason: "no active leaderboard"}, nil
+	return withTelemetry(s, ctx, "CheckTagAvailability", guildID, func(ctx context.Context) (results.OperationResult[TagAvailabilityResult, error], error) {
+		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
+		if err != nil {
+			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
+				return results.SuccessResult[TagAvailabilityResult, error](TagAvailabilityResult{Available: false, Reason: "no active leaderboard"}), nil
+			}
+			return results.OperationResult[TagAvailabilityResult, error]{}, err
 		}
-		return TagAvailabilityResult{}, err
-	}
 
-	available, reason := checkInternalAvailability(leaderboard, userID, tagNumber)
-	return TagAvailabilityResult{Available: available, Reason: reason}, nil
+		available, reason := checkInternalAvailability(leaderboard, userID, tagNumber)
+		return results.SuccessResult[TagAvailabilityResult, error](TagAvailabilityResult{Available: available, Reason: reason}), nil
+	})
 }
 
 // Private helper function
-func checkInternalAvailability(l *leaderboarddb.Leaderboard, userID sharedtypes.DiscordID, tag sharedtypes.TagNumber) (bool, string) {
+func checkInternalAvailability(l *leaderboardtypes.Leaderboard, userID sharedtypes.DiscordID, tag sharedtypes.TagNumber) (bool, string) {
 	for _, entry := range l.LeaderboardData {
 		if entry.TagNumber == tag && entry.UserID != userID {
 			return false, "tag is already taken"

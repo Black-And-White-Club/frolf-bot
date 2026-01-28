@@ -7,20 +7,17 @@ import (
 	"testing"
 	"time"
 
-	eventbus "github.com/Black-And-White-Club/frolf-bot-shared/eventbus/mocks"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
+func TestRoundService_StartRound(t *testing.T) {
 var (
 	testStartRoundID        = sharedtypes.RoundID(uuid.New())
 	testRoundTitle          = roundtypes.Title("Test Round")
@@ -43,44 +40,43 @@ var (
 )
 
 func TestRoundService_ProcessRoundStart(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx := context.Background()
-	mockDB := rounddb.NewMockRepository(ctrl)
+	validRoundID := sharedtypes.RoundID(uuid.New())
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-	mockEventBus := eventbus.NewMockEventBus(ctrl)
-
 	tests := []struct {
 		name           string
-		mockDBSetup    func(*rounddb.MockRepository)
+		setupFake      func(*FakeRepo)
+		setup          func(*FakeRepo)
 		payload        roundevents.RoundStartedPayloadV1
 		expectedResult results.OperationResult
 		expectedError  error
-	}{
 		{
+			name: "success - round started",
 			name: "successful processing",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				round := &roundtypes.Round{
+			setup: func(r *FakeRepo) {
+					ID:             validRoundID,
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
 					Location:       testStartLocation,
 					StartTime:      &testStartRoundTime,
-					State:          roundtypes.RoundStateUpcoming,
+				}
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
 					EventMessageID: testStartEventMessageID,
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+
+					// The service calls GetRound twice: once to check the round and once to refresh it after update.
 				}
+				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
 
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testStartRoundID).Return(round, nil)
-
-				// ✅ Fixed: Implementation calls UpdateRoundState, not UpdateRound
-				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(nil)
+					round.State = state
+					if state != roundtypes.RoundStateInProgress {
+						return errors.New("unexpected state")
+					}
+				}
 			},
+			verify: func(t *testing.T, res StartRoundResult, infraErr error, fake *FakeRepo) {
 			payload: roundevents.RoundStartedPayloadV1{
 				GuildID:   sharedtypes.GuildID("guild-123"),
 				RoundID:   testStartRoundID,
@@ -113,12 +109,13 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				},
 			},
 			expectedError: nil,
-		},
 		{
+			name: "failure - missing event message ID",
 			name: "error getting round",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testStartRoundID).Return(&roundtypes.Round{}, errors.New("database error"))
+			setup: func(r *FakeRepo) {
+					return &roundtypes.Round{
+					return &roundtypes.Round{}, errors.New("database error")
+				}
 			},
 			payload: roundevents.RoundStartedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
@@ -132,10 +129,10 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				},
 			},
 			expectedError: nil,
-		},
 		{
+			name: "failure - update state fails",
 			name: "error updating round",
-			mockDBSetup: func(mockDB *rounddb.MockRepository) {
+			setup: func(r *FakeRepo) {
 				round := &roundtypes.Round{
 					ID:             testStartRoundID,
 					Title:          testRoundTitle,
@@ -145,11 +142,13 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
 					EventMessageID: testStartEventMessageID,
 				}
-
-				guildID := sharedtypes.GuildID("guild-123")
-				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testStartRoundID).Return(round, nil)
-				mockDB.EXPECT().UpdateRoundState(gomock.Any(), guildID, testStartRoundID, roundtypes.RoundStateInProgress).Return(errors.New("database error"))
+					if len(r.Trace()) > 1 {
+					return round, nil
+				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
+					return nil
+					return errors.New("database error")
 			},
+			verify: func(t *testing.T, res StartRoundResult, infraErr error, fake *FakeRepo) {
 			payload: roundevents.RoundStartedPayloadV1{
 				GuildID: sharedtypes.GuildID("guild-123"),
 				RoundID: testStartRoundID,
@@ -162,20 +161,23 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 				},
 			},
 			expectedError: nil,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockDBSetup(mockDB)
+			repo := NewFakeRepo()
+			if tt.setupFake != nil {
+			if tt.setup != nil {
+				tt.setup(repo)
 
 			s := &RoundService{
-				repo:           mockDB,
+				repo:    repo,
+				repo:           repo,
 				logger:         logger,
 				metrics:        mockMetrics,
 				tracer:         tracer,
-				roundValidator: mockRoundValidator,
-				eventBus:       mockEventBus,
+				roundValidator: &FakeRoundValidator{},
+				eventBus:       &FakeEventBus{},
 			}
 
 			result, err := s.ProcessRoundStart(ctx, tt.payload.GuildID, tt.payload.RoundID)
@@ -242,7 +244,6 @@ func TestRoundService_ProcessRoundStart(t *testing.T) {
 						}
 					}
 				}
-			}
 		})
 	}
 }

@@ -127,8 +127,12 @@ func (h *LeaderboardHandlers) HandleGuildConfigCreated(
 	ctx context.Context,
 	payload *guildevents.GuildConfigCreatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	if err := h.service.EnsureGuildLeaderboard(ctx, payload.GuildID); err != nil {
+	result, err := h.service.EnsureGuildLeaderboard(ctx, payload.GuildID)
+	if err != nil {
 		return nil, err
+	}
+	if result.IsFailure() {
+		return nil, *result.Failure
 	}
 	return []handlerwrapper.Result{}, nil
 }

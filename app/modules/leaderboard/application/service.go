@@ -50,29 +50,43 @@ func NewLeaderboardService(
 }
 
 // EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
-// This is an infrastructure setup method, so it returns standard error rather than OperationResult.
-func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) error {
-	_, err := s.repo.GetActiveLeaderboard(ctx, nil, guildID)
+// This is an infrastructure setup method.
+func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+
+	// Named transaction function
+	ensureTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		return s.ensureGuildLeaderboardLogic(ctx, db, guildID)
+	}
+
+	return withTelemetry(s, ctx, "EnsureGuildLeaderboard", guildID, func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		return runInTx(s, ctx, ensureTx)
+	})
+}
+
+// ensureGuildLeaderboardLogic contains the core logic.
+func (s *LeaderboardService) ensureGuildLeaderboardLogic(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+	_, err := s.repo.GetActiveLeaderboard(ctx, db, guildID)
 	if err == nil {
-		return nil
+		// Already exists
+		return results.SuccessResult[bool, error](false), nil
 	}
 	if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-		return err
+		return results.OperationResult[bool, error]{}, err
 	}
 
 	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
 
-	empty := &leaderboarddb.Leaderboard{
+	empty := &leaderboardtypes.Leaderboard{
 		LeaderboardData: leaderboardtypes.LeaderboardData{},
 		IsActive:        true,
 		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
 		GuildID:         guildID,
 	}
 
-	if _, err := s.repo.CreateLeaderboard(ctx, s.db, guildID, empty); err != nil {
-		return fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
+	if err := s.repo.SaveLeaderboard(ctx, db, empty); err != nil {
+		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
 	}
-	return nil
+	return results.SuccessResult[bool, error](true), nil
 }
 
 // -----------------------------------------------------------------------------

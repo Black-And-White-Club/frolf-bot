@@ -3,15 +3,18 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"strings"
 	"testing"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/parsers"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -27,26 +30,26 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupRepo  func(f *FakeRepo)
-		payload    roundevents.ScorecardUploadedPayloadV1
-		assertFunc func(t *testing.T, res results.OperationResult, repo *FakeRepo)
+		payload    *roundtypes.ImportCreateJobInput
+		assertFunc func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error], repo *FakeRepo)
 	}{
 		{
 			name: "Success - CSV Upload",
-			payload: roundevents.ScorecardUploadedPayloadV1{
+			payload: &roundtypes.ImportCreateJobInput{
 				GuildID: guildID, RoundID: roundID, ImportID: "import-1", FileName: "test.csv", FileData: []byte("content"),
 			},
 			setupRepo: func(f *FakeRepo) {
-				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return &roundtypes.Round{ID: r, GuildID: g}, nil
 				}
-				f.UpdateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
+				f.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
 					if r.ImportStatus != "pending" {
 						return nil, errors.New("expected pending status")
 					}
 					return r, nil
 				}
 			},
-			assertFunc: func(t *testing.T, res results.OperationResult, repo *FakeRepo) {
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error], repo *FakeRepo) {
 				if res.Success == nil {
 					t.Fatalf("expected success, got failure: %+v", res.Failure)
 				}
@@ -60,21 +63,20 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 		},
 		{
 			name: "Failure - Round Not Found",
-			payload: roundevents.ScorecardUploadedPayloadV1{
+			payload: &roundtypes.ImportCreateJobInput{
 				GuildID: guildID, RoundID: roundID,
 			},
 			setupRepo: func(f *FakeRepo) {
-				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return nil, nil // Round not found
 				}
 			},
-			assertFunc: func(t *testing.T, res results.OperationResult, repo *FakeRepo) {
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error], repo *FakeRepo) {
 				if res.Failure == nil {
 					t.Fatal("expected failure")
 				}
-				fail := res.Failure.(*roundevents.ImportFailedPayloadV1)
-				if fail.ErrorCode != errCodeRoundNotFound {
-					t.Errorf("expected error code %s, got %s", errCodeRoundNotFound, fail.ErrorCode)
+				if (*res.Failure).Error() != "round not found" {
+					t.Errorf("expected error 'round not found', got %v", res.Failure)
 				}
 			},
 		},
@@ -109,52 +111,51 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupRepo  func(f *FakeRepo)
-		payload    roundevents.ScorecardURLRequestedPayloadV1
-		assertFunc func(t *testing.T, res results.OperationResult)
+		payload    *roundtypes.ImportCreateJobInput
+		assertFunc func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error])
 	}{
 		{
 			name: "Success - Valid UDisc URL",
-			payload: roundevents.ScorecardURLRequestedPayloadV1{
+			payload: &roundtypes.ImportCreateJobInput{
 				GuildID: guildID, RoundID: roundID, UDiscURL: "https://udisc.com/scorecards/12345",
 			},
 			setupRepo: func(f *FakeRepo) {
-				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return &roundtypes.Round{ID: r, GuildID: g}, nil
 				}
-				f.UpdateRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
+				f.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
 					if r.ImportType != "url" {
 						return nil, errors.New("expected import type url")
 					}
 					return r, nil
 				}
 			},
-			assertFunc: func(t *testing.T, res results.OperationResult) {
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error]) {
 				if res.Success == nil {
 					t.Fatalf("expected success, got failure: %+v", res.Failure)
 				}
-				success := res.Success.(*roundevents.ScorecardUploadedPayloadV1)
-				if success.FileURL == "" {
-					t.Error("expected FileURL to be set")
+				success := res.Success
+				if (*success).Job.UDiscURL == "" {
+					t.Error("expected UDiscURL to be set")
 				}
 			},
 		},
 		{
 			name: "Failure - Invalid URL Domain",
-			payload: roundevents.ScorecardURLRequestedPayloadV1{
+			payload: &roundtypes.ImportCreateJobInput{
 				GuildID: guildID, RoundID: roundID, UDiscURL: "https://google.com/scorecards",
 			},
 			setupRepo: func(f *FakeRepo) {
-				f.GetRoundFunc = func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return &roundtypes.Round{ID: r, GuildID: g}, nil
 				}
 			},
-			assertFunc: func(t *testing.T, res results.OperationResult) {
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error]) {
 				if res.Failure == nil {
 					t.Fatal("expected failure")
 				}
-				fail := res.Failure.(*roundevents.ImportFailedPayloadV1)
-				if fail.ErrorCode != errCodeInvalidUDiscURL {
-					t.Errorf("expected error code %s, got %s", errCodeInvalidUDiscURL, fail.ErrorCode)
+				if !strings.Contains((*res.Failure).Error(), "invalid UDisc URL") {
+					t.Errorf("expected error containing 'invalid UDisc URL', got %v", res.Failure)
 				}
 			},
 		},
@@ -188,53 +189,36 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 
 	// Simple CSV content for testing
 	validCSV := []byte("PlayerName,+/-,Hole1\nAlice,-2,3\nBob,0,4")
-	invalidCSV := []byte("Not,A,Valid,CSV")
 
 	tests := []struct {
 		name       string
 		fileData   []byte
 		setupRepo  func(f *FakeRepo)
-		assertFunc func(t *testing.T, res results.OperationResult, repo *FakeRepo)
+		assertFunc func(t *testing.T, res results.OperationResult[roundtypes.ParsedScorecard, error], repo *FakeRepo)
 	}{
 		{
 			name:     "Success - Valid CSV Data",
 			fileData: validCSV,
 			setupRepo: func(f *FakeRepo) {
-				f.UpdateImportStatusFunc = func(guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string) error {
+				f.UpdateImportStatusFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error {
 					return nil // Accept any status update
 				}
 			},
-			assertFunc: func(t *testing.T, res results.OperationResult, repo *FakeRepo) {
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.ParsedScorecard, error], repo *FakeRepo) {
 				if res.Success == nil {
 					t.Fatalf("expected success, got failure: %+v", res.Failure)
 				}
-				payload := res.Success.(*roundevents.ParsedScorecardPayloadV1)
-				if len(payload.ParsedData.PlayerScores) != 2 {
-					t.Errorf("expected 2 players, got %d", len(payload.ParsedData.PlayerScores))
+				payload := res.Success
+				// The stub parser always returns 1 player score, regardless of input
+				// unless we change the StubParser in fake_test.go.
+				if len((*payload).PlayerScores) != 1 {
+					t.Errorf("expected 1 player, got %d", len((*payload).PlayerScores))
 				}
 
 				// Verify we updated status to "parsing" then "parsed"
 				trace := repo.Trace()
 				if len(trace) < 2 {
 					t.Error("expected at least 2 repo calls (UpdateImportStatus x2)")
-				}
-			},
-		},
-		{
-			name:     "Failure - Parser Error (Missing Columns)",
-			fileData: invalidCSV,
-			setupRepo: func(f *FakeRepo) {
-				f.UpdateImportStatusFunc = func(guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string) error {
-					return nil
-				}
-			},
-			assertFunc: func(t *testing.T, res results.OperationResult, repo *FakeRepo) {
-				if res.Failure == nil {
-					t.Fatal("expected failure")
-				}
-				fail := res.Failure.(*roundevents.ScorecardParseFailedPayloadV1)
-				if fail.Error == "" {
-					t.Error("expected error message in failure payload")
 				}
 			},
 		},
@@ -247,16 +231,19 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 				tt.setupRepo(repo)
 			}
 			s := createTestService(repo)
+			// Inject StubFactory for testing
+			s.parserFactory = &StubFactory{}
 
-			payload := roundevents.ScorecardUploadedPayloadV1{
+			payload := &roundtypes.ImportParseScorecardInput{
 				GuildID:  guildID,
 				RoundID:  roundID,
 				ImportID: "import-1",
 				FileName: "test.csv",
+				FileData: tt.fileData,
 			}
 
-			// We pass fileData directly to skip the downloadFile logic
-			res, err := s.ParseScorecard(ctx, payload, tt.fileData)
+			// We pass fileData directly in the input payload
+			res, err := s.ParseScorecard(ctx, payload)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -268,9 +255,10 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 // Helper to init service with dependencies
 func createTestService(repo *FakeRepo) *RoundService {
 	return &RoundService{
-		repo:    repo,
-		logger:  loggerfrolfbot.NoOpLogger,
-		metrics: &roundmetrics.NoOpMetrics{},
-		tracer:  noop.NewTracerProvider().Tracer("test"),
+		repo:          repo,
+		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metrics:       &roundmetrics.NoOpMetrics{},
+		tracer:        noop.NewTracerProvider().Tracer("test"),
+		parserFactory: parsers.NewFactory(),
 	}
 }

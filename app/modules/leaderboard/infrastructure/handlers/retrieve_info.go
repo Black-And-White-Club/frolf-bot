@@ -16,7 +16,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	ctx context.Context,
 	payload *leaderboardevents.GetLeaderboardRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	leaderboard, err := h.service.GetLeaderboard(ctx, payload.GuildID)
+	result, err := h.service.GetLeaderboard(ctx, payload.GuildID)
 	if err != nil {
 		return []handlerwrapper.Result{{
 			Topic: leaderboardevents.GetLeaderboardFailedV1,
@@ -26,10 +26,19 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 			},
 		}}, nil
 	}
+	if result.IsFailure() {
+		return []handlerwrapper.Result{{
+			Topic: leaderboardevents.GetLeaderboardFailedV1,
+			Payload: &leaderboardevents.GetLeaderboardFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  (*result.Failure).Error(),
+			},
+		}}, nil
+	}
 
 	resp := &leaderboardevents.GetLeaderboardResponsePayloadV1{
 		GuildID:     payload.GuildID,
-		Leaderboard: leaderboard,
+		Leaderboard: *result.Success,
 	}
 
 	return []handlerwrapper.Result{{Topic: leaderboardevents.GetLeaderboardResponseV1, Payload: resp}}, nil
@@ -40,12 +49,12 @@ func (h *LeaderboardHandlers) HandleGetTagByUserIDRequest(
 	ctx context.Context,
 	payload *sharedevents.DiscordTagLookupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	tag, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.UserID)
-	found := err == nil
+	result, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.UserID)
+	found := err == nil && result.IsSuccess()
 
 	var tagPtr *sharedtypes.TagNumber
 	if found {
-		tagPtr = &tag
+		tagPtr = result.Success
 	}
 
 	successPayload := &sharedevents.DiscordTagLookupResultPayloadV1{
@@ -69,11 +78,14 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(
 	ctx context.Context,
 	payload *sharedevents.RoundTagLookupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	tag, err := h.service.RoundGetTagByUserID(ctx, payload.GuildID, payload.UserID)
+	result, err := h.service.RoundGetTagByUserID(ctx, payload.GuildID, payload.UserID)
 
 	if err != nil {
+		return nil, err
+	}
+	if result.IsFailure() {
 		// Not found -> NotFound event
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(*result.Failure, sql.ErrNoRows) {
 			p := &sharedevents.RoundTagLookupResultPayloadV1{
 				ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 				UserID:             payload.UserID,
@@ -85,14 +97,14 @@ func (h *LeaderboardHandlers) HandleRoundGetTagRequest(
 			}
 			return []handlerwrapper.Result{{Topic: sharedevents.RoundTagLookupNotFoundV1, Payload: p}}, nil
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
 
 	p := &sharedevents.RoundTagLookupResultPayloadV1{
 		ScopedGuildID:      sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 		UserID:             payload.UserID,
 		RoundID:            payload.RoundID,
-		TagNumber:          &tag,
+		TagNumber:          result.Success,
 		Found:              true,
 		OriginalResponse:   payload.Response,
 		OriginalJoinedLate: payload.JoinedLate,

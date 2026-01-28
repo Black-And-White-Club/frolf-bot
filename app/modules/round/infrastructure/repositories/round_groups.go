@@ -12,9 +12,13 @@ import (
 
 func (r *Impl) RoundHasGroups(
 	ctx context.Context,
+	db bun.IDB,
 	roundID sharedtypes.RoundID,
 ) (bool, error) {
-	count, err := r.db.NewSelect().
+	if db == nil {
+		db = r.db
+	}
+	count, err := db.NewSelect().
 		Model((*RoundGroup)(nil)).
 		Where("round_id = ?", roundID).
 		Count(ctx)
@@ -23,14 +27,18 @@ func (r *Impl) RoundHasGroups(
 
 func (r *Impl) CreateRoundGroups(
 	ctx context.Context,
+	db bun.IDB,
 	roundID sharedtypes.RoundID,
 	participants []roundtypes.Participant,
 ) error {
+	if db == nil {
+		db = r.db
+	}
 	if len(participants) == 0 {
 		return nil
 	}
 
-	return r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		for _, p := range participants {
 			displayName := roundtypes.DisplayName(p.UserIDPointer(), p.RawNameString())
 			groupID := uuid.New()

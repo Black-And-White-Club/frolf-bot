@@ -2,8 +2,8 @@ package roundservice
 
 import (
 	"context"
+	"fmt"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -12,14 +12,15 @@ import (
 
 // GetRound retrieves the round from the database.
 // Multi-guild: require guildID for all round operations
-func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "GetRound", roundID, func(ctx context.Context) (results.OperationResult, error) {
+func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+	return withTelemetry[*roundtypes.Round, error](s, ctx, "GetRound", roundID, func(ctx context.Context) (results.OperationResult[*roundtypes.Round, error], error) {
 		s.logger.InfoContext(ctx, "Getting round from database",
 			attr.RoundID("round_id", roundID),
 			attr.String("guild_id", string(guildID)),
 		)
 
-		dbRound, err := s.repo.GetRound(ctx, guildID, roundID)
+		// Pass s.db to repo method
+		dbRound, err := s.repo.GetRound(ctx, s.db, guildID, roundID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to retrieve round",
 				attr.RoundID("round_id", roundID),
@@ -27,13 +28,7 @@ func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
-			return results.OperationResult{
-				Failure: &roundevents.RoundErrorPayloadV1{
-					GuildID: guildID,
-					RoundID: roundID,
-					Error:   err.Error(),
-				},
-			}, nil
+			return results.FailureResult[*roundtypes.Round, error](err), nil
 		}
 
 		s.logger.InfoContext(ctx, "Round retrieved from database",
@@ -41,27 +36,40 @@ func (s *RoundService) GetRound(ctx context.Context, guildID sharedtypes.GuildID
 			attr.String("guild_id", string(guildID)),
 		)
 
-		rtRound := &roundtypes.Round{
-			ID:           dbRound.ID,
-			Title:        dbRound.Title,
-			Description:  dbRound.Description,
-			Location:     dbRound.Location,
-			EventType:    dbRound.EventType,
-			StartTime:    dbRound.StartTime,
-			Finalized:    dbRound.Finalized,
-			CreatedBy:    dbRound.CreatedBy,
-			State:        roundtypes.RoundState(dbRound.State),
-			Participants: dbRound.Participants,
-			GuildID:      dbRound.GuildID,
-		}
-
-		s.logger.InfoContext(ctx, "Round converted to roundtypes.Round",
-			attr.RoundID("round_id", roundID),
-			attr.String("guild_id", string(guildID)),
-		)
-
-		return results.OperationResult{
-			Success: rtRound,
-		}, nil
+		return results.SuccessResult[*roundtypes.Round, error](dbRound), nil
 	})
+}
+
+// GetRoundsForGuild retrieves all rounds for a guild, filtered by active states.
+func (s *RoundService) GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+	ctx, span := s.tracer.Start(ctx, "GetRoundsForGuild")
+	defer span.End()
+
+	s.logger.InfoContext(ctx, "Fetching rounds for guild",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("guild_id", string(guildID)),
+	)
+
+	// Get rounds that are not deleted or cancelled (active/completed)
+	rounds, err := s.repo.GetRoundsByGuildID(ctx, s.db, guildID,
+		roundtypes.RoundStateUpcoming,
+		roundtypes.RoundStateInProgress,
+		roundtypes.RoundStateFinalized,
+	)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to fetch rounds for guild",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("guild_id", string(guildID)),
+			attr.Error(err),
+		)
+		return nil, fmt.Errorf("failed to fetch rounds for guild: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "Successfully fetched rounds for guild",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("guild_id", string(guildID)),
+		attr.Int("count", len(rounds)),
+	)
+
+	return rounds, nil
 }

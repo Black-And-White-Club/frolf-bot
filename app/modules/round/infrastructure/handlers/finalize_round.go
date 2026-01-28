@@ -16,7 +16,12 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 	ctx context.Context,
 	payload *roundevents.AllScoresSubmittedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	finalizeResult, err := h.service.FinalizeRound(ctx, *payload)
+	req := &roundtypes.FinalizeRoundInput{
+		GuildID: payload.GuildID,
+		RoundID: payload.RoundID,
+	}
+
+	finalizeResult, err := h.service.FinalizeRound(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +40,9 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 	}
 
 	// Prepare data for multiple outgoing events
-	fetchedRound := &payload.RoundData
+	// Use the result from service as the source of truth
+	resultData := *finalizeResult.Success
+	fetchedRound := resultData.Round
 
 	discordFinalizationPayload := &roundevents.RoundFinalizedDiscordPayloadV1{
 		GuildID:        payload.GuildID,
@@ -43,25 +50,15 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		Title:          fetchedRound.Title,
 		StartTime:      fetchedRound.StartTime,
 		Location:       fetchedRound.Location,
-		Participants:   payload.Participants,
-		Teams:          payload.Teams,
+		Participants:   resultData.Participants,
+		Teams:          resultData.Teams,
 		EventMessageID: fetchedRound.EventMessageID,
 	}
 
 	backendFinalizationPayload := &roundevents.RoundFinalizedPayloadV1{
-		GuildID: payload.GuildID,
-		RoundID: payload.RoundID,
-		RoundData: roundtypes.Round{
-			ID:             fetchedRound.ID,
-			Title:          fetchedRound.Title,
-			Description:    fetchedRound.Description,
-			Location:       fetchedRound.Location,
-			StartTime:      fetchedRound.StartTime,
-			EventMessageID: fetchedRound.EventMessageID,
-			CreatedBy:      fetchedRound.CreatedBy,
-			State:          fetchedRound.State,
-			Participants:   payload.Participants,
-		},
+		GuildID:   payload.GuildID,
+		RoundID:   payload.RoundID,
+		RoundData: *fetchedRound,
 	}
 
 	// We return two separate results. The Discord-bound event needs the message ID
@@ -91,7 +88,15 @@ func (h *RoundHandlers) HandleRoundFinalized(
 	ctx context.Context,
 	payload *roundevents.RoundFinalizedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.NotifyScoreModule(ctx, *payload)
+	req := &roundtypes.FinalizeRoundResult{
+		Round:        &payload.RoundData,
+		Participants: payload.RoundData.Participants,
+		// Teams might be missing in payload.RoundData if not populated, but FinalizeRoundResult has it.
+		// If payload doesn't have Teams separate, we might leave it nil or extract if possible.
+		// RoundFinalizedPayloadV1 seems to rely on RoundData.
+	}
+
+	result, err := h.service.NotifyScoreModule(ctx, req)
 	if err != nil {
 		return nil, err
 	}

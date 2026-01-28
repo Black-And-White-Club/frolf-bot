@@ -8,11 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
@@ -23,23 +25,27 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 		setupFake func(*FakeLeaderboardRepo)
 		requests  []sharedtypes.TagAssignmentRequest
 		expectErr bool
-		verify    func(t *testing.T, data leaderboardtypes.LeaderboardData, err error)
+		verify    func(t *testing.T, res results.OperationResult[leaderboardtypes.LeaderboardData, error], err error)
 	}{
 		{
 			name: "successful batch updates leaderboard",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
-					return &leaderboarddb.Leaderboard{
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
+					return &leaderboardtypes.Leaderboard{
 						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "existing_user", TagNumber: 10}},
 					}, nil
 				}
-				f.UpdateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, uID sharedtypes.RoundID, s sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
-					return &leaderboarddb.Leaderboard{LeaderboardData: data}, nil
+				f.SaveLeaderboardFunc = func(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error {
+					return nil
 				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
 			expectErr: false,
-			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+			verify: func(t *testing.T, res results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure: %v", res.Failure)
+				}
+				data := *res.Success
 				if len(data) != 2 {
 					t.Fatalf("expected 2 entries in leaderboard, got %d", len(data))
 				}
@@ -52,9 +58,9 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 		{
 			name: "swap needed returns TagSwapNeededError",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 					// user1 wants tag 1 but target_user currently holds tag 1
-					return &leaderboarddb.Leaderboard{
+					return &leaderboardtypes.Leaderboard{
 						LeaderboardData: leaderboardtypes.LeaderboardData{
 							{UserID: "user1", TagNumber: 5},
 							{UserID: "target_user", TagNumber: 1},
@@ -63,11 +69,14 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
-			expectErr: true,
-			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+			expectErr: false, // It's a domain failure, not an infrastructure error
+			verify: func(t *testing.T, res results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
+				if !res.IsFailure() {
+					t.Fatal("expected failure result, got success")
+				}
 				var tsn *TagSwapNeededError
-				if !errors.As(err, &tsn) {
-					t.Fatalf("expected TagSwapNeededError, got: %T %v", err, err)
+				if !errors.As(*res.Failure, &tsn) {
+					t.Fatalf("expected TagSwapNeededError, got: %T %v", *res.Failure, *res.Failure)
 				}
 				if tsn.TargetUserID != "target_user" {
 					t.Errorf("expected conflict with target_user, got %s", tsn.TargetUserID)
@@ -75,18 +84,18 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateLeaderboard infrastructure error bubbles up",
+			name: "SaveLeaderboard infrastructure error bubbles up",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
-					return &leaderboarddb.Leaderboard{LeaderboardData: leaderboardtypes.LeaderboardData{}}, nil
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
+					return &leaderboardtypes.Leaderboard{LeaderboardData: leaderboardtypes.LeaderboardData{}}, nil
 				}
-				f.UpdateLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, data leaderboardtypes.LeaderboardData, uID sharedtypes.RoundID, s sharedtypes.ServiceUpdateSource) (*leaderboarddb.Leaderboard, error) {
-					return nil, errors.New("db failure")
+				f.SaveLeaderboardFunc = func(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error {
+					return errors.New("db failure")
 				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
 			expectErr: true,
-			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+			verify: func(t *testing.T, res results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
 				if !strings.Contains(err.Error(), "db failure") {
 					t.Fatalf("expected db failure error, got: %v", err)
 				}
@@ -95,13 +104,13 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 		{
 			name: "GetActiveLeaderboard failure bubbles up",
 			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboarddb.Leaderboard, error) {
+				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 					return nil, errors.New("no access")
 				}
 			},
 			requests:  []sharedtypes.TagAssignmentRequest{{UserID: "user1", TagNumber: 1}},
 			expectErr: true,
-			verify: func(t *testing.T, data leaderboardtypes.LeaderboardData, err error) {
+			verify: func(t *testing.T, res results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
 				if !strings.Contains(err.Error(), "no access") {
 					t.Fatalf("expected no access error, got: %v", err)
 				}
@@ -119,8 +128,10 @@ func TestLeaderboardService_ExecuteBatchTagAssignment(t *testing.T) {
 			// Initialize service with fake repo
 			// Note: s.db is left nil so ExecuteBatchTagAssignment skips the real Bun transaction wrapper
 			s := &LeaderboardService{
-				repo:   fakeRepo,
-				logger: slog.New(slog.NewTextHandler(os.Stdout, nil)),
+				repo:    fakeRepo,
+				logger:  slog.New(slog.NewTextHandler(os.Stdout, nil)),
+				metrics: &leaderboardmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
 
 			updateID := sharedtypes.RoundID(uuid.New())
