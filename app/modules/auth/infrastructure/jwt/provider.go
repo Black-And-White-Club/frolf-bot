@@ -7,6 +7,7 @@ import (
 
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // pwaClaims represents the JWT claims structure.
@@ -33,6 +34,7 @@ func (p *provider) GenerateToken(userID, guildID string, role authdomain.Role, t
 	now := time.Now()
 	claims := &pwaClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
