@@ -30,7 +30,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 				f.DeleteConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) error {
 					return nil
 				}
-				f.GetConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+				f.GetConfigIncludeDeletedFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
 					return &guildtypes.GuildConfig{GuildID: id}, nil
 				}
 			},
@@ -45,9 +45,9 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 				if res.Success == nil || (*res.Success).GuildID != "guild-1" {
 					t.Errorf("expected success payload for guild-1, got %v", res.Success)
 				}
-				// Verify call sequence: Delete then Get
+				// Verify call sequence: Delete then GetIncludeDeleted
 				trace := fake.Trace()
-				if len(trace) < 2 || trace[0] != "DeleteConfig" || trace[1] != "GetConfig" {
+				if len(trace) < 2 || trace[0] != "DeleteConfig" || trace[1] != "GetConfigIncludeDeleted" {
 					t.Errorf("unexpected call sequence: %v", trace)
 				}
 			},
@@ -87,7 +87,7 @@ func TestGuildService_DeleteGuildConfig(t *testing.T) {
 				f.DeleteConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) error {
 					return nil
 				}
-				f.GetConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+				f.GetConfigIncludeDeletedFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
 					return nil, errors.New("fetch error")
 				}
 			},

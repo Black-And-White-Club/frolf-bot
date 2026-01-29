@@ -2,10 +2,12 @@ package roundhandlers
 
 import (
 	"context"
+	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -81,7 +83,17 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 		return []handlerwrapper.Result{{Topic: roundevents.ImportFailedV1, Payload: result.Failure}}, nil
 	}
 
-	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParsedForNormalizationV1, Payload: result.Success}}, nil
+	payloadOut := &roundevents.ParsedScorecardPayloadV1{
+		ImportID:       payload.ImportID,
+		GuildID:        payload.GuildID,
+		RoundID:        payload.RoundID,
+		UserID:         payload.UserID,
+		ChannelID:      payload.ChannelID,
+		EventMessageID: payload.MessageID,
+		ParsedData:     result.Success,
+	}
+
+	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParsedForNormalizationV1, Payload: payloadOut}}, nil
 }
 
 // HandleScorecardParsedForNormalization takes raw parsed data and structures it.
@@ -103,7 +115,29 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 	}
 
 	// 3. Now mapOperationResult works because 'result' is the correct type
-	return mapOperationResult(result, roundevents.ScorecardNormalizedV1, roundevents.ImportFailedV1), nil
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "NormalizeParsedScorecard returned failure",
+			attr.String("import_id", payload.ImportID),
+			attr.Any("failure", result.Failure),
+			attr.String("error_msg", (*result.Failure).Error()),
+		)
+	}
+
+	return mapOperationResult(result.Map(
+		func(s *roundtypes.NormalizedScorecard) any {
+			return &roundevents.ScorecardNormalizedPayloadV1{
+				ImportID:       payload.ImportID,
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				EventMessageID: payload.EventMessageID,
+				Normalized:     *s,
+				Timestamp:      time.Now().UTC(),
+			}
+		},
+		func(f error) any { return f },
+	), roundevents.ScorecardNormalizedV1, roundevents.ImportFailedV1), nil
 }
 
 // HandleScorecardNormalized handles the ingestion/matching of names.
@@ -122,7 +156,19 @@ func (h *RoundHandlers) HandleScorecardNormalized(ctx context.Context, payload *
 	if err != nil {
 		return nil, err
 	}
-	return mapOperationResult(result, roundevents.ImportCompletedV1, roundevents.ImportFailedV1), nil
+	return mapOperationResult(result.Map(
+		func(s *roundtypes.IngestScorecardResult) any {
+			return &roundevents.ImportCompletedPayloadV1{
+				ImportID:       s.ImportID,
+				GuildID:        s.GuildID,
+				RoundID:        s.RoundID,
+				Scores:         s.Scores,
+				EventMessageID: s.EventMessageID,
+				Timestamp:      s.Timestamp,
+			}
+		},
+		func(f error) any { return f },
+	), roundevents.ImportCompletedV1, roundevents.ImportFailedV1), nil
 }
 
 // HandleImportCompleted routes the final scores (Singles to Leaderboard, Doubles to Score Module).
@@ -159,43 +205,45 @@ func (h *RoundHandlers) HandleImportCompleted(
 	// Map Result to Event Payload
 	success := *res.Success
 
-	applied := &roundevents.ImportScoresAppliedPayloadV1{
+	// 1. Emit RoundParticipantScoreUpdatedV1 for UI/Projections
+	scoreUpdatedPayload := &roundevents.ParticipantScoreUpdatedPayloadV1{
 		GuildID:        success.GuildID,
 		RoundID:        success.RoundID,
-		ImportID:       success.ImportID,
 		Participants:   success.Participants,
 		EventMessageID: success.EventMessageID,
-		Timestamp:      success.Timestamp,
 	}
 
-	// --- LOGGING FOR VISIBILITY ---
-	userIDs := make([]string, 0, len(applied.Participants))
-	for _, p := range applied.Participants {
-		if p.Score != nil {
-			userIDs = append(userIDs, string(p.UserID))
+	// 2. Emit RoundAllScoresSubmittedV1 to trigger finalization
+	// This is what the integration tests expect.
+	allScoresPayload := &roundevents.AllScoresSubmittedPayloadV1{
+		GuildID:        success.GuildID,
+		RoundID:        success.RoundID,
+		EventMessageID: success.EventMessageID,
+		Participants:   success.Participants,
+		Teams:          success.Teams,
+	}
+	if success.RoundData != nil {
+		allScoresPayload.RoundData = *success.RoundData
+		mode := sharedtypes.RoundModeSingles
+		if len(success.RoundData.Teams) > 0 {
+			mode = sharedtypes.RoundModeDoubles
 		}
+		allScoresPayload.RoundMode = mode
 	}
-
-	h.logger.InfoContext(ctx, "Import scores applied successfully",
-		attr.String("round_id", applied.RoundID.String()),
-		attr.Int("participant_count", len(userIDs)),
-		attr.Any("imported_user_ids", userIDs),
-	)
 
 	results := []handlerwrapper.Result{
 		{
-			Topic: roundevents.RoundParticipantScoreUpdatedV1,
-			Payload: &roundevents.ParticipantScoreUpdatedPayloadV1{
-				GuildID:        applied.GuildID,
-				RoundID:        applied.RoundID,
-				EventMessageID: applied.EventMessageID,
-				Participants:   applied.Participants,
-			},
+			Topic:   roundevents.RoundParticipantScoreUpdatedV1,
+			Payload: scoreUpdatedPayload,
+		},
+		{
+			Topic:   roundevents.RoundAllScoresSubmittedV1,
+			Payload: allScoresPayload,
 		},
 	}
 
 	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundParticipantScoreUpdatedV1, applied.GuildID)
+	results = addGuildScopedResult(results, roundevents.RoundParticipantScoreUpdatedV1, success.GuildID)
 
 	return results, nil
 }

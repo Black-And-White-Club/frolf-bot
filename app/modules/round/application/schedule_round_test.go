@@ -3,6 +3,7 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func ptr[T any](v T) *T {
 
 func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(nil, nil))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
@@ -77,10 +78,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					return errors.New("job cancellation error")
 				}
 			},
-			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
-				Failure: ptr(errors.New("job cancellation error")),
-			},
-			wantErr: false,
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
 		},
 		{
 			name:            "error scheduling reminder",
@@ -91,10 +90,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					return errors.New("reminder scheduling error")
 				}
 			},
-			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
-				Failure: ptr(errors.New("reminder scheduling error")),
-			},
-			wantErr: false,
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
 		},
 		{
 			name:            "error scheduling round start",
@@ -108,10 +105,8 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					return errors.New("round start scheduling error")
 				}
 			},
-			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
-				Failure: ptr(errors.New("round start scheduling error")),
-			},
-			wantErr: false,
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
 		},
 	}
 

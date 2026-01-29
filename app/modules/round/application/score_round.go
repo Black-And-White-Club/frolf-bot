@@ -52,15 +52,26 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, req *roun
 func (s *RoundService) UpdateParticipantScore(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (ScoreUpdateResult, error) {
 	result, err := withTelemetry[*roundtypes.ScoreUpdateResult, error](s, ctx, "UpdateParticipantScore", req.RoundID, func(ctx context.Context) (ScoreUpdateResult, error) {
 		return runInTx[*roundtypes.ScoreUpdateResult, error](s, ctx, func(ctx context.Context, tx bun.IDB) (ScoreUpdateResult, error) {
+			// Fetch the round first to get the event message ID
+			round, err := s.repo.GetRound(ctx, tx, req.GuildID, req.RoundID)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "Failed to fetch round",
+					attr.RoundID("round_id", req.RoundID),
+					attr.String("guild_id", string(req.GuildID)),
+					attr.Error(err),
+				)
+				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("round not found: %w", err)), nil
+			}
+
 			// Update the participant's score in the database
-			err := s.repo.UpdateParticipantScore(ctx, tx, req.GuildID, req.RoundID, req.UserID, sharedtypes.Score(*req.Score))
+			err = s.repo.UpdateParticipantScore(ctx, tx, req.GuildID, req.RoundID, req.UserID, sharedtypes.Score(*req.Score))
 			if err != nil {
 				s.logger.ErrorContext(ctx, "Failed to update participant score in DB",
 					attr.RoundID("round_id", req.RoundID),
 					attr.String("guild_id", string(req.GuildID)),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("Failed to update score in database: %w", err)), nil
+				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("failed to update score in database: %w", err)), nil
 			}
 
 			// Fetch the full, updated list of participants for this round
@@ -71,12 +82,14 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, req *roundtyp
 					attr.String("guild_id", string(req.GuildID)),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("Failed to retrieve updated participants list after score update: %w", err)), nil
+				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("failed to retrieve updated participants list: %w", err)), nil
 			}
 
+			// Return domain result
 			return results.SuccessResult[*roundtypes.ScoreUpdateResult, error](&roundtypes.ScoreUpdateResult{
-				RoundID:             req.RoundID,
 				GuildID:             req.GuildID,
+				RoundID:             req.RoundID,
+				EventMessageID:      round.EventMessageID,
 				UpdatedParticipants: updatedParticipants,
 			}), nil
 		})
@@ -111,7 +124,7 @@ func (s *RoundService) CheckAllScoresSubmitted(ctx context.Context, req *roundty
 				break
 			}
 		}
-		
+
 		var round *roundtypes.Round
 		if allSubmitted {
 			// Fetch round details if complete

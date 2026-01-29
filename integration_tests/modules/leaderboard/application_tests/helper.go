@@ -28,7 +28,7 @@ var (
 
 type TestDeps struct {
 	Ctx     context.Context
-	DB      leaderboarddb.LeaderboardDB
+	DB      leaderboarddb.Repository
 	BunDB   *bun.DB
 	Service leaderboardservice.Service
 	Cleanup func()

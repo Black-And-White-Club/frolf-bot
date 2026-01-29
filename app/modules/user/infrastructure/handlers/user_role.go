@@ -16,9 +16,33 @@ func (h *UserHandlers) HandleUserRoleUpdateRequest(
 	if err != nil {
 		return nil, err
 	}
+	if result.IsSuccess() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.UserRoleUpdatedV1,
+				Payload: &userevents.UserRoleUpdateResultPayloadV1{
+					GuildID: payload.GuildID,
+					UserID:  payload.UserID,
+					Role:    payload.Role,
+					Success: true,
+				},
+			},
+		}, nil
+	}
 
-	return mapOperationResult(result,
-		userevents.UserRoleUpdatedV1,
-		userevents.UserRoleUpdateFailedV1,
-	), nil
+	if result.IsFailure() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.UserRoleUpdateFailedV1,
+				Payload: &userevents.UserRoleUpdateFailedPayloadV1{
+					GuildID: payload.GuildID,
+					UserID:  payload.UserID,
+					Role:    payload.Role,
+					Reason:  (*result.Failure).Error(),
+				},
+			},
+		}, nil
+	}
+
+	return nil, nil
 }

@@ -6,8 +6,7 @@ import (
 	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
-	"go.uber.org/mock/gomock"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 )
 
 func TestNewTimeParser(t *testing.T) {
@@ -99,10 +98,7 @@ func TestTimeParser_GetTimezoneFromInput(t *testing.T) {
 }
 
 func TestTimeParser_ParseUserTimeInput(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClock := mocks.NewMockClock(ctrl)
+	fakeClock := &roundutil.FakeClock{}
 
 	tests := []struct {
 		name         string
@@ -344,11 +340,13 @@ func TestTimeParser_ParseUserTimeInput(t *testing.T) {
 			}
 
 			mockNowInLoc := tt.mockNow.In(loc)
-			mockClock.EXPECT().Now().Return(mockNowInLoc).AnyTimes()
+			fakeClock.NowFn = func() time.Time {
+				return mockNowInLoc
+			}
 
 			tp := NewTimeParser()
 
-			got, err := tp.ParseUserTimeInput(tt.startTimeStr, tt.timezone, mockClock)
+			got, err := tp.ParseUserTimeInput(tt.startTimeStr, tt.timezone, fakeClock)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TimeParser.ParseUserTimeInput() error = %v, wantErr %v", err, tt.wantErr)
 				return

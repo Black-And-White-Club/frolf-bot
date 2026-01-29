@@ -20,7 +20,7 @@ func (s *GuildService) CreateGuildConfig(
 ) (GuildConfigResult, error) {
 
 	if config == nil {
-		return GuildConfigResult{}, ErrNilConfig
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrNilConfig), nil
 	}
 
 	guildID := config.GuildID
@@ -66,6 +66,14 @@ func (s *GuildService) executeCreateGuildConfig(
 	}
 
 	if existing != nil {
+		// Idempotency check: if config matches, return success
+		if existing.SignupChannelID == config.SignupChannelID &&
+			existing.EventChannelID == config.EventChannelID &&
+			existing.LeaderboardChannelID == config.LeaderboardChannelID &&
+			existing.UserRoleID == config.UserRoleID &&
+			existing.SignupEmoji == config.SignupEmoji {
+			return results.SuccessResult[*guildtypes.GuildConfig, error](existing), nil
+		}
 		return results.FailureResult[*guildtypes.GuildConfig, error](ErrGuildConfigConflict), nil
 	}
 

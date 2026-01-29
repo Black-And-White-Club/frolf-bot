@@ -147,6 +147,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		testLogger,
 		noOpTracer,
 		roundValidator,
+		env.DB,
 	)
 
 	cleanup := func() {

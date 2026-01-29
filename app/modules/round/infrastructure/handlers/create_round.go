@@ -49,15 +49,48 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 		return nil, err
 	}
 
-	results := mapOperationResult(result,
+	// Explicitly map the result to the event payload to ensure correct structure
+	// Explicitly map the result to the event payload to ensure correct structure
+	mappedResult := result.Map(
+		func(res *roundtypes.CreateRoundResult) any {
+			r := res.Round
+			payload := &roundevents.RoundCreatedPayloadV1{
+				GuildID: payload.GuildID,
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:     r.ID,
+					Title:       r.Title,
+					Description: r.Description,
+					Location:    r.Location,
+					StartTime:   r.StartTime,
+					UserID:      r.CreatedBy,
+				},
+				ChannelID: res.ChannelID,
+			}
+
+			// Map guild config fragment if available
+			if res.GuildConfig != nil {
+				// Convert to event fragment if types differ
+			}
+
+			return payload
+		},
+		func(err error) any {
+			return &roundevents.RoundCreationFailedPayloadV1{
+				GuildID:      payload.GuildID,
+				ErrorMessage: err.Error(),
+			}
+		},
+	)
+
+	handlerResults := mapOperationResult(mappedResult,
 		roundevents.RoundCreatedV1,
 		roundevents.RoundCreationFailedV1,
 	)
 
 	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundCreatedV1, payload.GuildID)
+	handlerResults = addGuildScopedResult(handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
 
-	return results, nil
+	return handlerResults, nil
 }
 
 // HandleRoundEventMessageIDUpdate updates the round with the Discord message ID.

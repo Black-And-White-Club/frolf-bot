@@ -17,10 +17,11 @@ import (
 type FakeGuildRepository struct {
 	trace []string
 
-	GetConfigFunc    func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
-	SaveConfigFunc   func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
-	UpdateConfigFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
-	DeleteConfigFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
+	GetConfigFunc               func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	GetConfigIncludeDeletedFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	SaveConfigFunc              func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
+	UpdateConfigFunc            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
+	DeleteConfigFunc            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -49,6 +50,14 @@ func (f *FakeGuildRepository) GetConfig(ctx context.Context, db bun.IDB, guildID
 		return f.GetConfigFunc(ctx, db, guildID)
 	}
 	// Default: Return ErrNotFound to simulate a clean state
+	return nil, guilddb.ErrNotFound
+}
+
+func (f *FakeGuildRepository) GetConfigIncludeDeleted(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+	f.record("GetConfigIncludeDeleted")
+	if f.GetConfigIncludeDeletedFunc != nil {
+		return f.GetConfigIncludeDeletedFunc(ctx, db, guildID)
+	}
 	return nil, guilddb.ErrNotFound
 }
 

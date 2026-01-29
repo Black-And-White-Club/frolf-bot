@@ -30,7 +30,7 @@ func TestGuildHandlers_HandleDeleteGuildConfig(t *testing.T) {
 			},
 			setupFake: func(f *FakeGuildService) {
 				f.DeleteGuildConfigFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (guildservice.GuildConfigResult, error) {
-					return results.SuccessResult[*guildtypes.GuildConfig, error](nil), nil
+					return results.SuccessResult[*guildtypes.GuildConfig, error](&guildtypes.GuildConfig{GuildID: guildID}), nil
 				}
 			},
 			wantErr:   false,

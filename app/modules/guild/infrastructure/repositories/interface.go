@@ -21,6 +21,7 @@ type Repository interface {
 	// All methods accept a Bun DB handle so callers can control transactions
 	// and use the same DB connection as the service layer.
 	GetConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	GetConfigIncludeDeleted(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
 
 	// SaveConfig creates or re-activates a guild configuration.
 	// Uses UPSERT semantics: inserts if not exists, updates if exists.

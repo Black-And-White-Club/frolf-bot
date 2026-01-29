@@ -2,14 +2,13 @@ package userintegrationtests
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 
@@ -20,7 +19,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupFn         func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, sharedtypes.UserRoleEnum)
-		validateFn      func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result results.OperationResult, err error)
+		validateFn      func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UpdateIdentityResult, err error)
 		expectedSuccess bool
 		skipCleanup     bool
 	}{
@@ -40,33 +39,23 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				if createErr != nil {
 					t.Fatalf("Failed to create user for test setup: %v", createErr)
 				}
-				if createResult.Success == nil {
+				if !createResult.IsSuccess() {
 					t.Fatalf("User creation failed in setup: %+v", createResult.Failure)
 				}
 
 				return deps.Ctx, userID, newRole
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UpdateIdentityResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected nil error for successful update, got: %v", err)
 				}
-				if result.Success == nil {
+				if !result.IsSuccess() {
+					t.Logf("UpdateIdentityResult Failure payload: %+v", result.Failure)
 					t.Fatal("Result contained nil Success payload, expected non-nil")
 				}
-				if result.Failure != nil {
-					t.Fatalf("Result contained non-nil Failure payload, got: %+v", result.Failure)
-				}
 
-				successPayload, ok := result.Success.(*userevents.UserRoleUpdateResultPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1")
-				}
-
-				if successPayload.UserID != userID {
-					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
-				}
-				if successPayload.Role != newRole {
-					t.Errorf("Success payload Role mismatch: expected %q, got %q", newRole, successPayload.Role)
+				if !*result.Success {
+					t.Error("Update returned false for success indicator, expected true")
 				}
 
 				// Verify the role was actually updated in the database
@@ -77,14 +66,14 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 					t.Logf("GetUser returned error after update, skipping DB assertion: %v", getUserErr)
 					return
 				}
-				if getUserResult.Success == nil {
+				if !getUserResult.IsSuccess() {
 					t.Logf("GetUser returned failure payload after update, skipping DB assertion: %+v", getUserResult.Failure)
 					return
 				}
 				// Safe to assert now
-				gotRole := getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User.Role
-				if gotRole != newRole {
-					t.Errorf("Database user role mismatch after update: expected %q, got %q", newRole, gotRole)
+				retrievedUser := *getUserResult.Success
+				if retrievedUser.Role != newRole {
+					t.Errorf("Database user role mismatch after update: expected %q, got %q", newRole, retrievedUser.Role)
 				}
 			},
 			expectedSuccess: true,
@@ -97,32 +86,20 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				newRole := sharedtypes.UserRoleEnum("invalid_role")
 				return deps.Ctx, userID, newRole
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UpdateIdentityResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected nil standard error for invalid role, got: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1, got %T", result.Failure)
-				}
-				if failurePayload.UserID != userID {
-					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
-				}
-				if failurePayload.Role != newRole {
-					t.Errorf("Failure payload Role mismatch: expected %q, got %q", newRole, failurePayload.Role)
-				}
-				if failurePayload.Success != false {
-					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
-				}
-				expectedFailureReasonString := "invalid role"
-				if failurePayload.Reason != expectedFailureReasonString {
-					t.Errorf("Failure payload Reason string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Reason)
+
+				errVal := *result.Failure
+				if errVal.Error() != "invalid role" {
+					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", "invalid role", errVal.Error())
 				}
 			},
 			expectedSuccess: false,
@@ -138,33 +115,21 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				}
 				return deps.Ctx, userID, newRole
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UpdateIdentityResult, err error) {
 				// Service now returns failure payload with nil top-level error for user-not-found
 				if err != nil {
 					t.Fatalf("Did not expect top-level error for user-not-found case, got: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
-				failurePayload, ok := result.Failure.(*userevents.UserRoleUpdateResultPayloadV1) // Service returns this type for failures
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserRoleUpdateResultPayloadV1, got %T", result.Failure)
-				}
-				if failurePayload.UserID != userID {
-					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
-				}
-				if failurePayload.Role != newRole {
-					t.Errorf("Failure payload Role mismatch: expected %q, got %q", newRole, failurePayload.Role)
-				}
-				if failurePayload.Success != false {
-					t.Errorf("Failure payload Success mismatch: expected false, got %t", failurePayload.Success)
-				}
-				expectedFailureReasonString := "user not found" // Service puts reason in string Reason field
-				if failurePayload.Reason != expectedFailureReasonString {
-					t.Errorf("Failure payload Reason string mismatch: expected %q, got %q", expectedFailureReasonString, failurePayload.Reason)
+
+				errVal := *result.Failure
+				if !errors.Is(errVal, userservice.ErrUserNotFound) {
+					t.Errorf("Expected ErrUserNotFound, got %v", errVal)
 				}
 			},
 			expectedSuccess: false,
@@ -177,7 +142,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 				newRole := sharedtypes.UserRoleAdmin
 				return nil, userID, newRole
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum, result userservice.UpdateIdentityResult, err error) {
 				if err == nil {
 					t.Fatal("Expected error for nil context, got nil")
 				}
@@ -193,7 +158,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 			var ctx context.Context
 			var userID sharedtypes.DiscordID
 			var newRole sharedtypes.UserRoleEnum
-			var result results.OperationResult
+			var result userservice.UpdateIdentityResult
 			var err error
 
 			if !tc.skipCleanup {
@@ -210,6 +175,7 @@ func TestUpdateUserRoleInDatabase(t *testing.T) {
 						slog.New(slog.NewTextHandler(io.Discard, nil)),
 						&usermetrics.NoOpMetrics{},
 						noop.NewTracerProvider().Tracer("test"),
+						nil,
 					),
 				}
 				ctx, userID, newRole = tc.setupFn(t, currentDeps)

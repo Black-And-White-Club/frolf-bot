@@ -11,7 +11,6 @@ import (
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	sharedinterface "github.com/Black-And-White-Club/frolf-bot/app/shared/interfaces"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -20,13 +19,12 @@ import (
 
 // DBService satisfies the db.Database interface
 type DBService struct {
-	UserDB            userdb.Repository
-	RoundDB           rounddb.Repository
-	ScoreDB           scoredb.ScoreDB
-	LeaderboardDB     leaderboarddb.Repository
-	GuildDB           guilddb.Repository
-	SharedDBInterface sharedinterface.GuildConfigReader
-	db                *bun.DB
+	UserDB        userdb.Repository
+	RoundDB       rounddb.Repository
+	ScoreDB       scoredb.Repository
+	LeaderboardDB leaderboarddb.Repository
+	GuildDB       guilddb.Repository
+	db            *bun.DB
 }
 
 // GetDB returns the underlying database connection pool.

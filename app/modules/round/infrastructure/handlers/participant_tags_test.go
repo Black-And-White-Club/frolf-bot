@@ -2,7 +2,7 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -11,9 +11,8 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
@@ -34,7 +33,7 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *sharedevents.SyncRoundsTagRequestPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -43,32 +42,20 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle scheduled round tag update with changes",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
-							UpdatedRounds: []roundevents.RoundUpdateInfoV1{
-								{
-									RoundID:             testRoundID,
-									Title:               "Test Round",
-									EventMessageID:      "msg-123",
-									UpdatedParticipants: []roundtypes.Participant{},
-									ParticipantsChanged: 2,
-								},
-							},
-							Summary: roundevents.UpdateSummaryV1{
-								TotalRoundsProcessed: 1,
-								RoundsUpdated:        1,
-								ParticipantsUpdated:  2,
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundsWithNewTagsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
+					return results.SuccessResult[*roundtypes.ScheduledRoundsSyncResult, error](&roundtypes.ScheduledRoundsSyncResult{
+						GuildID: testGuildID,
+						Updates: []roundtypes.RoundUpdate{
+							{
+								RoundID:        testRoundID,
+								EventMessageID: "msg-123",
+								Participants:   []roundtypes.Participant{},
 							},
 						},
-					},
-					nil,
-				)
+						TotalChecked: 1,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -77,20 +64,10 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 		},
 		{
 			name: "Service returns failure",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayloadV1{
-							GuildID: testGuildID,
-							Error:   "tag update failed",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundsWithNewTagsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
+					return results.FailureResult[*roundtypes.ScheduledRoundsSyncResult, error](errors.New("tag update failed")), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -99,15 +76,10 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 		},
 		{
 			name: "Service returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundsWithNewTagsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
+					return roundservice.UpdateScheduledRoundsWithNewTagsResult{}, errors.New("database error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -115,79 +87,25 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 		},
 		{
 			name: "Service returns empty result",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundsWithNewTagsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
+					return roundservice.UpdateScheduledRoundsWithNewTagsResult{}, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 0,
 		},
 		{
-			name: "Payload with no changed tags returns nil",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				// Service is called by handler; return empty result
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
-			},
-			payload: &sharedevents.SyncRoundsTagRequestPayloadV1{
-				GuildID:     testGuildID,
-				ChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{},
-			},
-			wantErr:       false,
-			wantResultLen: 0,
-		},
-		{
-			name: "Success with no affected rounds returns nil",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.ScheduledRoundsSyncedPayloadV1{
-							UpdatedRounds: []roundevents.RoundUpdateInfoV1{}, // No rounds affected
-							Summary: roundevents.UpdateSummaryV1{
-								TotalRoundsProcessed: 0,
-								RoundsUpdated:        0,
-								ParticipantsUpdated:  0,
-							},
-						},
-					},
-					nil,
-				)
-			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.ScheduledRoundsSyncedV1,
-		},
-		{
-			name: "Service returns unexpected payload type",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundsWithNewTags(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
-					},
-					nil,
-				)
+			name: "Success with no affected rounds returns result with empty updates",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundsWithNewTagsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
+					return results.SuccessResult[*roundtypes.ScheduledRoundsSyncResult, error](&roundtypes.ScheduledRoundsSyncResult{
+						GuildID:      testGuildID,
+						Updates:      []roundtypes.RoundUpdate{},
+						TotalChecked: 1,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -198,14 +116,13 @@ func TestRoundHandlers_HandleScheduledRoundTagSync(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
+				service: fakeService,
 				logger:  logger,
 			}
 

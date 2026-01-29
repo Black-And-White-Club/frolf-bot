@@ -372,14 +372,14 @@ func (f *FakeQueueService) Stop(ctx context.Context) error {
 // ------------------------
 
 type FakeEventBus struct {
-	PublishFunc          func(topic string, messages ...*message.Message) error
-	SubscribeFunc        func(ctx context.Context, topic string) (<-chan *message.Message, error)
-	CloseFunc            func() error
+	PublishFunc           func(topic string, messages ...*message.Message) error
+	SubscribeFunc         func(ctx context.Context, topic string) (<-chan *message.Message, error)
+	CloseFunc             func() error
 	GetNATSConnectionFunc func() *nc.Conn
-	GetJetStreamFunc     func() jetstream.JetStream
+	GetJetStreamFunc      func() jetstream.JetStream
 	GetHealthCheckersFunc func() []eventbus.HealthChecker
-	CreateStreamFunc     func(ctx context.Context, streamName string) error
-	SubscribeForTestFunc func(ctx context.Context, topic string) (<-chan *message.Message, error)
+	CreateStreamFunc      func(ctx context.Context, streamName string) error
+	SubscribeForTestFunc  func(ctx context.Context, topic string) (<-chan *message.Message, error)
 }
 
 func (f *FakeEventBus) Publish(topic string, messages ...*message.Message) error {
@@ -500,6 +500,12 @@ func (f *FakeTimeParser) ParseUserTimeInput(startTimeStr string, timezone roundt
 	}
 	return time.Now().Unix(), nil
 }
+
+// ------------------------
+// Fake Clock
+// ------------------------
+
+// FakeClock has been moved to roundutil.FakeClock in app/modules/round/utils/fake_clock.go
 
 // ------------------------
 // Fake Guild Config Provider

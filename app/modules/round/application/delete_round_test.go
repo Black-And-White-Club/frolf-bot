@@ -151,11 +151,11 @@ func TestRoundService_ValidateRoundDeletion(t *testing.T) {
 			}
 
 			s := &RoundService{
-				repo:           repo,
-				logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics:        &roundmetrics.NoOpMetrics{},
-				tracer:         noop.NewTracerProvider().Tracer("test"),
-				parserFactory:  &StubFactory{},
+				repo:          repo,
+				logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:       &roundmetrics.NoOpMetrics{},
+				tracer:        noop.NewTracerProvider().Tracer("test"),
+				parserFactory: &StubFactory{},
 			}
 
 			res, err := s.ValidateRoundDeletion(ctx, tt.input)
@@ -311,11 +311,11 @@ func TestRoundService_DeleteRound(t *testing.T) {
 			}
 
 			s := &RoundService{
-				repo:         repo,
-				queueService: queue,
-				logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics:      &roundmetrics.NoOpMetrics{},
-				tracer:       noop.NewTracerProvider().Tracer("test"),
+				repo:          repo,
+				queueService:  queue,
+				logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:       &roundmetrics.NoOpMetrics{},
+				tracer:        noop.NewTracerProvider().Tracer("test"),
 				parserFactory: &StubFactory{},
 			}
 

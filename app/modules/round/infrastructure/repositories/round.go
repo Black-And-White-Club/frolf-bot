@@ -398,21 +398,41 @@ func (r *Impl) UpdateParticipant(ctx context.Context, db bun.IDB, guildID shared
 	if db == nil {
 		db = r.db
 	}
-	// Start a transaction
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
+
+	// Check if db is already a transaction
+	_, isTx := db.(bun.Tx)
 
 	var dbRound Round
-	err = tx.NewSelect().
-		Model(&dbRound).
-		Where("id = ? AND guild_id = ?", roundID, guildID).
-		For("UPDATE").
-		Scan(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("fetch round: %w", err)
+	var err error
+
+	if isTx {
+		// Already in a transaction, use it directly
+		err = db.NewSelect().
+			Model(&dbRound).
+			Where("id = ? AND guild_id = ?", roundID, guildID).
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetch round: %w", err)
+		}
+	} else {
+		// Not in a transaction, start one
+		tx, txErr := db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, fmt.Errorf("begin tx: %w", txErr)
+		}
+		defer tx.Rollback()
+
+		err = tx.NewSelect().
+			Model(&dbRound).
+			Where("id = ? AND guild_id = ?", roundID, guildID).
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetch round: %w", err)
+		}
+
+		db = tx // Use the transaction for the rest of the function
 	}
 
 	// Initialize participants if null
@@ -447,7 +467,7 @@ func (r *Impl) UpdateParticipant(ctx context.Context, db bun.IDB, guildID shared
 	}
 
 	// Update the record
-	_, err = tx.NewUpdate().
+	_, err = db.NewUpdate().
 		Model(&dbRound).
 		Set("participants = ?", dbRound.Participants). // Assuming participants are stored as JSONB or similar
 		Where("id = ? AND guild_id = ?", roundID, guildID).
@@ -456,9 +476,13 @@ func (r *Impl) UpdateParticipant(ctx context.Context, db bun.IDB, guildID shared
 		return nil, fmt.Errorf("update round: %w", err)
 	}
 
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit tx: %w", err)
+	// Commit transaction only if we started it
+	if !isTx {
+		if tx, ok := db.(bun.Tx); ok {
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("commit tx: %w", err)
+			}
+		}
 	}
 
 	return dbRound.Participants, nil
@@ -493,6 +517,8 @@ func (r *Impl) GetUpcomingRounds(ctx context.Context, db bun.IDB, guildID shared
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upcoming rounds: %w", err)
 	}
+
+	fmt.Printf("DEBUG: GetUpcomingRounds found %d rounds for guild %s\n", len(localRounds), guildID)
 
 	rounds := make([]*roundtypes.Round, len(localRounds))
 	for i, r := range localRounds {

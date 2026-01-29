@@ -29,7 +29,7 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 				attr.String("title", string(req.Title)),
 			)
 			// Return a combined error
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](fmt.Errorf("validation failed: %v", errs)), nil
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("validation failed: %v", errs)), nil
 		} else {
 			s.metrics.RecordValidationSuccess(ctx)
 		}
@@ -48,7 +48,7 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 				attr.String("timezone", req.Timezone),
 				attr.Error(err),
 			)
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](fmt.Errorf("time parsing failed: %w", err)), nil
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("time parsing failed: %w", err)), nil
 		} else {
 			s.metrics.RecordTimeParsingSuccess(ctx)
 		}
@@ -65,7 +65,7 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 				attr.Time("current_time", currentTime),
 				attr.String("title", string(req.Title)),
 			)
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](errors.New("start time is in the past")), nil
+			return results.FailureResult[*roundtypes.CreateRoundResult](errors.New("start time is in the past")), nil
 		}
 
 		// Create round object
@@ -112,16 +112,12 @@ func (s *RoundService) StoreRound(ctx context.Context, round *roundtypes.Round, 
 		// Validate round data
 		if round.Title == "" || round.Description == "" || round.Location == "" || round.StartTime == nil {
 			s.metrics.RecordValidationError(ctx)
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](errors.New("invalid round data")), fmt.Errorf("invalid round data")
+			return results.FailureResult[*roundtypes.CreateRoundResult](errors.New("invalid round data")), nil
 		}
 
 		defaultType := roundtypes.DefaultEventType
 		if round.EventType == nil {
 			round.EventType = &defaultType
-		}
-
-		if round.StartTime == nil {
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](errors.New("start time cannot be nil")), fmt.Errorf("nil field:  start=%v", round.StartTime)
 		}
 
 		startTime := time.Time(*round.StartTime)
@@ -137,14 +133,14 @@ func (s *RoundService) StoreRound(ctx context.Context, round *roundtypes.Round, 
 		// Store the round in the database
 		if err := s.repo.CreateRound(ctx, db, guildID, round); err != nil {
 			s.metrics.RecordDBOperationError(ctx, "create_round")
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](fmt.Errorf("failed to store round: %w", err)), fmt.Errorf("failed to store round: %w", err)
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed to store round: %w", err)), fmt.Errorf("failed to store round: %w", err)
 		} else {
 			s.metrics.RecordDBOperationSuccess(ctx, "create_round")
 		}
 		// Immediately materialize participant groups (singles-safe)
 		hasGroups, err := s.repo.RoundHasGroups(ctx, db, round.ID)
 		if err != nil {
-			return results.FailureResult[*roundtypes.CreateRoundResult, error](fmt.Errorf("failed checking round groups: %w", err)), err
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed checking round groups: %w", err)), err
 		}
 
 		if !hasGroups {
@@ -154,7 +150,7 @@ func (s *RoundService) StoreRound(ctx context.Context, round *roundtypes.Round, 
 				round.ID,
 				round.Participants,
 			); err != nil {
-				return results.FailureResult[*roundtypes.CreateRoundResult, error](fmt.Errorf("failed creating round groups: %w", err)), err
+				return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed creating round groups: %w", err)), err
 			}
 		}
 
@@ -224,7 +220,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 				attr.String("guild_id_value", string(guildID)),
 				attr.Error(dbErr),
 			)
-			return results.FailureResult[*roundtypes.Round, error](fmt.Errorf("database update failed: %w", dbErr)), fmt.Errorf("failed to update Discord event message ID in DB: %w", dbErr)
+			return results.FailureResult[*roundtypes.Round](fmt.Errorf("database update failed: %w", dbErr)), fmt.Errorf("failed to update Discord event message ID in DB: %w", dbErr)
 		}
 
 		s.metrics.RecordDBOperationSuccess(ctx, "update_round_message_id")
@@ -245,7 +241,7 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 	}
 
 	if result.Failure != nil {
-		return nil, fmt.Errorf("operation failed: %w", result.Failure)
+		return nil, fmt.Errorf("operation failed: %w", *result.Failure)
 	}
 	return nil, errors.New("operation failed with unknown error")
 }

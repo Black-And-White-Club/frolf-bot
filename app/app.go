@@ -115,7 +115,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: Starting module initialization...")
 
 	fmt.Println("DEBUG: Initializing user module...")
-	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize user module", attr.Error(err))
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
@@ -136,14 +136,14 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: Round module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing guild module...")
-	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize guild module", attr.Error(err))
 		return fmt.Errorf("failed to initialize guild module: %w", err)
 	}
 	fmt.Println("DEBUG: Guild module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing score module...")
-	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}

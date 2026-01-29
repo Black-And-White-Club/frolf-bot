@@ -35,8 +35,25 @@ func (h *GuildHandlers) HandleUpdateGuildConfig(ctx context.Context, payload *gu
 		return nil, err
 	}
 
-	return mapOperationResult(result,
-		guildevents.GuildConfigUpdatedV1,
-		guildevents.GuildConfigUpdateFailedV1,
-	), nil
+	if result.Success != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigUpdatedV1,
+			Payload: guildevents.GuildConfigUpdatedPayloadV1{
+				GuildID: payload.GuildID,
+				Config:  **result.Success,
+			},
+		}}, nil
+	}
+
+	if result.Failure != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigUpdateFailedV1,
+			Payload: guildevents.GuildConfigUpdateFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  (*result.Failure).Error(),
+			},
+		}}, nil
+	}
+
+	return nil, nil
 }

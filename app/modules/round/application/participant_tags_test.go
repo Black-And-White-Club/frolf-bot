@@ -72,11 +72,11 @@ func TestRoundService_UpdateScheduledRoundsWithNewTags(t *testing.T) {
 	upcomingRounds := []*roundtypes.Round{&round1, &round2}
 
 	tests := []struct {
-		name           string
-		setup          func(*FakeRepo)
-		req            *roundtypes.UpdateScheduledRoundsWithNewTagsRequest
-		expectError    bool
-		verify         func(t *testing.T, res UpdateScheduledRoundsWithNewTagsResult, err error, fake *FakeRepo)
+		name        string
+		setup       func(*FakeRepo)
+		req         *roundtypes.UpdateScheduledRoundsWithNewTagsRequest
+		expectError bool
+		verify      func(t *testing.T, res UpdateScheduledRoundsWithNewTagsResult, err error, fake *FakeRepo)
 	}{
 		{
 			name: "successful update with valid tags",

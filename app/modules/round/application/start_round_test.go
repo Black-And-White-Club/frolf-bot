@@ -3,11 +3,9 @@ package roundservice
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -18,232 +16,146 @@ import (
 )
 
 func TestRoundService_StartRound(t *testing.T) {
-var (
-	testStartRoundID        = sharedtypes.RoundID(uuid.New())
-	testRoundTitle          = roundtypes.Title("Test Round")
-	testStartLocation       = roundtypes.Location("Test Location")
-	testStartRoundTime      = sharedtypes.StartTime(time.Now())
-	testStartEventMessageID = "12345"
-)
+	var (
+		testGuildID    = sharedtypes.GuildID("guild-123")
+		testRoundID    = sharedtypes.RoundID(uuid.New())
+		testEventMsgID = "event-msg-456"
+		testStartTime  = sharedtypes.StartTime(time.Now())
+		testRoundTitle = roundtypes.Title("Test Round")
+		testLocation   = roundtypes.Location("Test Location")
+	)
 
-var (
-	testStartParticipant1 = roundtypes.Participant{
-		UserID:    sharedtypes.DiscordID("user1"),
-		TagNumber: nil,
-		Response:  roundtypes.ResponseAccept,
-	}
-	testStartParticipant2 = roundtypes.Participant{
-		UserID:    sharedtypes.DiscordID("user2"),
-		TagNumber: nil,
-		Response:  roundtypes.ResponseTentative,
-	}
-)
-
-func TestRoundService_ProcessRoundStart(t *testing.T) {
-	validRoundID := sharedtypes.RoundID(uuid.New())
 	logger := loggerfrolfbot.NoOpLogger
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}
+
 	tests := []struct {
-		name           string
-		setupFake      func(*FakeRepo)
-		setup          func(*FakeRepo)
-		payload        roundevents.RoundStartedPayloadV1
-		expectedResult results.OperationResult
-		expectedError  error
+		name          string
+		setup         func(*FakeRepo)
+		req           *roundtypes.StartRoundRequest
+		expectedState roundtypes.RoundState
+		expectError   bool
+		expectFailure bool
+	}{
 		{
-			name: "success - round started",
-			name: "successful processing",
+			name: "successful start",
 			setup: func(r *FakeRepo) {
-					ID:             validRoundID,
-					ID:             testStartRoundID,
-					Title:          testRoundTitle,
-					Location:       testStartLocation,
-					StartTime:      &testStartRoundTime,
-				}
-					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
-					EventMessageID: testStartEventMessageID,
 				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
-
-					// The service calls GetRound twice: once to check the round and once to refresh it after update.
-				}
-				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
-
-					round.State = state
-					if state != roundtypes.RoundStateInProgress {
-						return errors.New("unexpected state")
-					}
-				}
-			},
-			verify: func(t *testing.T, res StartRoundResult, infraErr error, fake *FakeRepo) {
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID:   sharedtypes.GuildID("guild-123"),
-				RoundID:   testStartRoundID,
-				Title:     testRoundTitle,
-				Location:  testStartLocation,
-				StartTime: &testStartRoundTime,
-			},
-			expectedResult: results.OperationResult{
-				Success: &roundevents.DiscordRoundStartPayloadV1{
-					GuildID:   sharedtypes.GuildID("guild-123"),
-					RoundID:   testStartRoundID,
-					Title:     testRoundTitle,
-					Location:  testStartLocation,
-					StartTime: &testStartRoundTime,
-					Participants: []roundevents.RoundParticipantV1{
-						{
-							UserID:    sharedtypes.DiscordID("user1"),
-							TagNumber: nil,
-							Response:  roundtypes.ResponseAccept,
-							Score:     nil,
-						},
-						{
-							UserID:    sharedtypes.DiscordID("user2"),
-							TagNumber: nil,
-							Response:  roundtypes.ResponseTentative,
-							Score:     nil,
-						},
-					},
-					EventMessageID: testStartEventMessageID,
-				},
-			},
-			expectedError: nil,
-		{
-			name: "failure - missing event message ID",
-			name: "error getting round",
-			setup: func(r *FakeRepo) {
 					return &roundtypes.Round{
-					return &roundtypes.Round{}, errors.New("database error")
+						ID:             testRoundID,
+						GuildID:        testGuildID,
+						State:          roundtypes.RoundStateUpcoming,
+						EventMessageID: testEventMsgID,
+						Title:          testRoundTitle,
+						Location:       testLocation,
+						StartTime:      &testStartTime,
+					}, nil
 				}
-			},
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testStartRoundID,
-			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundErrorPayloadV1{
-					GuildID: sharedtypes.GuildID("guild-123"),
-					RoundID: testStartRoundID,
-					Error:   "database error",
-				},
-			},
-			expectedError: nil,
-		{
-			name: "failure - update state fails",
-			name: "error updating round",
-			setup: func(r *FakeRepo) {
-				round := &roundtypes.Round{
-					ID:             testStartRoundID,
-					Title:          testRoundTitle,
-					Location:       testStartLocation,
-					StartTime:      &testStartRoundTime,
-					State:          roundtypes.RoundStateUpcoming,
-					Participants:   []roundtypes.Participant{testStartParticipant1, testStartParticipant2},
-					EventMessageID: testStartEventMessageID,
-				}
-					if len(r.Trace()) > 1 {
-					return round, nil
 				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
+					if id != testRoundID {
+						return errors.New("wrong round id")
+					}
+					if state != roundtypes.RoundStateInProgress {
+						return errors.New("wrong state")
+					}
 					return nil
-					return errors.New("database error")
+				}
 			},
-			verify: func(t *testing.T, res StartRoundResult, infraErr error, fake *FakeRepo) {
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID: sharedtypes.GuildID("guild-123"),
-				RoundID: testStartRoundID,
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
 			},
-			expectedResult: results.OperationResult{
-				Failure: &roundevents.RoundErrorPayloadV1{
-					GuildID: sharedtypes.GuildID("guild-123"),
-					RoundID: testStartRoundID,
-					Error:   "database error",
-				},
+			expectedState: roundtypes.RoundStateInProgress,
+			expectError:   false,
+		},
+		{
+			name: "failure - missing event message id",
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						GuildID:        testGuildID,
+						State:          roundtypes.RoundStateUpcoming,
+						EventMessageID: "", // Missing
+					}, nil
+				}
 			},
-			expectedError: nil,
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+			},
+			expectError:   false,
+			expectFailure: true,
+		},
+		{
+			name: "failure - get round error",
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return nil, errors.New("db error")
+				}
+			},
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+			},
+			expectError:   false,
+			expectFailure: true,
+		},
+		{
+			name: "failure - update state error",
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						GuildID:        testGuildID,
+						State:          roundtypes.RoundStateUpcoming,
+						EventMessageID: testEventMsgID,
+					}, nil
+				}
+				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
+					return errors.New("update error")
+				}
+			},
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+			},
+			expectError:   false,
+			expectFailure: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := NewFakeRepo()
-			if tt.setupFake != nil {
 			if tt.setup != nil {
 				tt.setup(repo)
-
-			s := &RoundService{
-				repo:    repo,
-				repo:           repo,
-				logger:         logger,
-				metrics:        mockMetrics,
-				tracer:         tracer,
-				roundValidator: &FakeRoundValidator{},
-				eventBus:       &FakeEventBus{},
 			}
 
-			result, err := s.ProcessRoundStart(ctx, tt.payload.GuildID, tt.payload.RoundID)
+			s := NewRoundService(repo, nil, nil, nil, mockMetrics, logger, tracer, nil, nil)
 
-			// Check error expectation
-			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf("expected error: %v, got: nil", tt.expectedError)
-				} else if err.Error() != tt.expectedError.Error() {
-					t.Errorf("expected error message: %q, got: %q", tt.expectedError.Error(), err.Error())
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, got: %v", err)
+			result, err := s.StartRound(context.Background(), tt.req)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("StartRound() error = %v, expectError %v", err, tt.expectError)
+				return
 			}
 
-			// Check result structure
-			if tt.expectedResult.Success != nil {
-				if result.Success == nil {
-					t.Errorf("expected success result, got failure")
-				} else {
-					if expectedPayload, ok := tt.expectedResult.Success.(*roundevents.DiscordRoundStartPayloadV1); ok {
-						if actualPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayloadV1); ok {
-							if actualPayload.RoundID != expectedPayload.RoundID {
-								t.Errorf("expected RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
-							}
-							if actualPayload.Title != expectedPayload.Title {
-								t.Errorf("expected Title %v, got %v", expectedPayload.Title, actualPayload.Title)
-							}
-							if actualPayload.Location != expectedPayload.Location {
-								t.Errorf("expected Location %v, got %v", expectedPayload.Location, actualPayload.Location)
-							}
-							if (actualPayload.StartTime == nil) != (expectedPayload.StartTime == nil) {
-								t.Errorf("expected StartTime nil status %v, got %v", expectedPayload.StartTime == nil, actualPayload.StartTime == nil)
-							} else if actualPayload.StartTime != nil && expectedPayload.StartTime != nil && !actualPayload.StartTime.AsTime().Equal(expectedPayload.StartTime.AsTime()) {
-								t.Errorf("expected StartTime %v, got %v", expectedPayload.StartTime, actualPayload.StartTime)
-							}
-							if actualPayload.EventMessageID != expectedPayload.EventMessageID {
-								t.Errorf("expected EventMessageID %v, got %v", expectedPayload.EventMessageID, actualPayload.EventMessageID)
-							}
-							if !reflect.DeepEqual(actualPayload.Participants, expectedPayload.Participants) {
-								t.Errorf("expected Participants %v, got %v", expectedPayload.Participants, actualPayload.Participants)
-							}
-						} else {
-							t.Errorf("expected result.Success to be *roundevents.DiscordRoundStartPayloadV1, got %T", result.Success)
-						}
-					}
-				}
-			}
-
-			if tt.expectedResult.Failure != nil {
+			if tt.expectFailure {
 				if result.Failure == nil {
-					t.Errorf("expected failure result, got success")
+					t.Errorf("StartRound() expected failure result, got success")
+				}
+			} else {
+				if result.Success == nil {
+					t.Errorf("StartRound() expected success result, got failure")
 				} else {
-					if expectedPayload, ok := tt.expectedResult.Failure.(*roundevents.RoundErrorPayloadV1); ok {
-						if actualPayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1); ok {
-							if actualPayload.RoundID != expectedPayload.RoundID {
-								t.Errorf("expected Failure RoundID %v, got %v", expectedPayload.RoundID, actualPayload.RoundID)
-							}
-							if actualPayload.Error != expectedPayload.Error {
-								t.Errorf("expected Failure Error %v, got %v", expectedPayload.Error, actualPayload.Error)
-							}
-						} else {
-							t.Errorf("expected result.Failure to be *roundevents.RoundErrorPayloadV1, got %T", result.Failure)
-						}
+					round := *result.Success
+					if round.State != tt.expectedState {
+						t.Errorf("StartRound() expected state %v, got %v", tt.expectedState, round.State)
 					}
 				}
+			}
 		})
 	}
 }

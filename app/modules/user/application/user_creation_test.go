@@ -53,12 +53,17 @@ func TestUserService_CreateUser(t *testing.T) {
 				if infraErr != nil {
 					t.Fatalf("unexpected infra error: %v", infraErr)
 				}
-				// ASSERTION: res.Success is now *usertypes.UserData
 				if res.Success == nil {
 					t.Fatalf("expected success, got failure: %v", res.Failure)
 				}
 				if (*res.Success).GetUserID() != testUserID {
 					t.Errorf("expected userID %s, got %s", testUserID, (*res.Success).GetUserID())
+				}
+				if (*res.Success).TagNumber == nil || *(*res.Success).TagNumber != testTag {
+					t.Errorf("expected tag %v, got %v", testTag, (*res.Success).TagNumber)
+				}
+				if (*res.Success).IsReturningUser {
+					t.Errorf("expected IsReturningUser to be false for new user")
 				}
 			},
 		},
@@ -79,11 +84,14 @@ func TestUserService_CreateUser(t *testing.T) {
 			},
 			verify: func(t *testing.T, res UserResult, infraErr error, fake *FakeUserRepository) {
 				if res.Success == nil {
-					t.Errorf("expected success for returning user")
+					t.Fatalf("expected success for returning user, got failure: %v", res.Failure)
 				}
 				// Verify mapping happened
 				if (*res.Success).GetUserID() != testUserID {
 					t.Errorf("expected userID %s, got %s", testUserID, (*res.Success).GetUserID())
+				}
+				if !(*res.Success).IsReturningUser {
+					t.Errorf("expected IsReturningUser to be true for existing user")
 				}
 			},
 		},

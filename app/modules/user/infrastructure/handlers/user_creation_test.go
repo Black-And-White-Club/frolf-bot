@@ -55,8 +55,11 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			},
 			setupFake: func(f *FakeUserService) {
 				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
-					return results.SuccessResult[*usertypes.UserData, error](&usertypes.UserData{
-						UserID: userID,
+					return results.SuccessResult[*userservice.CreateUserResponse, error](&userservice.CreateUserResponse{
+						UserData: usertypes.UserData{
+							UserID: userID,
+						},
+						TagNumber: tag,
 					}), nil
 				}
 			},
@@ -72,7 +75,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			},
 			setupFake: func(f *FakeUserService) {
 				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
-					return results.FailureResult[*usertypes.UserData, error](errors.New("already exists")), nil
+					return results.FailureResult[*userservice.CreateUserResponse, error](errors.New("already exists")), nil
 				}
 			},
 			wantLen:   1,

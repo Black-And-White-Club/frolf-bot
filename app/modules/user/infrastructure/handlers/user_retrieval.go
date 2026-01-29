@@ -16,11 +16,32 @@ func (h *UserHandlers) HandleGetUserRequest(
 	if err != nil {
 		return nil, err
 	}
+	if result.IsSuccess() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.GetUserResponseV1,
+				Payload: &userevents.GetUserResponsePayloadV1{
+					GuildID: payload.GuildID,
+					User:    &(*result.Success).UserData,
+				},
+			},
+		}, nil
+	}
 
-	return mapOperationResult(result,
-		userevents.GetUserResponseV1,
-		userevents.GetUserFailedV1,
-	), nil
+	if result.IsFailure() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.GetUserFailedV1,
+				Payload: &userevents.GetUserFailedPayloadV1{
+					GuildID: payload.GuildID,
+					UserID:  payload.UserID,
+					Reason:  (*result.Failure).Error(),
+				},
+			},
+		}, nil
+	}
+
+	return nil, nil
 }
 
 // HandleGetUserRoleRequest handles the GetUserRoleRequest event.
@@ -32,9 +53,31 @@ func (h *UserHandlers) HandleGetUserRoleRequest(
 	if err != nil {
 		return nil, err
 	}
+	if result.IsSuccess() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.GetUserRoleResponseV1,
+				Payload: &userevents.GetUserRoleResponsePayloadV1{
+					GuildID: payload.GuildID,
+					UserID:  payload.UserID,
+					Role:    *result.Success,
+				},
+			},
+		}, nil
+	}
 
-	return mapOperationResult(result,
-		userevents.GetUserRoleResponseV1,
-		userevents.GetUserRoleFailedV1,
-	), nil
+	if result.IsFailure() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.GetUserRoleFailedV1,
+				Payload: &userevents.GetUserRoleFailedPayloadV1{
+					GuildID: payload.GuildID,
+					UserID:  payload.UserID,
+					Reason:  (*result.Failure).Error(),
+				},
+			},
+		}, nil
+	}
+
+	return nil, nil
 }

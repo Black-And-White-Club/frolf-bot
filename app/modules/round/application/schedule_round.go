@@ -29,7 +29,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 				attr.RoundID("round_id", req.RoundID),
 				attr.Error(err),
 			)
-			return results.FailureResult[*roundtypes.ScheduleRoundEventsResult, error](err), nil
+			return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
 		}
 
 		// Calculate times
@@ -78,7 +78,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 					attr.RoundID("round_id", req.RoundID),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.ScheduleRoundEventsResult, error](err), nil
+				return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
 			}
 		} else {
 			s.logger.InfoContext(ctx, "Skipping 1-hour reminder - not enough time",
@@ -108,7 +108,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 					attr.RoundID("round_id", req.RoundID),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.ScheduleRoundEventsResult, error](err), nil
+				return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
 			}
 		} else {
 			s.logger.InfoContext(ctx, "Round start time is too close or in the past, not scheduling",

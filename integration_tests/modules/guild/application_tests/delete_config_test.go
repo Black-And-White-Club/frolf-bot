@@ -4,17 +4,16 @@ import (
 	"context"
 	"testing"
 
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 )
 
 func TestDeleteGuildConfig(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupFn    func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.GuildID)
-		validateFn func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error)
+		validateFn func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error)
 	}{
 		{
 			name: "Success - Delete existing guild config",
@@ -37,7 +36,7 @@ func TestDeleteGuildConfig(t *testing.T) {
 
 				return deps.Ctx, guildID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("DeleteGuildConfig returned unexpected error: %v", err)
 				}
@@ -49,17 +48,15 @@ func TestDeleteGuildConfig(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*guildevents.GuildConfigDeletedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigDeletedPayloadV1")
-				}
+				// Success payload is now *guildtypes.GuildConfig (the state before/after delete)
+				deletedConfig := *result.Success
 
-				if successPayload.GuildID != guildID {
-					t.Errorf("Success payload GuildID mismatch: expected %q, got %q", guildID, successPayload.GuildID)
+				if deletedConfig.GuildID != guildID {
+					t.Errorf("Success payload GuildID mismatch: expected %q, got %q", guildID, deletedConfig.GuildID)
 				}
 
 				// Verify the config was soft-deleted in the database
-				retrievedConfig, dbErr := deps.DB.GetConfig(deps.Ctx, guildID)
+				retrievedConfig, dbErr := deps.DB.GetConfig(deps.Ctx, nil, guildID)
 				if dbErr == nil && retrievedConfig != nil {
 					t.Logf("Config still retrievable after delete (soft delete behavior)")
 				}
@@ -71,11 +68,17 @@ func TestDeleteGuildConfig(t *testing.T) {
 				guildID := sharedtypes.GuildID("nonexistent_guild_delete")
 				return deps.Ctx, guildID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("DeleteGuildConfig returned unexpected system error: %v", err)
 				}
-				// Deleting a nonexistent config is idempotent and returns success
+				// Deleting a nonexistent config currently returns success (idempotent) or failure depending on impl.
+				// Based on previous test, it seemed to return success.
+				// However, if the implementation relies on `repo.DeleteConfig` doing a soft delete on existing,
+				// let's check what checking logic exists.
+				// Previous test said "Success - Delete nonexistent config (idempotent)".
+				// Assuming `repo.DeleteGuildConfig` handles not found gracefully or we don't check existence first.
+
 				if result.Failure != nil {
 					t.Fatalf("Expected success but got failure: %+v", result.Failure)
 				}
@@ -90,7 +93,7 @@ func TestDeleteGuildConfig(t *testing.T) {
 				guildID := sharedtypes.GuildID("")
 				return deps.Ctx, guildID
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				// New behavior: empty guild ID returns a business failure payload (no system error)
 				if err != nil {
 					t.Fatalf("Expected business failure payload for empty guild ID but got system error: %v", err)
@@ -101,13 +104,12 @@ func TestDeleteGuildConfig(t *testing.T) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload for empty guild ID but got nil")
 				}
-				failurePayload, ok := result.Failure.(*guildevents.GuildConfigDeletionFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type")
+
+				domainErr := *result.Failure
+				if domainErr == nil {
+					t.Fatalf("Failure payload was nil error")
 				}
-				if failurePayload.GuildID != guildID {
-					t.Errorf("Failure payload GuildID mismatch: expected %q, got %q", guildID, failurePayload.GuildID)
-				}
+				t.Logf("Got expected domain error: %v", domainErr)
 			},
 		},
 	}

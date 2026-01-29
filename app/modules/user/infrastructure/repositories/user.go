@@ -190,11 +190,11 @@ func (r *Impl) GetUserByUserID(ctx context.Context, db bun.IDB, userID sharedtyp
 	// or use ColumnExpr to define the source.
 	err := db.NewSelect().
 		Model(uwm.User).
-		ColumnExpr("users.*"). // Replace 'u' with the actual table name 'users'
+		ColumnExpr("u.*"). // Model is aliased to 'u'
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
-		Join("JOIN guild_memberships AS gm ON users.user_id = gm.user_id").
-		Where("users.user_id = ?", userID).
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("u.user_id = ?", userID).
 		Where("gm.guild_id = ?", guildID).
 		Scan(ctx, uwm)
 
@@ -249,7 +249,7 @@ func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID shar
 		Where("LOWER(u.udisc_username) = LOWER(?)", username).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
-		Scan(ctx)
+		Scan(ctx, uwm)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -273,7 +273,7 @@ func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedty
 		Where("LOWER(u.udisc_name) = LOWER(?)", name).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
-		Scan(ctx)
+		Scan(ctx, uwm)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

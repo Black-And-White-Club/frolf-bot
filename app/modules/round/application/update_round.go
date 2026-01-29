@@ -66,7 +66,7 @@ func (s *RoundService) ValidateRoundUpdateWithClock(ctx context.Context, req *ro
 				} else {
 					// Convert and validate parsed time (like create round)
 					parsedTime := time.Unix(parsedTimeUnix, 0).UTC()
-					currentTime := time.Now().UTC()
+					currentTime := clock.NowUTC()
 
 					if parsedTime.Before(currentTime) {
 						s.logger.InfoContext(ctx, "Parsed time is in the past",
@@ -149,7 +149,8 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, req *roundtypes.Up
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetRound")
-			return results.FailureResult[*roundtypes.UpdateRoundResult, error](fmt.Errorf("failed to fetch current round: %v", err)), nil
+			// Return as failure result so it can be published as an error event
+			return results.FailureResult[*roundtypes.UpdateRoundResult](fmt.Errorf("failed to fetch round: %w", err)), nil
 		}
 
 		// Step 2: Create update object starting with current required fields
@@ -211,6 +212,13 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, req *roundtypes.Up
 			// If it wasn't provided, this block is skipped.
 		}
 
+		if req.EventType != nil {
+			if currentRound.EventType == nil || *req.EventType != *currentRound.EventType {
+				updateRound.EventType = req.EventType
+				updatedFields = append(updatedFields, "event_type")
+			}
+		}
+
 		// Step 4: Ensure there is at least one field to update
 		if len(updatedFields) == 0 {
 			s.logger.WarnContext(ctx, "No fields to update after processing",
@@ -227,7 +235,7 @@ func (s *RoundService) UpdateRoundEntity(ctx context.Context, req *roundtypes.Up
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "UpdateRound")
-			return results.FailureResult[*roundtypes.UpdateRoundResult, error](fmt.Errorf("failed to update round in database: %v", err)), nil
+			return results.OperationResult[*roundtypes.UpdateRoundResult, error]{}, err
 		}
 
 		s.metrics.RecordDBOperationSuccess(ctx, "UpdateRound")
@@ -265,7 +273,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 				attr.RoundID("round_id", req.RoundID),
 				attr.Error(err),
 			)
-			return results.FailureResult[bool, error](fmt.Errorf("failed to cancel existing scheduled jobs: %v", err)), nil
+			return results.OperationResult[bool, error]{}, err
 		}
 
 		s.logger.InfoContext(ctx, "Successfully cancelled existing scheduled jobs",
@@ -279,7 +287,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 				attr.RoundID("round_id", req.RoundID),
 				attr.Error(err),
 			)
-			return results.FailureResult[bool, error](fmt.Errorf("failed to get EventMessageID: %v", err)), nil
+			return results.OperationResult[bool, error]{}, err
 		}
 
 		// Step 3: Get current round data to preserve fields not being updated
@@ -289,7 +297,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 				attr.RoundID("round_id", req.RoundID),
 				attr.Error(err),
 			)
-			return results.FailureResult[bool, error](fmt.Errorf("failed to get current round data: %v", err)), nil
+			return results.OperationResult[bool, error]{}, err
 		}
 
 		// Step 4: Determine final values (updated or preserved)
@@ -373,7 +381,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 					attr.RoundID("round_id", req.RoundID),
 					attr.Error(err),
 				)
-				return results.FailureResult[bool, error](err), nil
+				return results.OperationResult[bool, error]{}, err
 			}
 
 			s.logger.InfoContext(ctx, "Successfully rescheduled 1-hour reminder",
@@ -413,7 +421,7 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 				attr.RoundID("round_id", req.RoundID),
 				attr.Error(err),
 			)
-			return results.FailureResult[bool, error](err), nil
+			return results.OperationResult[bool, error]{}, err
 		}
 
 		s.logger.InfoContext(ctx, "Round events rescheduled successfully",

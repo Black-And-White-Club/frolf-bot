@@ -12,14 +12,19 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// MapDBUserToUserData converts internal DB model to the shared domain model.
-func MapDBUserToUserData(dbUser *userdb.User) *usertypes.UserData {
+// MapDBUserToUserData converts internal DB model to the application response model.
+func MapDBUserToUserData(dbUser *userdb.User, tag *sharedtypes.TagNumber, returning bool) *CreateUserResponse {
 	if dbUser == nil {
 		return nil
 	}
-	return &usertypes.UserData{
-		UserID: dbUser.UserID,
-		Role:   sharedtypes.UserRoleUser,
+	return &CreateUserResponse{
+		UserData: usertypes.UserData{
+			ID:     dbUser.ID,
+			UserID: dbUser.UserID,
+			Role:   sharedtypes.UserRoleUser,
+		},
+		TagNumber:       tag,
+		IsReturningUser: returning,
 	}
 }
 
@@ -32,6 +37,9 @@ func (s *UserService) CreateUser(
 	udiscUsername *string,
 	udiscName *string,
 ) (UserResult, error) {
+	if ctx == nil {
+		return results.FailureResult[*CreateUserResponse](errors.New("context cannot be nil")), errors.New("context cannot be nil")
+	}
 
 	// Named transaction function
 	createUserTx := func(ctx context.Context, db bun.IDB) (UserResult, error) {
@@ -63,10 +71,10 @@ func (s *UserService) executeCreateUser(
 
 	// 1. Domain Validations
 	if userID == "" {
-		return results.FailureResult[*usertypes.UserData](ErrInvalidDiscordID), nil
+		return results.FailureResult[*CreateUserResponse](ErrInvalidDiscordID), nil
 	}
 	if tag != nil && *tag < 0 {
-		return results.FailureResult[*usertypes.UserData](ErrNegativeTagNumber), nil
+		return results.FailureResult[*CreateUserResponse](ErrNegativeTagNumber), nil
 	}
 
 	// 2. Check if user exists globally
@@ -82,7 +90,7 @@ func (s *UserService) executeCreateUser(
 		}
 
 		if membership != nil {
-			return results.FailureResult[*usertypes.UserData](ErrUserAlreadyExists), nil
+			return results.FailureResult[*CreateUserResponse](ErrUserAlreadyExists), nil
 		}
 
 		if err := s.repo.CreateGuildMembership(ctx, db, &userdb.GuildMembership{
@@ -93,7 +101,7 @@ func (s *UserService) executeCreateUser(
 			return UserResult{}, fmt.Errorf("failed to create guild membership: %w", err)
 		}
 
-		return results.SuccessResult[*usertypes.UserData, error](MapDBUserToUserData(user)), nil
+		return results.SuccessResult[*CreateUserResponse, error](MapDBUserToUserData(user, tag, true)), nil
 	}
 
 	// 3. New user flow
@@ -115,5 +123,5 @@ func (s *UserService) executeCreateUser(
 		return UserResult{}, fmt.Errorf("failed to create guild membership: %w", err)
 	}
 
-	return results.SuccessResult[*usertypes.UserData, error](MapDBUserToUserData(newUser)), nil
+	return results.SuccessResult[*CreateUserResponse, error](MapDBUserToUserData(newUser, tag, false)), nil
 }

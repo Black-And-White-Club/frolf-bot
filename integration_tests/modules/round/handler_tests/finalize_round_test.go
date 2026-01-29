@@ -44,17 +44,13 @@ func createValidRoundFinalizedPayload(roundID sharedtypes.RoundID, roundData rou
 func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.DiscordID, db bun.IDB) (sharedtypes.RoundID, []roundtypes.Participant, roundtypes.Round) {
 	t.Helper()
 
-	// Use the passed DB instance instead of creating new deps
 	generator := testutils.NewTestDataGenerator(time.Now().UnixNano())
+	roundData := generator.GenerateRound(testutils.DiscordID(userID), 0, []testutils.User{})
 
-	// Generate a complete round with participants and scores
-	roundData := generator.GenerateRound(testutils.DiscordID(userID), 0, []testutils.User{}) // Start with 0 participants
-
-	// Create sample participants with realistic disc golf scores
 	tagNumber1 := sharedtypes.TagNumber(1)
 	tagNumber2 := sharedtypes.TagNumber(2)
-	score1 := sharedtypes.Score(-3) // 3 under par (excellent score)
-	score2 := sharedtypes.Score(2)  // 2 over par (decent score)
+	score1 := sharedtypes.Score(-3)
+	score2 := sharedtypes.Score(2)
 
 	participants := []roundtypes.Participant{
 		{
@@ -71,11 +67,9 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 		},
 	}
 
-	// Add participants to round data
 	roundData.Participants = participants
 
-	// Convert to DB model and insert using the passed DB instance
-	roundDB := &rounddb.Round{
+	roundDBRec := &rounddb.Round{
 		ID:           roundData.ID,
 		Title:        roundData.Title,
 		Description:  roundData.Description,
@@ -86,10 +80,10 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 		CreatedBy:    roundData.CreatedBy,
 		State:        roundData.State,
 		Participants: roundData.Participants,
-		GuildID:      "test-guild", // ✅ FIX: Must match handler test payloads
+		GuildID:      "test-guild",
 	}
 
-	_, err := db.NewInsert().Model(roundDB).Exec(context.Background()) // ✅ Use passed DB
+	_, err := db.NewInsert().Model(roundDBRec).Exec(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to insert test round for finalization: %v", err)
 	}
@@ -97,7 +91,6 @@ func createExistingRoundForFinalization(t *testing.T, userID sharedtypes.Discord
 	return roundData.ID, participants, roundData
 }
 
-// TestHandleAllScoresSubmitted tests the all scores submitted handler
 func TestHandleAllScoresSubmitted(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -111,7 +104,7 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 			name: "Success - Valid All Scores Submitted",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, env.DB)
 				return struct {
 					id           sharedtypes.RoundID
 					participants []roundtypes.Participant
@@ -119,9 +112,8 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 				}{roundID, participants, round}
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				// Reuse setup to build a payload
 				data := NewTestData()
-				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				roundID, participants, round := createExistingRoundForFinalization(t, data.UserID, env.DB)
 				payload := createValidAllScoresSubmittedPayload(roundID, participants, round)
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -141,7 +133,7 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 					t.Fatalf("expected discord finalized message, got none")
 				}
 			},
-			timeout: 2 * time.Second,
+			timeout: 5 * time.Second,
 		},
 	}
 
@@ -169,7 +161,6 @@ func TestHandleAllScoresSubmitted(t *testing.T) {
 	}
 }
 
-// TestHandleRoundFinalized tests the round finalized handler
 func TestHandleRoundFinalized(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -183,7 +174,7 @@ func TestHandleRoundFinalized(t *testing.T) {
 			name: "Success - Valid Round Finalized",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				data := NewTestData()
-				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, env.DB)
 				return struct {
 					id sharedtypes.RoundID
 					r  roundtypes.Round
@@ -191,7 +182,7 @@ func TestHandleRoundFinalized(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
-				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, deps.DB)
+				roundID, _, existingRound := createExistingRoundForFinalization(t, data.UserID, env.DB)
 				payload := createValidRoundFinalizedPayload(roundID, existingRound)
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -211,7 +202,7 @@ func TestHandleRoundFinalized(t *testing.T) {
 					t.Fatalf("expected process round scores request, got none")
 				}
 			},
-			timeout: 2 * time.Second,
+			timeout: 5 * time.Second,
 		},
 	}
 

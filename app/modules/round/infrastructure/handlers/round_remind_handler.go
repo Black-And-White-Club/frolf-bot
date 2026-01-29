@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -49,15 +50,21 @@ func (h *RoundHandlers) HandleRoundReminder(
 		h.logger.WarnContext(ctx, "round reminder processing failed in service",
 			attr.Any("failure", result.Failure),
 		)
+		// Map domain failure to event payload manually to ensure context fields are present
+		failurePayload := &roundevents.RoundReminderFailedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			Error:   fmt.Sprintf("%v", result.Failure),
+		}
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundReminderFailedV1, Payload: result.Failure},
+			{Topic: roundevents.RoundReminderFailedV1, Payload: failurePayload},
 		}, nil
 	}
 
 	// Handle successful preparation of the reminder.
 	if result.Success != nil {
 		serviceResult := *result.Success
-		
+
 		discordPayload := &roundevents.DiscordReminderPayloadV1{
 			GuildID:          serviceResult.GuildID,
 			RoundID:          serviceResult.RoundID,

@@ -69,8 +69,8 @@ func TestUserService_GetUser(t *testing.T) {
 				if infraErr != nil {
 					t.Fatalf("unexpected infra error: %v", infraErr)
 				}
-				if res.Failure == nil || !errors.Is(*res.Failure, userdb.ErrNotFound) {
-					t.Errorf("expected ErrNotFound in failure, got %v", res.Failure)
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrUserNotFound) {
+					t.Errorf("expected ErrUserNotFound in failure, got %v", res.Failure)
 				}
 			},
 		},

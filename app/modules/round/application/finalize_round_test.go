@@ -156,11 +156,11 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			}
 
 			s := &RoundService{
-				repo:           repo,
-				logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics:        &roundmetrics.NoOpMetrics{},
-				tracer:         noop.NewTracerProvider().Tracer("test"),
-				parserFactory:  &StubFactory{},
+				repo:          repo,
+				logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:       &roundmetrics.NoOpMetrics{},
+				tracer:        noop.NewTracerProvider().Tracer("test"),
+				parserFactory: &StubFactory{},
 			}
 
 			res, err := s.FinalizeRound(ctx, tt.payload)
@@ -236,10 +236,10 @@ func TestRoundService_NotifyScoreModule(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &RoundService{
-				logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics:        &roundmetrics.NoOpMetrics{},
-				tracer:         noop.NewTracerProvider().Tracer("test"),
-				parserFactory:  &StubFactory{},
+				logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:       &roundmetrics.NoOpMetrics{},
+				tracer:        noop.NewTracerProvider().Tracer("test"),
+				parserFactory: &StubFactory{},
 			}
 
 			// Ensure Round.Participants matches Participants for the logic to work

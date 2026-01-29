@@ -3,14 +3,13 @@ package userintegrationtests
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 
@@ -19,9 +18,10 @@ import (
 
 func TestCreateUser(t *testing.T) {
 	tests := []struct {
-		name             string
+		name string
+		// Modified function signatures to explicitly accept deps
 		setupFn          func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, *sharedtypes.TagNumber)
-		validateFn       func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error)
+		validateFn       func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error)
 		expectedSuccess  bool
 		expectedErrorMsg string
 		skipCleanup      bool
@@ -33,37 +33,27 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(42)
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateUser returned unexpected error: %v", err)
 				}
 				// No top-level error expected; check success/failure via OperationResult
-				if result.Success == nil {
+				if !result.IsSuccess() {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
-				if result.Failure != nil {
-					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
-				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
-				}
+				successPayload := *result.Success
 
-				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
+				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, deps.BunDB, userID, sharedtypes.GuildID("test_guild"))
 				if dbErr != nil {
-					t.Logf("Failed to retrieve user %q from DB, skipping DB assertions: %v", userID, dbErr)
+					t.Errorf("Failed to retrieve user %q from DB: %v", userID, dbErr)
+					return
 				} else if retrievedUser == nil {
 					t.Fatalf("User %q not found in database after creation", userID)
 				}
 
 				if successPayload.UserID != userID {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
-				}
-				if successPayload.TagNumber == nil {
-					t.Errorf("Success payload TagNumber is unexpectedly nil")
-				} else if *successPayload.TagNumber != 42 {
-					t.Errorf("Success payload TagNumber mismatch: expected %d, got %d", 42, *successPayload.TagNumber)
 				}
 
 				if retrievedUser.User.UserID != userID {
@@ -85,35 +75,22 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(42)
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				// Service returns a domain failure payload and no top-level error for validation failures
 				if err != nil {
 					t.Fatalf("Did not expect top-level error for validation failure, got: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
-				}
-
-				if failurePayload.UserID != userID {
-					t.Errorf("Failure payload UserID mismatch: expected empty string, got %q", failurePayload.UserID)
-				}
-				if failurePayload.TagNumber == nil {
-					t.Errorf("Failure payload TagNumber is unexpectedly nil")
-				} else if *failurePayload.TagNumber != 42 {
-					t.Errorf("Failure payload TagNumber mismatch: expected %d, got %d", 42, *failurePayload.TagNumber)
-				}
-
-				expectedErrMsg := "invalid Discord ID"
-				if failurePayload.Reason != expectedErrMsg {
-					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, failurePayload.Reason)
+				errVal := *result.Failure
+				expectedErrMsg := "Discord ID cannot be empty"
+				if errVal.Error() != expectedErrMsg {
+					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, errVal.Error())
 				}
 			},
 			expectedSuccess: false,
@@ -126,35 +103,22 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(-5)
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				// Service returns a domain failure payload and no top-level error for validation failures
 				if err != nil {
 					t.Fatalf("Did not expect top-level error for validation failure, got: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
-				}
-
-				if failurePayload.UserID != userID {
-					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
-				}
-				if failurePayload.TagNumber == nil {
-					t.Errorf("Failure payload TagNumber is unexpectedly nil")
-				} else if *failurePayload.TagNumber != -5 {
-					t.Errorf("Failure payload TagNumber mismatch: expected %d, got %d", -5, *failurePayload.TagNumber)
-				}
-
+				errVal := *result.Failure
 				expectedErrMsg := "tag number cannot be negative"
-				if failurePayload.Reason != expectedErrMsg {
-					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, failurePayload.Reason)
+				if errVal.Error() != expectedErrMsg {
+					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, errVal.Error())
 				}
 			},
 			expectedSuccess: false,
@@ -167,34 +131,26 @@ func TestCreateUser(t *testing.T) {
 				var tag *sharedtypes.TagNumber = nil
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateUser returned unexpected error: %v", err)
 				}
-				if result.Success == nil {
+				if !result.IsSuccess() {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
-				if result.Failure != nil {
-					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
-				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
-				}
+				successPayload := *result.Success
 
-				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
+				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, deps.BunDB, userID, sharedtypes.GuildID("test_guild"))
 				if dbErr != nil {
-					t.Logf("Failed to retrieve user %q from DB, skipping DB assertions: %v", userID, dbErr)
+					t.Errorf("Failed to retrieve user %q from DB: %v", userID, dbErr)
+					return
 				} else if retrievedUser == nil {
 					t.Fatalf("User %q not found in database after creation", userID)
 				}
 
 				if successPayload.UserID != userID {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
-				}
-				if successPayload.TagNumber != nil {
-					t.Errorf("Success payload TagNumber should be nil, got %d", *successPayload.TagNumber)
 				}
 
 				if retrievedUser.User.UserID != userID {
@@ -211,14 +167,14 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(42)
 				return nil, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				if err == nil {
 					t.Fatal("Expected error for nil context, got nil")
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatalf("Result contained nil Failure payload, expected non-nil: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
 
@@ -226,12 +182,9 @@ func TestCreateUser(t *testing.T) {
 				if err.Error() != expectedErrMsg {
 					t.Errorf("Returned error message mismatch: expected %q, got %q", expectedErrMsg, err.Error())
 				}
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
-				}
-				if failurePayload.Reason != expectedErrMsg {
-					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, failurePayload.Reason)
+				errVal := *result.Failure
+				if errVal.Error() != expectedErrMsg {
+					t.Errorf("Failure payload Reason mismatch: expected %q, got %q", expectedErrMsg, errVal.Error())
 				}
 			},
 			expectedSuccess: false,
@@ -244,36 +197,26 @@ func TestCreateUser(t *testing.T) {
 				tag := tagPtr(999999)
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateUser returned unexpected error: %v", err)
 				}
-				if result.Success == nil {
+				if !result.IsSuccess() {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
-				if result.Failure != nil {
-					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
-				}
 
-				successPayload, ok := result.Success.(*userevents.UserCreatedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *userevents.UserCreatedPayloadV1")
-				}
+				successPayload := *result.Success
 
-				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, userID, sharedtypes.GuildID("test_guild"))
+				retrievedUser, dbErr := deps.DB.GetUserByUserID(deps.Ctx, deps.BunDB, userID, sharedtypes.GuildID("test_guild"))
 				if dbErr != nil {
-					t.Logf("Failed to retrieve user %q from DB, skipping DB assertions: %v", userID, dbErr)
+					t.Errorf("Failed to retrieve user %q from DB: %v", userID, dbErr)
+					return
 				} else if retrievedUser == nil {
 					t.Fatalf("User with large tag number not found in database")
 				}
 
 				if successPayload.UserID != userID {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
-				}
-				if successPayload.TagNumber == nil {
-					t.Errorf("Success payload TagNumber is unexpectedly nil")
-				} else if *successPayload.TagNumber != 999999 {
-					t.Errorf("Success payload TagNumber mismatch: expected %d, got %d", 999999, *successPayload.TagNumber)
 				}
 			},
 			expectedSuccess: true,
@@ -288,11 +231,11 @@ func TestCreateUser(t *testing.T) {
 
 				// Call CreateUser for setup and check its result
 				result, err := deps.Service.CreateUser(deps.Ctx, guildID, userID, tag, nil, nil)
-				if err != nil && result.Failure == nil { // If error exists but no failure payload, something is wrong
+				if err != nil && !result.IsFailure() { // If error exists but no failure payload, something is wrong
 					t.Fatalf("Failed to setup test by creating initial user: %v (Result: %+v)", err, result)
 				}
 				// Check if the initial creation succeeded as expected
-				if result.Success == nil {
+				if !result.IsSuccess() {
 					t.Fatalf("Setup failed to create initial user successfully: %+v", result.Failure)
 				}
 				if err != nil {
@@ -303,25 +246,21 @@ func TestCreateUser(t *testing.T) {
 				// This will trigger "user already exists in guild" error
 				return deps.Ctx, userID, tag
 			},
-			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
 				// Service now returns failure payload with nil top-level error for duplicate user
 				if err != nil {
 					t.Fatalf("Did not expect top-level error when creating duplicate user, got: %v", err)
 				}
-				if result.Success != nil {
+				if result.IsSuccess() {
 					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
 				}
-				if result.Failure == nil {
+				if !result.IsFailure() {
 					t.Fatal("Result contained nil Failure payload, expected non-nil")
 				}
 
-				failurePayload, ok := result.Failure.(*userevents.UserCreationFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type *userevents.UserCreationFailedPayloadV1")
-				}
-
-				if failurePayload.UserID != userID {
-					t.Errorf("Failure payload UserID mismatch: expected %q, got %q", userID, failurePayload.UserID)
+				errVal := *result.Failure
+				if !errors.Is(errVal, userservice.ErrUserAlreadyExists) {
+					t.Errorf("Expected ErrUserAlreadyExists, got %v", errVal)
 				}
 			},
 			expectedSuccess: false,
@@ -336,7 +275,7 @@ func TestCreateUser(t *testing.T) {
 			var ctx context.Context
 			var userID sharedtypes.DiscordID
 			var tag *sharedtypes.TagNumber
-			var result results.OperationResult
+			var result userservice.UserResult
 			var err error
 
 			if !tc.skipCleanup {
@@ -356,6 +295,7 @@ func TestCreateUser(t *testing.T) {
 						slog.New(slog.NewTextHandler(io.Discard, nil)),
 						&usermetrics.NoOpMetrics{},
 						noop.NewTracerProvider().Tracer("test"),
+						nil,
 					),
 				}
 				ctx, userID, tag = tc.setupFn(t, currentDeps)

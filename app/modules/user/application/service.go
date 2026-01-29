@@ -57,6 +57,9 @@ func withTelemetry[S any, F any](
 	userID sharedtypes.DiscordID,
 	op operationFunc[S, F],
 ) (result results.OperationResult[S, F], err error) {
+	if ctx == nil {
+		return results.FailureResult[S, F](any(errors.New("context cannot be nil")).(F)), errors.New("context cannot be nil")
+	}
 
 	// Start span
 	var span trace.Span
@@ -150,12 +153,6 @@ func withTelemetry[S any, F any](
 	}
 
 	return result, nil
-}
-
-// MatchResult holds the domain outcome of a scorecard matching operation.
-type MatchResult struct {
-	Mappings  []userevents.UDiscConfirmedMappingV1 // Or a domain-equivalent struct
-	Unmatched []string
 }
 
 func (s *UserService) MatchParsedScorecard(

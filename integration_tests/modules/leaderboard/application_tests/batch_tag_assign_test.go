@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -28,7 +27,7 @@ func TestExecuteBatchTagAssignment_Integration(t *testing.T) {
 		guildID       sharedtypes.GuildID
 		requests      []sharedtypes.TagAssignmentRequest
 		expectSwapErr bool
-		validate      func(t *testing.T, db *bun.DB, result results.OperationResult, err error)
+		validate      func(t *testing.T, db *bun.DB, result results.OperationResult[leaderboardtypes.LeaderboardData, error], err error)
 	}{
 		{
 			name: "Successful complex internal swap",
@@ -52,7 +51,7 @@ func TestExecuteBatchTagAssignment_Integration(t *testing.T) {
 				{UserID: "user_2", TagNumber: 3}, // User 2 moves to a new tag
 			},
 			expectSwapErr: false,
-			validate: func(t *testing.T, db *bun.DB, result results.OperationResult, err error) {
+			validate: func(t *testing.T, db *bun.DB, result results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
 				if err != nil {
 					t.Fatalf("expected success, got: %v", err)
 				}
@@ -66,12 +65,18 @@ func TestExecuteBatchTagAssignment_Integration(t *testing.T) {
 				}
 
 				// Verify result: Check that Assignments were computed correctly in the success payload
-				successPayload, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
-				if !ok || successPayload == nil {
-					t.Fatalf("expected success payload of type *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1, got %T", result.Success)
+				if result.Success == nil {
+					t.Fatalf("expected success payload, got nil")
 				}
-				if len(successPayload.Assignments) != 2 {
-					t.Errorf("expected 2 assignments in result, got %d", len(successPayload.Assignments))
+				successPayload := *result.Success
+				// Assignments are not directly returned as payload in generic result ?
+				// The generic result is [LeaderboardData, error].
+				// So Success is *LeaderboardData.
+
+				// Wait, LeaderboardData is []LeaderboardEntry. It doesn't have "Assignments" field.
+				// We need to check the data itself.
+				if len(successPayload) != 2 {
+					t.Errorf("expected 2 entries in result, got %d", len(successPayload))
 				}
 			},
 		},
@@ -95,10 +100,17 @@ func TestExecuteBatchTagAssignment_Integration(t *testing.T) {
 				{UserID: "user_new", TagNumber: 10},
 			},
 			expectSwapErr: true,
-			validate: func(t *testing.T, db *bun.DB, result results.OperationResult, err error) {
+			validate: func(t *testing.T, db *bun.DB, result results.OperationResult[leaderboardtypes.LeaderboardData, error], err error) {
+				if err != nil {
+					t.Fatalf("expected no system error, got %v", err)
+				}
+				if result.Failure == nil {
+					t.Fatalf("expected domain failure, got nil")
+				}
+
 				var swapErr *leaderboardservice.TagSwapNeededError
-				if !errors.As(err, &swapErr) {
-					t.Fatalf("expected TagSwapNeededError, got %v", err)
+				if !errors.As(*result.Failure, &swapErr) {
+					t.Fatalf("expected TagSwapNeededError, got %v", *result.Failure)
 				}
 
 				if swapErr.TargetUserID != "user_external" {

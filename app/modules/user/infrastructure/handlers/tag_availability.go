@@ -34,12 +34,38 @@ func (h *UserHandlers) HandleTagAvailable(
 		return nil, err
 	}
 
-	// mapOperationResult handles converting SuccessResult to UserCreatedV1
-	// and FailureResult (domain errors) to UserCreationFailedV1.
-	return mapOperationResult(result,
-		userevents.UserCreatedV1,
-		userevents.UserCreationFailedV1,
-	), nil
+	// Manual mapping since UserCreatedPayloadV1 needs fields from both payload and result
+	if result.IsSuccess() {
+		success := *result.Success
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.UserCreatedV1,
+				Payload: &userevents.UserCreatedPayloadV1{
+					GuildID:         payload.GuildID,
+					UserID:          success.UserID,
+					TagNumber:       success.TagNumber,
+					IsReturningUser: success.IsReturningUser,
+				},
+			},
+		}, nil
+	}
+
+	if result.IsFailure() {
+		failure := *result.Failure
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.UserCreationFailedV1,
+				Payload: &userevents.UserCreationFailedPayloadV1{
+					GuildID:   payload.GuildID,
+					UserID:    payload.UserID,
+					TagNumber: &payload.TagNumber,
+					Reason:    failure.Error(),
+				},
+			},
+		}, nil
+	}
+
+	return nil, nil
 }
 
 // HandleTagUnavailable remains largely the same as it doesn't call the service,

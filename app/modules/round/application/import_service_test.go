@@ -155,7 +155,7 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 					t.Fatal("expected failure")
 				}
 				if !strings.Contains((*res.Failure).Error(), "invalid UDisc URL") {
-					t.Errorf("expected error containing 'invalid UDisc URL', got %v", res.Failure)
+					t.Errorf("expected error containing 'invalid UDisc URL', got %v", (*res.Failure).Error())
 				}
 			},
 		},

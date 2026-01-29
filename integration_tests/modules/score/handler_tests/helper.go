@@ -156,6 +156,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 		watermillRouter,
 		realHelpers,
 		routerRunCtx,
+		env.DB,
 	)
 	if err != nil {
 		eventBusImpl.Close()

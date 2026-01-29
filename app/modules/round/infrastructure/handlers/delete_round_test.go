@@ -2,17 +2,16 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
@@ -30,7 +29,7 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.RoundDeleteRequestPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -39,19 +38,12 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle RoundDeleteRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundDeleteValidatedPayloadV1{
-							GuildID:                   testGuildID,
-							RoundDeleteRequestPayload: *testPayload,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundDeletionFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						ID: testRoundID,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -60,24 +52,10 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "Service failure returns delete error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayloadV1{
-							GuildID: testGuildID,
-							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
-								GuildID:              testGuildID,
-								RoundID:              testRoundID,
-								RequestingUserUserID: testUserID,
-							},
-							Error: "unauthorized: only the round creator can delete the round",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundDeletionFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.FailureResult[*roundtypes.Round, error](errors.New("unauthorized: only the round creator can delete the round")), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -86,14 +64,10 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundDeletionFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, errors.New("database error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -101,14 +75,10 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 		},
 		{
 			name: "Unknown result returns empty results",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateRoundDeleteRequest(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundDeletionFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -118,14 +88,13 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
+				service: fakeService,
 				logger:  logger,
 				helpers: utils.NewHelper(logger),
 			}
@@ -183,13 +152,10 @@ func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
+			fakeService := NewFakeService()
 
 			h := &RoundHandlers{
-				service: mockRoundService,
+				service: fakeService,
 				logger:  logger,
 				helpers: utils.NewHelper(logger),
 			}
@@ -232,7 +198,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		mockSetup        func(*roundmocks.MockService)
+		fakeSetup        func(*FakeService)
 		payload          *roundevents.RoundDeleteAuthorizedPayloadV1
 		ctx              context.Context
 		wantErr          bool
@@ -244,19 +210,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	}{
 		{
 			name: "Successfully delete round",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().DeleteRound(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundDeletedPayloadV1{
-							GuildID: testGuildID,
-							RoundID: testRoundID,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+					return results.SuccessResult[bool, error](true), nil
+				}
 			},
 			payload:         testPayload,
 			ctx:             context.Background(),
@@ -266,19 +223,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Successfully delete round with discord message ID in metadata",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().DeleteRound(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundDeletedPayloadV1{
-							GuildID: testGuildID,
-							RoundID: testRoundID,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+					return results.SuccessResult[bool, error](true), nil
+				}
 			},
 			payload:         testPayload,
 			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
@@ -292,23 +240,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Service failure returns delete error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().DeleteRound(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundDeleteErrorPayloadV1{
-							GuildID: testGuildID,
-							RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
-								GuildID: testGuildID,
-								RoundID: testRoundID,
-							},
-							Error: "round not found",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+					return results.FailureResult[bool, error](errors.New("round not found")), nil
+				}
 			},
 			payload:         testPayload,
 			ctx:             context.Background(),
@@ -318,14 +253,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().DeleteRound(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+					return results.OperationResult[bool, error]{}, errors.New("database error")
+				}
 			},
 			payload:        testPayload,
 			ctx:            context.Background(),
@@ -334,14 +265,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Unknown result returns empty results",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().DeleteRound(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+					return results.OperationResult[bool, error]{}, nil
+				}
 			},
 			payload:       testPayload,
 			ctx:           context.Background(),
@@ -352,14 +279,13 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
+				service: fakeService,
 				logger:  logger,
 				helpers: utils.NewHelper(logger),
 			}

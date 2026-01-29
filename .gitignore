@@ -51,3 +51,10 @@ backend_mapping.md
 doc_agents/
 2026-01-19 1845 - Live Oak Brewing DGC - Live Oak Main 18 - UDisc.csv
 .claude/
+
+.gemini/
+gha-creds-*.json
+.agent/
+.claude/
+*commands/
+.github/workflows/gemini-*.yml

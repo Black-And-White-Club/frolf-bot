@@ -19,8 +19,25 @@ func (h *GuildHandlers) HandleRetrieveGuildConfig(ctx context.Context, payload *
 		return nil, err
 	}
 
-	return mapOperationResult(result,
-		guildevents.GuildConfigRetrievedV1,
-		guildevents.GuildConfigRetrievalFailedV1,
-	), nil
+	if result.Success != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigRetrievedV1,
+			Payload: guildevents.GuildConfigRetrievedPayloadV1{
+				GuildID: payload.GuildID,
+				Config:  **result.Success,
+			},
+		}}, nil
+	}
+
+	if result.Failure != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigRetrievalFailedV1,
+			Payload: guildevents.GuildConfigRetrievalFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  (*result.Failure).Error(),
+			},
+		}}, nil
+	}
+
+	return nil, nil
 }

@@ -2,11 +2,13 @@ package guildservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
@@ -54,8 +56,14 @@ func (s *GuildService) executeDeleteGuildConfig(
 	}
 
 	// Fetch the final state (useful for cleanup events that need the IDs)
-	deletedConfig, err := s.repo.GetConfig(ctx, db, guildID)
+	deletedConfig, err := s.repo.GetConfigIncludeDeleted(ctx, db, guildID)
 	if err != nil {
+		if errors.Is(err, guilddb.ErrNotFound) {
+			// If never existed, return success with just the GuildID for idempotency
+			return results.SuccessResult[*guildtypes.GuildConfig, error](&guildtypes.GuildConfig{
+				GuildID: guildID,
+			}), nil
+		}
 		// Infrastructure error
 		return GuildConfigResult{}, fmt.Errorf("failed to fetch deleted config state: %w", err)
 	}

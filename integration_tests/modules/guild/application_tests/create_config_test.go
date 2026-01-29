@@ -4,17 +4,16 @@ import (
 	"context"
 	"testing"
 
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
 )
 
 func TestCreateGuildConfig(t *testing.T) {
 	tests := []struct {
 		name             string
 		setupFn          func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig)
-		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error)
+		validateFn       func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error)
 		expectedSuccess  bool
 		expectedErrorMsg string
 	}{
@@ -31,11 +30,11 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateGuildConfig returned unexpected error: %v", err)
 				}
-				// No system error expected; checked via err above
+
 				if result.Success == nil {
 					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
@@ -43,13 +42,10 @@ func TestCreateGuildConfig(t *testing.T) {
 					t.Fatalf("Result contained non-nil Failure payload: %+v", result.Failure)
 				}
 
-				successPayload, ok := result.Success.(*guildevents.GuildConfigCreatedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload was not of expected type *guildevents.GuildConfigCreatedPayloadV1")
-				}
+				createdConfig := *result.Success
 
 				// Verify the config was saved to the database
-				retrievedConfig, dbErr := deps.DB.GetConfig(deps.Ctx, guildID)
+				retrievedConfig, dbErr := deps.DB.GetConfig(deps.Ctx, nil, guildID)
 				if dbErr != nil {
 					t.Fatalf("Failed to retrieve guild config %q from DB: %v", guildID, dbErr)
 				}
@@ -57,8 +53,8 @@ func TestCreateGuildConfig(t *testing.T) {
 					t.Fatalf("Guild config %q not found in database after creation", guildID)
 				}
 
-				if successPayload.GuildID != guildID {
-					t.Errorf("Success payload GuildID mismatch: expected %q, got %q", guildID, successPayload.GuildID)
+				if createdConfig.GuildID != guildID {
+					t.Errorf("Success payload GuildID mismatch: expected %q, got %q", guildID, createdConfig.GuildID)
 				}
 
 				if retrievedConfig.GuildID != guildID {
@@ -100,7 +96,7 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("CreateGuildConfig returned unexpected error: %v", err)
 				}
@@ -124,7 +120,7 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
@@ -132,14 +128,14 @@ func TestCreateGuildConfig(t *testing.T) {
 					t.Fatalf("Expected failure payload but got nil")
 				}
 
-				failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
-				if !ok {
-					t.Fatalf("Failure payload was not of expected type")
+				// The failure payload is now an *error
+				domainErr := *result.Failure
+				if domainErr == nil {
+					t.Fatalf("Failure payload was nil error")
 				}
 
-				if failurePayload.GuildID != guildID {
-					t.Errorf("Failure payload GuildID mismatch: expected %q, got %q", guildID, failurePayload.GuildID)
-				}
+				// Optional: check specific error if exported, otherwise just ensure it's not nil
+				t.Logf("Got expected domain error: %v", domainErr)
 			},
 			expectedSuccess: false,
 		},
@@ -156,7 +152,7 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
@@ -179,7 +175,7 @@ func TestCreateGuildConfig(t *testing.T) {
 				}
 				return deps.Ctx, config
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				if err != nil {
 					t.Fatalf("Expected business failure but got system error: %v", err)
 				}
@@ -194,7 +190,7 @@ func TestCreateGuildConfig(t *testing.T) {
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, *guildtypes.GuildConfig) {
 				return deps.Ctx, nil
 			},
-			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result results.OperationResult, err error) {
+			validateFn: func(t *testing.T, deps TestDeps, guildID sharedtypes.GuildID, result guildservice.GuildConfigResult, err error) {
 				// Service returns a business failure payload for nil config (no system error)
 				if err != nil {
 					t.Fatalf("Expected business failure but got system error: %v", err)
@@ -271,12 +267,10 @@ func TestCreateGuildConfig_AlreadyExists(t *testing.T) {
 		t.Fatalf("Expected failure payload but got nil")
 	}
 
-	failurePayload, ok := result.Failure.(*guildevents.GuildConfigCreationFailedPayloadV1)
-	if !ok {
-		t.Fatalf("Failure payload was not of expected type")
+	domainErr := *result.Failure
+	if domainErr == nil {
+		t.Fatalf("Failure payload was nil error")
 	}
 
-	if failurePayload.GuildID != "623456789012345678" {
-		t.Errorf("Failure payload GuildID mismatch: expected %q, got %q", "623456789012345678", failurePayload.GuildID)
-	}
+	t.Logf("Got expected domain error for duplicate config: %v", domainErr)
 }

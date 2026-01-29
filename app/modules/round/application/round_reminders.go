@@ -12,7 +12,7 @@ import (
 // ProcessRoundReminder handles the reminder event when it's triggered from the delayed queue
 // Multi-guild: require guildID for all round operations
 func (s *RoundService) ProcessRoundReminder(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (ProcessRoundReminderResult, error) {
-	return withTelemetry[roundtypes.ProcessRoundReminderResult, error](s, ctx, "ProcessRoundReminder", req.RoundID, func(ctx context.Context) (ProcessRoundReminderResult, error) {
+	return withTelemetry(s, ctx, "ProcessRoundReminder", req.RoundID, func(ctx context.Context) (ProcessRoundReminderResult, error) {
 		s.logger.InfoContext(ctx, "Processing round reminder",
 			attr.RoundID("round_id", req.RoundID),
 			attr.String("reminder_type", req.ReminderType),
@@ -30,7 +30,7 @@ func (s *RoundService) ProcessRoundReminder(ctx context.Context, req *roundtypes
 				attr.Error(err),
 			)
 			s.metrics.RecordDBOperationError(ctx, "GetParticipants")
-			return results.FailureResult[roundtypes.ProcessRoundReminderResult, error](err), nil
+			return results.FailureResult[roundtypes.ProcessRoundReminderResult](err), nil
 		}
 
 		for _, p := range participants {

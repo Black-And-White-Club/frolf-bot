@@ -18,9 +18,9 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	var score int32
+	var score sharedtypes.Score
 	if payload.Score != nil {
-		score = int32(*payload.Score)
+		score = *payload.Score
 	}
 
 	result, err := h.service.ValidateScoreUpdateRequest(ctx, &roundtypes.ScoreUpdateRequest{
@@ -33,7 +33,28 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	// Map result to event payloads ensuring correct structure
+	mappedResult := result.Map(
+		func(req *roundtypes.ScoreUpdateRequest) any {
+			return &roundevents.ScoreUpdateValidatedPayloadV1{
+				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
+					GuildID: req.GuildID,
+					RoundID: req.RoundID,
+					UserID:  req.UserID,
+					Score:   req.Score,
+				},
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundScoreUpdateErrorPayloadV1{
+				GuildID:            payload.GuildID,
+				ScoreUpdateRequest: payload,
+				Error:              err.Error(),
+			}
+		},
+	)
+
+	return mapOperationResult(mappedResult,
 		roundevents.RoundScoreUpdateValidatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
 	), nil
@@ -44,9 +65,9 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateValidatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	var score int32
+	var score sharedtypes.Score
 	if payload.ScoreUpdateRequestPayload.Score != nil {
-		score = int32(*payload.ScoreUpdateRequestPayload.Score)
+		score = *payload.ScoreUpdateRequestPayload.Score
 	}
 
 	result, err := h.service.UpdateParticipantScore(ctx, &roundtypes.ScoreUpdateRequest{
@@ -59,7 +80,30 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	return mapOperationResult(result.Map(
+		func(s *roundtypes.ScoreUpdateResult) any {
+			return &roundevents.ParticipantScoreUpdatedPayloadV1{
+				GuildID:        s.GuildID,
+				RoundID:        s.RoundID,
+				UserID:         payload.ScoreUpdateRequestPayload.UserID,
+				Score:          score,
+				EventMessageID: s.EventMessageID,
+				Participants:   s.UpdatedParticipants,
+			}
+		},
+		func(f error) any {
+			return &roundevents.RoundScoreUpdateErrorPayloadV1{
+				GuildID: payload.GuildID,
+				ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.ScoreUpdateRequestPayload.RoundID,
+					UserID:  payload.ScoreUpdateRequestPayload.UserID,
+					Score:   payload.ScoreUpdateRequestPayload.Score,
+				},
+				Error: f.Error(),
+			}
+		},
+	),
 		roundevents.RoundParticipantScoreUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
 	), nil
@@ -79,9 +123,9 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 
 	updates := make([]roundtypes.ScoreUpdateRequest, 0, len(payload.Updates))
 	for _, u := range payload.Updates {
-		var score int32
+		var score sharedtypes.Score
 		if u.Score != nil {
-			score = int32(*u.Score)
+			score = *u.Score
 		}
 		updates = append(updates, roundtypes.ScoreUpdateRequest{
 			GuildID: u.GuildID,
@@ -149,6 +193,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	h.logger.InfoContext(ctx, "HandleParticipantScoreUpdated called",
 		attr.String("round_id", payload.RoundID.String()),
 		attr.String("user_id", string(payload.UserID)),
+		attr.String("guild_id", string(payload.GuildID)),
 	)
 
 	// 1. Ask the domain service if the round is ready
@@ -158,16 +203,35 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 		UserID:  payload.UserID,
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed", attr.Error(err))
+		h.logger.ErrorContext(ctx, "CheckAllScoresSubmitted failed with error", attr.Error(err))
 		return nil, err
+	}
+
+	if result.Success != nil {
+		h.logger.InfoContext(ctx, "CheckAllScoresSubmitted success",
+			attr.Bool("is_complete", (*result.Success).IsComplete),
+			attr.Int("participant_count", len((*result.Success).Participants)),
+		)
+	} else {
+		h.logger.WarnContext(ctx, "CheckAllScoresSubmitted returned no success result")
+	}
+
+	if result.Failure != nil {
+		h.logger.WarnContext(ctx, "CheckAllScoresSubmitted returned failure", attr.Any("failure", result.Failure))
 	}
 
 	// 2. Business failure
 	if result.Failure != nil {
+		// Map to event payload ensuring context fields
+		failurePayload := &roundevents.RoundFinalizationFailedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			Error:   fmt.Sprintf("%v", result.Failure),
+		}
 		return []handlerwrapper.Result{
 			{
 				Topic:   roundevents.RoundFinalizationFailedV1,
-				Payload: result.Failure,
+				Payload: failurePayload,
 			},
 		}, nil
 	}
@@ -246,7 +310,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 		// ... logic to populate scores if needed, but previously we just returned partialData
 		// The previous code casted result.Success to *roundevents.ScoresPartiallySubmittedPayloadV1
 		// Now result.Success is AllScoresSubmittedResult (shared type).
-		
+
 		eventPayload := &roundevents.ScoresPartiallySubmittedPayloadV1{
 			GuildID:        payload.GuildID,
 			RoundID:        payload.RoundID,

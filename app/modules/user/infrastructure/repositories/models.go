@@ -38,7 +38,7 @@ type GuildMembership struct {
 // UserWithMembership combines user identity with guild-specific data.
 // Used for queries that need both global and guild context.
 type UserWithMembership struct {
-	User     *User
+	*User    `bun:",extend"`
 	Role     sharedtypes.UserRoleEnum `bun:"role"`
 	JoinedAt time.Time                `bun:"joined_at"`
 }

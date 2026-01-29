@@ -19,7 +19,6 @@ import (
 var (
 	testUserID         = sharedtypes.DiscordID("user1")
 	testEventMessageID = "discord_message_id_123"
-	testTagNumber      = sharedtypes.TagNumber(1)
 	joinedLateFalse    = false
 )
 
@@ -31,7 +30,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 	mockMetrics := &roundmetrics.NoOpMetrics{}
 
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	testUserID := sharedtypes.DiscordID("test-user-123")
+	userID := sharedtypes.DiscordID("test-user-123")
 	guildID := sharedtypes.GuildID("guild-123")
 
 	tests := []struct {
@@ -51,7 +50,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			payload: &roundtypes.JoinRoundRequest{
 				RoundID:  testRoundID,
 				GuildID:  guildID,
-				UserID:   testUserID,
+				UserID:   userID,
 				Response: roundtypes.ResponseAccept,
 			},
 			expectedResult: results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error]{
@@ -59,7 +58,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 					Action:        "VALIDATE",
 					CurrentStatus: "",
 					RoundID:       testRoundID,
-					UserID:        testUserID,
+					UserID:        userID,
 					Response:      roundtypes.ResponseAccept,
 					GuildID:       guildID,
 				}),
@@ -71,7 +70,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			setup: func(f *FakeRepo) {
 				f.GetParticipantFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, u sharedtypes.DiscordID) (*roundtypes.Participant, error) {
 					return &roundtypes.Participant{
-						UserID:   testUserID,
+						UserID:   userID,
 						Response: roundtypes.ResponseTentative,
 					}, nil
 				}
@@ -79,7 +78,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			payload: &roundtypes.JoinRoundRequest{
 				RoundID:  testRoundID,
 				GuildID:  guildID,
-				UserID:   testUserID,
+				UserID:   userID,
 				Response: roundtypes.ResponseAccept, // Different from existing status
 			},
 			expectedResult: results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error]{
@@ -87,7 +86,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 					Action:        "VALIDATE",
 					CurrentStatus: "TENTATIVE",
 					RoundID:       testRoundID,
-					UserID:        testUserID,
+					UserID:        userID,
 					Response:      roundtypes.ResponseAccept,
 					GuildID:       guildID,
 				}),
@@ -99,7 +98,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			setup: func(f *FakeRepo) {
 				f.GetParticipantFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, u sharedtypes.DiscordID) (*roundtypes.Participant, error) {
 					return &roundtypes.Participant{
-						UserID:   testUserID,
+						UserID:   userID,
 						Response: roundtypes.ResponseAccept,
 					}, nil
 				}
@@ -107,7 +106,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			payload: &roundtypes.JoinRoundRequest{
 				RoundID:  testRoundID,
 				GuildID:  guildID,
-				UserID:   testUserID,
+				UserID:   userID,
 				Response: roundtypes.ResponseAccept, // Same as existing status
 			},
 			expectedResult: results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error]{
@@ -115,7 +114,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 					Action:        "REMOVE",
 					CurrentStatus: "ACCEPT",
 					RoundID:       testRoundID,
-					UserID:        testUserID,
+					UserID:        userID,
 					Response:      roundtypes.ResponseAccept,
 					GuildID:       guildID,
 				}),
@@ -132,7 +131,7 @@ func TestRoundService_CheckParticipantStatus(t *testing.T) {
 			payload: &roundtypes.JoinRoundRequest{
 				RoundID:  testRoundID,
 				GuildID:  guildID,
-				UserID:   testUserID,
+				UserID:   userID,
 				Response: roundtypes.ResponseAccept,
 			},
 			expectedResult: results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error]{

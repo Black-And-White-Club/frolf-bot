@@ -88,6 +88,27 @@ func (r *Impl) GetConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.Gu
 	return toSharedModel(model), nil
 }
 
+// GetConfigIncludeDeleted retrieves a guild configuration by ID, including inactive ones.
+func (r *Impl) GetConfigIncludeDeleted(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	model := new(GuildConfig)
+	err := db.NewSelect().
+		Model(model).
+		Where("guild_id = ?", guildID).
+		Scan(ctx)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("guilddb.GetConfigIncludeDeleted: %w", err)
+	}
+	return toSharedModel(model), nil
+}
+
 // --- WRITE METHODS ---
 
 // SaveConfig creates or re-activates a guild configuration.

@@ -60,7 +60,9 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 			config: validConfig, // Added: Ensure config is not nil
 			setupFake: func(f *FakeGuildRepository) {
 				f.GetConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
-					return validConfig, nil // Return existing config to trigger conflict logic
+					existing := *validConfig
+					existing.SignupEmoji = ":different:" // Trigger conflict by making it non-identical
+					return &existing, nil
 				}
 			},
 			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
@@ -105,10 +107,10 @@ func TestGuildService_CreateGuildConfig(t *testing.T) {
 		{
 			name:           "domain failure - nil config",
 			config:         nil,
-			expectInfraErr: true,
+			expectInfraErr: false, // Updated: It returns a domain failure, not an infra error
 			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
-				if !errors.Is(infraErr, ErrNilConfig) {
-					t.Fatalf("expected ErrNilConfig, got %v", infraErr)
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrNilConfig) {
+					t.Fatalf("expected ErrNilConfig in Failure field, got %v", res.Failure)
 				}
 			},
 		},

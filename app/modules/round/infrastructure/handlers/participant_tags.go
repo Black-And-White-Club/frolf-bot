@@ -36,7 +36,40 @@ func (h *RoundHandlers) HandleScheduledRoundTagSync(
 
 	// 2. Publish the result to trigger Discord updates
 	// Success Topic: roundevents.ScheduledRoundsSyncedV1
-	return mapOperationResult(result,
+	return mapOperationResult(result.Map(
+		func(s *roundtypes.ScheduledRoundsSyncResult) any {
+			updatedRounds := make([]roundevents.RoundUpdateInfoV1, len(s.Updates))
+			totalParticipantsUpdated := 0
+			for i, u := range s.Updates {
+				totalParticipantsUpdated += u.ParticipantsChangedCount
+				roundInfo := roundevents.RoundUpdateInfoV1{
+					GuildID:             s.GuildID,
+					RoundID:             u.RoundID,
+					EventMessageID:      u.EventMessageID,
+					UpdatedParticipants: u.Participants,
+					ParticipantsChanged: u.ParticipantsChangedCount,
+				}
+				if u.Round != nil {
+					roundInfo.Title = u.Round.Title
+					roundInfo.StartTime = u.Round.StartTime
+					roundInfo.Location = u.Round.Location
+				}
+				updatedRounds[i] = roundInfo
+			}
+
+			return &roundevents.ScheduledRoundsSyncedPayloadV1{
+				GuildID:       s.GuildID,
+				UpdatedRounds: updatedRounds,
+				Summary: roundevents.UpdateSummaryV1{
+					GuildID:              s.GuildID,
+					TotalRoundsProcessed: s.TotalChecked,
+					RoundsUpdated:        len(s.Updates),
+					ParticipantsUpdated:  totalParticipantsUpdated,
+				},
+			}
+		},
+		func(f error) any { return f },
+	),
 		roundevents.ScheduledRoundsSyncedV1,
 		roundevents.RoundUpdateErrorV1,
 	), nil

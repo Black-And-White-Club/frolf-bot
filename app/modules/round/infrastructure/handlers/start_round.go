@@ -25,7 +25,35 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	return mapOperationResult(result.Map(
+		func(round *roundtypes.Round) any {
+			// Convert Participants to the expected event type
+			eventParticipants := make([]roundevents.RoundParticipantV1, len(round.Participants))
+			for i, p := range round.Participants {
+				eventParticipants[i] = roundevents.RoundParticipantV1{
+					UserID: p.UserID,
+					Score:  p.Score,
+				}
+			}
+
+			return &roundevents.DiscordRoundStartPayloadV1{
+				GuildID:        round.GuildID,
+				RoundID:        round.ID,
+				Title:          round.Title,
+				Location:       round.Location,
+				StartTime:      round.StartTime,
+				Participants:   eventParticipants,
+				EventMessageID: round.EventMessageID,
+			}
+		},
+		func(f error) any {
+			return &roundevents.RoundStartFailedPayloadV1{
+				GuildID: req.GuildID,
+				RoundID: req.RoundID,
+				Error:   f.Error(),
+			}
+		},
+	),
 		roundevents.RoundStartedDiscordV1,
 		roundevents.RoundStartFailedV1,
 	), nil

@@ -1,6 +1,7 @@
 package roundhandler_integration_tests
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -52,6 +54,8 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			deps := SetupTestRoundHandler(t)
+			// Ensure streams are created
+			ensureStreams(t, deps.TestEnvironment)
 
 			// Generate shared test data for this specific subtest
 			// This ensures SetupFn and PublishMsgFn use the SAME IDs.
@@ -82,30 +86,40 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 					return nil
 				},
 				PublishMsgFn: func(t *testing.T, env *testutils.TestEnvironment) *message.Message {
-					var changedTags map[sharedtypes.DiscordID]*sharedtypes.TagNumber
+					var changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber
 					newTag1 := sharedtypes.TagNumber(42)
 					newTag2 := sharedtypes.TagNumber(99)
 
 					switch tc.name {
 					case "Success - Tag Update for Single Round with Multiple Participants":
-						changedTags = map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-							data1.UserID: &newTag1,
-							data2.UserID: &newTag2,
+						changedTags = map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+							data1.UserID: newTag1,
+							data2.UserID: newTag2,
 						}
 					case "Success - Tag Update for Multiple Rounds with Same Participant",
 						"Success - Tag Update Only Affects Upcoming Rounds":
-						changedTags = map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-							data1.UserID: &newTag1,
+						changedTags = map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+							data1.UserID: newTag1,
 						}
 					case "Success - Empty Tag Update (No Upcoming Rounds with Matching Participants)":
-						changedTags = map[sharedtypes.DiscordID]*sharedtypes.TagNumber{
-							sharedtypes.DiscordID(uuid.New().String()): &newTag1,
+						changedTags = map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+							sharedtypes.DiscordID(uuid.New().String()): newTag1,
 						}
 					case "Invalid JSON - Scheduled Round Tag Update Handler":
 						msg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 						msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 						testutils.PublishMessage(t, env.EventBus, env.Ctx, sharedevents.SyncRoundsTagRequestV1, msg)
 						return msg
+					}
+
+					// DEBUG: Check DB state
+					count, _ := deps.DB.NewSelect().Model(&rounddb.Round{}).Count(context.Background())
+					t.Logf("DEBUG: Total rounds in DB: %d", count)
+
+					var rounds []rounddb.Round
+					deps.DB.NewSelect().Model(&rounds).Scan(context.Background())
+					for _, r := range rounds {
+						t.Logf("DEBUG: Round %s: GuildID=%s, State=%s", r.ID, r.GuildID, r.State)
 					}
 
 					payload := createScheduledRoundTagUpdatePayload(changedTags)
@@ -153,9 +167,11 @@ func TestHandleScheduledRoundTagUpdate(t *testing.T) {
 	}
 }
 
-func createScheduledRoundTagUpdatePayload(changedTags map[sharedtypes.DiscordID]*sharedtypes.TagNumber) sharedevents.ScheduledRoundTagUpdatePayloadV1 {
-	return sharedevents.ScheduledRoundTagUpdatePayloadV1{
+func createScheduledRoundTagUpdatePayload(changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber) sharedevents.SyncRoundsTagRequestPayloadV1 {
+	return sharedevents.SyncRoundsTagRequestPayloadV1{
 		GuildID:     "test-guild",
 		ChangedTags: changedTags,
+		UpdatedAt:   time.Now().UTC(),
+		Source:      sharedtypes.ServiceUpdateSourceManual,
 	}
 }

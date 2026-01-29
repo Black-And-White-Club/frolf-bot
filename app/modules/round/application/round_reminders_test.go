@@ -3,6 +3,7 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ var (
 
 func TestRoundService_ProcessRoundReminder(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(nil, nil))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracerProvider := noop.NewTracerProvider()
 	tracer := tracerProvider.Tracer("test")
 	mockMetrics := &roundmetrics.NoOpMetrics{}

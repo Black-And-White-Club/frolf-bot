@@ -240,12 +240,7 @@ func TestHandleUpdateGuildConfig(t *testing.T) {
 						return errors.New("config not found yet or success payload is nil")
 					}
 
-					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
-					if !ok {
-						return errors.New("success payload is not of type GuildConfigRetrievedPayloadV1")
-					}
-
-					updatedConfig = &successPayload.Config
+					updatedConfig = *getResult.Success
 					if updatedConfig.SignupEmoji != "🎯" {
 						return errors.New("config not updated yet")
 					}

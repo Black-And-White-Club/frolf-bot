@@ -117,6 +117,7 @@ func (s *RoundService) applySinglesScores(
 		RoundID:        req.RoundID,
 		ImportID:       req.ImportID,
 		Participants:   existingParticipants,
+		RoundData:      round,
 		EventMessageID: round.EventMessageID,
 		Timestamp:      time.Now().UTC(),
 	}), nil
@@ -210,6 +211,8 @@ func (s *RoundService) applyTeamScores(
 		RoundID:        req.RoundID,
 		ImportID:       req.ImportID,
 		Participants:   existingParticipants,
+		Teams:          round.Teams,
+		RoundData:      round,
 		EventMessageID: round.EventMessageID,
 		Timestamp:      time.Now().UTC(),
 	}), nil

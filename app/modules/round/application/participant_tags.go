@@ -47,11 +47,18 @@ func (s *RoundService) getRoundsAndParticipantsToUpdateFromRounds(
 
 		// Only include rounds that actually required a state change
 		if hasChanges {
+			count := 0
+			for _, p := range round.Participants {
+				if _, exists := changedTags[p.UserID]; exists {
+					count++
+				}
+			}
 			updates = append(updates, roundtypes.RoundUpdate{
-				RoundID:        round.ID,
-				EventMessageID: round.EventMessageID,
-				Participants:   updatedParticipants,
-				Round:          round,
+				RoundID:                  round.ID,
+				EventMessageID:           round.EventMessageID,
+				Participants:             updatedParticipants,
+				ParticipantsChangedCount: count,
+				Round:                    round,
 			})
 		}
 	}
@@ -89,8 +96,17 @@ func (s *RoundService) UpdateScheduledRoundsWithNewTags(
 				return results.FailureResult[*roundtypes.ScheduledRoundsSyncResult, error](fmt.Errorf("failed to get upcoming rounds: %w", err)), nil
 			}
 
+			s.logger.InfoContext(ctx, "GetUpcomingRounds result",
+				attr.Int("count", len(allUpcomingRounds)),
+				attr.String("guild_id", string(req.GuildID)),
+			)
+
 			// 2. Determine which rounds need the atomic update
 			updates := s.getRoundsAndParticipantsToUpdateFromRounds(ctx, allUpcomingRounds, req.ChangedTags)
+
+			s.logger.InfoContext(ctx, "getRoundsAndParticipantsToUpdateFromRounds result",
+				attr.Int("updates_count", len(updates)),
+			)
 
 			if len(updates) == 0 {
 				s.logger.InfoContext(ctx, "No upcoming rounds affected by tag changes",

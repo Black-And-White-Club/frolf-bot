@@ -50,7 +50,7 @@ func (s *UserService) executeUpdateUserRole(
 		return results.FailureResult[bool](ErrInvalidDiscordID), nil
 	}
 	if !newRole.IsValid() {
-		return results.FailureResult[bool](errors.New("invalid role")), nil
+		return results.FailureResult[bool](ErrInvalidRole), nil
 	}
 
 	// 2. Repository Call
@@ -58,7 +58,7 @@ func (s *UserService) executeUpdateUserRole(
 	if err != nil {
 		// If user not found, return domain failure (nil error)
 		if errors.Is(err, userdb.ErrNoRowsAffected) || errors.Is(err, userdb.ErrNotFound) {
-			return results.FailureResult[bool](userdb.ErrNotFound), nil
+			return results.FailureResult[bool](ErrUserNotFound), nil
 		}
 		// Technical error
 		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to update user role: %w", err)

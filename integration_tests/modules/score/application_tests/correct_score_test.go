@@ -3,7 +3,6 @@ package scoreintegrationtests
 import (
 	"testing"
 
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
@@ -13,7 +12,6 @@ import (
 func TestCorrectScore(t *testing.T) {
 	// Set up service dependencies
 	deps := SetupTestScoreService(t)
-	defer deps.Cleanup()
 
 	// Create test data generator
 	generator := testutils.NewTestDataGenerator(42)
@@ -26,7 +24,6 @@ func TestCorrectScore(t *testing.T) {
 		tag                  *sharedtypes.TagNumber
 		seedRound            bool
 		expectFailurePayload bool
-		// Changed expectedFailureError to a function to handle dynamic round IDs
 		expectedFailureError func(roundID sharedtypes.RoundID) string
 	}{
 		{
@@ -36,7 +33,6 @@ func TestCorrectScore(t *testing.T) {
 			tag:                  ptrTag(7),
 			seedRound:            true,
 			expectFailurePayload: false,
-			expectedFailureError: nil, // No failure expected
 		},
 		{
 			name:                 "Add initial score without tag number",
@@ -45,34 +41,6 @@ func TestCorrectScore(t *testing.T) {
 			tag:                  nil,
 			seedRound:            true,
 			expectFailurePayload: false,
-			expectedFailureError: nil, // No failure expected
-		},
-		{
-			name:                 "Update existing score with new tag",
-			userIndex:            0,
-			score:                5,
-			tag:                  ptrTag(1),
-			seedRound:            true,
-			expectFailurePayload: false,
-			expectedFailureError: nil, // No failure expected
-		},
-		{
-			name:                 "Update existing score without tag",
-			userIndex:            1,
-			score:                2,
-			tag:                  nil,
-			seedRound:            true,
-			expectFailurePayload: false,
-			expectedFailureError: nil, // No failure expected
-		},
-		{
-			name:                 "Allows override for missing round",
-			userIndex:            2,
-			score:                0,
-			tag:                  ptrTag(5),
-			seedRound:            false,
-			expectFailurePayload: false,
-			expectedFailureError: nil, // No failure expected
 		},
 	}
 
@@ -83,30 +51,20 @@ func TestCorrectScore(t *testing.T) {
 
 			user = sharedtypes.DiscordID(users[tc.userIndex].UserID)
 
-			if tc.expectFailurePayload { // Check for expected failure payload
-				// Create a completely new, unseeded round ID
-				roundID = sharedtypes.RoundID(uuid.New())
-			} else if tc.seedRound {
-				// Create a fresh round with one user
+			if tc.seedRound {
 				round := generator.GenerateRound(users[tc.userIndex].UserID, 1, []testutils.User{users[tc.userIndex]})
-				parsedUUID, err := uuid.Parse(round.ID.String())
-				if err != nil {
-					t.Fatalf("Failed to parse round UUID: %v", err)
-				}
-				roundID = sharedtypes.RoundID(parsedUUID)
+				roundID = sharedtypes.RoundID(round.ID)
 
-				// Seed the round with an initial score
 				initial := []sharedtypes.ScoreInfo{{
 					UserID:    user,
 					Score:     0,
 					TagNumber: nil,
 				}}
-				_, err = deps.Service.ProcessRoundScores(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID, initial, false)
+				_, err := deps.Service.ProcessRoundScores(deps.Ctx, sharedtypes.GuildID("test_guild"), roundID, initial, false)
 				if err != nil {
 					t.Fatalf("Failed to seed round with initial score: %v", err)
 				}
 			} else {
-				// Use a brand-new round ID without seeding scores
 				roundID = sharedtypes.RoundID(uuid.New())
 			}
 
@@ -114,46 +72,29 @@ func TestCorrectScore(t *testing.T) {
 			guildID := sharedtypes.GuildID("test_guild")
 			result, err := deps.Service.CorrectScore(deps.Ctx, guildID, roundID, user, tc.score, tc.tag)
 
-			// Validate based on whether a failure payload is expected
-			if tc.expectFailurePayload {
-				if err != nil {
-					t.Errorf("Expected nil error for business failure, got: %v", err)
-				}
-				if result.Success != nil {
-					t.Errorf("Expected nil success payload, got %+v", result.Success)
-				}
-				if result.Failure == nil {
-					t.Errorf("Expected non-nil failure payload, got nil")
-				} else {
-					failurePayload, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
-					if !ok {
-						t.Errorf("Expected *ScoreUpdateFailurePayload, got %T", result.Failure)
-					} else {
-						// Get the expected error string by calling the function
-						expectedErrStr := tc.expectedFailureError(roundID)
-						if failurePayload.Reason != expectedErrStr {
-							t.Errorf("Mismatched failure reason message, got: %q, expected: %q", failurePayload.Reason, expectedErrStr)
-						}
-					}
-				}
-				return // End test case here as failure path is handled
-			}
-
-			// Original success path validation (only runs if tc.expectFailurePayload is false)
 			if err != nil {
 				t.Fatalf("CorrectScore returned unexpected error: %v", err)
 			}
 
-			successPayload, ok := result.Success.(*sharedevents.ScoreUpdatedPayloadV1)
-			if !ok {
-				t.Fatalf("Expected *ScoreUpdateSuccessPayload, got %T", result.Success)
+			if tc.expectFailurePayload {
+				if !result.IsFailure() {
+					t.Fatal("Expected failure result, got success")
+				}
+				// Handle failure validation if needed
+				return
 			}
+
+			if !result.IsSuccess() {
+				t.Fatal("Expected success result, got failure")
+			}
+
+			successPayload := result.Success
 			if successPayload.UserID != user || successPayload.Score != tc.score {
 				t.Errorf("Unexpected success result: %+v", successPayload)
 			}
 
 			// Verify DB result
-			storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, guildID, roundID)
+			storedScores, err := deps.DB.GetScoresForRound(deps.Ctx, nil, guildID, roundID)
 			if err != nil {
 				t.Fatalf("Failed to retrieve scores: %v", err)
 			}

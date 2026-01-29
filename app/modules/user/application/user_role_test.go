@@ -71,8 +71,8 @@ func TestUserService_UpdateUserRoleInDatabase(t *testing.T) {
 				}
 			},
 			verify: func(t *testing.T, res results.OperationResult[bool, error], infraErr error) {
-				if res.Failure == nil || !errors.Is(*res.Failure, userdb.ErrNotFound) {
-					t.Errorf("expected ErrNotFound in failure result, got %v", res.Failure)
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrUserNotFound) {
+					t.Errorf("expected ErrUserNotFound in failure result, got %v", res.Failure)
 				}
 			},
 		},

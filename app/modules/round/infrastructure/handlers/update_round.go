@@ -62,48 +62,99 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(
 		return nil, err
 	}
 
-	if result.Failure != nil {
+	// Map result to ensure correct event payload structure
+	mappedResult := result.Map(
+		func(r *roundtypes.UpdateRoundResult) any {
+			var title *roundtypes.Title
+			if req.Title != nil {
+				t := roundtypes.Title(*req.Title)
+				title = &t
+			}
+			var desc *roundtypes.Description
+			if req.Description != nil {
+				d := roundtypes.Description(*req.Description)
+				desc = &d
+			}
+			var loc *roundtypes.Location
+			if req.Location != nil {
+				l := roundtypes.Location(*req.Location)
+				loc = &l
+			}
+
+			// Use Round's StartTime if request had a start time update
+			var startTime *sharedtypes.StartTime
+			if req.StartTime != nil && r.Round != nil {
+				startTime = r.Round.StartTime
+			}
+
+			return &roundevents.RoundUpdateValidatedPayloadV1{
+				GuildID: req.GuildID,
+				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
+					GuildID:     req.GuildID,
+					RoundID:     req.RoundID,
+					UserID:      req.UserID,
+					Title:       title,
+					Description: desc,
+					Location:    loc,
+					StartTime:   startTime,
+				},
+			}
+		},
+		func(err error) any {
+			// Construct payload for error case using outer 'req'
+			var title *roundtypes.Title
+			if req.Title != nil {
+				t := roundtypes.Title(*req.Title)
+				title = &t
+			}
+			var desc *roundtypes.Description
+			if req.Description != nil {
+				d := roundtypes.Description(*req.Description)
+				desc = &d
+			}
+			var loc *roundtypes.Location
+			if req.Location != nil {
+				l := roundtypes.Location(*req.Location)
+				loc = &l
+			}
+
+			requestPayload := roundevents.RoundUpdateRequestPayloadV1{
+				GuildID:     req.GuildID,
+				RoundID:     req.RoundID,
+				UserID:      req.UserID,
+				Title:       title,
+				Description: desc,
+				Location:    loc,
+				// StartTime usage removed due to type mismatch
+			}
+
+			return &roundevents.RoundUpdateErrorPayloadV1{
+				GuildID:            payload.GuildID,
+				RoundUpdateRequest: &requestPayload,
+				Error:              err.Error(),
+			}
+		},
+	)
+
+	if mappedResult.Failure != nil {
 		h.logger.WarnContext(ctx, "round update validation failed",
 			attr.RoundID("round_id", payload.RoundID),
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", mappedResult.Failure),
 		)
-		return []handlerwrapper.Result{
-			{
-				Topic:   roundevents.RoundUpdateErrorV1,
-				Payload: result.Failure,
-			},
-		}, nil
+		return mapOperationResult(mappedResult,
+			roundevents.RoundUpdateValidatedV1,
+			roundevents.RoundUpdateErrorV1,
+		), nil
 	}
 
-	if result.Success != nil {
+	if mappedResult.Success != nil {
 		h.logger.InfoContext(ctx, "round update validation successful, publishing validated event",
 			attr.RoundID("round_id", payload.RoundID),
 		)
-
-		requestPayload := roundevents.RoundUpdateRequestPayloadV1{
-			GuildID:     payload.GuildID,
-			RoundID:     payload.RoundID,
-			UserID:      payload.UserID,
-			Title:       payload.Title,
-			Description: payload.Description,
-			Location:    payload.Location,
-		}
-
-		if (*result.Success).Round != nil && (*result.Success).Round.StartTime != nil {
-			requestPayload.StartTime = (*result.Success).Round.StartTime
-		}
-
-		eventPayload := &roundevents.RoundUpdateValidatedPayloadV1{
-			GuildID:                   payload.GuildID,
-			RoundUpdateRequestPayload: requestPayload,
-		}
-
-		return []handlerwrapper.Result{
-			{
-				Topic:   roundevents.RoundUpdateValidatedV1,
-				Payload: eventPayload,
-			},
-		}, nil
+		return mapOperationResult(mappedResult,
+			roundevents.RoundUpdateValidatedV1,
+			roundevents.RoundUpdateErrorV1,
+		), nil
 	}
 
 	h.logger.ErrorContext(ctx, "ValidateAndProcessRoundUpdateWithClock returned empty result",
@@ -146,6 +197,9 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 		req.Location = &l
 	}
 	// Timezone is not available in validated payload but not needed since we have ParsedStartTime
+	if payload.RoundUpdateRequestPayload.EventType != nil {
+		req.EventType = payload.RoundUpdateRequestPayload.EventType
+	}
 
 	result, err := h.service.UpdateRoundEntity(ctx, req)
 	if err != nil {
@@ -163,8 +217,12 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 		)
 		return []handlerwrapper.Result{
 			{
-				Topic:   roundevents.RoundUpdateErrorV1,
-				Payload: result.Failure,
+				Topic: roundevents.RoundUpdateErrorV1,
+				Payload: &roundevents.RoundUpdateErrorPayloadV1{
+					GuildID:            payload.RoundUpdateRequestPayload.GuildID,
+					RoundUpdateRequest: &payload.RoundUpdateRequestPayload,
+					Error:              (*result.Failure).Error(),
+				},
 			},
 		}, nil
 	}
