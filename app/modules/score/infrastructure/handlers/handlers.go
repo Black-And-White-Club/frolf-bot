@@ -1,10 +1,14 @@
 package scorehandlers
 
 import (
+	"log/slog"
+
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ScoreHandlers implements the Handlers interface for score events.
@@ -14,13 +18,13 @@ type ScoreHandlers struct {
 }
 
 // NewScoreHandlers creates a new ScoreHandlers instance.
+// Now using concrete types for logger and tracer to match the pattern in guildhandlers.
 func NewScoreHandlers(
 	service scoreservice.Service,
-	// logger and tracer parameters are kept for compatibility but ignored by handlers
-	_ interface{},
-	_ interface{},
+	logger *slog.Logger,
+	tracer trace.Tracer,
 	helpers utils.Helpers,
-	_ interface{},
+	metrics scoremetrics.ScoreMetrics,
 ) Handlers {
 	return &ScoreHandlers{
 		service: service,
@@ -28,20 +32,28 @@ func NewScoreHandlers(
 	}
 }
 
-// mapOperationResult converts a service OperationResult to handler Results.
-func mapOperationResult(
-	result results.OperationResult,
+// mapOperationResult manually maps the generic OperationResult to handlerwrapper.Result.
+// Updated to use [S any, F any] to match the refactored results package.
+func mapOperationResult[S any, F any](
+	result results.OperationResult[S, F],
 	successTopic, failureTopic string,
 ) []handlerwrapper.Result {
-	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+	var wrapperResults []handlerwrapper.Result
 
-	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
-	for i, hr := range handlerResults {
-		wrapperResults[i] = handlerwrapper.Result{
-			Topic:    hr.Topic,
-			Payload:  hr.Payload,
-			Metadata: hr.Metadata,
-		}
+	// Handle Success case
+	if result.Success != nil {
+		wrapperResults = append(wrapperResults, handlerwrapper.Result{
+			Topic:   successTopic,
+			Payload: result.Success,
+		})
+	}
+
+	// Handle Failure case
+	if result.Failure != nil {
+		wrapperResults = append(wrapperResults, handlerwrapper.Result{
+			Topic:   failureTopic,
+			Payload: result.Failure,
+		})
 	}
 
 	return wrapperResults

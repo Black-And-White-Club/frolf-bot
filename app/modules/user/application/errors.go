@@ -10,7 +10,7 @@ var (
 	ErrUserAlreadyExists = errors.New("user already exists")
 
 	// ErrInvalidDiscordID indicates an empty or invalid Discord ID was provided.
-	ErrInvalidDiscordID = errors.New("invalid Discord ID")
+	ErrInvalidDiscordID = errors.New("Discord ID cannot be empty")
 
 	// ErrNegativeTagNumber indicates a tag number cannot be negative.
 	ErrNegativeTagNumber = errors.New("tag number cannot be negative")

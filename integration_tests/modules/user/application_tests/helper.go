@@ -18,6 +18,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
+var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+
 // Global variables for the test environment, initialized once.
 var (
 	testEnv     *testutils.TestEnvironment
@@ -73,6 +75,13 @@ func SetupTestUserService(t *testing.T) TestDeps {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
+	// Ensure all required streams exist
+	for _, streamName := range standardStreamNames {
+		if err := env.EventBus.CreateStream(env.Ctx, streamName); err != nil {
+			t.Fatalf("Failed to create required NATS stream %q: %v", streamName, err)
+		}
+	}
+
 	realDB := userdb.NewRepository(env.DB)
 
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -85,6 +94,7 @@ func SetupTestUserService(t *testing.T) TestDeps {
 		testLogger,
 		noOpMetrics,
 		noOpTracer,
+		env.DB,
 	)
 
 	cleanup := func() {

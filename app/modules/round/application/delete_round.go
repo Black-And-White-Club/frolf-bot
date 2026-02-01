@@ -2,164 +2,100 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
-// ValidateRoundDeleteRequest validates the round delete request.
-func (s *RoundService) ValidateRoundDeleteRequest(ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "ValidateRoundDeleteRequest", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
-		if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-			return results.OperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayloadV1{
-					GuildID:            payload.GuildID,
-					RoundDeleteRequest: &payload,
-					Error:              "round ID cannot be zero",
-				},
-			}, nil
+// ValidateRoundDeletion validates the round delete request.
+func (s *RoundService) ValidateRoundDeletion(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+	return withTelemetry(s, ctx, "ValidateRoundDeletion", req.RoundID, func(ctx context.Context) (results.OperationResult[*roundtypes.Round, error], error) {
+		if req.RoundID == sharedtypes.RoundID(uuid.Nil) {
+			return results.FailureResult[*roundtypes.Round, error](errors.New("round ID cannot be zero")), nil
 		}
 
-		if payload.RequestingUserUserID == "" {
-			return results.OperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayloadV1{
-					GuildID:            payload.GuildID,
-					RoundDeleteRequest: &payload,
-					Error:              "requesting user's Discord ID cannot be empty",
-				},
-			}, nil
+		if req.UserID == "" {
+			return results.FailureResult[*roundtypes.Round, error](errors.New("requesting user's Discord ID cannot be empty")), nil
 		}
 
-		round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
+		round, err := s.repo.GetRound(ctx, s.db, req.GuildID, req.RoundID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "Round not found for delete request",
-				attr.String("round_id", payload.RoundID.String()),
-				attr.String("requesting_user", string(payload.RequestingUserUserID)),
+				attr.String("round_id", req.RoundID.String()),
+				attr.String("requesting_user", string(req.UserID)),
 				attr.Error(err),
 			)
-			return results.OperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayloadV1{
-					GuildID:            payload.GuildID,
-					RoundDeleteRequest: &payload,
-					Error:              fmt.Sprintf("round not found: %v", err),
-				},
-			}, nil
+			return results.FailureResult[*roundtypes.Round, error](fmt.Errorf("round not found: %w", err)), nil
 		}
 
-		if round.CreatedBy != payload.RequestingUserUserID {
+		if round.CreatedBy != req.UserID {
 			s.logger.WarnContext(ctx, "Unauthorized delete request",
-				attr.String("round_id", payload.RoundID.String()),
-				attr.String("requesting_user", string(payload.RequestingUserUserID)),
+				attr.String("round_id", req.RoundID.String()),
+				attr.String("requesting_user", string(req.UserID)),
 				attr.String("round_created_by", string(round.CreatedBy)),
 			)
-			return results.OperationResult{
-				Failure: &roundevents.RoundDeleteErrorPayloadV1{
-					GuildID:            payload.GuildID,
-					RoundDeleteRequest: &payload,
-					Error:              "unauthorized: only the round creator can delete the round",
-				},
-			}, nil
+			return results.FailureResult[*roundtypes.Round, error](errors.New("unauthorized: only the round creator can delete the round")), nil
 		}
 
 		s.logger.InfoContext(ctx, "Round delete request validated",
-			attr.String("round_id", payload.RoundID.String()),
-			attr.String("requesting_user", string(payload.RequestingUserUserID)),
+			attr.String("round_id", req.RoundID.String()),
+			attr.String("requesting_user", string(req.UserID)),
 		)
 
-		return results.OperationResult{
-			Success: &roundevents.RoundDeleteValidatedPayloadV1{
-				GuildID:                   payload.GuildID,
-				RoundDeleteRequestPayload: payload,
-			},
-		}, nil
+		return results.SuccessResult[*roundtypes.Round, error](round), nil
 	})
 }
 
-func (s *RoundService) DeleteRound(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (results.OperationResult, error) {
-	if payload.RoundID == sharedtypes.RoundID(uuid.Nil) {
-		s.logger.ErrorContext(ctx, "Cannot delete round with nil UUID")
-		return results.OperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayloadV1{
-				GuildID: payload.GuildID,
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
-				},
-				Error: "round ID cannot be nil",
-			},
-		}, nil
+func (s *RoundService) DeleteRound(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
+	deleteOp := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		if req.RoundID == sharedtypes.RoundID(uuid.Nil) {
+			s.logger.ErrorContext(ctx, "Cannot delete round with nil UUID")
+			return results.FailureResult[bool, error](errors.New("round ID cannot be nil")), nil
+		}
+
+		s.logger.InfoContext(ctx, "DeleteRound service called",
+			attr.RoundID("round_id", req.RoundID),
+		)
+
+		// Delete the round from the database
+		if err := s.repo.DeleteRound(ctx, db, req.GuildID, req.RoundID); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to delete round from DB",
+				attr.RoundID("round_id", req.RoundID),
+				attr.Error(err),
+			)
+			return results.FailureResult[bool, error](fmt.Errorf("failed to delete round from database: %w", err)), nil
+		}
+
+		s.logger.InfoContext(ctx, "Round deleted from DB", attr.RoundID("round_id", req.RoundID))
+
+		return results.SuccessResult[bool, error](true), nil
 	}
 
-	s.logger.InfoContext(ctx, "DeleteRound service called",
-		attr.RoundID("round_id", payload.RoundID),
-	)
+	result, err := withTelemetry(s, ctx, "DeleteRound", req.RoundID, func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		return runInTx(s, ctx, deleteOp)
+	})
 
-	round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "Cannot delete non-existent round",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.Error(err),
-		)
-		return results.OperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayloadV1{
-				GuildID: payload.GuildID,
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
-				},
-				Error: fmt.Sprintf("round not found: %v", err),
-			},
-		}, nil
+		return result, err
 	}
 
-	// Capture the event message ID before deletion
-	eventMessageID := round.EventMessageID
-
-	// Delete the round from the database
-	if err := s.repo.DeleteRound(ctx, payload.GuildID, payload.RoundID); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to delete round from DB",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.Error(err),
-		)
-		return results.OperationResult{
-			Failure: &roundevents.RoundDeleteErrorPayloadV1{
-				GuildID: payload.GuildID,
-				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
-				},
-				Error: fmt.Sprintf("failed to delete round from database: %v", err),
-			},
-		}, nil
+	if result.IsSuccess() {
+		// Attempt to cancel any scheduled jobs for this round (outside transaction, after success)
+		if err := s.queueService.CancelRoundJobs(ctx, req.RoundID); err != nil {
+			s.logger.WarnContext(ctx, "Failed to cancel scheduled jobs",
+				attr.RoundID("round_id", req.RoundID),
+				attr.Error(err),
+			)
+		} else {
+			s.logger.InfoContext(ctx, "Scheduled jobs cancellation successful", attr.RoundID("round_id", req.RoundID))
+		}
 	}
 
-	s.logger.InfoContext(ctx, "Round deleted from DB", attr.RoundID("round_id", payload.RoundID))
-
-	// Attempt to cancel any scheduled jobs for this round
-	if err := s.queueService.CancelRoundJobs(ctx, payload.RoundID); err != nil {
-		s.logger.WarnContext(ctx, "Failed to cancel scheduled jobs",
-			attr.RoundID("round_id", payload.RoundID),
-			attr.Error(err),
-		)
-	} else {
-		s.logger.InfoContext(ctx, "Scheduled jobs cancellation successful", attr.RoundID("round_id", payload.RoundID))
-	}
-
-	s.logger.InfoContext(ctx, "Round deletion service process successful",
-		attr.RoundID("round_id", payload.RoundID),
-	)
-
-	successPayload := &roundevents.RoundDeletedPayloadV1{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		EventMessageID: eventMessageID,
-	}
-
-	return results.OperationResult{
-		Success: successPayload,
-	}, nil
+	return result, nil
 }

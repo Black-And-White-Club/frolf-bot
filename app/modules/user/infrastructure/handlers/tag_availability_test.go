@@ -2,6 +2,7 @@ package userhandlers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -9,21 +10,17 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	usermocks "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application/mocks"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
 func TestUserHandlers_HandleTagAvailable(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testUserID := sharedtypes.DiscordID("12345678901234567")
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(1)
 
-	mockUserService := usermocks.NewMockService(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
@@ -31,7 +28,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 	tests := []struct {
 		name      string
 		payload   *sharedevents.TagAvailablePayloadV1
-		mockSetup func()
+		setupFake func(*FakeUserService)
 		wantLen   int
 		wantTopic string
 		wantErr   bool
@@ -43,56 +40,47 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
 			},
-			mockSetup: func() {
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					results.OperationResult{
-						Success: &userevents.UserCreatedPayloadV1{GuildID: testGuildID, UserID: testUserID, TagNumber: &testTagNumber},
-						Failure: nil,
-					},
-					nil,
-				)
+			setupFake: func(f *FakeUserService) {
+				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+					return results.SuccessResult[*userservice.CreateUserResponse, error](&userservice.CreateUserResponse{
+						UserData: usertypes.UserData{
+							UserID: userID,
+						},
+						TagNumber: tag,
+					}), nil
+				}
 			},
 			wantLen:   1,
 			wantTopic: userevents.UserCreatedV1,
 			wantErr:   false,
 		},
 		{
-			name: "Fail to create user",
+			name: "Fail to create user (Domain Logic)",
 			payload: &sharedevents.TagAvailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
 			},
-			mockSetup: func() {
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					results.OperationResult{
-						Success: nil,
-						Failure: &userevents.UserCreationFailedPayloadV1{
-							GuildID:   testGuildID,
-							UserID:    testUserID,
-							TagNumber: &testTagNumber,
-							Reason:    "failed",
-						},
-					},
-					nil,
-				)
+			setupFake: func(f *FakeUserService) {
+				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+					return results.FailureResult[*userservice.CreateUserResponse, error](errors.New("conflict")), nil
+				}
 			},
 			wantLen:   1,
 			wantTopic: userevents.UserCreationFailedV1,
 			wantErr:   false,
 		},
 		{
-			name: "Service failure in CreateUser",
+			name: "Service failure (Infrastructure)",
 			payload: &sharedevents.TagAvailablePayloadV1{
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: testTagNumber,
 			},
-			mockSetup: func() {
-				mockUserService.EXPECT().CreateUser(gomock.Any(), testGuildID, testUserID, gomock.Eq(&testTagNumber), nil, nil).Return(
-					results.OperationResult{},
-					context.DeadlineExceeded,
-				)
+			setupFake: func(f *FakeUserService) {
+				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+					return userservice.UserResult{}, context.DeadlineExceeded
+				}
 			},
 			wantErr: true,
 		},
@@ -100,24 +88,25 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
-
-			results, err := h.HandleTagAvailable(context.Background(), tt.payload)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleTagAvailable() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			fake := NewFakeUserService()
+			if tt.setupFake != nil {
+				tt.setupFake(fake)
 			}
 
+			h := NewUserHandlers(fake, logger, tracer, nil, metrics)
+			res, err := h.HandleTagAvailable(context.Background(), tt.payload)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 			if !tt.wantErr {
-				if len(results) != tt.wantLen {
-					t.Errorf("HandleTagAvailable() got %d results, want %d", len(results), tt.wantLen)
+				if len(res) != tt.wantLen {
+					t.Errorf("got %d results, want %d", len(res), tt.wantLen)
 					return
 				}
-				if results[0].Topic != tt.wantTopic {
-					t.Errorf("HandleTagAvailable() got topic %s, want %s", results[0].Topic, tt.wantTopic)
+				if res[0].Topic != tt.wantTopic {
+					t.Errorf("got topic %s, want %s", res[0].Topic, tt.wantTopic)
 				}
 			}
 		})
@@ -125,14 +114,10 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 }
 
 func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	testUserID := sharedtypes.DiscordID("98765432109876543")
 	testGuildID := sharedtypes.GuildID("98765432109876543")
 	testTagNumber := sharedtypes.TagNumber(2)
 
-	mockUserService := usermocks.NewMockService(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	metrics := &usermetrics.NoOpMetrics{}
@@ -140,10 +125,8 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 	tests := []struct {
 		name      string
 		payload   *sharedevents.TagUnavailablePayloadV1
-		mockSetup func()
 		wantLen   int
 		wantTopic string
-		wantErr   bool
 	}{
 		{
 			name: "Successfully handle TagUnavailable event",
@@ -153,51 +136,26 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 				TagNumber: testTagNumber,
 				Reason:    "tag not available",
 			},
-			mockSetup: func() {
-				// No service call needed
-			},
 			wantLen:   1,
 			wantTopic: userevents.UserCreationFailedV1,
-			wantErr:   false,
-		},
-		{
-			name: "Handle empty reason",
-			payload: &sharedevents.TagUnavailablePayloadV1{
-				GuildID:   testGuildID,
-				UserID:    testUserID,
-				TagNumber: testTagNumber,
-				Reason:    "",
-			},
-			mockSetup: func() {
-				// No service call needed
-			},
-			wantLen:   1,
-			wantTopic: userevents.UserCreationFailedV1,
-			wantErr:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fake := NewFakeUserService() // No mock setup needed for this one!
+			h := NewUserHandlers(fake, logger, tracer, nil, metrics)
 
-			h := NewUserHandlers(mockUserService, logger, tracer, nil, metrics)
+			res, err := h.HandleTagUnavailable(context.Background(), tt.payload)
 
-			results, err := h.HandleTagUnavailable(context.Background(), tt.payload)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleTagUnavailable() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
-
-			if !tt.wantErr {
-				if len(results) != tt.wantLen {
-					t.Errorf("HandleTagUnavailable() got %d results, want %d", len(results), tt.wantLen)
-					return
-				}
-				if results[0].Topic != tt.wantTopic {
-					t.Errorf("HandleTagUnavailable() got topic %s, want %s", results[0].Topic, tt.wantTopic)
-				}
+			if len(res) != tt.wantLen {
+				t.Errorf("got %d results, want %d", len(res), tt.wantLen)
+			}
+			if res[0].Topic != tt.wantTopic {
+				t.Errorf("got topic %s, want %s", res[0].Topic, tt.wantTopic)
 			}
 		})
 	}

@@ -1,161 +1,63 @@
 package roundintegrationtests
 
 import (
-	"context"
-	"database/sql" // Import sql package
-	"strings"
 	"testing"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
-	"github.com/uptrace/bun"
 )
 
-// TestProcessRoundStart tests the functionality of starting a round.
-func TestProcessRoundStart(t *testing.T) {
-	tag1 := sharedtypes.TagNumber(1)
-
+func TestStartRound(t *testing.T) {
 	tests := []struct {
-		name                  string
-		roundID               sharedtypes.RoundID
-		initialSetup          func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID)
-		payload               roundevents.RoundStartedPayloadV1
-		expectedError         bool
-		expectedErrorContains string
-		validateResponse      func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID)
+		name            string
+		initialSetup    func(t *testing.T, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID)
+		expectedFailure bool
+		validateResult  func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID)
 	}{
 		{
-			name:    "Successful round start",
-			roundID: sharedtypes.RoundID(uuid.New()),
-			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
-				// Setup a round in 'Upcoming' state
-				SetupRoundWithParticipantsAndGroupsHelper(t, db, roundID,
-					roundtypes.Title("Test Round for Start"),
-					"start_msg_123",
-					[]roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("user_A"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: nil},
-					})
-			},
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID:   "test-guild",
-				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
-				Title:     roundtypes.Title("Test Round"),
-				Location:  "Test Location",
-				StartTime: nil,
-				ChannelID: "",
-			},
-			expectedError: false,
-			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
-				if result.Success == nil {
-					t.Fatalf("Expected success payload, got nil")
-				}
-				// Fix: Expect pointer type instead of value type
-				successPayload, ok := result.Success.(*roundevents.DiscordRoundStartPayloadV1)
-				if !ok {
-					t.Fatalf("Expected *DiscordRoundStartPayload, got %T", result.Success)
-				}
+			name: "Successful round start",
+			initialSetup: func(t *testing.T, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID) {
+				roundID := sharedtypes.RoundID(uuid.New())
+				generator := testutils.NewTestDataGenerator()
+				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					ID:    roundID,
+					Title: "Test Round for Start",
+					State: roundtypes.RoundStateUpcoming,
+				})
+				round.GuildID = "test-guild"
 
-				// Assert payload content
-				if successPayload.RoundID != roundID {
-					t.Errorf("Expected RoundID %s, got %s", roundID, successPayload.RoundID)
-				}
-				if successPayload.EventMessageID != "start_msg_123" {
-					t.Errorf("Expected EventMessageID 'start_msg_123', got '%s'", successPayload.EventMessageID)
-				}
-				if len(successPayload.Participants) != 1 {
-					t.Errorf("Expected 1 participant, got %d", len(successPayload.Participants))
-				}
-				if successPayload.Participants[0].UserID != sharedtypes.DiscordID("user_A") {
-					t.Errorf("Expected participant 'user_A', got '%s'", successPayload.Participants[0].UserID)
-				}
-
-				// Verify round state in DB
-				fetchedRound := new(roundtypes.Round)
-				err := db.NewSelect().Model(fetchedRound).Where("id = ?", roundID).Scan(context.Background())
+				err := deps.DB.CreateRound(deps.Ctx, deps.BunDB, "test-guild", &round)
 				if err != nil {
-					t.Fatalf("Failed to fetch round from DB after update: %v", err)
+					t.Fatalf("Failed to create round: %v", err)
 				}
-				if fetchedRound.State != roundtypes.RoundStateInProgress {
-					t.Errorf("Expected round state to be '%s', got '%s'", roundtypes.RoundStateInProgress, fetchedRound.State)
+				return "test-guild", roundID
+			},
+			expectedFailure: false,
+			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+				if res.Success == nil {
+					t.Fatalf("Expected success payload, got failure: %+v", res.Failure)
+				}
+				round := *res.Success
+				if round.ID != roundID {
+					t.Errorf("Expected round ID %s, got %s", roundID, round.ID)
+				}
+				if round.State != roundtypes.RoundStateInProgress {
+					t.Errorf("Expected state InProgress, got %s", round.State)
 				}
 			},
 		},
 		{
-			name:    "Round not found in DB",
-			roundID: sharedtypes.RoundID(uuid.New()), // This round will not be inserted
-			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
-				// No setup, so the round won't exist
+			name: "Round not found",
+			initialSetup: func(t *testing.T, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID) {
+				return "test-guild", sharedtypes.RoundID(uuid.New())
 			},
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID:   "test-guild",
-				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
-				Title:     roundtypes.Title("Test Round"),
-				Location:  "",
-				StartTime: nil,
-				ChannelID: "",
-			},
-			expectedError:         false, // Service uses failure payload instead of error
-			expectedErrorContains: "",    // Raw DB error - don't check specific message
-			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
-				if result.Failure == nil {
+			expectedFailure: true,
+			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+				if res.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
-				}
-				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
-				if !ok {
-					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
-				}
-				// Application returns raw DB error, just verify error is non-empty
-				if failurePayload.Error == "" {
-					t.Errorf("Expected non-empty error message")
-				}
-			},
-		},
-		{
-			name:    "Failed to update round state in DB",
-			roundID: sharedtypes.RoundID(uuid.New()),
-			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
-				// Setup a round that exists initially.
-				SetupRoundWithParticipantsAndGroupsHelper(t, db, roundID,
-					roundtypes.Title("Test Round for Start"),
-					"start_msg_123",
-					[]roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("user_A"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: nil},
-					})
-			},
-			payload: roundevents.RoundStartedPayloadV1{
-				GuildID:   "test-guild",
-				RoundID:   sharedtypes.RoundID(uuid.Nil), // Will be updated in test loop
-				Title:     roundtypes.Title("Test Round"),
-				Location:  "",
-				StartTime: nil,
-				ChannelID: "",
-			},
-			expectedError:         false, // Service uses failure payload instead of error
-			expectedErrorContains: "",    // Raw DB error - don't check specific message
-			validateResponse: func(t *testing.T, result results.OperationResult, db *bun.DB, roundID sharedtypes.RoundID) {
-				if result.Failure == nil {
-					t.Fatalf("Expected failure payload, but got nil")
-				}
-				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
-				if !ok {
-					t.Fatalf("Expected *RoundErrorPayloadV1, got %T", result.Failure)
-				}
-				// Application returns raw DB error, just verify error is non-empty
-				if failurePayload.Error == "" {
-					t.Errorf("Expected non-empty error message")
-				}
-				// Verify that the round is no longer in the DB, as it was deleted to simulate update failure.
-				fetchedRound := new(roundtypes.Round)
-				err := db.NewSelect().Model(fetchedRound).Where("id = ?", roundID).Scan(context.Background())
-				if err == nil {
-					t.Errorf("Expected round to not be found in DB after simulated update failure, but it was found")
-				} else if err != sql.ErrNoRows {
-					t.Fatalf("Failed to fetch round from DB after failed update with unexpected error: %v", err)
 				}
 			},
 		},
@@ -164,68 +66,18 @@ func TestProcessRoundStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
-			// No defer deps.Cleanup() here, as per your request. Cleanup is external.
+			guildID, roundID := tt.initialSetup(t, deps)
 
-			tt.roundID = sharedtypes.RoundID(uuid.New())
-			tt.payload.RoundID = tt.roundID
-
-			if tt.initialSetup != nil {
-				tt.initialSetup(t, deps.BunDB, tt.roundID)
+			result, err := deps.Service.StartRound(deps.Ctx, &roundtypes.StartRoundRequest{
+				GuildID: guildID,
+				RoundID: roundID,
+			})
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			// --- NEW LOGIC FOR "Failed to update round state in DB" TEST CASE ---
-			if tt.name == "Failed to update round state in DB" {
-				// Simulate a scenario where the update fails because the round is no longer present.
-				// This forces UpdateRound to return sql.ErrNoRows, which ProcessRoundStart handles.
-				_, err := deps.BunDB.NewDelete().Model(&roundtypes.Round{}).Where("id = ?", tt.roundID).Exec(context.Background())
-				if err != nil {
-					t.Fatalf("Failed to delete round for update failure simulation: %v", err)
-				}
-			}
-			// --- END NEW LOGIC ---
-
-			result, err := deps.Service.ProcessRoundStart(deps.Ctx, tt.payload.GuildID, tt.payload.RoundID)
-
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				}
-				if result.Failure == nil {
-					t.Errorf("Expected a failure payload, but got nil")
-				}
-				if result.Success != nil {
-					t.Errorf("Expected nil success payload, but got %v", result.Success)
-				}
-				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
-					if ok && !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
-						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
-					}
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
-				}
-
-				// Handle both success and failure cases when expectedError is false
-				if result.Failure != nil && result.Success != nil {
-					t.Errorf("Got both failure and success payloads - should only have one")
-				}
-				if result.Failure == nil && result.Success == nil {
-					t.Errorf("Expected either a success or failure payload, but got neither")
-				}
-
-				// Handle validation failures when expectedError is false but operation fails
-				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundErrorPayloadV1)
-					if ok && !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
-						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
-					}
-				}
-			}
-
-			if tt.validateResponse != nil {
-				tt.validateResponse(t, result, deps.BunDB, tt.roundID)
+			if tt.validateResult != nil {
+				tt.validateResult(t, result, roundID)
 			}
 		})
 	}

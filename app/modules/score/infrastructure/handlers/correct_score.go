@@ -9,7 +9,6 @@ import (
 )
 
 // HandleCorrectScoreRequest processes a ScoreUpdateRequest.
-// It calls the ScoreService to correct a score and returns either a success or failure event.
 func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
@@ -25,17 +24,20 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 		payload.TagNumber,
 	)
 
-	// 2. Handle System Errors (e.g. DB connection issues)
-	// We return the error so the message can be retried by the infrastructure if needed.
+	// 2. Handle System Errors (Infrastructure)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Handle Business-Level Failures (Handled by the service)
+	// 3. Handle Business-Level Failures
+	// result.Failure is now an 'error' type from the service
 	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected failure payload type from service")
+		errVal := *result.Failure
+		failurePayload := &sharedevents.ScoreUpdateFailedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			UserID:  payload.UserID,
+			Reason:  errVal.Error(),
 		}
 
 		return []handlerwrapper.Result{
@@ -47,10 +49,13 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 	}
 
 	// 4. Handle Success Case
+	// result.Success is now sharedtypes.ScoreInfo
 	if result.Success != nil {
-		successPayload, ok := result.Success.(*sharedevents.ScoreUpdatedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected success payload type from service")
+		successPayload := &sharedevents.ScoreUpdatedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			UserID:  result.Success.UserID,
+			Score:   result.Success.Score,
 		}
 
 		results := []handlerwrapper.Result{
@@ -61,11 +66,9 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 		}
 
 		// 5. Trigger reprocessing
-		// Fetch scores to include in the reprocess request
 		scores, err := h.service.GetScoresForRound(ctx, successPayload.GuildID, successPayload.RoundID)
 		if err != nil {
-			// Do NOT return an error here, or the handler will retry and double-publish.
-			// Service layer already logged the error.
+			// Infrastructure error during fetch - we still return the success of the update
 			return results, nil
 		}
 
@@ -84,6 +87,5 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 		return results, nil
 	}
 
-	// 6. Final Fallback - Matches Unit Test expectation exactly
 	return nil, errors.New("unexpected result from service: neither success nor failure")
 }

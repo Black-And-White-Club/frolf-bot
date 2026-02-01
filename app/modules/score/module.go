@@ -14,6 +14,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/uptrace/bun"
 )
 
 type Module struct {
@@ -32,17 +33,18 @@ func NewScoreModule(
 	ctx context.Context,
 	cfg *config.Config,
 	obs observability.Observability,
-	scoreDB scoredb.ScoreDB,
+	scoreDB scoredb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
 	routerCtx context.Context,
+	db *bun.DB,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.ScoreMetrics
 	tracer := obs.Registry.Tracer
 
-	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer)
+	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer, db)
 
 	// Prometheus registry can be created here or passed in if it's a shared registry
 	prometheusRegistry := prometheus.NewRegistry()

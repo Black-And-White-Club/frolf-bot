@@ -27,7 +27,7 @@ var (
 
 type TestDeps struct {
 	Ctx     context.Context
-	DB      scoredb.ScoreDB
+	DB      scoredb.Repository
 	BunDB   *bun.DB
 	Service scoreservice.Service
 	Cleanup func()
@@ -62,29 +62,31 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 func SetupTestScoreService(t *testing.T) TestDeps {
 	t.Helper()
 
-	// Get the shared test environment
+	// 1. Get the shared test environment
 	env := GetTestEnv(t)
 
-	// Reset environment for clean state
+	// 2. Reset environment for clean state
 	resetCtx, resetCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer resetCancel()
 	if err := env.Reset(resetCtx); err != nil {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
+	// 3. Setup dependencies
 	realDB := scoredb.NewRepository(env.DB)
-
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	noOpMetrics := &scoremetrics.NoOpMetrics{}
 	noOpTracer := noop.NewTracerProvider().Tracer("test_score_service")
 
-	// Create the ScoreService with no-op dependencies
+	// 4. Create the ScoreService
+	// NewScoreService signature: (repo, eventBus, logger, metrics, tracer, db)
 	service := scoreservice.NewScoreService(
 		realDB,
-		nil, // No EventBus needed for score service
+		nil, // No EventBus needed for basic application tests
 		testLogger,
 		noOpMetrics,
 		noOpTracer,
+		env.DB,
 	)
 
 	cleanup := func() {

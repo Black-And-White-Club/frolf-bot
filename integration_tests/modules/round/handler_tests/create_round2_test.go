@@ -14,6 +14,19 @@ import (
 	"github.com/google/uuid"
 )
 
+func ensureStreams(t *testing.T, env *testutils.TestEnvironment) {
+	// Ensure 'discord' stream exists as it's often missing in fresh envs
+	err := env.EventBus.CreateStream(env.Ctx, "discord")
+	if err != nil {
+		t.Logf("CreateStream 'discord' result: %v", err)
+	}
+	// Ensure 'round' stream exists
+	err = env.EventBus.CreateStream(env.Ctx, "round")
+	if err != nil {
+		t.Logf("CreateStream 'round' result: %v", err)
+	}
+}
+
 // createValidRoundEntityCreatedPayload creates a valid RoundEntityCreatedPayload for testing
 func createValidRoundEntityCreatedPayload(userID sharedtypes.DiscordID) roundevents.RoundEntityCreatedPayloadV1 {
 	now := time.Now()
@@ -370,6 +383,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			deps := SetupTestRoundHandler(t)
+			ensureStreams(t, deps.TestEnvironment)
 			genericCase := testutils.TestCase{
 				Name: tc.name,
 				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {

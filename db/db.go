@@ -6,7 +6,6 @@ import (
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	sharedinterface "github.com/Black-And-White-Club/frolf-bot/app/shared/interfaces"
 )
 
 const (
@@ -16,10 +15,9 @@ const (
 
 // DB provides methods for interacting with an underlying database or other storage mechanism.
 type Database interface {
-	leaderboarddb.LeaderboardDB
+	leaderboarddb.Repository
 	rounddb.Repository
-	scoredb.ScoreDB
-	userdb.UserDB
-	guilddb.GuildDB
-	sharedinterface.GuildConfigReader
+	scoredb.Repository
+	userdb.Repository
+	guilddb.Repository
 }

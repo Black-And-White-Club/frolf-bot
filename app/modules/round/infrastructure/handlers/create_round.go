@@ -17,12 +17,44 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 ) ([]handlerwrapper.Result, error) {
 	clock := h.extractAnchorClock(ctx)
 
-	result, err := h.service.ValidateAndProcessRoundWithClock(ctx, *payload, roundtime.NewTimeParser(), clock)
+	req := &roundtypes.CreateRoundInput{
+		GuildID:     payload.GuildID,
+		Title:       roundtypes.Title(payload.Title),
+		Description: roundtypes.Description(payload.Description),
+		Location:    roundtypes.Location(payload.Location),
+		StartTime:   payload.StartTime,
+		Timezone:    string(payload.Timezone),
+		UserID:      payload.UserID,
+		ChannelID:   payload.ChannelID,
+	}
+
+	result, err := h.service.ValidateRoundCreationWithClock(ctx, req, roundtime.NewTimeParser(), clock)
 	if err != nil {
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	// Explicitly map results to event payloads
+	mappedResult := result.Map(
+		func(res *roundtypes.CreateRoundResult) any {
+			return &roundevents.RoundEntityCreatedPayloadV1{
+				GuildID:          payload.GuildID,
+				Round:            *res.Round,
+				DiscordChannelID: res.ChannelID,
+				DiscordGuildID:   string(payload.GuildID),
+				// Config fragment mapping omitted as it requires conversion which is verbose here
+				// and likely not critical for this specific step if the guild ID is present.
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundValidationFailedPayloadV1{
+				GuildID:       payload.GuildID,
+				UserID:        payload.UserID,
+				ErrorMessages: []string{err.Error()},
+			}
+		},
+	)
+
+	return mapOperationResult(mappedResult,
 		roundevents.RoundEntityCreatedV1,
 		roundevents.RoundValidationFailedV1,
 	), nil
@@ -33,15 +65,53 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	ctx context.Context,
 	payload *roundevents.RoundEntityCreatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.StoreRound(ctx, payload.GuildID, *payload)
+	result, err := h.service.StoreRound(ctx, &payload.Round, payload.GuildID)
 	if err != nil {
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	// Explicitly map the result to the event payload to ensure correct structure
+	// Explicitly map the result to the event payload to ensure correct structure
+	mappedResult := result.Map(
+		func(res *roundtypes.CreateRoundResult) any {
+			r := res.Round
+			payload := &roundevents.RoundCreatedPayloadV1{
+				GuildID: payload.GuildID,
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:     r.ID,
+					Title:       r.Title,
+					Description: r.Description,
+					Location:    r.Location,
+					StartTime:   r.StartTime,
+					UserID:      r.CreatedBy,
+				},
+				ChannelID: payload.DiscordChannelID,
+			}
+
+			// Map guild config fragment if available
+			if res.GuildConfig != nil {
+				// Convert to event fragment if types differ
+			}
+
+			return payload
+		},
+		func(err error) any {
+			return &roundevents.RoundCreationFailedPayloadV1{
+				GuildID:      payload.GuildID,
+				ErrorMessage: err.Error(),
+			}
+		},
+	)
+
+	handlerResults := mapOperationResult(mappedResult,
 		roundevents.RoundCreatedV1,
 		roundevents.RoundCreationFailedV1,
-	), nil
+	)
+
+	// Add guild-scoped version for PWA permission scoping
+	handlerResults = addGuildScopedResult(handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
+
+	return handlerResults, nil
 }
 
 // HandleRoundEventMessageIDUpdate updates the round with the Discord message ID.

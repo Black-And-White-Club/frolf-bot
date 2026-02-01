@@ -37,10 +37,13 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		sharedtypes.RoundID(batchUUID),
 		sharedtypes.ServiceUpdateSourceAdminBatch,
 	)
-
 	if err != nil {
+		return nil, err
+	}
+
+	if result.IsFailure() {
 		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(err, &swapErr) {
+		if errors.As(*result.Failure, &swapErr) {
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     swapErr.RequestorID,
 				CurrentTag: swapErr.CurrentTag,
@@ -49,8 +52,22 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 			})
 			return []handlerwrapper.Result{}, intentErr
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, result, "batch_assignment"), nil
+	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment")
+
+	// Propagate correlation_id if present to allow Discord to update the interaction
+	if val := ctx.Value("correlation_id"); val != nil {
+		if correlationID, ok := val.(string); ok && correlationID != "" {
+			for i := range results {
+				if results[i].Metadata == nil {
+					results[i].Metadata = make(map[string]string)
+				}
+				results[i].Metadata["correlation_id"] = correlationID
+			}
+		}
+	}
+
+	return results, nil
 }

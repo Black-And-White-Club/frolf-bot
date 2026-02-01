@@ -8,6 +8,11 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
+// RoundListRequest is the minimal request payload for PWA round list requests
+type RoundListRequest struct {
+	GuildID string `json:"guild_id"`
+}
+
 type Handlers interface {
 	// Round creation handlers
 	HandleCreateRoundRequest(ctx context.Context, payload *roundevents.CreateRoundRequestedPayloadV1) ([]handlerwrapper.Result, error)
@@ -68,4 +73,7 @@ type Handlers interface {
 	HandleScorecardNormalized(ctx context.Context, payload *roundevents.ScorecardNormalizedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleParseScorecardRequest(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleImportCompleted(ctx context.Context, payload *roundevents.ImportCompletedPayloadV1) ([]handlerwrapper.Result, error)
+
+	// PWA request/reply handlers
+	HandleRoundListRequest(ctx context.Context, payload *RoundListRequest) ([]handlerwrapper.Result, error)
 }

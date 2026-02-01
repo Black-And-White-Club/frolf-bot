@@ -1,109 +1,55 @@
 package scoreservice
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"math/rand"
-// 	"testing"
-// 	"time"
+import (
+	"context"
+	"fmt"
+	"testing"
 
-// 	lokifrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-// 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
-// 	tempofrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
-// 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-// )
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
+)
 
-// // setupBenchmarkService creates a test score service with no-op dependencies
-// func setupBenchmarkService() *ScoreService {
-// 	logger := loggerfrolfbot.NoOpLogger
-// tracerProvider := noop.NewTracerProvider()
-// tracer := tracerProvider.Tracer("test")
-// 	metrics := &scoremetrics.NoOpMetrics{}
-//
+func BenchmarkProcessScoresForStorage_Scaling(b *testing.B) {
+	s := &ScoreService{
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &scoremetrics.NoOpMetrics{},
+	}
 
-// 	return &ScoreService{
-// 		logger:  logger,
-// 		metrics: metrics,
-// 		tracer:  tracer,
-// 	}
-// }
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-1")
+	roundID := sharedtypes.RoundID(uuid.New())
 
-// // generateScores creates test score data with optional configuration
-// func generateScores(count int, tagPercentage int) []sharedtypes.ScoreInfo {
-// 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-// 	scores := make([]sharedtypes.ScoreInfo, count)
+	// Define different scales of data
+	scales := []struct {
+		name int
+	}{
+		{10},   // Small group
+		{100},  // Large tournament
+		{1000}, // Massive league (unlikely, but good for stress testing)
+	}
 
-// 	for i := 0; i < count; i++ {
-// 		// Create a basic score with random values
-// 		score := sharedtypes.ScoreInfo{
-// 			UserID: sharedtypes.DiscordID(fmt.Sprintf("%019d", 1000000000000000000+i)),
-// 			Score:  sharedtypes.Score(rng.Intn(20) - 5), // Scores from -5 to +14
-// 		}
+	for _, tc := range scales {
+		b.Run(fmt.Sprintf("Players-%d", tc.name), func(b *testing.B) {
+			// Generate the baseline data once outside the loop
+			originalScores := generateScores(tc.name, 50)
 
-// 		// Add tag based on percentage
-// 		if rng.Intn(100) < tagPercentage {
-// 			tagNum := sharedtypes.TagNumber(rng.Intn(50) + 1) // Tags 1-50
-// 			score.TagNumber = &tagNum
-// 		}
+			b.ResetTimer()
+			b.ReportAllocs() // This tracks how much memory you are using per operation
 
-// 		scores[i] = score
-// 	}
+			for i := 0; i < b.N; i++ {
+				// IMPORTANT: Since ProcessScoresForStorage sorts the slice in-place,
+				// we must copy the original data for every iteration.
+				// Otherwise, we are benchmarking sorting an already sorted list.
+				testData := make([]sharedtypes.ScoreInfo, len(originalScores))
+				copy(testData, originalScores)
 
-// 	return scores
-// }
-
-// // BenchmarkProcessScoresForStorage benchmarks the ProcessScoresForStorage method
-// func BenchmarkProcessScoresForStorage(b *testing.B) {
-// 	service := setupBenchmarkService()
-// 	ctx := context.Background()
-// 	roundID := sharedtypes.RoundID("benchmark-round-id")
-
-// 	// Test with different sizes of score sets
-// 	sizes := []int{10, 100, 1000, 10000}
-
-// 	for _, size := range sizes {
-// 		// Standard benchmark - Mixed tagged/untagged
-// 		b.Run(fmt.Sprintf("Size-%d-Mixed50Pct", size), func(b *testing.B) {
-// 			scores := generateScores(size, 50) // 50% tagged
-
-// 			b.ResetTimer()
-// 			b.ReportAllocs()
-
-// 			for i := 0; i < b.N; i++ {
-// 				_, err := service.ProcessScoresForStorage(ctx, roundID, scores)
-// 				if err != nil {
-// 					b.Fatal(err)
-// 				}
-// 			}
-// 		})
-
-// 		// All tagged scenario
-// 		b.Run(fmt.Sprintf("Size-%d-AllTagged", size), func(b *testing.B) {
-// 			scores := generateScores(size, 100) // 100% tagged
-
-// 			b.ResetTimer()
-// 			b.ReportAllocs()
-
-// 			for i := 0; i < b.N; i++ {
-// 				_, err := service.ProcessScoresForStorage(ctx, roundID, scores)
-// 				if err != nil {
-// 					b.Fatal(err)
-// 				}
-// 			}
-// 		})
-// 		// All untagged scenario
-// 		b.Run(fmt.Sprintf("Size-%d-AllUntagged", size), func(b *testing.B) {
-// 			scores := generateScores(size, 0) // 0% tagged
-
-// 			b.ResetTimer()
-// 			b.ReportAllocs()
-
-// 			for i := 0; i < b.N; i++ {
-// 				_, err := service.ProcessScoresForStorage(ctx, roundID, scores)
-// 				if err != nil {
-// 					b.Fatal(err)
-// 				}
-// 			}
-// 		})
-// 	}
-// }
+				_, err := s.ProcessScoresForStorage(ctx, guildID, roundID, testData)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

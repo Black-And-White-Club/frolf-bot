@@ -2,6 +2,7 @@ package leaderboardhandlers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -10,17 +11,10 @@ import (
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboardmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application/mocks"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testPayload := &leaderboardevents.GetLeaderboardRequestedPayloadV1{
 		GuildID: testGuildID,
@@ -28,272 +22,173 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		mockSetup     func()
-		payload       *leaderboardevents.GetLeaderboardRequestedPayloadV1
+		setupFake     func(f *FakeService)
 		wantErr       bool
 		wantResultLen int
 		wantTopic     string
 	}{
 		{
 			name: "Successfully get leaderboard",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-						GuildID:     testGuildID,
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-					}),
-					nil,
-				)
+			setupFake: func(f *FakeService) {
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error]([]leaderboardtypes.LeaderboardEntry{
+						{UserID: "user-1", TagNumber: 1},
+					}), nil
+				}
 			},
-			payload:       testPayload,
 			wantErr:       false,
 			wantResultLen: 1,
 			wantTopic:     leaderboardevents.GetLeaderboardResponseV1,
 		},
 		{
-			name: "Service error in GetLeaderboard",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			name: "Service error returns Failed event",
+			setupFake: func(f *FakeService) {
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, fmt.Errorf("database error")
+				}
 			},
-			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
-		},
-		{
-			name: "Service failure - no active leaderboard",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetLeaderboard(gomock.Any(), testGuildID).Return(
-					results.SuccessResult(&leaderboardevents.GetLeaderboardResponsePayloadV1{
-						GuildID:     testGuildID,
-						Leaderboard: []leaderboardtypes.LeaderboardEntry{},
-					}),
-					nil,
-				)
-			},
-			payload:       testPayload,
-			wantErr:       false,
+			wantErr:       false, // Handler catches error and returns failure event
 			wantResultLen: 1,
-			wantTopic:     leaderboardevents.GetLeaderboardResponseV1,
+			wantTopic:     leaderboardevents.GetLeaderboardFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeService()
+			tt.setupFake(fakeSvc)
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
-			h := &LeaderboardHandlers{
-				service: mockLeaderboardService,
-			}
-
-			ctx := context.Background()
-			results, err := h.HandleGetLeaderboardRequest(ctx, tt.payload)
+			res, err := h.HandleGetLeaderboardRequest(context.Background(), testPayload)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("HandleGetLeaderboardRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleGetLeaderboardRequest() result length = %d, want %d", len(results), tt.wantResultLen)
+			if len(res) != tt.wantResultLen {
+				t.Errorf("Result length = %d, want %d", len(res), tt.wantResultLen)
 			}
-
-			if !tt.wantErr && tt.wantResultLen > 0 && results[0].Topic != tt.wantTopic {
-				t.Errorf("HandleGetLeaderboardRequest() topic = %s, want %s", results[0].Topic, tt.wantTopic)
+			if len(res) > 0 && res[0].Topic != tt.wantTopic {
+				t.Errorf("Topic = %s, want %s", res[0].Topic, tt.wantTopic)
 			}
 		})
 	}
 }
 
 func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testUserID := sharedtypes.DiscordID("user-456")
-	testTagNumber := sharedtypes.TagNumber(5)
 	testPayload := &sharedevents.DiscordTagLookupRequestedPayloadV1{
 		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
 		UserID:        testUserID,
 	}
 
 	tests := []struct {
-		name          string
-		mockSetup     func()
-		payload       *sharedevents.DiscordTagLookupRequestedPayloadV1
-		wantErr       bool
-		wantResultLen int
-		wantTopic     string
+		name      string
+		setupFake func(f *FakeService)
+		wantTopic string
+		wantFound bool
 	}{
 		{
-			name: "Successfully lookup tag - found",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					testTagNumber,
-					nil,
-				)
+			name: "Tag found",
+			setupFake: func(f *FakeService) {
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.SuccessResult[sharedtypes.TagNumber, error](5), nil
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     sharedevents.LeaderboardTagLookupSucceededV1,
+			wantTopic: sharedevents.LeaderboardTagLookupSucceededV1,
+			wantFound: true,
 		},
 		{
-			name: "Successfully lookup tag - not found",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					sharedtypes.TagNumber(0),
-					fmt.Errorf("not found"),
-				)
+			name: "Tag not found",
+			setupFake: func(f *FakeService) {
+				f.GetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.OperationResult[sharedtypes.TagNumber, error]{}, fmt.Errorf("not found")
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     sharedevents.LeaderboardTagLookupNotFoundV1,
-		},
-		{
-			name: "Service error",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().GetTagByUserID(gomock.Any(), testPayload.GuildID, testPayload.UserID).Return(
-					sharedtypes.TagNumber(0),
-					fmt.Errorf("service error"),
-				)
-			},
-			payload: testPayload,
-			// Handler treats service errors as "not found" for this lookup and returns a not-found event
-			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     sharedevents.LeaderboardTagLookupNotFoundV1,
+			wantTopic: sharedevents.LeaderboardTagLookupNotFoundV1,
+			wantFound: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeService()
+			tt.setupFake(fakeSvc)
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
-			h := &LeaderboardHandlers{
-				service: mockLeaderboardService,
+			res, _ := h.HandleGetTagByUserIDRequest(context.Background(), testPayload)
+
+			if res[0].Topic != tt.wantTopic {
+				t.Errorf("Topic = %s, want %s", res[0].Topic, tt.wantTopic)
 			}
-
-			ctx := context.Background()
-			results, err := h.HandleGetTagByUserIDRequest(ctx, tt.payload)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleGetTagByUserIDRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleGetTagByUserIDRequest() result length = %d, want %d", len(results), tt.wantResultLen)
-			}
-
-			if !tt.wantErr && tt.wantResultLen > 0 && results[0].Topic != tt.wantTopic {
-				t.Errorf("HandleGetTagByUserIDRequest() topic = %s, want %s", results[0].Topic, tt.wantTopic)
+			p := res[0].Payload.(*sharedevents.DiscordTagLookupResultPayloadV1)
+			if p.Found != tt.wantFound {
+				t.Errorf("Found = %v, want %v", p.Found, tt.wantFound)
 			}
 		})
 	}
 }
 
 func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockLeaderboardService := leaderboardmocks.NewMockService(ctrl)
-
 	testGuildID := sharedtypes.GuildID("test-guild-123")
-	testRoundID := sharedtypes.RoundID(uuid.New())
 	testUserID := sharedtypes.DiscordID("user-456")
-	testTagNumber := sharedtypes.TagNumber(3)
-	joinedLateFalse := false
 	testPayload := &sharedevents.RoundTagLookupRequestedPayloadV1{
 		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
-		RoundID:       testRoundID,
+		RoundID:       sharedtypes.RoundID(uuid.New()),
 		UserID:        testUserID,
-		Response:      "yes",
-		JoinedLate:    &joinedLateFalse,
 	}
 
 	tests := []struct {
-		name          string
-		mockSetup     func()
-		payload       *sharedevents.RoundTagLookupRequestedPayloadV1
-		wantErr       bool
-		wantResultLen int
-		wantTopic     string
+		name      string
+		setupFake func(f *FakeService)
+		wantErr   bool
+		wantTopic string
 	}{
 		{
-			name: "Successfully lookup round tag - found",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					results.SuccessResult(&sharedevents.RoundTagLookupResultPayloadV1{
-						ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testPayload.GuildID},
-						UserID:        testUserID,
-						TagNumber:     &testTagNumber,
-						Found:         true,
-					}),
-					nil,
-				)
+			name: "Round tag found",
+			setupFake: func(f *FakeService) {
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.SuccessResult[sharedtypes.TagNumber, error](10), nil
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     sharedevents.RoundTagLookupFoundV1,
+			wantErr:   false,
+			wantTopic: sharedevents.RoundTagLookupFoundV1,
 		},
 		{
-			name: "Successfully lookup round tag - not found",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					results.FailureResult(&sharedevents.RoundTagLookupFailedPayloadV1{
-						ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testPayload.GuildID},
-						UserID:        testUserID,
-						RoundID:       testPayload.RoundID,
-						Reason:        "not found",
-					}),
-					nil,
-				)
+			name: "Round tag not found (sql.ErrNoRows)",
+			setupFake: func(f *FakeService) {
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					err := sql.ErrNoRows
+					return results.FailureResult[sharedtypes.TagNumber, error](err), nil
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 1,
-			wantTopic:     sharedevents.RoundTagLookupFailedV1,
+			wantErr:   false,
+			wantTopic: sharedevents.RoundTagLookupNotFoundV1,
 		},
 		{
 			name: "Service error",
-			mockSetup: func() {
-				mockLeaderboardService.EXPECT().RoundGetTagByUserID(gomock.Any(), testPayload.GuildID, *testPayload).Return(
-					results.OperationResult{},
-					fmt.Errorf("service error"),
-				)
+			setupFake: func(f *FakeService) {
+				f.RoundGetTagByUserIDFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
+					return results.OperationResult[sharedtypes.TagNumber, error]{}, fmt.Errorf("internal error")
+				}
 			},
-			payload:       testPayload,
-			wantErr:       true,
-			wantResultLen: 0,
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
+			fakeSvc := NewFakeService()
+			tt.setupFake(fakeSvc)
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
-			h := &LeaderboardHandlers{
-				service: mockLeaderboardService,
-			}
-
-			ctx := context.Background()
-			results, err := h.HandleRoundGetTagRequest(ctx, tt.payload)
+			res, err := h.HandleRoundGetTagRequest(context.Background(), testPayload)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("HandleRoundGetTagRequest() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("wantErr %v, got %v", tt.wantErr, err)
 			}
-
-			if len(results) != tt.wantResultLen {
-				t.Errorf("HandleRoundGetTagRequest() result length = %d, want %d", len(results), tt.wantResultLen)
-			}
-
-			if !tt.wantErr && tt.wantResultLen > 0 && results[0].Topic != tt.wantTopic {
-				t.Errorf("HandleRoundGetTagRequest() topic = %s, want %s", results[0].Topic, tt.wantTopic)
+			if !tt.wantErr && res[0].Topic != tt.wantTopic {
+				t.Errorf("Topic = %s, want %s", res[0].Topic, tt.wantTopic)
 			}
 		})
 	}

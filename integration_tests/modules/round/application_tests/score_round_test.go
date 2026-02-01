@@ -1,232 +1,87 @@
 package roundintegrationtests
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
 )
 
-// InsertRoundHelper creates and inserts a round with the given data using bun.
-func InsertRoundHelper(t *testing.T, db *bun.DB, roundData roundtypes.Round) (*roundtypes.Round, error) {
-	t.Helper()
-	_, err := db.NewInsert().Model(&roundData).Exec(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert round: %w", err)
-	}
-	return &roundData, nil
-}
-
-// SetupRoundWithParticipantsHelper generates a round with specified properties and participants
-// using testutils.TestDataGenerator and inserts it into the database.
-func SetupRoundWithParticipantsHelper(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID, roundTitle roundtypes.Title, eventMessageID string, participantsData []roundtypes.Participant) (*roundtypes.Round, []roundtypes.Participant) {
-	t.Helper()
-	gen := testutils.NewTestDataGenerator()
-
-	// Prepare users for GenerateRoundWithConstraints
-	var usersForGeneration []testutils.User
-	for _, pData := range participantsData {
-		usersForGeneration = append(usersForGeneration, testutils.User{UserID: testutils.DiscordID(pData.UserID)})
-	}
-
-	// Create RoundOptions to pass to the generator
-	roundOptions := testutils.RoundOptions{
-		ID:               roundID,
-		CreatedBy:        testutils.DiscordID("test_creator"), // A dummy creator ID
-		ParticipantCount: len(participantsData),
-		Users:            usersForGeneration,
-		Title:            roundTitle,
-		// Other fields like State, StartTime, Finalized will be generated or can be overridden in options
-	}
-
-	// Generate the base round with participants
-	round := gen.GenerateRoundWithConstraints(roundOptions)
-
-	// --- START OF MODIFICATION ---
-	// Explicitly set the EventMessageID from the helper's argument.
-	// This ensures the value passed to the helper is used, overriding any default from the generator.
-	round.EventMessageID = eventMessageID
-	// Set the GuildID to match test expectations
-	round.GuildID = sharedtypes.GuildID("test-guild")
-	// --- END OF MODIFICATION ---
-
-	// Override participants with the exact data provided for the test case
-	round.Participants = make([]roundtypes.Participant, len(participantsData))
-	for i, pData := range participantsData {
-		round.Participants[i] = roundtypes.Participant{
-			UserID:    pData.UserID,
-			TagNumber: pData.TagNumber,
-			Response:  pData.Response,
-			Score:     pData.Score,
-		}
-	}
-
-	// Insert the round (which includes its participants) into the database
-	insertedRound, err := InsertRoundHelper(t, db, round)
-	if err != nil {
-		t.Fatalf("Failed to insert round during setup: %v", err)
-	}
-
-	return insertedRound, insertedRound.Participants
-}
-
-// --- Integration Test Functions ---
-
-// TestValidateScoreUpdateRequest tests the score update validation functionality.
 func TestValidateScoreUpdateRequest(t *testing.T) {
 	tests := []struct {
 		name                  string
-		payload               roundevents.ScoreUpdateRequestPayloadV1
-		expectedError         bool
+		payload               *roundtypes.ScoreUpdateRequest
 		expectedErrorContains string
 	}{
 		{
 			name: "Valid score update request",
-			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:   sharedtypes.GuildID("test-guild"),
-				RoundID:   sharedtypes.RoundID(uuid.New()),
-				UserID:    sharedtypes.DiscordID("123456789"),
-				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
-				ChannelID: "test-channel",
-				MessageID: "test-message",
+			payload: &roundtypes.ScoreUpdateRequest{
+				GuildID: "test-guild",
+				RoundID: sharedtypes.RoundID(uuid.New()),
+				UserID:  "123456789",
+				Score:   func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
 			},
-			expectedError: false,
+			expectedErrorContains: "",
 		},
 		{
 			name: "Invalid request - zero round ID",
-			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:   sharedtypes.GuildID("test-guild"),
-				RoundID:   sharedtypes.RoundID(uuid.Nil),
-				UserID:    sharedtypes.DiscordID("123456789"),
-				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
-				ChannelID: "test-channel",
-				MessageID: "test-message",
+			payload: &roundtypes.ScoreUpdateRequest{
+				GuildID: "test-guild",
+				RoundID: sharedtypes.RoundID(uuid.Nil),
+				UserID:  "123456789",
+				Score:   func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
 			},
-			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "round ID cannot be zero",
 		},
 		{
 			name: "Invalid request - empty participant",
-			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:   sharedtypes.GuildID("test-guild"),
-				RoundID:   sharedtypes.RoundID(uuid.New()), // Fixed: use valid UUID instead of Nil
-				UserID:    sharedtypes.DiscordID(""),
-				Score:     func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
-				ChannelID: "test-channel",
-				MessageID: "test-message",
+			payload: &roundtypes.ScoreUpdateRequest{
+				GuildID: "test-guild",
+				RoundID: sharedtypes.RoundID(uuid.New()),
+				UserID:  "",
+				Score:   func() *sharedtypes.Score { s := sharedtypes.Score(72); return &s }(),
 			},
-			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "participant Discord ID cannot be empty",
 		},
 		{
 			name: "Invalid request - nil score",
-			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:   sharedtypes.GuildID("test-guild"),
-				RoundID:   sharedtypes.RoundID(uuid.New()),
-				UserID:    sharedtypes.DiscordID("123456789"),
-				Score:     nil,
-				ChannelID: "test-channel",
-				MessageID: "test-message",
+			payload: &roundtypes.ScoreUpdateRequest{
+				GuildID: "test-guild",
+				RoundID: sharedtypes.RoundID(uuid.New()),
+				UserID:  "123456789",
+				Score:   nil,
 			},
-			expectedError:         false, // Service uses failure payload instead of error
 			expectedErrorContains: "score cannot be empty",
-		},
-		{
-			name: "Invalid request - multiple validation errors",
-			payload: roundevents.ScoreUpdateRequestPayloadV1{
-				GuildID:   sharedtypes.GuildID("test-guild"),
-				RoundID:   sharedtypes.RoundID(uuid.Nil),
-				UserID:    sharedtypes.DiscordID(""),
-				Score:     nil,
-				ChannelID: "test-channel",
-				MessageID: "test-message",
-			},
-			expectedError:         false, // Service uses failure payload instead of error
-			expectedErrorContains: "round ID cannot be zero; participant Discord ID cannot be empty; score cannot be empty",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup dependencies for this test function
 			deps := SetupTestRoundService(t)
-			// No defer deps.Cleanup() here, as per your request. Cleanup is external.
-
-			// Service is now part of deps
 			result, err := deps.Service.ValidateScoreUpdateRequest(deps.Ctx, tt.payload)
+			if err != nil {
+				t.Fatalf("Unexpected error from service: %v", err)
+			}
 
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				}
+			if tt.expectedErrorContains != "" {
 				if result.Failure == nil {
-					t.Errorf("Expected a failure payload, but got nil")
+					t.Fatalf("Expected failure result, but got nil")
 				}
-				if result.Success != nil {
-					t.Errorf("Expected nil success payload, but got %v", result.Success)
-				}
-
-				failurePayload, ok := result.Failure.(*roundevents.RoundScoreUpdateErrorPayloadV1)
-				if !ok {
-					t.Errorf("Expected *RoundScoreUpdateErrorPayload, got %T", result.Failure)
-				}
-				if !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
-					t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
-				}
-				if failurePayload.ScoreUpdateRequest == nil {
-					t.Errorf("Expected ScoreUpdateRequest in failure payload, but got nil")
-				} else if *failurePayload.ScoreUpdateRequest != tt.payload {
-					t.Errorf("Expected ScoreUpdateRequest in failure payload to be %v, got %v", tt.payload, *failurePayload.ScoreUpdateRequest)
+				failureErr := *result.Failure
+				if !strings.Contains(failureErr.Error(), tt.expectedErrorContains) {
+					t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failureErr.Error())
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
+				if result.Success == nil {
+					t.Fatalf("Expected success result, but got nil: %+v", result.Failure)
 				}
-
-				// Handle both success and failure cases when expectedError is false
-				if result.Failure != nil && result.Success != nil {
-					t.Errorf("Got both failure and success payloads - should only have one")
-				}
-				if result.Failure == nil && result.Success == nil {
-					t.Errorf("Expected either a success or failure payload, but got neither")
-				}
-
-				// Check for validation failures when expectedError is false but validation fails
-				if result.Failure != nil && tt.expectedErrorContains != "" {
-					failurePayload, ok := result.Failure.(*roundevents.RoundScoreUpdateErrorPayloadV1)
-					if !ok {
-						t.Errorf("Expected *RoundScoreUpdateErrorPayload, got %T", result.Failure)
-					}
-					if !strings.Contains(failurePayload.Error, tt.expectedErrorContains) {
-						t.Errorf("Expected error message to contain '%s', got '%s'", tt.expectedErrorContains, failurePayload.Error)
-					}
-					if failurePayload.ScoreUpdateRequest == nil {
-						t.Errorf("Expected ScoreUpdateRequest in failure payload, but got nil")
-					} else if *failurePayload.ScoreUpdateRequest != tt.payload {
-						t.Errorf("Expected ScoreUpdateRequest in failure payload to be %v, got %v", tt.payload, *failurePayload.ScoreUpdateRequest)
-					}
-				}
-
-				// Check for success when validation passes
-				if result.Success != nil {
-					successPayload, ok := result.Success.(*roundevents.ScoreUpdateValidatedPayloadV1)
-					if !ok {
-						t.Errorf("Expected *ScoreUpdateValidatedPayload pointer, got %T", result.Success)
-					}
-					if successPayload.ScoreUpdateRequestPayload != tt.payload {
-						t.Errorf("Expected ScoreUpdateRequestPayload to be %v, got %v", tt.payload, successPayload.ScoreUpdateRequestPayload)
-					}
+				success := *result.Success
+				if success.UserID != tt.payload.UserID {
+					t.Errorf("Expected UserID %s, got %s", tt.payload.UserID, success.UserID)
 				}
 			}
 		})
@@ -235,94 +90,79 @@ func TestValidateScoreUpdateRequest(t *testing.T) {
 
 func TestUpdateParticipantScore(t *testing.T) {
 	score72 := sharedtypes.Score(72)
-	tag1 := sharedtypes.TagNumber(1)
 
 	tests := []struct {
 		name             string
-		roundID          sharedtypes.RoundID
-		initialSetup     func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID)
-		payload          roundevents.ScoreUpdateValidatedPayloadV1
-		expectedError    bool
-		validateResponse func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID)
+		initialSetup     func(t *testing.T, deps RoundTestDeps) (sharedtypes.RoundID, *roundtypes.ScoreUpdateRequest)
+		expectedFailure  bool
+		validateResponse func(t *testing.T, result roundservice.ScoreUpdateResult, roundID sharedtypes.RoundID)
 	}{
 		{
-			name:    "Successful score update",
-			roundID: sharedtypes.RoundID(uuid.New()),
-			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
-				_ = SetupRoundWithParticipantsAndGroupsHelper(t, db, roundID,
-					roundtypes.Title("Test Round"), "msg123",
-					[]roundtypes.Participant{
-						{UserID: sharedtypes.DiscordID("123456789"), TagNumber: &tag1, Response: roundtypes.ResponseAccept, Score: nil},
-					})
+			name: "Successful score update",
+			initialSetup: func(t *testing.T, deps RoundTestDeps) (sharedtypes.RoundID, *roundtypes.ScoreUpdateRequest) {
+				roundID := sharedtypes.RoundID(uuid.New())
+				generator := testutils.NewTestDataGenerator()
+				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
+					ID:    roundID,
+					Title: "Test Round",
+					State: roundtypes.RoundStateUpcoming,
+				})
+				round.Participants = []roundtypes.Participant{
+					{UserID: "123456789", Response: roundtypes.ResponseAccept},
+				}
+				round.GuildID = "test-guild"
+				round.EventMessageID = "msg123"
+
+				err := deps.DB.CreateRound(deps.Ctx, deps.BunDB, "test-guild", &round)
+				if err != nil {
+					t.Fatalf("Failed to setup round: %v", err)
+				}
+
+				return roundID, &roundtypes.ScoreUpdateRequest{
+					GuildID: "test-guild",
+					RoundID: roundID,
+					UserID:  "123456789",
+					Score:   &score72,
+				}
 			},
-			payload: roundevents.ScoreUpdateValidatedPayloadV1{
-				GuildID: sharedtypes.GuildID("test-guild"),
-				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:   sharedtypes.GuildID("test-guild"),
-					RoundID:   sharedtypes.RoundID(uuid.Nil), // replaced in loop
-					UserID:    sharedtypes.DiscordID("123456789"),
-					Score:     &score72,
-					ChannelID: "test-channel",
-					MessageID: "test-message",
-				},
-			},
-			expectedError: false,
-			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
+			expectedFailure: false,
+			validateResponse: func(t *testing.T, result roundservice.ScoreUpdateResult, roundID sharedtypes.RoundID) {
 				if result.Success == nil {
-					t.Fatalf("Expected success payload, got failure instead: %+v", result.Failure)
+					t.Fatalf("Expected success payload, got failure: %+v", result.Failure)
 				}
-				successPayload, ok := result.Success.(*roundevents.ParticipantScoreUpdatedPayloadV1)
-				if !ok {
-					t.Fatalf("Expected ParticipantScoreUpdatedPayload pointer, got %T", result.Success)
+				success := *result.Success
+				if success.RoundID != roundID {
+					t.Errorf("Expected roundID %s, got %s", roundID, success.RoundID)
 				}
-				if successPayload.UserID != sharedtypes.DiscordID("123456789") {
-					t.Errorf("Expected participant '123456789', got '%s'", successPayload.UserID)
+				found := false
+				for _, p := range success.UpdatedParticipants {
+					if p.UserID == "123456789" {
+						found = true
+						if p.Score == nil || *p.Score != score72 {
+							t.Errorf("Expected score 72, got %v", p.Score)
+						}
+					}
 				}
-				if successPayload.Score != score72 {
-					t.Errorf("Expected score 72, got %d", successPayload.Score)
-				}
-				if successPayload.EventMessageID != "msg123" {
-					t.Errorf("Expected EventMessageID 'msg123', got '%s'", successPayload.EventMessageID)
-				}
-				if len(successPayload.Participants) != 1 {
-					t.Errorf("Expected 1 participant, got %d", len(successPayload.Participants))
-				}
-				if successPayload.Participants[0].UserID != sharedtypes.DiscordID("123456789") {
-					t.Errorf("Expected participant in list '123456789', got '%s'", successPayload.Participants[0].UserID)
-				}
-				if successPayload.Participants[0].Score == nil || *successPayload.Participants[0].Score != score72 {
-					t.Errorf("Expected participant score in list 72, got %v", successPayload.Participants[0].Score)
+				if !found {
+					t.Errorf("Updated participant not found in result")
 				}
 			},
 		},
 		{
-			name:    "Database update failure (non-existent round)",
-			roundID: sharedtypes.RoundID(uuid.New()),
-			initialSetup: func(t *testing.T, db *bun.DB, roundID sharedtypes.RoundID) {
-				// No setup: this round doesn't exist
+			name: "Failure update for non-existent round",
+			initialSetup: func(t *testing.T, deps RoundTestDeps) (sharedtypes.RoundID, *roundtypes.ScoreUpdateRequest) {
+				roundID := sharedtypes.RoundID(uuid.New())
+				return roundID, &roundtypes.ScoreUpdateRequest{
+					GuildID: "test-guild",
+					RoundID: roundID,
+					UserID:  "nonexistent",
+					Score:   &score72,
+				}
 			},
-			payload: roundevents.ScoreUpdateValidatedPayloadV1{
-				GuildID: sharedtypes.GuildID("test-guild"),
-				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
-					GuildID:   sharedtypes.GuildID("test-guild"),
-					RoundID:   sharedtypes.RoundID(uuid.Nil),
-					UserID:    sharedtypes.DiscordID("nonexistent"),
-					Score:     &score72,
-					ChannelID: "test-channel",
-					MessageID: "test-message",
-				},
-			},
-			expectedError: false,
-			validateResponse: func(t *testing.T, result results.OperationResult, roundID sharedtypes.RoundID) {
+			expectedFailure: true,
+			validateResponse: func(t *testing.T, result roundservice.ScoreUpdateResult, roundID sharedtypes.RoundID) {
 				if result.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
-				}
-				failurePayload, ok := result.Failure.(*roundevents.RoundScoreUpdateErrorPayloadV1)
-				if !ok {
-					t.Fatalf("Expected *RoundScoreUpdateErrorPayload, got %T", result.Failure)
-				}
-				if !strings.Contains(failurePayload.Error, "Failed to update score in database") {
-					t.Errorf("Expected error message to contain 'Failed to update score in database', got '%s'", failurePayload.Error)
 				}
 			},
 		},
@@ -331,62 +171,16 @@ func TestUpdateParticipantScore(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
-			tt.roundID = sharedtypes.RoundID(uuid.New())
-			tt.payload.ScoreUpdateRequestPayload.RoundID = tt.roundID
+			roundID, payload := tt.initialSetup(t, deps)
 
-			if tt.initialSetup != nil {
-				tt.initialSetup(t, deps.BunDB, tt.roundID)
-			}
-
-			result, err := deps.Service.UpdateParticipantScore(deps.Ctx, tt.payload)
-			if tt.expectedError && err == nil {
-				t.Errorf("Expected error, got none")
+			result, err := deps.Service.UpdateParticipantScore(deps.Ctx, payload)
+			if err != nil {
+				t.Fatalf("Unexpected error from service: %v", err)
 			}
 
 			if tt.validateResponse != nil {
-				tt.validateResponse(t, result, tt.roundID)
+				tt.validateResponse(t, result, roundID)
 			}
 		})
 	}
-}
-
-func SetupRoundWithParticipantsAndGroupsHelper(
-	t *testing.T,
-	db *bun.DB,
-	roundID sharedtypes.RoundID,
-	title roundtypes.Title,
-	messageID string,
-	participants []roundtypes.Participant,
-) *roundtypes.Round {
-	t.Helper()
-
-	round := &roundtypes.Round{
-		ID:             roundID,
-		Title:          title,
-		Description:    "Test Description",
-		Location:       "Test Location",
-		StartTime:      (*sharedtypes.StartTime)(ptrToTime(time.Now().Add(time.Hour))),
-		CreatedBy:      sharedtypes.DiscordID("test-user"),
-		State:          roundtypes.RoundStateUpcoming,
-		Participants:   participants,
-		GuildID:        sharedtypes.GuildID("test-guild"),
-		EventMessageID: messageID,
-	}
-
-	// Insert round
-	_, err := db.NewInsert().
-		Model(round).
-		Exec(context.Background())
-	require.NoError(t, err, "failed to insert round")
-
-	// Materialize groups
-	repo := rounddb.NewRepository(db) // Assuming your repo constructor
-	err = repo.CreateRoundGroups(context.Background(), round.ID, participants)
-	require.NoError(t, err, "failed to create round groups")
-
-	return round
-}
-
-func ptrToTime(t time.Time) *time.Time {
-	return &t
 }

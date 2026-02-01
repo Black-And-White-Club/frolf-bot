@@ -69,12 +69,7 @@ func TestHandleGuildSetup(t *testing.T) {
 						return errors.New("config not found yet or success payload is nil")
 					}
 
-					successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
-					if !ok {
-						return errors.New("success payload is not of type GuildConfigRetrievedPayloadV1")
-					}
-
-					config = &successPayload.Config
+					config = *getResult.Success
 					return nil
 				})
 				if err != nil {
@@ -188,12 +183,7 @@ func TestHandleGuildSetup(t *testing.T) {
 					t.Fatalf("Expected GetGuildConfig to return success payload, but got nil. Failure: %+v", getResult.Failure)
 				}
 
-				successPayload, ok := getResult.Success.(*guildevents.GuildConfigRetrievedPayloadV1)
-				if !ok {
-					t.Fatalf("Success payload is not of type GuildConfigRetrievedPayloadV1")
-				}
-
-				existingConfig := &successPayload.Config
+				existingConfig := *getResult.Success
 				if existingConfig.SignupChannelID != "934567890123456789" {
 					t.Errorf("Original config was modified. Expected SignupChannelID %s, got %s", "934567890123456789", existingConfig.SignupChannelID)
 				}

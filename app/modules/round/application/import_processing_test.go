@@ -5,13 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -54,8 +53,8 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			},
 			expectSuccess: true,
 			check: func(t *testing.T, res any) {
-				payload := res.(*roundevents.ScorecardNormalizedPayloadV1)
-				if len(payload.Normalized.Teams) != 1 || len(payload.Normalized.Teams[0].Members) != 2 {
+				payload := res.(*roundtypes.NormalizedScorecard)
+				if len(payload.Teams) != 1 || len(payload.Teams[0].Members) != 2 {
 					t.Errorf("failed to map doubles team members correctly")
 				}
 			},
@@ -73,7 +72,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			mode: sharedtypes.RoundModeSingles,
 			setupFakes: func(r *FakeRepo, l *FakeUserLookup) {
 				l.FindByDisplayFn = func(name string) sharedtypes.DiscordID {
-					if name == "Alice" {
+					if name == "alice" {
 						return "alice-id"
 					}
 					return ""
@@ -81,7 +80,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			},
 			expectSuccess: true,
 			check: func(t *testing.T, res any) {
-				p := res.(*roundevents.ImportCompletedPayloadV1)
+				p := res.(*roundtypes.IngestScorecardResult)
 				if p.MatchedPlayers != 1 || p.UnmatchedPlayers != 1 {
 					t.Errorf("expected 1 match/1 skip, got %d/%d", p.MatchedPlayers, p.UnmatchedPlayers)
 				}
@@ -95,7 +94,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 					return "" // Fail all username lookups
 				}
 				l.FindByDisplayFn = func(name string) sharedtypes.DiscordID {
-					if name == "Alice" {
+					if name == "alice" {
 						return "alice-discord-id" // Succeed on display name fallback
 					}
 					return ""
@@ -103,7 +102,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			},
 			expectSuccess: true,
 			check: func(t *testing.T, res any) {
-				p := res.(*roundevents.ImportCompletedPayloadV1)
+				p := res.(*roundtypes.IngestScorecardResult)
 				if p.MatchedPlayers != 1 {
 					t.Errorf("expected 1 match via fallback, got %d", p.MatchedPlayers)
 				}
@@ -114,8 +113,8 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			mode: sharedtypes.RoundModeDoubles,
 			setupFakes: func(r *FakeRepo, l *FakeUserLookup) {
 				l.FindByDisplayFn = func(name string) sharedtypes.DiscordID { return "user-id" }
-				r.RoundHasGroupsFunc = func(ctx context.Context, id sharedtypes.RoundID) (bool, error) { return false, nil }
-				r.CreateRoundGroupsFunc = func(id sharedtypes.RoundID, p []roundtypes.Participant) error {
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.RoundID) (bool, error) { return false, nil }
+				r.CreateRoundGroupsFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.RoundID, p []roundtypes.Participant) error {
 					return nil
 				}
 			},
@@ -126,8 +125,8 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			mode: sharedtypes.RoundModeDoubles,
 			setupFakes: func(r *FakeRepo, l *FakeUserLookup) {
 				l.FindByDisplayFn = func(name string) sharedtypes.DiscordID { return "user-id" }
-				r.RoundHasGroupsFunc = func(ctx context.Context, id sharedtypes.RoundID) (bool, error) { return true, nil }
-				r.CreateRoundGroupsFunc = func(id sharedtypes.RoundID, p []roundtypes.Participant) error {
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.RoundID) (bool, error) { return true, nil }
+				r.CreateRoundGroupsFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.RoundID, p []roundtypes.Participant) error {
 					t.Error("CreateRoundGroups should NOT be called when groups already exist")
 					return nil
 				}
@@ -139,7 +138,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			mode: sharedtypes.RoundModeDoubles,
 			setupFakes: func(r *FakeRepo, l *FakeUserLookup) {
 				l.FindByUsernameFn = func(name string) sharedtypes.DiscordID { return "user-id" }
-				r.RoundHasGroupsFunc = func(ctx context.Context, id sharedtypes.RoundID) (bool, error) {
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.RoundID) (bool, error) {
 					return false, errors.New("db connection lost")
 				}
 			},
@@ -157,7 +156,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &FakeRepo{}
+			repo := NewFakeRepo()
 			lookup := &FakeUserLookup{}
 			logger := loggerfrolfbot.NoOpLogger
 			tracerProvider := noop.NewTracerProvider()
@@ -178,43 +177,51 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			if tt.isNormalize {
 				meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
 				res, _ := s.NormalizeParsedScorecard(ctx, tt.inputData, meta)
-				validateResult(t, res, tt.expectSuccess, tt.check)
+				if tt.expectSuccess {
+					if res.Success == nil {
+						t.Errorf("expected success but got failure: %+v", res.Failure)
+						return
+					}
+					if tt.check != nil {
+						tt.check(t, *res.Success)
+					}
+				} else {
+					if res.Failure == nil {
+						t.Error("expected failure but got success")
+					}
+				}
 			} else {
-				payload := roundevents.ScorecardNormalizedPayloadV1{
+				payload := roundtypes.ImportIngestScorecardInput{
 					GuildID: guildID, RoundID: roundID, ImportID: importID,
-					Normalized: roundtypes.NormalizedScorecard{
+					NormalizedData: roundtypes.NormalizedScorecard{
 						Mode: tt.mode,
 					},
 				}
 				if tt.mode == sharedtypes.RoundModeSingles {
-					payload.Normalized.Players = []roundtypes.NormalizedPlayer{
+					payload.NormalizedData.Players = []roundtypes.NormalizedPlayer{
 						{DisplayName: "Alice", Total: 54}, {DisplayName: "Bob", Total: 60},
 					}
 				} else {
-					payload.Normalized.Teams = []roundtypes.NormalizedTeam{
+					payload.NormalizedData.Teams = []roundtypes.NormalizedTeam{
 						{Members: []roundtypes.TeamMember{{RawName: "Alice"}}, Total: 48},
 					}
 				}
 
 				res, _ := s.IngestNormalizedScorecard(ctx, payload)
-				validateResult(t, res, tt.expectSuccess, tt.check)
+				if tt.expectSuccess {
+					if res.Success == nil {
+						t.Errorf("expected success but got failure: %+v", res.Failure)
+						return
+					}
+					if tt.check != nil {
+						tt.check(t, *res.Success)
+					}
+				} else {
+					if res.Failure == nil {
+						t.Error("expected failure but got success")
+					}
+				}
 			}
 		})
-	}
-}
-
-func validateResult(t *testing.T, res results.OperationResult, expectSuccess bool, check func(*testing.T, any)) {
-	if expectSuccess {
-		if res.Success == nil {
-			t.Errorf("expected success but got failure: %+v", res.Failure)
-			return
-		}
-		if check != nil {
-			check(t, res.Success)
-		}
-	} else {
-		if res.Failure == nil {
-			t.Error("expected failure but got success")
-		}
 	}
 }

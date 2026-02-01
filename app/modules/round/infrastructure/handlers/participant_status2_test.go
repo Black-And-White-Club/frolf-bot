@@ -2,7 +2,7 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -11,9 +11,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
@@ -35,30 +33,23 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 
 	tests := []struct {
 		name            string
+		fakeSetup       func(*FakeService)
 		payload         *sharedevents.RoundTagLookupResultPayloadV1
 		wantErr         bool
 		wantResultLen   int
 		wantResultTopic string
 		expectedErrMsg  string
-		mockSetup       func(*roundmocks.MockService)
 	}{
 		{
 			name: "Successfully handle TagNumberFound",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				expectedPayload := &roundevents.ParticipantJoinedPayloadV1{
-					RoundID:        testRoundID,
-					EventMessageID: "msg-id",
+			fakeSetup: func(fakeService *FakeService) {
+				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						ID:             testRoundID,
+						EventMessageID: "msg-id",
+						Participants:   []roundtypes.Participant{},
+					}), nil
 				}
-
-				mockRoundService.EXPECT().UpdateParticipantStatus(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: expectedPayload,
-					},
-					nil,
-				)
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -67,14 +58,10 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 		},
 		{
 			name: "Handle UpdateParticipantStatus error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateParticipantStatus(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("service error"),
-				)
+			fakeSetup: func(fakeService *FakeService) {
+				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, errors.New("service error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -84,15 +71,15 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleTagNumberFound(context.Background(), tt.payload)
@@ -128,50 +115,38 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 
 	tests := []struct {
 		name            string
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.ParticipantDeclinedPayloadV1
 		wantErr         bool
 		wantResultLen   int
 		wantResultTopic string
 		expectedErrMsg  string
-		mockSetup       func(*roundmocks.MockService)
 	}{
 		{
 			name: "Successfully handle ParticipantDeclined",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				expectedPayload := &roundevents.ParticipantJoinedPayloadV1{
-					GuildID:        testGuildID,
-					RoundID:        testRoundID,
-					EventMessageID: "msg-id",
-					DeclinedParticipants: []roundtypes.Participant{
-						{UserID: testUserID, Response: roundtypes.ResponseDecline},
-					},
+			fakeSetup: func(fakeService *FakeService) {
+				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						GuildID:        testGuildID,
+						ID:             testRoundID,
+						EventMessageID: "msg-id",
+						Participants: []roundtypes.Participant{
+							{UserID: testUserID, Response: roundtypes.ResponseDecline},
+						},
+					}), nil
 				}
-
-				mockRoundService.EXPECT().UpdateParticipantStatus(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: expectedPayload,
-					},
-					nil,
-				)
 			},
 			payload:         testPayload,
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundParticipantJoinedV1,
 		},
 		{
 			name: "Handle UpdateParticipantStatus error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateParticipantStatus(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("service error"),
-				)
+			fakeSetup: func(fakeService *FakeService) {
+				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, errors.New("service error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -181,15 +156,15 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleParticipantDeclined(context.Background(), tt.payload)

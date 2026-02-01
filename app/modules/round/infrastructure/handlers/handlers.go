@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,34 +11,38 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
 
 // RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
-	service roundservice.Service
-	logger  *slog.Logger
-	helpers utils.Helpers
+	service     roundservice.Service
+	userService userservice.Service
+	logger      *slog.Logger
+	helpers     utils.Helpers
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
 func NewRoundHandlers(
 	service roundservice.Service,
+	userService userservice.Service,
 	logger *slog.Logger,
 	helpers utils.Helpers,
 ) Handlers {
 	return &RoundHandlers{
-		service: service,
-		logger:  logger,
-		helpers: helpers,
+		service:     service,
+		userService: userService,
+		logger:      logger,
+		helpers:     helpers,
 	}
 }
 
 // mapOperationResult converts a service OperationResult to handler Results.
-func mapOperationResult(
-	result results.OperationResult,
+func mapOperationResult[S any, F any](
+	result results.OperationResult[S, F],
 	successTopic, failureTopic string,
 ) []handlerwrapper.Result {
-	handlerResults := result.MapToHandlerResults(successTopic, failureTopic)
+	handlerResults := result.ToHandlerResults(successTopic, failureTopic)
 
 	wrapperResults := make([]handlerwrapper.Result, len(handlerResults))
 	for i, hr := range handlerResults {
@@ -49,6 +54,41 @@ func mapOperationResult(
 	}
 
 	return wrapperResults
+}
+
+// addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.
+// This enables PWA consumers to subscribe with patterns like "round.created.v1.{guild_id}".
+// Maintains backward compatibility by keeping the original non-scoped event.
+func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
+	// Convert guildID to string
+	var guildIDStr string
+	switch v := guildID.(type) {
+	case string:
+		guildIDStr = v
+	case fmt.Stringer:
+		guildIDStr = v.String()
+	default:
+		guildIDStr = fmt.Sprintf("%v", v)
+	}
+
+	if guildIDStr == "" {
+		return results
+	}
+
+	// Find the result with the matching base topic and duplicate it with guild suffix
+	for _, r := range results {
+		if r.Topic == baseTopic {
+			guildScopedTopic := fmt.Sprintf("%s.%s", baseTopic, guildIDStr)
+			guildScopedResult := handlerwrapper.Result{
+				Topic:    guildScopedTopic,
+				Payload:  r.Payload,
+				Metadata: r.Metadata,
+			}
+			return append(results, guildScopedResult)
+		}
+	}
+
+	return results
 }
 
 // extractAnchorClock builds an AnchorClock from context if a timestamp is provided; falls back to RealClock.

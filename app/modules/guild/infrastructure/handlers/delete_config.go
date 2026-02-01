@@ -20,8 +20,25 @@ func (h *GuildHandlers) HandleDeleteGuildConfig(ctx context.Context, payload *gu
 		return nil, err
 	}
 
-	return mapOperationResult(result,
-		guildevents.GuildConfigDeletedV1,
-		guildevents.GuildConfigDeletionFailedV1,
-	), nil
+	if result.Success != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigDeletedV1,
+			Payload: guildevents.GuildConfigDeletedPayloadV1{
+				GuildID:       sharedtypes.GuildID(payload.GuildID),
+				ResourceState: (*result.Success).ResourceState,
+			},
+		}}, nil
+	}
+
+	if result.Failure != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigDeletionFailedV1,
+			Payload: guildevents.GuildConfigDeletionFailedPayloadV1{
+				GuildID: sharedtypes.GuildID(payload.GuildID),
+				Reason:  (*result.Failure).Error(),
+			},
+		}}, nil
+	}
+
+	return nil, nil
 }

@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 )
 
 // =============================================================================
@@ -21,44 +23,61 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		setupService func(s *FakeService)
-		expectTopic  string
+		name            string
+		fakeSetup       func(*FakeService)
+		payload         *roundevents.ScorecardURLRequestedPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Success - URL Accepted",
-			setupService: func(s *FakeService) {
-				s.ScorecardURLRequestedFn = func(ctx context.Context, p roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error) {
-					return results.OperationResult{Success: &roundevents.ScorecardUploadedPayloadV1{}}, nil
+			fakeSetup: func(fake *FakeService) {
+				fake.ScorecardURLRequestedFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+					return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{
+						Job: &roundtypes.ImportCreateJobInput{},
+					}), nil
 				}
 			},
-			expectTopic: string(roundevents.ScorecardParseRequestedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ScorecardParseRequestedV1,
 		},
 		{
 			name: "Failure - Invalid URL format",
-			setupService: func(s *FakeService) {
-				s.ScorecardURLRequestedFn = func(ctx context.Context, p roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error) {
-					return results.OperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{ErrorCode: "INVALID_URL"},
-					}, nil
+			fakeSetup: func(fake *FakeService) {
+				fake.ScorecardURLRequestedFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+					return results.FailureResult[roundtypes.CreateImportJobResult, error](errors.New("INVALID_URL")), nil
 				}
 			},
-			expectTopic: string(roundevents.ImportFailedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewFakeService()
-			tt.setupService(svc)
-			h := &RoundHandlers{service: svc}
-
-			res, err := h.HandleScorecardURLRequested(ctx, payload)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
 			}
-			if res[0].Topic != tt.expectTopic {
-				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
+			logger := loggerfrolfbot.NoOpLogger
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+			}
+
+			res, err := h.HandleScorecardURLRequested(ctx, tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleScorecardURLRequested() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && res[0].Topic != tt.wantResultTopic {
+				t.Errorf("expected topic %s, got %s", tt.wantResultTopic, res[0].Topic)
 			}
 		})
 	}
@@ -78,48 +97,63 @@ func TestRoundHandlers_HandleScorecardParsedForNormalization(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		setupService func(s *FakeService)
-		expectTopic  string
+		name            string
+		fakeSetup       func(*FakeService)
+		payload         *roundevents.ParsedScorecardPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Success - Data Normalized",
-			setupService: func(s *FakeService) {
-				s.NormalizeParsedScorecardFn = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult, error) {
+			fakeSetup: func(fake *FakeService) {
+				fake.NormalizeParsedScorecardFunc = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
 					// Verify metadata was mapped correctly from payload
 					if m.ImportID != "imp-1" {
-						return results.OperationResult{}, errors.New("metadata mismatch")
+						return results.OperationResult[*roundtypes.NormalizedScorecard, error]{}, errors.New("metadata mismatch")
 					}
-					return results.OperationResult{Success: &roundevents.ScorecardNormalizedPayloadV1{}}, nil
+					return results.SuccessResult[*roundtypes.NormalizedScorecard, error](&roundtypes.NormalizedScorecard{}), nil
 				}
 			},
-			expectTopic: string(roundevents.ScorecardNormalizedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ScorecardNormalizedV1,
 		},
 		{
 			name: "Failure - Normalization Logic Error",
-			setupService: func(s *FakeService) {
-				s.NormalizeParsedScorecardFn = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult, error) {
-					return results.OperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{Error: "normalization failed"},
-					}, nil
+			fakeSetup: func(fake *FakeService) {
+				fake.NormalizeParsedScorecardFunc = func(ctx context.Context, p *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
+					return results.FailureResult[*roundtypes.NormalizedScorecard, error](errors.New("normalization failed")), nil
 				}
 			},
-			expectTopic: string(roundevents.ImportFailedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewFakeService()
-			tt.setupService(svc)
-			h := &RoundHandlers{service: svc}
-
-			res, err := h.HandleScorecardParsedForNormalization(ctx, payload)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
 			}
-			if res[0].Topic != tt.expectTopic {
-				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
+			logger := loggerfrolfbot.NoOpLogger
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+			}
+
+			res, err := h.HandleScorecardParsedForNormalization(ctx, tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleScorecardParsedForNormalization() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && res[0].Topic != tt.wantResultTopic {
+				t.Errorf("expected topic %s, got %s", tt.wantResultTopic, res[0].Topic)
 			}
 		})
 	}
@@ -134,44 +168,59 @@ func TestRoundHandlers_HandleScorecardNormalized(t *testing.T) {
 	payload := &roundevents.ScorecardNormalizedPayloadV1{ImportID: "imp-1"}
 
 	tests := []struct {
-		name         string
-		setupService func(s *FakeService)
-		expectTopic  string
+		name            string
+		fakeSetup       func(*FakeService)
+		payload         *roundevents.ScorecardNormalizedPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
 	}{
 		{
 			name: "Success - Ingestion Complete",
-			setupService: func(s *FakeService) {
-				s.IngestNormalizedScorecardFn = func(ctx context.Context, p roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
-					return results.OperationResult{Success: &roundevents.ImportCompletedPayloadV1{}}, nil
+			fakeSetup: func(fake *FakeService) {
+				fake.IngestNormalizedScorecardFunc = func(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
+					return results.SuccessResult[*roundtypes.IngestScorecardResult, error](&roundtypes.IngestScorecardResult{}), nil
 				}
 			},
-			expectTopic: string(roundevents.ImportCompletedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportCompletedV1,
 		},
 		{
 			name: "Failure - Name matching failed",
-			setupService: func(s *FakeService) {
-				s.IngestNormalizedScorecardFn = func(ctx context.Context, p roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
-					return results.OperationResult{
-						Failure: &roundevents.ImportFailedPayloadV1{ErrorCode: "MATCH_ERROR"},
-					}, nil
+			fakeSetup: func(fake *FakeService) {
+				fake.IngestNormalizedScorecardFunc = func(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
+					return results.FailureResult[*roundtypes.IngestScorecardResult, error](errors.New("MATCH_ERROR")), nil
 				}
 			},
-			expectTopic: string(roundevents.ImportFailedV1),
+			payload:         payload,
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.ImportFailedV1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewFakeService()
-			tt.setupService(svc)
-			h := &RoundHandlers{service: svc}
-
-			res, err := h.HandleScorecardNormalized(ctx, payload)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
 			}
-			if res[0].Topic != tt.expectTopic {
-				t.Errorf("expected topic %s, got %s", tt.expectTopic, res[0].Topic)
+			logger := loggerfrolfbot.NoOpLogger
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+			}
+
+			res, err := h.HandleScorecardNormalized(ctx, tt.payload)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleScorecardNormalized() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && res[0].Topic != tt.wantResultTopic {
+				t.Errorf("expected topic %s, got %s", tt.wantResultTopic, res[0].Topic)
 			}
 		})
 	}

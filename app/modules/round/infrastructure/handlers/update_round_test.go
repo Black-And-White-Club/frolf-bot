@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -11,9 +12,10 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
@@ -31,7 +33,7 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.UpdateRoundRequestedPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -40,25 +42,16 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle RoundUpdateRequest",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundUpdateValidatedPayloadV1{
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundUpdateWithClockFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+						Round: &roundtypes.Round{
+							ID:      testRoundID,
 							GuildID: testGuildID,
-							RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-								GuildID: testGuildID,
-								RoundID: testRoundID,
-								Title:   &testTitle,
-							},
+							Title:   testTitle,
 						},
-					},
-					nil,
-				)
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -67,21 +60,10 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Service failure returns update error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayloadV1{
-							GuildID: testGuildID,
-							Error:   "invalid update request",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundUpdateWithClockFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error) {
+					return results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("invalid update request")), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -90,33 +72,21 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundUpdateWithClockFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error) {
+					return roundservice.UpdateRoundResult{}, fmt.Errorf("database error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
 			expectedErrMsg: "database error",
 		},
 		{
-			name: "Unknown result returns validation error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ValidateAndProcessRoundUpdateWithClock(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			name: "Unknown result returns error",
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundUpdateWithClockFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error) {
+					return roundservice.UpdateRoundResult{}, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       true,
@@ -126,15 +96,15 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -185,7 +155,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.RoundUpdateValidatedPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -194,68 +164,47 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle without rescheduling",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateRoundEntity(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundEntityUpdatedPayloadV1{
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+						Round: &roundtypes.Round{
+							ID:      testRoundID,
 							GuildID: testGuildID,
-							Round: roundtypes.Round{
-								ID:    testRoundID,
-								Title: testTitle,
-							},
+							Title:   testTitle,
 						},
-					},
-					nil,
-				)
+					}), nil
+				}
 			},
 			payload:         testPayloadNoReschedule,
 			wantErr:         false,
-			wantResultLen:   1,
+			wantResultLen:   2, // Now returns original + guild-scoped event
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
 			name: "Successfully handle with rescheduling",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateRoundEntity(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundEntityUpdatedPayloadV1{
-							GuildID: testGuildID,
-							Round: roundtypes.Round{
-								ID:        testRoundID,
-								Title:     testTitle,
-								StartTime: &testStartTime,
-							},
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+						Round: &roundtypes.Round{
+							ID:        testRoundID,
+							GuildID:   testGuildID,
+							Title:     testTitle,
+							StartTime: &testStartTime,
 						},
-					},
-					nil,
-				)
+					}), nil
+				}
 			},
 			payload:         testPayloadWithReschedule,
 			wantErr:         false,
-			wantResultLen:   2,
+			wantResultLen:   3, // Now returns original + guild-scoped + reschedule event
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
 			name: "Service failure returns update error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateRoundEntity(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayloadV1{
-							GuildID: testGuildID,
-							Error:   "update failed",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
+					return results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("update failed")), nil
+				}
 			},
 			payload:         testPayloadNoReschedule,
 			wantErr:         false,
@@ -264,29 +213,21 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateRoundEntity(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
+					return roundservice.UpdateRoundResult{}, fmt.Errorf("database error")
+				}
 			},
 			payload:        testPayloadNoReschedule,
 			wantErr:        true,
 			expectedErrMsg: "database error",
 		},
 		{
-			name: "Unknown result returns validation error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateRoundEntity(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			name: "Unknown result returns error",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
+					return roundservice.UpdateRoundResult{}, nil
+				}
 			},
 			payload:       testPayloadNoReschedule,
 			wantErr:       true,
@@ -296,15 +237,15 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -322,8 +263,9 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundUpdateValidated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
-			if tt.wantResultLen > 1 && results[1].Topic != roundevents.RoundScheduleUpdatedV1 {
-				t.Errorf("HandleRoundUpdateValidated() second result topic = %v, want %v", results[1].Topic, roundevents.RoundScheduleUpdatedV1)
+			// With guild-scoped events: [0] = original, [1] = guild-scoped, [2] = reschedule (if present)
+			if tt.wantResultLen == 3 && results[2].Topic != roundevents.RoundScheduleUpdatedV1 {
+				t.Errorf("HandleRoundUpdateValidated() third result topic = %v, want %v", results[2].Topic, roundevents.RoundScheduleUpdatedV1)
 			}
 		})
 	}
@@ -348,7 +290,7 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		mockSetup      func(*roundmocks.MockService)
+		fakeSetup      func(*FakeService)
 		payload        *roundevents.RoundEntityUpdatedPayloadV1
 		wantErr        bool
 		wantResultLen  int
@@ -356,16 +298,10 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 	}{
 		{
 			name: "Successfully update scheduled round events",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundEvents(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundUpdateSuccessPayloadV1{},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundEventsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
+					return results.SuccessResult[bool, error](true), nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -373,19 +309,10 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 		},
 		{
 			name: "Service failure returns update error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundEvents(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundUpdateErrorPayloadV1{
-							GuildID: testGuildID,
-							Error:   "schedule update failed",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundEventsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
+					return results.FailureResult[bool, error](errors.New("schedule update failed")), nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -393,29 +320,21 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundEvents(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("scheduling service error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundEventsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
+					return roundservice.UpdateScheduledRoundEventsResult{}, fmt.Errorf("scheduling service error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
 			expectedErrMsg: "scheduling service error",
 		},
 		{
-			name: "Unknown result returns validation error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundEvents(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			name: "Unknown result returns error",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundEventsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
+					return roundservice.UpdateScheduledRoundEventsResult{}, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       true,
@@ -423,16 +342,10 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 		},
 		{
 			name: "Payload uses fallback GuildID from Round",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().UpdateScheduledRoundEvents(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundUpdateSuccessPayloadV1{},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateScheduledRoundEventsFunc = func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
+					return results.SuccessResult[bool, error](true), nil
+				}
 			},
 			payload: &roundevents.RoundEntityUpdatedPayloadV1{
 				Round: roundtypes.Round{
@@ -449,15 +362,15 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

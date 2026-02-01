@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/guild"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
@@ -36,6 +38,7 @@ type App struct {
 	RoundModule       *round.Module
 	ScoreModule       *score.Module
 	GuildModule       *guild.Module
+	AuthModule        *auth.Module
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
 	Helpers           utils.Helpers
@@ -113,39 +116,47 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: Starting module initialization...")
 
 	fmt.Println("DEBUG: Initializing user module...")
-	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.UserModule, err = user.NewUserModule(ctx, app.Config, app.Observability, app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize user module", attr.Error(err))
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
 	fmt.Println("DEBUG: User module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing leaderboard module...")
-	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.GetDB(), app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.EventBus.GetJetStream()); err != nil {
+	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.GetDB(), app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.EventBus.GetJetStream(), app.UserModule.UserService); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize leaderboard module", attr.Error(err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}
 	fmt.Println("DEBUG: Leaderboard module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing round module...")
-	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.UserModule.UserService, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize round module", attr.Error(err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
 	fmt.Println("DEBUG: Round module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing guild module...")
-	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize guild module", attr.Error(err))
 		return fmt.Errorf("failed to initialize guild module: %w", err)
 	}
 	fmt.Println("DEBUG: Guild module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing score module...")
-	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
 	fmt.Println("DEBUG: Score module initialized successfully")
+
+	// Initialize auth module (handles magic links and auth callout)
+	fmt.Println("DEBUG: Initializing auth module...")
+	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize auth module", attr.Error(err))
+		return fmt.Errorf("failed to initialize auth module: %w", err)
+	}
+	fmt.Println("DEBUG: Auth module initialized successfully")
 
 	fmt.Println("DEBUG: All modules initialized successfully")
 	return nil
@@ -175,6 +186,11 @@ func (app *App) Run(ctx context.Context) error {
 		cancel()
 		return fmt.Errorf("failed during module initialization: %w", err)
 	}
+
+	// Start Auth Module (runs its own NATS router)
+	var wg sync.WaitGroup // Create a WaitGroup for modules that need it
+	wg.Add(1)
+	go app.AuthModule.Run(ctx, &wg)
 
 	go func() {
 		fmt.Println("DEBUG: Starting Watermill router...")
@@ -256,6 +272,9 @@ func (app *App) Close() error {
 	}
 	if app.ScoreModule != nil {
 		app.ScoreModule.Close()
+	}
+	if app.AuthModule != nil {
+		app.AuthModule.Close()
 	}
 
 	if app.EventBus != nil {

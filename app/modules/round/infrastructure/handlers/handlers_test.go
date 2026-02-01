@@ -3,10 +3,7 @@ package roundhandlers
 import (
 	"testing"
 
-	mockHelpers "github.com/Black-And-White-Club/frolf-bot-shared/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
-	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
-	"go.uber.org/mock/gomock"
 )
 
 func TestNewRoundHandlers(t *testing.T) {
@@ -18,16 +15,14 @@ func TestNewRoundHandlers(t *testing.T) {
 		{
 			name: "Creates handlers with all dependencies",
 			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				// Create mock dependencies
-				mockRoundService := roundservice.NewMockService(ctrl)
-				mockHelpersInstance := mockHelpers.NewMockHelpers(ctrl)
+				// Create fake dependencies
+				fakeRoundService := NewFakeService()
+				fakeUserService := NewFakeUserService()
+				fakeHelpers := &FakeHelpers{}
 				logger := loggerfrolfbot.NoOpLogger
 
 				// Call the function being tested
-				handlers := NewRoundHandlers(mockRoundService, logger, mockHelpersInstance)
+				handlers := NewRoundHandlers(fakeRoundService, fakeUserService, logger, fakeHelpers)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -38,11 +33,13 @@ func TestNewRoundHandlers(t *testing.T) {
 				roundHandlers := handlers.(*RoundHandlers)
 
 				// Check that all dependencies were correctly assigned
-				// Note: only service and helpers are stored in the struct now
-				if roundHandlers.service != mockRoundService {
+				if roundHandlers.service != fakeRoundService {
 					t.Errorf("service not correctly assigned")
 				}
-				if roundHandlers.helpers != mockHelpersInstance {
+				if roundHandlers.userService != fakeUserService {
+					t.Errorf("userService not correctly assigned")
+				}
+				if roundHandlers.helpers != fakeHelpers {
 					t.Errorf("helpers not correctly assigned")
 				}
 			},
@@ -50,11 +47,8 @@ func TestNewRoundHandlers(t *testing.T) {
 		{
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
 				// Call with nil dependencies
-				handlers := NewRoundHandlers(nil, nil, nil)
+				handlers := NewRoundHandlers(nil, nil, nil, nil)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -62,10 +56,12 @@ func TestNewRoundHandlers(t *testing.T) {
 				}
 
 				// Check nil fields
-				// Note: only service and helpers are stored in the struct now
 				if roundHandlers, ok := handlers.(*RoundHandlers); ok {
 					if roundHandlers.service != nil {
 						t.Errorf("service should be nil")
+					}
+					if roundHandlers.userService != nil {
+						t.Errorf("userService should be nil")
 					}
 					if roundHandlers.helpers != nil {
 						t.Errorf("helpers should be nil")

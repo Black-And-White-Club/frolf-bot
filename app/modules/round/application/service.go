@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
@@ -12,9 +13,11 @@ import (
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/parsers"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -30,6 +33,8 @@ type RoundService struct {
 	tracer              trace.Tracer
 	roundValidator      roundutil.RoundValidator
 	guildConfigProvider GuildConfigProvider
+	parserFactory       parsers.ParserFactory
+	db                  *bun.DB
 }
 
 // GuildConfigProvider supplies guild config for enrichment (DB-backed, no events)
@@ -47,6 +52,7 @@ func NewRoundService(
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	roundValidator roundutil.RoundValidator,
+	db *bun.DB,
 ) *RoundService {
 	return &RoundService{
 		repo:           repo,
@@ -57,19 +63,22 @@ func NewRoundService(
 		logger:         logger,
 		tracer:         tracer,
 		roundValidator: roundValidator,
+		parserFactory:  parsers.NewFactory(),
+		db:             db,
 	}
 }
 
-// operationFunc is the signature for service operation functions.
-type operationFunc func(ctx context.Context) (results.OperationResult, error)
+// operationFunc is the generic signature for service operation functions.
+type operationFunc[S any, F any] func(ctx context.Context) (results.OperationResult[S, F], error)
 
 // withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
-func (s *RoundService) withTelemetry(
+func withTelemetry[S any, F any](
+	s *RoundService,
 	ctx context.Context,
 	operationName string,
 	roundID sharedtypes.RoundID,
-	op operationFunc,
-) (result results.OperationResult, err error) {
+	op operationFunc[S, F],
+) (result results.OperationResult[S, F], err error) {
 
 	ctx, span := s.tracer.Start(ctx, operationName, trace.WithAttributes(
 		attribute.String("operation", operationName),
@@ -94,7 +103,7 @@ func (s *RoundService) withTelemetry(
 			)
 			s.metrics.RecordOperationFailure(ctx, operationName, "RoundService")
 			span.RecordError(err)
-			result = results.OperationResult{}
+			result = results.OperationResult[S, F]{}
 		}
 	}()
 
@@ -147,8 +156,7 @@ func (s *RoundService) WithGuildConfigProvider(p GuildConfigProvider) *RoundServ
 }
 
 // getGuildConfigForEnrichment attempts to retrieve a guild config for adding config fragments
-// to outbound round events. This is a placeholder; wire in actual retrieval (e.g., injected
-// GuildConfigProvider) later. Returning nil is safe: enrichment is optional.
+// to outbound round events.
 func (s *RoundService) getGuildConfigForEnrichment(ctx context.Context, guildID sharedtypes.GuildID) *guildtypes.GuildConfig {
 	if s.guildConfigProvider == nil || guildID == "" {
 		return nil
@@ -162,4 +170,26 @@ func (s *RoundService) getGuildConfigForEnrichment(ctx context.Context, guildID 
 		return nil
 	}
 	return cfg
+}
+
+// runInTx ensures the operation runs within a database transaction.
+func runInTx[S any, F any](
+	s *RoundService,
+	ctx context.Context,
+	fn func(ctx context.Context, db bun.IDB) (results.OperationResult[S, F], error),
+) (results.OperationResult[S, F], error) {
+
+	if s.db == nil {
+		return fn(ctx, nil)
+	}
+
+	var result results.OperationResult[S, F]
+
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var txErr error
+		result, txErr = fn(ctx, tx)
+		return txErr
+	})
+
+	return result, err
 }

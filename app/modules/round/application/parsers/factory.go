@@ -12,6 +12,11 @@ type Parser interface {
 	Parse(data []byte) (*roundtypes.ParsedScorecard, error)
 }
 
+// ParserFactory defines the interface for creating parsers
+type ParserFactory interface {
+	GetParser(filename string) (Parser, error)
+}
+
 // Factory creates the appropriate parser based on file extension
 type Factory struct{}
 

@@ -19,8 +19,11 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 ) ([]handlerwrapper.Result, error) {
 	// 1. We still need to know WHAT tag the Target currently holds.
 	// The service helper 'GetTagByUserID' is perfect for this.
-	targetTag, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
+	targetTagResult, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
 	if err != nil {
+		return nil, err
+	}
+	if targetTagResult.IsFailure() {
 		// If Target has no tag, we can't swap.
 		return []handlerwrapper.Result{{
 			Topic: leaderboardevents.TagSwapFailedV1,
@@ -30,10 +33,15 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 			},
 		}}, nil
 	}
+	targetTag := *targetTagResult.Success
 
 	// 2. Identify the requestor's current tag for the Saga record.
 	// We ignore the error here; if they don't have a tag, CurrentTag is just 0.
-	requestorTag, _ := h.service.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
+	var requestorTag sharedtypes.TagNumber
+	reqResult, _ := h.service.GetTagByUserID(ctx, payload.GuildID, payload.RequestorID)
+	if reqResult.IsSuccess() {
+		requestorTag = *reqResult.Success
+	}
 
 	// 3. Attempt the Funnel
 	result, err := h.service.ExecuteBatchTagAssignment(
@@ -45,11 +53,14 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 		sharedtypes.RoundID(uuid.New()),
 		sharedtypes.ServiceUpdateSourceTagSwap,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// 4. Traffic Cop: Handle Saga Redirection
-	if err != nil {
+	if result.IsFailure() {
 		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(err, &swapErr) {
+		if errors.As(*result.Failure, &swapErr) {
 			// This is a "Partial Success" - the intent is recorded.
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     payload.RequestorID,
@@ -70,9 +81,9 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 				},
 			}}, nil
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
 
 	// 5. Success Path (Immediate Swap)
-	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", result, "tag_swap"), nil
+	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", *result.Success, "tag_swap"), nil
 }

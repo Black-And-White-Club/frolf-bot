@@ -2,9 +2,11 @@ package roundhandlers
 
 import (
 	"context"
+	"fmt"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
@@ -23,7 +25,22 @@ func (h *RoundHandlers) HandleRoundReminder(
 	)
 
 	// Delegate to the service to fetch participant lists and format the final notification data.
-	result, err := h.service.ProcessRoundReminder(ctx, *payload)
+	startTime := ""
+	if payload.StartTime != nil {
+		startTime = (*payload.StartTime).AsTime().String()
+	}
+
+	result, err := h.service.ProcessRoundReminder(ctx, &roundtypes.ProcessRoundReminderRequest{
+		GuildID:          payload.GuildID,
+		RoundID:          payload.RoundID,
+		ReminderType:     payload.ReminderType,
+		RoundTitle:       payload.RoundTitle.String(),
+		Location:         payload.Location.String(),
+		StartTime:        startTime,
+		EventMessageID:   payload.EventMessageID,
+		DiscordChannelID: payload.DiscordChannelID,
+		DiscordGuildID:   payload.DiscordGuildID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -33,16 +50,32 @@ func (h *RoundHandlers) HandleRoundReminder(
 		h.logger.WarnContext(ctx, "round reminder processing failed in service",
 			attr.Any("failure", result.Failure),
 		)
+		// Map domain failure to event payload manually to ensure context fields are present
+		failurePayload := &roundevents.RoundReminderFailedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			Error:   fmt.Sprintf("%v", result.Failure),
+		}
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundReminderFailedV1, Payload: result.Failure},
+			{Topic: roundevents.RoundReminderFailedV1, Payload: failurePayload},
 		}, nil
 	}
 
 	// Handle successful preparation of the reminder.
 	if result.Success != nil {
-		discordPayload, ok := result.Success.(*roundevents.DiscordReminderPayloadV1)
-		if !ok {
-			return nil, sharedtypes.ValidationError{Message: "unexpected success payload type from ProcessRoundReminder"}
+		serviceResult := *result.Success
+
+		discordPayload := &roundevents.DiscordReminderPayloadV1{
+			GuildID:          serviceResult.GuildID,
+			RoundID:          serviceResult.RoundID,
+			RoundTitle:       roundtypes.Title(serviceResult.RoundTitle),
+			StartTime:        payload.StartTime, // Reuse original pointer as service doesn't modify it, just echoes
+			Location:         roundtypes.Location(serviceResult.Location),
+			UserIDs:          serviceResult.UserIDs,
+			ReminderType:     serviceResult.ReminderType,
+			EventMessageID:   serviceResult.EventMessageID,
+			DiscordChannelID: serviceResult.DiscordChannelID,
+			DiscordGuildID:   serviceResult.DiscordGuildID,
 		}
 
 		// Only publish to the Discord module if there is actually someone to notify.

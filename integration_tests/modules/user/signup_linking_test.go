@@ -73,7 +73,7 @@ func verifyUserAndMembershipExist(t *testing.T, db bun.IDB, userID sharedtypes.D
 	repo := userdb.NewRepository(db)
 
 	// Check global user exists
-	user, err := repo.GetUserGlobal(ctx, userID)
+	user, err := repo.GetUserGlobal(ctx, db, userID)
 	if err != nil {
 		t.Fatalf("failed to get user: %v", err)
 	}
@@ -82,7 +82,7 @@ func verifyUserAndMembershipExist(t *testing.T, db bun.IDB, userID sharedtypes.D
 	}
 
 	// Check guild membership exists
-	membership, err := repo.GetGuildMembership(ctx, userID, guildID)
+	membership, err := repo.GetGuildMembership(ctx, db, userID, guildID)
 	if err != nil {
 		t.Fatalf("failed to get guild membership: %v", err)
 	}
@@ -99,7 +99,7 @@ func verifyUserCanBeResolvedByName(t *testing.T, db bun.IDB, guildID sharedtypes
 	repo := userdb.NewRepository(db)
 
 	// Try to find by UDisc username (used by import resolution)
-	identity, err := repo.FindByUDiscUsername(ctx, guildID, normalizedName)
+	identity, err := repo.FindByUDiscUsername(ctx, db, guildID, normalizedName)
 	if err != nil {
 		t.Fatalf("failed to find user by UDisc username: %v", err)
 	}

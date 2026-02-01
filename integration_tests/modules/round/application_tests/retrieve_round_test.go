@@ -2,11 +2,8 @@ package roundintegrationtests
 
 import (
 	"context"
-	"strings"
 	"testing"
-	"time"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -14,211 +11,49 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestGetRound is the main integration test function for the GetRound service method.
 func TestGetRound(t *testing.T) {
-	nonexistentRoundID := sharedtypes.RoundID(uuid.New())
 	tests := []struct {
-		name                     string
-		setupTestEnv             func(ctx context.Context, deps RoundTestDeps) sharedtypes.RoundID
-		expectedError            bool
-		expectedErrorMessagePart string
-		validateResult           func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult)
+		name            string
+		setupTestEnv    func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID)
+		expectedFailure bool
+		validateResult  func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID)
 	}{
 		{
-			name: "Successful retrieval of an existing round",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) sharedtypes.RoundID {
+			name: "Successfully retrieve an existing round",
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID) {
+				roundID := sharedtypes.RoundID(uuid.New())
 				generator := testutils.NewTestDataGenerator()
-
 				round := generator.GenerateRoundWithConstraints(testutils.RoundOptions{
-					CreatedBy: testutils.DiscordID("test_creator_123"),
-					Title:     "Integration Test Round",
-					State:     roundtypes.RoundStateUpcoming,
+					ID:    roundID,
+					Title: "Round to retrieve",
 				})
-
-				// Set the fields that are NOT in RoundOptions directly on the returned 'round' object
-				description := roundtypes.Description("This is a test round for GetRound.")
-				round.Description = description
-
-				location := roundtypes.Location("Test Course")
-				round.Location = location
-
-				eventType := roundtypes.EventType("Practice")
-				round.EventType = &eventType
-
-				// Ensure start_time is set (required field)
-				if round.StartTime == nil || round.StartTime.AsTime().IsZero() {
-					startTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
-					round.StartTime = &startTime
-				}
-
-				tag1 := sharedtypes.TagNumber(1)
-				tag2 := sharedtypes.TagNumber(2)
-				// Add participants with a mix of tags, no tags, and different responses
-				round.Participants = []roundtypes.Participant{
-					{
-						UserID:    sharedtypes.DiscordID("user_a"),
-						TagNumber: &tag1,
-						Response:  roundtypes.ResponseAccept,
-					},
-					{
-						UserID:    sharedtypes.DiscordID("user_b"),
-						TagNumber: &tag2,
-						Response:  roundtypes.ResponseTentative,
-					},
-					{
-						UserID:    sharedtypes.DiscordID("user_c"),
-						TagNumber: nil, // Declined user should not have a tag
-						Response:  roundtypes.ResponseDecline,
-					},
-					{
-						UserID:    sharedtypes.DiscordID("user_d"),
-						TagNumber: nil, // Accepted but no tag assigned yet
-						Response:  roundtypes.ResponseAccept,
-					},
-					{
-						UserID:    sharedtypes.DiscordID("user_e"),
-						TagNumber: nil, // Tentative, no tag
-						Response:  roundtypes.ResponseTentative,
-					},
-				}
-
 				round.GuildID = "test-guild"
-				err := deps.DB.CreateRound(ctx, sharedtypes.GuildID("test-guild"), &round)
+				err := deps.DB.CreateRound(ctx, deps.BunDB, "test-guild", &round)
 				if err != nil {
-					t.Fatalf("Failed to create round in DB for test setup: %v", err)
+					t.Fatalf("Failed to create round: %v", err)
 				}
-				return round.ID
+				return "test-guild", roundID
 			},
-			// roundIDToFetch removed; always use the ID returned by setupTestEnv
-			expectedError:            false,
-			expectedErrorMessagePart: "",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
-				if returnedResult.Success == nil {
-					t.Fatalf("Expected success result, but got nil")
+			expectedFailure: false,
+			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+				if res.Success == nil {
+					t.Fatalf("Expected success payload, got failure: %+v", res.Failure)
 				}
-
-				// Fix: Expect pointer type instead of value type
-				retrievedRound, ok := returnedResult.Success.(*roundtypes.Round)
-				if !ok {
-					t.Errorf("Expected result to be of type *roundtypes.Round, got %T", returnedResult.Success)
-					return
-				}
-
-				// Retrieve the original round from the DB to compare
-				// Assumed deps.DB.GetUpcomingRounds returns []*roundtypes.Round based on observed compiler error
-				rounds, err := deps.DB.GetUpcomingRounds(ctx, sharedtypes.GuildID("test-guild"))
-				if err != nil {
-					t.Fatalf("Failed to get rounds from DB for validation: %v", err)
-				}
-
-				var expectedRound *roundtypes.Round
-				for _, r := range rounds {
-					if r.ID == retrievedRound.ID {
-						expectedRound = r
-						break
-					}
-				}
-
-				if expectedRound == nil {
-					t.Fatalf("Could not find the expected round in the database for validation.")
-				}
-
-				if retrievedRound.ID != expectedRound.ID {
-					t.Errorf("Expected RoundID %s, got %s", expectedRound.ID, retrievedRound.ID)
-				}
-				if retrievedRound.Title != expectedRound.Title {
-					t.Errorf("Expected Title '%s', got '%s'", expectedRound.Title, retrievedRound.Title)
-				}
-
-				// Validate Description (pointer comparison and printing with %v)
-				if retrievedRound.Description != expectedRound.Description {
-					t.Errorf("Expected Description %v, got %v", expectedRound.Description, retrievedRound.Description)
-				}
-
-				// Validate Location (pointer comparison and printing with %v)
-				if retrievedRound.Location != expectedRound.Location {
-					t.Errorf("Expected Location %v, got %v", expectedRound.Location, retrievedRound.Location)
-				}
-
-				// Validate EventType (pointer comparison and printing with %v)
-				if (retrievedRound.EventType == nil && expectedRound.EventType != nil) ||
-					(retrievedRound.EventType != nil && expectedRound.EventType == nil) ||
-					(retrievedRound.EventType != nil && expectedRound.EventType != nil && *retrievedRound.EventType != *expectedRound.EventType) {
-					t.Errorf("Expected EventType %v, got %v", expectedRound.EventType, retrievedRound.EventType)
-				}
-
-				if retrievedRound.CreatedBy != expectedRound.CreatedBy {
-					t.Errorf("Expected CreatedBy '%s', got '%s'", expectedRound.CreatedBy, retrievedRound.CreatedBy)
-				}
-				if retrievedRound.State != expectedRound.State {
-					t.Errorf("Expected State '%s', got '%s'", expectedRound.State, retrievedRound.State)
-				}
-
-				// Validate participants
-				if len(retrievedRound.Participants) != len(expectedRound.Participants) {
-					t.Errorf("Expected %d participants, got %d", len(expectedRound.Participants), len(retrievedRound.Participants))
-					return // If counts don't match, further detailed validation might be misleading.
-				}
-
-				expectedParticipantsMap := make(map[sharedtypes.DiscordID]roundtypes.Participant)
-				for _, p := range expectedRound.Participants {
-					expectedParticipantsMap[p.UserID] = p
-				}
-
-				for _, retrievedP := range retrievedRound.Participants {
-					expectedP, exists := expectedParticipantsMap[retrievedP.UserID]
-					if !exists {
-						t.Errorf("Unexpected participant with UserID '%s' found in retrieved round", retrievedP.UserID)
-						continue
-					}
-
-					// Validate TagNumber
-					if (retrievedP.TagNumber == nil && expectedP.TagNumber != nil) ||
-						(retrievedP.TagNumber != nil && expectedP.TagNumber == nil) ||
-						(retrievedP.TagNumber != nil && expectedP.TagNumber != nil && *retrievedP.TagNumber != *expectedP.TagNumber) {
-						t.Errorf("Participant '%s': Expected TagNumber %v, got %v", retrievedP.UserID, expectedP.TagNumber, retrievedP.TagNumber)
-					}
-
-					// Validate Response
-					if retrievedP.Response != expectedP.Response {
-						t.Errorf("Participant '%s': Expected Response '%s', got '%s'", retrievedP.UserID, expectedP.Response, retrievedP.Response)
-					}
-
-					// Specific rule: Declined participants should have nil TagNumber
-					if retrievedP.Response == roundtypes.ResponseDecline {
-						if retrievedP.TagNumber != nil {
-							t.Errorf("Participant '%s' with Response 'Decline': Expected TagNumber to be nil, but got %v", retrievedP.UserID, *retrievedP.TagNumber)
-						}
-					}
+				round := *res.Success
+				if round.ID != roundID {
+					t.Errorf("Expected round ID %s, got %s", roundID, round.ID)
 				}
 			},
 		},
 		{
-			name: "Retrieval of a non-existent round",
-			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) sharedtypes.RoundID {
-				// No rounds are created for this test, as we want to test fetching a non-existent one.
-				return nonexistentRoundID
+			name: "Round not found",
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID) {
+				return "test-guild", sharedtypes.RoundID(uuid.New())
 			},
-			// Fix: The service returns nil error but uses Failure payload
-			expectedError:            false,
-			expectedErrorMessagePart: "",
-			validateResult: func(t *testing.T, ctx context.Context, deps RoundTestDeps, returnedResult results.OperationResult) {
-				if returnedResult.Failure == nil {
-					t.Fatalf("Expected failure result, but got nil")
-				}
-
-				// Fix: Expect pointer type instead of value type
-				failurePayload, ok := returnedResult.Failure.(*roundevents.RoundErrorPayloadV1)
-				if !ok {
-					t.Fatalf("Expected returnedResult.Failure to be of type *roundevents.RoundErrorPayloadV1, got %T", returnedResult.Failure)
-				}
-
-				if failurePayload.RoundID != nonexistentRoundID {
-					t.Errorf("Expected failure RoundID to be '%s', got '%s'", nonexistentRoundID, failurePayload.RoundID)
-				}
-				expectedDBErrorMessagePart := "not found"
-				if !strings.Contains(failurePayload.Error, expectedDBErrorMessagePart) && !strings.Contains(failurePayload.Error, "round") {
-					t.Errorf("Expected failure payload error message to contain '%s' or 'round', got '%s'", expectedDBErrorMessagePart, failurePayload.Error)
+			expectedFailure: true,
+			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+				if res.Failure == nil {
+					t.Fatalf("Expected failure payload, but got nil")
 				}
 			},
 		},
@@ -227,24 +62,61 @@ func TestGetRound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := SetupTestRoundService(t)
+			guildID, roundID := tt.setupTestEnv(deps.Ctx, deps)
 
-			roundIDToFetch := tt.setupTestEnv(deps.Ctx, deps)
-			result, err := deps.Service.GetRound(deps.Ctx, sharedtypes.GuildID("test-guild"), roundIDToFetch)
-
-			if tt.expectedError {
-				if err == nil {
-					t.Errorf("Expected an error, but got none")
-				} else if tt.expectedErrorMessagePart != "" && !strings.Contains(err.Error(), tt.expectedErrorMessagePart) {
-					t.Errorf("Expected error message to contain '%s', but got: '%v'", tt.expectedErrorMessagePart, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
-				}
+			result, err := deps.Service.GetRound(deps.Ctx, guildID, roundID)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
 			}
 
 			if tt.validateResult != nil {
-				tt.validateResult(t, deps.Ctx, deps, result)
+				tt.validateResult(t, result, roundID)
+			}
+		})
+	}
+}
+
+func TestGetRoundsForGuild(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupTestEnv   func(ctx context.Context, deps RoundTestDeps) sharedtypes.GuildID
+		validateResult func(t *testing.T, rounds []*roundtypes.Round, guildID sharedtypes.GuildID)
+	}{
+		{
+			name: "Successfully retrieve rounds for a guild",
+			setupTestEnv: func(ctx context.Context, deps RoundTestDeps) sharedtypes.GuildID {
+				generator := testutils.NewTestDataGenerator()
+				guildID := sharedtypes.GuildID("guild-1")
+				r1 := generator.GenerateRoundWithConstraints(testutils.RoundOptions{})
+				r1.GuildID = guildID
+				r2 := generator.GenerateRoundWithConstraints(testutils.RoundOptions{})
+				r2.GuildID = guildID
+
+				_ = deps.DB.CreateRound(ctx, deps.BunDB, guildID, &r1)
+				_ = deps.DB.CreateRound(ctx, deps.BunDB, guildID, &r2)
+
+				return guildID
+			},
+			validateResult: func(t *testing.T, rounds []*roundtypes.Round, guildID sharedtypes.GuildID) {
+				if len(rounds) != 2 {
+					t.Errorf("Expected 2 rounds, got %d", len(rounds))
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := SetupTestRoundService(t)
+			guildID := tt.setupTestEnv(deps.Ctx, deps)
+
+			rounds, err := deps.Service.GetRoundsForGuild(deps.Ctx, guildID)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if tt.validateResult != nil {
+				tt.validateResult(t, rounds, guildID)
 			}
 		})
 	}

@@ -19,7 +19,7 @@ func normalizeUDiscExportURL(raw string) (string, error) {
 	}
 
 	// Security: allowlist host
-	if !strings.EqualFold(u.Host, "udisc.com") {
+	if !strings.EqualFold(u.Host, "udisc.com") && !strings.EqualFold(u.Host, "www.udisc.com") {
 		return "", fmt.Errorf("unsupported host: %s", u.Host)
 	}
 

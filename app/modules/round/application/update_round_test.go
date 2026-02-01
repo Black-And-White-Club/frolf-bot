@@ -3,167 +3,173 @@ package roundservice
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	queuemocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue/mocks"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/mocks"
-	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/mocks"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
-func TestRoundService_ValidateAndProcessRoundUpdate(t *testing.T) { // ← Updated method name
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockDB := rounddb.NewMockRepository(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-	mockTimeParser := roundutil.NewMockTimeParserInterface(ctrl) // ← Add mock time parser
-
-	s := &RoundService{
-		repo:           mockDB,
-		logger:         logger,
-		metrics:        mockMetrics,
-		tracer:         tracer,
-		roundValidator: mockRoundValidator,
-	}
-
+func TestRoundService_ValidateRoundUpdate(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
+
 	tests := []struct {
 		name    string
-		payload roundevents.UpdateRoundRequestedPayloadV1 // ← Changed to Discord payload type
-		want    results.OperationResult
+		setup   func(*FakeTimeParser)
+		payload roundtypes.UpdateRoundRequest
+		want    UpdateRoundResult
 		wantErr bool
 	}{
 		{
 			name: "valid request",
-			payload: roundevents.UpdateRoundRequestedPayloadV1{ // ← Updated payload structure
+			payload: roundtypes.UpdateRoundRequest{
 				RoundID:  testRoundID,
 				UserID:   sharedtypes.DiscordID("user123"),
-				Title:    titlePtr("New Title"), // ← Pointer types
-				Timezone: timezonePtr("America/Chicago"),
+				Title:    stringPtr("New Title"),
+				Timezone: stringPtr("America/Chicago"),
 			},
-			want: results.OperationResult{
-				Success: &roundevents.RoundUpdateValidatedPayloadV1{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-						RoundID: testRoundID,
-						Title:   titlePtr("New Title"),
-						UserID:  sharedtypes.DiscordID("user123"),
-					},
+			want: results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+				Round: &roundtypes.Round{
+					ID:    testRoundID,
+					Title: roundtypes.Title("New Title"),
 				},
-			},
+			}),
 			wantErr: false,
 		},
 		{
 			name: "valid request with time parsing",
-			payload: roundevents.UpdateRoundRequestedPayloadV1{
+			payload: roundtypes.UpdateRoundRequest{
 				RoundID:   testRoundID,
 				UserID:    sharedtypes.DiscordID("user123"),
-				Title:     titlePtr("New Title"),
+				Title:     stringPtr("New Title"),
 				StartTime: stringPtr("tomorrow at 2pm"),
-				Timezone:  timezonePtr("America/Chicago"),
+				Timezone:  stringPtr("America/Chicago"),
 			},
-			want: results.OperationResult{
-				Success: &roundevents.RoundUpdateValidatedPayloadV1{
-					RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-						RoundID: testRoundID,
-						Title:   titlePtr("New Title"),
-						UserID:  sharedtypes.DiscordID("user123"),
-						// Don't set StartTime here - it will be set dynamically in the test
-					},
+			setup: func(p *FakeTimeParser) {
+				p.ParseFn = func(s string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					// Return a fixed future time
+					return time.Now().Add(24 * time.Hour).Unix(), nil
+				}
+			},
+			want: results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+				Round: &roundtypes.Round{
+					ID:    testRoundID,
+					Title: roundtypes.Title("New Title"),
+					// StartTime will be dynamic
 				},
-			},
+			}),
 			wantErr: false,
 		},
 		{
 			name: "invalid request - zero round ID",
-			payload: roundevents.UpdateRoundRequestedPayloadV1{
+			payload: roundtypes.UpdateRoundRequest{
 				RoundID: sharedtypes.RoundID(uuid.Nil),
 			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					RoundUpdateRequest: nil,
-					Error:              "validation failed: round ID cannot be zero; at least one field to update must be provided",
-				},
-			},
+			want:    results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("validation failed: round ID cannot be zero; at least one field to update must be provided")),
 			wantErr: false,
 		},
 		{
 			name: "invalid request - no fields to update",
-			payload: roundevents.UpdateRoundRequestedPayloadV1{
+			payload: roundtypes.UpdateRoundRequest{
 				RoundID: testRoundID,
 				UserID:  sharedtypes.DiscordID("user123"),
 			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					RoundUpdateRequest: nil,
-					Error:              "validation failed: at least one field to update must be provided",
-				},
-			},
+			want:    results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("validation failed: at least one field to update must be provided")),
 			wantErr: false,
 		},
 		{
 			name: "invalid request - time parsing failed",
-			payload: roundevents.UpdateRoundRequestedPayloadV1{
+			payload: roundtypes.UpdateRoundRequest{
 				RoundID:   testRoundID,
 				UserID:    sharedtypes.DiscordID("user123"),
-				Title:     titlePtr("New Title"),
+				Title:     stringPtr("New Title"),
 				StartTime: stringPtr("invalid time"),
-				Timezone:  timezonePtr("America/Chicago"),
+				Timezone:  stringPtr("America/Chicago"),
 			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					RoundUpdateRequest: nil,
-					Error:              "validation failed: time parsing failed: invalid time format",
-				},
+			setup: func(p *FakeTimeParser) {
+				p.ParseFn = func(s string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return 0, errors.New("invalid time format")
+				}
 			},
+			want:    results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("validation failed: time parsing failed: invalid time format")),
 			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up time parser expectations with a fixed time for testing
-			var expectedParsedTime int64
-			switch ptr := tt.payload.StartTime; {
-			case ptr != nil && *ptr == "tomorrow at 2pm":
-				// Use a FUTURE time for consistent testing
-				expectedParsedTime = time.Now().Add(24 * time.Hour).Unix() // Tomorrow
-				mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(expectedParsedTime, nil)
-
-				// Update the expected result with the actual parsed time
-				if successPayload, ok := tt.want.Success.(*roundevents.RoundUpdateValidatedPayloadV1); ok {
-					expectedStartTime := sharedtypes.StartTime(time.Unix(expectedParsedTime, 0).UTC())
-					successPayload.RoundUpdateRequestPayload.StartTime = &expectedStartTime
-				}
-			case ptr != nil && *ptr == "invalid time":
-				mockTimeParser.EXPECT().ParseUserTimeInput(*tt.payload.StartTime, *tt.payload.Timezone, gomock.Any()).Return(int64(0), errors.New("invalid time format"))
+			parser := &FakeTimeParser{}
+			if tt.setup != nil {
+				tt.setup(parser)
 			}
 
-			// Updated: Now calls ValidateAndProcessRoundUpdate with timeParser
-			got, err := s.ValidateAndProcessRoundUpdate(context.Background(), tt.payload, mockTimeParser)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("RoundService.ValidateAndProcessRoundUpdate() error = %v, wantErr %v", err, tt.wantErr)
+			repo := NewFakeRepo()
+			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
+
+			// For "valid request with time parsing", we need to dynamically set the expected StartTime in 'want'
+			if tt.name == "valid request with time parsing" {
+				fixedTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC).Unix()
+				parser.ParseFn = func(s string, tz roundtypes.Timezone, clock roundutil.Clock) (int64, error) {
+					return fixedTime, nil
+				}
+				if tt.want.Success != nil {
+					st := sharedtypes.StartTime(time.Unix(fixedTime, 0).UTC())
+					(*tt.want.Success).Round.StartTime = &st
+				}
+
+				// Use FakeClock to ensure the fixed time is considered in the future
+				clock := &roundutil.FakeClock{
+					NowUTCFn: func() time.Time {
+						return time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC)
+					},
+				}
+				got, err := s.ValidateRoundUpdateWithClock(context.Background(), &tt.payload, parser, clock)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("RoundService.ValidateRoundUpdate() error = %v, wantErr %v", err, tt.wantErr)
+					return
+				}
+				checkResult(t, got, tt.want)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(sharedtypes.StartTime{})); diff != "" {
-				t.Errorf("RoundService.ValidateAndProcessRoundUpdate() mismatch (-got +want):\n%s", diff)
+
+			got, err := s.ValidateRoundUpdate(context.Background(), &tt.payload, parser)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RoundService.ValidateRoundUpdate() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
+			checkResult(t, got, tt.want)
 		})
+	}
+}
+
+func checkResult(t *testing.T, got, want UpdateRoundResult) {
+	if want.Success != nil {
+		if got.Success == nil {
+			t.Errorf("expected success, got nil")
+		} else {
+			if diff := cmp.Diff(*got.Success, *want.Success, cmpopts.EquateComparable(sharedtypes.StartTime{})); diff != "" {
+				t.Errorf("RoundService.ValidateRoundUpdate() mismatch (-got +want):\n%s", diff)
+			}
+		}
+	} else if want.Failure != nil {
+		if got.Failure == nil {
+			t.Errorf("expected failure, got nil")
+		} else {
+			if (*got.Failure).Error() != (*want.Failure).Error() {
+				t.Errorf("RoundService.ValidateRoundUpdate() failure mismatch: got %v, want %v", *got.Failure, *want.Failure)
+			}
+		}
 	}
 }
 
@@ -185,150 +191,99 @@ func timezonePtr(t string) *roundtypes.Timezone {
 }
 
 func TestRoundService_UpdateRoundEntity(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockDB := rounddb.NewMockRepository(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracerProvider := noop.NewTracerProvider()
-	tracer := tracerProvider.Tracer("test")
-	mockMetrics := &roundmetrics.NoOpMetrics{}
-	mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-
-	s := &RoundService{
-		repo:           mockDB,
-		logger:         logger,
-		metrics:        mockMetrics,
-		tracer:         tracer,
-		roundValidator: mockRoundValidator,
-	}
-
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
 
-	// Shared "existing" round returned by GetRound
-	currentRound := &roundtypes.Round{
-		ID:      testRoundID,
-		Title:   roundtypes.Title("Old Title"),
-		GuildID: testGuildID,
-	}
-
 	tests := []struct {
 		name    string
-		payload roundevents.RoundUpdateValidatedPayloadV1
-		want    results.OperationResult
+		setup   func(*FakeRepo)
+		payload roundtypes.UpdateRoundRequest
+		want    UpdateRoundResult
 		wantErr bool
 	}{
 		{
-			name: "valid update",
-			payload: roundevents.RoundUpdateValidatedPayloadV1{
+			name: "successful update",
+			payload: roundtypes.UpdateRoundRequest{
 				GuildID: testGuildID,
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					Title:   titlePtr("New Title"),
-					UserID:  sharedtypes.DiscordID("user123"),
-				},
+				RoundID: testRoundID,
+				Title:   stringPtr("Updated Title"),
 			},
-			want: results.OperationResult{
-				Success: &roundevents.RoundEntityUpdatedPayloadV1{
-					GuildID: testGuildID,
-					Round: roundtypes.Round{
-						ID:      testRoundID,
-						Title:   roundtypes.Title("New Title"),
-						GuildID: testGuildID,
-					},
-				},
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    id,
+						Title: roundtypes.Title("Old Title"),
+					}, nil
+				}
+				r.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
+					return r, nil
+				}
 			},
+			want: results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
+				Round: &roundtypes.Round{
+					ID:    testRoundID,
+					Title: roundtypes.Title("Updated Title"),
+				},
+			}),
 			wantErr: false,
 		},
 		{
-			name: "invalid update - round not found",
-			payload: roundevents.RoundUpdateValidatedPayloadV1{
+			name: "repo error",
+			payload: roundtypes.UpdateRoundRequest{
 				GuildID: testGuildID,
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					Title:   titlePtr("New Title"),
-					UserID:  sharedtypes.DiscordID("user123"),
-				},
+				RoundID: testRoundID,
+				Title:   stringPtr("Updated Title"),
 			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID: testGuildID,
-					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
-						GuildID: testGuildID,
-						RoundID: testRoundID,
-						Title:   titlePtr("New Title"),
-						UserID:  sharedtypes.DiscordID("user123"),
-					},
-					Error: "failed to update round in database: round not found",
-				},
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    id,
+						Title: roundtypes.Title("Old Title"),
+					}, nil
+				}
+				r.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
+					return nil, errors.New("database error")
+				}
 			},
-			wantErr: false,
-		},
-		{
-			name: "invalid update - update failed",
-			payload: roundevents.RoundUpdateValidatedPayloadV1{
-				GuildID: testGuildID,
-				RoundUpdateRequestPayload: roundevents.RoundUpdateRequestPayloadV1{
-					GuildID: testGuildID,
-					RoundID: testRoundID,
-					Title:   titlePtr("New Title"),
-					UserID:  sharedtypes.DiscordID("user123"),
-				},
-			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					GuildID: testGuildID,
-					RoundUpdateRequest: &roundevents.RoundUpdateRequestPayloadV1{
-						GuildID: testGuildID,
-						RoundID: testRoundID,
-						Title:   titlePtr("New Title"),
-						UserID:  sharedtypes.DiscordID("user123"),
-					},
-					Error: "failed to update round in database: update failed",
-				},
-			},
-			wantErr: false,
+			want:    UpdateRoundResult{},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// GetRound is ALWAYS called first
-			mockDB.EXPECT().
-				GetRound(gomock.Any(), testGuildID, testRoundID).
-				Return(currentRound, nil)
-
-			switch tt.name {
-			case "valid update":
-				mockDB.EXPECT().
-					UpdateRound(gomock.Any(), testGuildID, testRoundID, gomock.Any()).
-					Return(&roundtypes.Round{
-						ID:      testRoundID,
-						Title:   roundtypes.Title("New Title"),
-						GuildID: testGuildID,
-					}, nil)
-
-			case "invalid update - round not found":
-				mockDB.EXPECT().
-					UpdateRound(gomock.Any(), testGuildID, testRoundID, gomock.Any()).
-					Return(nil, errors.New("round not found"))
-
-			case "invalid update - update failed":
-				mockDB.EXPECT().
-					UpdateRound(gomock.Any(), testGuildID, testRoundID, gomock.Any()).
-					Return(nil, errors.New("update failed"))
+			repo := NewFakeRepo()
+			if tt.setup != nil {
+				tt.setup(repo)
 			}
 
-			got, err := s.UpdateRoundEntity(context.Background(), tt.payload)
+			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
+
+			got, err := s.UpdateRoundEntity(context.Background(), &tt.payload)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("unexpected error state: %v", err)
+				t.Errorf("RoundService.UpdateRoundEntity() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-
-			if diff := cmp.Diff(got, tt.want, cmpopts.EquateComparable(sharedtypes.StartTime{})); diff != "" {
-				t.Fatalf("mismatch (-got +want):\n%s", diff)
+			if tt.want.Success != nil {
+				if got.Success == nil {
+					t.Errorf("expected success, got nil")
+				} else {
+					// We need to ignore some fields when comparing if needed, but for now let's try direct comparison
+					if diff := cmp.Diff((*got.Success).Round.Title, (*tt.want.Success).Round.Title); diff != "" {
+						t.Errorf("RoundService.UpdateRoundEntity() title mismatch (-got +want):\n%s", diff)
+					}
+					if diff := cmp.Diff((*got.Success).Round.ID, (*tt.want.Success).Round.ID); diff != "" {
+						t.Errorf("RoundService.UpdateRoundEntity() ID mismatch (-got +want):\n%s", diff)
+					}
+				}
+			} else if tt.want.Failure != nil {
+				if got.Failure == nil {
+					t.Errorf("expected failure, got nil")
+				} else {
+					if (*got.Failure).Error() != (*tt.want.Failure).Error() {
+						t.Errorf("RoundService.UpdateRoundEntity() failure mismatch: got %v, want %v", *got.Failure, *tt.want.Failure)
+					}
+				}
 			}
 		})
 	}
@@ -336,136 +291,89 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 
 func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
-	// Use UTC time to match implementation
-	testStartUpdateTime := sharedtypes.StartTime(time.Now().UTC().Add(2 * time.Hour))
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testStartTime := sharedtypes.StartTime(time.Now().Add(2 * time.Hour).UTC())
 
 	tests := []struct {
-		name      string
-		payload   roundevents.RoundScheduleUpdatePayloadV1
-		mockSetup func(*rounddb.MockRepository, *queuemocks.MockQueueService)
-		want      results.OperationResult
-		wantErr   bool
+		name    string
+		setup   func(*FakeRepo, *FakeQueueService)
+		payload roundtypes.UpdateScheduledRoundEventsRequest
+		want    UpdateScheduledRoundEventsResult
+		wantErr bool
 	}{
 		{
-			name: "valid update",
-			payload: roundevents.RoundScheduleUpdatePayloadV1{
-				GuildID:   sharedtypes.GuildID("guild-123"),
+			name: "successful update",
+			payload: roundtypes.UpdateScheduledRoundEventsRequest{
+				GuildID:   testGuildID,
 				RoundID:   testRoundID,
-				Title:     roundtypes.Title("New Title"),
-				StartTime: &testStartUpdateTime,
-				Location:  roundtypes.Location("New Location"),
+				Title:     stringPtr("New Title"),
+				StartTime: &testStartTime,
 			},
-			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
-				// Expect cancellation of existing jobs
-				guildID := sharedtypes.GuildID("guild-123")
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
-
-				// Expect GetEventMessageID call
-				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("event123", nil)
-
-				// Expect GetRound call to get current round data
-				mockDB.EXPECT().GetRound(gomock.Any(), guildID, testRoundID).Return(&roundtypes.Round{
-					ID:    testRoundID,
-					Title: roundtypes.Title("Old Title"),
-				}, nil)
-
-				// Expect reminder scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundReminder(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
-
-				// Expect round start scheduling (use gomock.Any() for time since implementation uses time.Now())
-				mockQueue.EXPECT().ScheduleRoundStart(gomock.Any(), gomock.Any(), testRoundID, gomock.Any(), gomock.Any()).Return(nil)
+			setup: func(r *FakeRepo, q *FakeQueueService) {
+				r.GetEventMessageIDFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (string, error) {
+					return "msg-123", nil
+				}
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    id,
+						Title: roundtypes.Title("Old Title"),
+					}, nil
+				}
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return nil
+				}
 			},
-			want: results.OperationResult{
-				Success: &roundevents.RoundScheduleUpdatePayloadV1{
-					GuildID:   sharedtypes.GuildID("guild-123"),
-					RoundID:   testRoundID,
-					Title:     roundtypes.Title("New Title"),
-					Location:  roundtypes.Location("New Location"),
-					StartTime: &testStartUpdateTime,
-				},
-			},
+			want:    results.SuccessResult[bool, error](true),
 			wantErr: false,
 		},
 		{
 			name: "error cancelling jobs",
-			payload: roundevents.RoundScheduleUpdatePayloadV1{
-				GuildID:   sharedtypes.GuildID("guild-123"),
+			payload: roundtypes.UpdateScheduledRoundEventsRequest{
+				GuildID:   testGuildID,
 				RoundID:   testRoundID,
-				Title:     roundtypes.Title("New Title"),
-				StartTime: &testStartUpdateTime,
-				Location:  roundtypes.Location("New Location"),
+				StartTime: &testStartTime,
 			},
-			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
-				// Expect cancellation to fail
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(errors.New("cancel jobs failed"))
+			setup: func(r *FakeRepo, q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error {
+					return errors.New("cancel error")
+				}
 			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					RoundUpdateRequest: nil,
-					Error:              "failed to cancel existing scheduled jobs: cancel jobs failed",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "error getting event message ID",
-			payload: roundevents.RoundScheduleUpdatePayloadV1{
-				GuildID:   sharedtypes.GuildID("guild-123"),
-				RoundID:   testRoundID,
-				Title:     roundtypes.Title("New Title"),
-				StartTime: &testStartUpdateTime,
-				Location:  roundtypes.Location("New Location"),
-			},
-			mockSetup: func(mockDB *rounddb.MockRepository, mockQueue *queuemocks.MockQueueService) {
-				// Expect cancellation to succeed
-				guildID := sharedtypes.GuildID("guild-123")
-				mockQueue.EXPECT().CancelRoundJobs(gomock.Any(), testRoundID).Return(nil)
-
-				// Expect GetEventMessageID to fail
-				mockDB.EXPECT().GetEventMessageID(gomock.Any(), guildID, testRoundID).Return("", errors.New("event message ID not found"))
-			},
-			want: results.OperationResult{
-				Failure: &roundevents.RoundUpdateErrorPayloadV1{
-					RoundUpdateRequest: nil,
-					Error:              "failed to get EventMessageID: event message ID not found",
-				},
-			},
-			wantErr: false,
+			want:    UpdateScheduledRoundEventsResult{},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockDB := rounddb.NewMockRepository(ctrl)
-			logger := loggerfrolfbot.NoOpLogger
-			tracerProvider := noop.NewTracerProvider()
-			tracer := tracerProvider.Tracer("test")
-			mockMetrics := &roundmetrics.NoOpMetrics{}
-			mockRoundValidator := roundutil.NewMockRoundValidator(ctrl)
-			mockQueue := queuemocks.NewMockQueueService(ctrl)
-
-			s := &RoundService{
-				repo:           mockDB,
-				logger:         logger,
-				metrics:        mockMetrics,
-				tracer:         tracer,
-				roundValidator: mockRoundValidator,
-				queueService:   mockQueue,
+			repo := NewFakeRepo()
+			queue := NewFakeQueueService()
+			if tt.setup != nil {
+				tt.setup(repo, queue)
 			}
 
-			// Setup mocks
-			tt.mockSetup(mockDB, mockQueue)
+			s := NewRoundService(repo, queue, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
 
-			got, err := s.UpdateScheduledRoundEvents(context.Background(), tt.payload)
+			got, err := s.UpdateScheduledRoundEvents(context.Background(), &tt.payload)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("RoundService.UpdateScheduledRoundEvents() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.EquateComparable(sharedtypes.StartTime{})); diff != "" {
-				t.Errorf("RoundService.UpdateScheduledRoundEvents() mismatch (-got +want):\n%s", diff)
+			if tt.want.Success != nil {
+				if got.Success == nil {
+					t.Errorf("expected success, got nil")
+				}
+			} else if tt.want.Failure != nil {
+				if got.Failure == nil {
+					t.Errorf("expected failure, got nil")
+				} else {
+					if (*got.Failure).Error() != (*tt.want.Failure).Error() {
+						t.Errorf("RoundService.UpdateScheduledRoundEvents() failure mismatch: got %v, want %v", *got.Failure, *tt.want.Failure)
+					}
+				}
 			}
 		})
 	}

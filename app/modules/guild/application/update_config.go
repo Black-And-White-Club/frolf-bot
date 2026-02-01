@@ -3,67 +3,72 @@ package guildservice
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/ptr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
+	"github.com/uptrace/bun"
 )
 
-// UpdateGuildConfig updates an existing guild configuration using partial updates.
-func (s *GuildService) UpdateGuildConfig(ctx context.Context, config *guildtypes.GuildConfig) (results.OperationResult, error) {
-	// Pre-validation (before telemetry)
+// UpdateGuildConfig updates an existing guild configuration.
+func (s *GuildService) UpdateGuildConfig(
+	ctx context.Context,
+	config *guildtypes.GuildConfig,
+) (GuildConfigResult, error) {
 	if config == nil {
-		return updateFailure("", ErrNilConfig), nil
+		return GuildConfigResult{}, ErrNilConfig
 	}
 
 	guildID := config.GuildID
 
-	return s.withTelemetry(ctx, "UpdateGuildConfig", guildID, func(ctx context.Context) (results.OperationResult, error) {
-		// Validate
-		if guildID == "" {
-			return updateFailure(guildID, ErrInvalidGuildID), nil
-		}
+	updateTx := func(ctx context.Context, db bun.IDB) (GuildConfigResult, error) {
+		return s.executeUpdateGuildConfig(ctx, db, config)
+	}
 
-		// Build partial update fields
-		updates := &guilddb.UpdateFields{
-			SignupChannelID:      ptr.IfNonEmpty(config.SignupChannelID),
-			SignupMessageID:      ptr.IfNonEmpty(config.SignupMessageID),
-			EventChannelID:       ptr.IfNonEmpty(config.EventChannelID),
-			LeaderboardChannelID: ptr.IfNonEmpty(config.LeaderboardChannelID),
-			UserRoleID:           ptr.IfNonEmpty(config.UserRoleID),
-			EditorRoleID:         ptr.IfNonEmpty(config.EditorRoleID),
-			AdminRoleID:          ptr.IfNonEmpty(config.AdminRoleID),
-			SignupEmoji:          ptr.IfNonEmpty(config.SignupEmoji),
-			AutoSetupCompleted:   ptr.IfTrue(config.AutoSetupCompleted),
-			SetupCompletedAt:     ptr.TimeToUnixNano(config.SetupCompletedAt),
-		}
-
-		// Perform the update
-		if err := s.repo.UpdateConfig(ctx, guildID, updates); err != nil {
-			if errors.Is(err, guilddb.ErrNoRowsAffected) {
-				// No active config found - domain failure
-				return updateFailure(guildID, ErrGuildConfigNotFound), nil
-			}
-			// Infrastructure error - should retry
-			return updateFailure(guildID, err), err
-		}
-
-		// Success
-		return results.SuccessResult(&guildevents.GuildConfigUpdatedPayloadV1{
-			GuildID: guildID,
-			Config:  *config,
-		}), nil
+	result, err := withTelemetry(s, ctx, "UpdateGuildConfig", guildID, func(ctx context.Context) (GuildConfigResult, error) {
+		return runInTx(s, ctx, updateTx)
 	})
+
+	if err != nil {
+		return GuildConfigResult{}, fmt.Errorf("UpdateGuildConfig failed for %s: %w", guildID, err)
+	}
+
+	return result, nil
 }
 
-// updateFailure creates a failure result for config update.
-func updateFailure(guildID sharedtypes.GuildID, err error) results.OperationResult {
-	return results.FailureResult(&guildevents.GuildConfigUpdateFailedPayloadV1{
-		GuildID: guildID,
-		Reason:  err.Error(),
-	})
+func (s *GuildService) executeUpdateGuildConfig(
+	ctx context.Context,
+	db bun.IDB,
+	config *guildtypes.GuildConfig,
+) (GuildConfigResult, error) {
+	if config.GuildID == "" {
+		return results.FailureResult[*guildtypes.GuildConfig, error](ErrInvalidGuildID), nil
+	}
+
+	// Build partial update fields
+	updates := &guilddb.UpdateFields{
+		SignupChannelID:      ptr.IfNonEmpty(config.SignupChannelID),
+		SignupMessageID:      ptr.IfNonEmpty(config.SignupMessageID),
+		EventChannelID:       ptr.IfNonEmpty(config.EventChannelID),
+		LeaderboardChannelID: ptr.IfNonEmpty(config.LeaderboardChannelID),
+		UserRoleID:           ptr.IfNonEmpty(config.UserRoleID),
+		EditorRoleID:         ptr.IfNonEmpty(config.EditorRoleID),
+		AdminRoleID:          ptr.IfNonEmpty(config.AdminRoleID),
+		SignupEmoji:          ptr.IfNonEmpty(config.SignupEmoji),
+		AutoSetupCompleted:   ptr.IfTrue(config.AutoSetupCompleted),
+		SetupCompletedAt:     ptr.TimeToUnixNano(config.SetupCompletedAt),
+	}
+
+	if err := s.repo.UpdateConfig(ctx, db, config.GuildID, updates); err != nil {
+		if errors.Is(err, guilddb.ErrNoRowsAffected) {
+			// Domain failure: Cannot update what doesn't exist
+			return results.FailureResult[*guildtypes.GuildConfig, error](ErrGuildConfigNotFound), nil
+		}
+		// Infrastructure error
+		return GuildConfigResult{}, fmt.Errorf("failed to update config in DB: %w", err)
+	}
+
+	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil
 }

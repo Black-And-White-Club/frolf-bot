@@ -29,53 +29,61 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 		payload.Overwrite,
 	)
 
-	if err != nil && result.Failure == nil {
+	// 1. Handle Hard System/Infra Errors
+	if err != nil {
 		return nil, err
 	}
 
+	// 2. Handle Domain Failures (Dereferencing the *error)
 	if result.Failure != nil {
-		failurePayload, ok := result.Failure.(*sharedevents.ProcessRoundScoresFailedPayloadV1)
-		if !ok {
-			return nil, errors.New("unexpected failure payload type from service")
-		}
+		errVal := *result.Failure // Resolve the pointer to interface
 
 		return []handlerwrapper.Result{
 			{
-				Topic:   sharedevents.ProcessRoundScoresFailedV1,
-				Payload: failurePayload,
+				Topic: sharedevents.ProcessRoundScoresFailedV1,
+				Payload: &sharedevents.ProcessRoundScoresFailedPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					Reason:  errVal.Error(),
+				},
 			},
 		}, nil
 	}
 
-	// 🔚 Non-singles rounds terminate here (DB updated only)
+	//  Non-singles rounds terminate here (DB updated only)
 	if payload.RoundMode != sharedtypes.RoundModeSingles {
 		return nil, nil
 	}
 
-	successPayload, ok := result.Success.(*sharedevents.ProcessRoundScoresSucceededPayloadV1)
-	if !ok {
-		return nil, errors.New("unexpected success payload type")
+	// 3. Handle Success Case
+	if result.Success != nil {
+		// Use the tag mappings returned in our custom Success struct
+		batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(result.Success.TagMappings))
+		for _, tm := range result.Success.TagMappings {
+			batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfoV1{
+				UserID:    tm.DiscordID,
+				TagNumber: tm.TagNumber,
+			})
+		}
+
+		if len(batchAssignments) == 0 {
+			return nil, nil
+		}
+
+		batchPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+			ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
+			RequestingUserID: "score-service",
+			BatchID:          uuid.New().String(),
+			Assignments:      batchAssignments,
+		}
+
+		return []handlerwrapper.Result{
+			{
+				Topic:   sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
+				Payload: batchPayload,
+			},
+		}, nil
 	}
 
-	batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(successPayload.TagMappings))
-	for _, tm := range successPayload.TagMappings {
-		batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfoV1{
-			UserID:    tm.DiscordID,
-			TagNumber: tm.TagNumber,
-		})
-	}
-
-	batchPayload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
-		ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
-		RequestingUserID: "score-service",
-		BatchID:          uuid.New().String(),
-		Assignments:      batchAssignments,
-	}
-
-	return []handlerwrapper.Result{
-		{
-			Topic:   sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
-			Payload: batchPayload,
-		},
-	}, nil
+	return nil, errors.New("unexpected result from service: neither success nor failure")
 }

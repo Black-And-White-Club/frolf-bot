@@ -3,82 +3,67 @@ package userservice
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/uptrace/bun"
 )
 
-// UpdateUserRoleInDatabase updates a user's role in the database and returns an operation result.
-func (s *UserService) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (results.OperationResult, error) {
-	operationName := "HandleUpdateUserRole"
+// UpdateUserRoleInDatabase updates a user's role in the database.
+func (s *UserService) UpdateUserRoleInDatabase(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+	newRole sharedtypes.UserRoleEnum,
+) (results.OperationResult[bool, error], error) {
 
-	result, err := s.withTelemetry(ctx, operationName, userID, func(ctx context.Context) (results.OperationResult, error) {
-		if !newRole.IsValid() {
-			validationErr := errors.New("invalid role")
+	// Named transaction function for logic execution
+	updateRoleTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		return s.executeUpdateUserRole(ctx, db, guildID, userID, newRole)
+	}
 
-			s.logger.ErrorContext(ctx, "Role validation failed",
-				attr.String("user_id", string(userID)),
-				attr.String("guild_id", string(guildID)),
-				attr.String("new_role", string(newRole)),
-				attr.Error(validationErr),
-			)
-
-			s.metrics.RecordRoleUpdateFailure(ctx, userID, "validation_failed", newRole)
-			return results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{
-				GuildID: guildID,
-				UserID:  userID,
-				Role:    newRole, // Include the invalid role in the response
-				Success: false,
-				Reason:  "invalid role",
-			}), nil
-		}
-
-		dbErr := s.repo.UpdateUserRole(ctx, userID, guildID, newRole)
-		if dbErr != nil {
-			// If user not found, return domain failure (nil error) so caller can publish failure
-			if errors.Is(dbErr, userdb.ErrNoRowsAffected) || errors.Is(dbErr, userdb.ErrNotFound) {
-				s.metrics.RecordRoleUpdateFailure(ctx, userID, "not_found", newRole)
-				return results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{
-					GuildID: guildID,
-					UserID:  userID,
-					Role:    newRole,
-					Success: false,
-					Reason:  "user not found",
-				}), nil
-			}
-
-			s.logger.ErrorContext(ctx, "Failed to update userrole",
-				attr.String("user_id", string(userID)),
-				attr.String("guild_id", string(guildID)),
-				attr.String("new_role", string(newRole)),
-				attr.Error(dbErr),
-			)
-
-			s.metrics.RecordRoleUpdateFailure(ctx, userID, "database_error", newRole)
-			// Return failure payload but do not propagate top-level error so caller can publish
-			return results.FailureResult(&userevents.UserRoleUpdateResultPayloadV1{GuildID: guildID, UserID: userID, Role: newRole, Success: false, Reason: "failed to update user role"}), nil
-		}
-
-		s.logger.InfoContext(ctx, "User role updated successfully",
-			attr.String("user_id", string(userID)),
-			attr.String("guild_id", string(guildID)),
-			attr.String("new_role", string(newRole)),
-		)
-
-		s.metrics.RecordRoleUpdateSuccess(ctx, userID, "database_success", newRole)
-
-		return results.SuccessResult(&userevents.UserRoleUpdateResultPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Role:    newRole,
-			Success: true,
-			Reason:  "",
-		}), nil
+	// Wrap with telemetry & transaction helper
+	result, err := withTelemetry(s, ctx, "UpdateUserRole", userID, func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		return runInTx(s, ctx, updateRoleTx)
 	})
 
-	// Return the result and the wrapped error from the wrapper.
-	return result, err
+	if err != nil {
+		// Infrastructure failure
+		return results.OperationResult[bool, error]{}, fmt.Errorf("UpdateUserRoleInDatabase failed: %w", err)
+	}
+
+	return result, nil
+}
+
+func (s *UserService) executeUpdateUserRole(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+	newRole sharedtypes.UserRoleEnum,
+) (results.OperationResult[bool, error], error) {
+
+	// 1. Domain Validations
+	if userID == "" {
+		return results.FailureResult[bool](ErrInvalidDiscordID), nil
+	}
+	if !newRole.IsValid() {
+		return results.FailureResult[bool](ErrInvalidRole), nil
+	}
+
+	// 2. Repository Call
+	err := s.repo.UpdateUserRole(ctx, db, userID, guildID, newRole)
+	if err != nil {
+		// If user not found, return domain failure (nil error)
+		if errors.Is(err, userdb.ErrNoRowsAffected) || errors.Is(err, userdb.ErrNotFound) {
+			return results.FailureResult[bool](ErrUserNotFound), nil
+		}
+		// Technical error
+		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to update user role: %w", err)
+	}
+
+	// 3. Success
+	return results.SuccessResult[bool, error](true), nil
 }

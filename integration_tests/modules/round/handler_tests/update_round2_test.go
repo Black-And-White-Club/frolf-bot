@@ -353,6 +353,9 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			deps := SetupTestRoundHandler(t)
+			// Ensure streams are created
+			ensureStreams(t, deps.TestEnvironment)
+
 			genericCase := testutils.TestCase{
 				Name: tc.name,
 				SetupFn: func(t *testing.T, env *testutils.TestEnvironment) interface{} {

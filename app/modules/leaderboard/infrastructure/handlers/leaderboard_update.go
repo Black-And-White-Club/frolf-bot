@@ -3,7 +3,6 @@ package leaderboardhandlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -42,10 +41,13 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		payload.RoundID,
 		sharedtypes.ServiceUpdateSourceProcessScores,
 	)
-
 	if err != nil {
+		return nil, err
+	}
+
+	if result.IsFailure() {
 		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(err, &swapErr) {
+		if errors.As(*result.Failure, &swapErr) {
 			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
 				UserID:     swapErr.RequestorID,
 				CurrentTag: swapErr.CurrentTag,
@@ -54,26 +56,19 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 			})
 			return []handlerwrapper.Result{}, intentErr
 		}
-		return nil, err
+		return nil, *result.Failure
 	}
 
-	// Handle domain-level failures returned inside the OperationResult
-	if result.IsFailure() {
-		// No failure topic defined for this handler; ack and stop
-		return []handlerwrapper.Result{}, nil
+	updatedData := *result.Success
+	// Build success events from returned leaderboard data
+	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(updatedData))
+	for _, entry := range updatedData {
+		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
+			UserID:    entry.UserID,
+			TagNumber: entry.TagNumber,
+		})
 	}
 
-	// Expect success payload to contain assignment info
-	var assignments []leaderboardevents.TagAssignmentInfoV1
-	if result.IsSuccess() {
-		if payloadSuccess, ok := result.Success.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1); ok {
-			assignments = payloadSuccess.Assignments
-		} else {
-			return nil, fmt.Errorf("unexpected success payload type: %T", result.Success)
-		}
-	}
-
-	// Build success events from assignments
 	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(assignments))
 	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(assignments))
 	for _, entry := range assignments {
@@ -81,7 +76,7 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		changedTags[entry.UserID] = entry.TagNumber
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic: leaderboardevents.LeaderboardUpdatedV1,
 			Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
@@ -99,5 +94,10 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 				ChangedTags: changedTags,
 			},
 		},
-	}, nil
+	}
+
+	// Add guild-scoped version for PWA permission scoping
+	results = addGuildScopedResult(results, leaderboardevents.LeaderboardUpdatedV1, payload.GuildID)
+
+	return results, nil
 }

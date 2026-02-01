@@ -19,4 +19,5 @@ type Handlers interface {
 	HandleTagAvailable(ctx context.Context, payload *sharedevents.TagAvailablePayloadV1) ([]handlerwrapper.Result, error)
 	HandleUpdateUDiscIdentityRequest(ctx context.Context, payload *userevents.UpdateUDiscIdentityRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardParsed(ctx context.Context, payload *roundevents.ParsedScorecardPayloadV1) ([]handlerwrapper.Result, error)
+	HandleUserProfileUpdated(ctx context.Context, payload *userevents.UserProfileUpdatedPayloadV1) ([]handlerwrapper.Result, error)
 }

@@ -11,6 +11,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -128,22 +129,22 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				// Verify user is NOT created in the database (via service call)
 				guildID := sharedtypes.GuildID("test-guild")
 				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
-				// Expecting an error or a failure payload indicating "not found"
-				if getUserErr == nil { // No technical error, now check business result
-					if getUserResult.Success != nil {
-						foundUser := getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User
-						t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, foundUser)
-					}
-					if getUserResult.Failure == nil {
-						t.Errorf("Expected GetUser to return 'user not found' failure or technical error, but got nil results")
-					} else {
-						failurePayload, ok := getUserResult.Failure.(*userevents.GetUserFailedPayloadV1)
-						if !ok || failurePayload.Reason != "user not found" { // Assuming service returns this specific reason
-							t.Errorf("Expected GetUser to return 'user not found' failure, but got unexpected failure payload: %+v", getUserResult.Failure)
-						}
-					}
-				} else if !errors.Is(getUserErr, errors.New("user not found")) { // Check if it's the expected "user not found" error
-					t.Errorf("Expected GetUser to return 'user not found' error, but got unexpected error: %v", getUserErr)
+				if getUserErr != nil {
+					t.Fatalf("Unexpected technical error from GetUser: %v", getUserErr)
+				}
+
+				if getUserResult.IsSuccess() {
+					t.Fatalf("Expected user %q NOT to be created, but found: %+v", userID, *getUserResult.Success)
+				}
+
+				if !getUserResult.IsFailure() {
+					t.Fatal("Expected GetUser to return a failure payload for non-existent user, but got none")
+				}
+
+				errVal := *getUserResult.Failure
+				// Assuming the service returns ErrNotFound from repo when user is missing in guild
+				if !errors.Is(errVal, userdb.ErrNotFound) && errVal.Error() != "user not found" {
+					t.Errorf("Expected GetUser to return 'user not found' error, but got: %v", errVal)
 				}
 
 				// Verify the TagAvailabilityCheckRequested event was published
@@ -217,7 +218,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					if getUserErr != nil {
 						return fmt.Errorf("service returned error: %w", getUserErr)
 					}
-					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
+					if !getUserResult.IsSuccess() || *getUserResult.Success == nil {
 						return errors.New("user not found in DB yet")
 					}
 					return nil
@@ -292,7 +293,7 @@ func TestHandleUserSignupRequest(t *testing.T) {
 					if getUserErr != nil {
 						return fmt.Errorf("service returned error: %w", getUserErr)
 					}
-					if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
+					if !getUserResult.IsSuccess() || *getUserResult.Success == nil {
 						return errors.New("user not found in guild-2 yet")
 					}
 					return nil
@@ -369,10 +370,10 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				if getUserErr != nil {
 					t.Fatalf("Expected GetUser to succeed for existing user, but got error: %v", getUserErr)
 				}
-				if getUserResult.Success == nil || getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User == nil {
+				if !getUserResult.IsSuccess() || *getUserResult.Success == nil {
 					t.Fatalf("Expected GetUser to return success payload for existing user, but got nil. Failure: %+v", getUserResult.Failure)
 				}
-				existingUser := getUserResult.Success.(*userevents.GetUserResponsePayloadV1).User
+				existingUser := *getUserResult.Success
 				if existingUser.UserID != userID {
 					t.Errorf("Existing user ID mismatch: expected %q, got %q", userID, existingUser.UserID)
 				}

@@ -2,7 +2,7 @@ package scoreservice
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,6 +13,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -24,8 +25,7 @@ type ScoreService struct {
 	logger   *slog.Logger
 	metrics  scoremetrics.ScoreMetrics
 	tracer   trace.Tracer
-	// Backwards compatible serviceWrapper for tests and callers that override behavior.
-	serviceWrapper func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error)
+	db       *bun.DB
 }
 
 // NewScoreService creates a new ScoreService.
@@ -35,60 +35,36 @@ func NewScoreService(
 	logger *slog.Logger,
 	metrics scoremetrics.ScoreMetrics,
 	tracer trace.Tracer,
-) Service {
-	svc := &ScoreService{
+	db *bun.DB,
+) *ScoreService {
+	return &ScoreService{
 		repo:     repo,
 		EventBus: eventBus,
 		logger:   logger,
 		metrics:  metrics,
 		tracer:   tracer,
+		db:       db,
 	}
-
-	// Default legacy-compatible serviceWrapper that delegates to withTelemetry.
-	svc.serviceWrapper = func(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error)) (ScoreOperationResult, error) {
-		// Adapter: convert legacy ScoreOperationResult <-> results.OperationResult
-		adaptedOp := func(ctx context.Context) (results.OperationResult, error) {
-			res, err := serviceFunc(ctx)
-			if err != nil {
-				return results.OperationResult{}, err
-			}
-			return results.OperationResult{Success: res.Success, Failure: res.Failure}, nil
-		}
-
-		opRes, err := svc.withTelemetry(ctx, operationName, roundID, adaptedOp)
-		if err != nil {
-			return ScoreOperationResult{Error: err}, err
-		}
-
-		return ScoreOperationResult{Success: opRes.Success, Failure: opRes.Failure}, nil
-	}
-
-	return svc
 }
 
-// operationFunc is the signature for service operation functions.
-type operationFunc func(ctx context.Context) (results.OperationResult, error)
+// operationFunc is the generic signature for service operation functions.
+type operationFunc[S any, F any] func(ctx context.Context) (results.OperationResult[S, F], error)
 
 // withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
-// This standardizes observability across all service methods.
-func (s *ScoreService) withTelemetry(
+func withTelemetry[S any, F any](
+	s *ScoreService,
 	ctx context.Context,
 	operationName string,
 	roundID sharedtypes.RoundID,
-	op operationFunc,
-) (result results.OperationResult, err error) {
-	if op == nil {
-		return results.OperationResult{}, errors.New("operation function is nil")
-	}
+	op operationFunc[S, F],
+) (result results.OperationResult[S, F], err error) {
 
-	// Start a new tracing span while preserving existing context
 	ctx, span := s.tracer.Start(ctx, operationName, trace.WithAttributes(
 		attribute.String("operation", operationName),
 		attribute.String("round_id", roundID.String()),
 	))
 	defer span.End()
 
-	// Record the operation attempt
 	s.metrics.RecordOperationAttempt(ctx, operationName, roundID)
 
 	startTime := time.Now()
@@ -96,120 +72,87 @@ func (s *ScoreService) withTelemetry(
 		s.metrics.RecordOperationDuration(ctx, operationName, time.Since(startTime))
 	}()
 
-	// Log the operation start
 	s.logger.InfoContext(ctx, operationName+" triggered",
 		attr.String("operation", operationName),
 		attr.RoundID("round_id", roundID),
 		attr.ExtractCorrelationID(ctx),
 	)
 
-	// Recover from panic and log the error
 	defer func() {
 		if r := recover(); r != nil {
-			errorMsg := fmt.Sprintf("Panic in %s: %v", operationName, r)
-			s.logger.ErrorContext(ctx, errorMsg,
+			err = fmt.Errorf("panic in %s: %v", operationName, r)
+			s.logger.ErrorContext(ctx, "Critical panic recovered",
 				attr.RoundID("round_id", roundID),
 				attr.ExtractCorrelationID(ctx),
-				attr.Any("panic", r),
+				attr.Error(err),
 			)
 			s.metrics.RecordOperationFailure(ctx, operationName, roundID)
-
-			// Create error with panic information
-			err = fmt.Errorf("panic in %s: %v", operationName, r)
-
-			// Record error in span
 			span.RecordError(err)
-			result = results.OperationResult{}
+			result = results.OperationResult[S, F]{}
 		}
 	}()
 
-	// Call the service function
 	result, err = op(ctx)
 
-	// If the service function returned an error AND did NOT populate a Failure payload,
-	// then it's a true system error that should be propagated.
-	if err != nil && result.Failure == nil {
-		wrappedErr := fmt.Errorf("%s operation failed: %w", operationName, err)
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
 		s.logger.ErrorContext(ctx, "Operation failed with error",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.RoundID("round_id", roundID),
 			attr.Error(wrappedErr),
-			attr.Any("result_has_failure", result.Failure != nil),
 		)
 		s.metrics.RecordOperationFailure(ctx, operationName, roundID)
 		span.RecordError(wrappedErr)
-		return results.OperationResult{}, wrappedErr // Return empty result and wrapped error
+		return result, wrappedErr
 	}
 
-	// Check for business logic failures even when err is nil
-	if result.Failure != nil {
+	if result.IsFailure() {
 		s.logger.WarnContext(ctx, "Operation returned failure result",
 			attr.ExtractCorrelationID(ctx),
 			attr.String("operation", operationName),
 			attr.RoundID("round_id", roundID),
-			attr.Any("failure_payload", result.Failure),
-			attr.Any("failure_type", fmt.Sprintf("%T", result.Failure)),
+			attr.Any("failure_payload", *result.Failure),
 		)
-		// Note: Not recording as operation failure in metrics since err is nil
-		// and the operation technically succeeded (business validation failed)
 	}
 
-	// If there was an error but a Failure payload was populated, or no error occurred,
-	// log success and return the result.
-	if err == nil || result.Failure != nil { // This condition explicitly handles both success and handled business failures
-		// Log successful operations at debug level with result type
-		if result.Success != nil {
-			s.logger.InfoContext(ctx, "Operation completed successfully",
-				attr.ExtractCorrelationID(ctx),
-				attr.String("operation", operationName),
-				attr.RoundID("round_id", roundID),
-				attr.Any("success_type", fmt.Sprintf("%T", result.Success)),
-			)
-		}
-
+	if result.IsSuccess() {
 		s.logger.InfoContext(ctx, operationName+" completed successfully",
 			attr.String("operation", operationName),
 			attr.RoundID("round_id", roundID),
 			attr.ExtractCorrelationID(ctx),
 		)
 		s.metrics.RecordOperationSuccess(ctx, operationName, roundID)
-		return result, nil // Return the actual result and nil error
 	}
 
-	// Fallback for unexpected scenarios (should ideally not be reached)
-	return results.OperationResult{}, fmt.Errorf("unexpected state after %s operation", operationName)
+	return result, nil
 }
 
-// ScoreOperationResult represents a generic result from a score operation
-type ScoreOperationResult struct {
-	Success interface{}
-	Failure interface{}
-	Error   error
+// runInTx ensures the operation runs within a transaction.
+func runInTx[S any, F any](
+	s *ScoreService,
+	ctx context.Context,
+	fn func(ctx context.Context, db bun.IDB) (results.OperationResult[S, F], error),
+) (results.OperationResult[S, F], error) {
+	if s.db == nil {
+		return fn(ctx, nil)
+	}
+
+	var result results.OperationResult[S, F]
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var txErr error
+		result, txErr = fn(ctx, tx)
+		return txErr
+	})
+
+	return result, err
 }
 
-// GetScoresForRound returns the stored round scores (with tag numbers) from persistence.
+// --- Service Methods ---
+
+// GetScoresForRound retrieves all scores for a round.
 func (s *ScoreService) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
-	return s.repo.GetScoresForRound(ctx, guildID, roundID)
-}
-
-// serviceWrapper is a legacy package-level adapter kept for compatibility with existing callers/tests.
-// It delegates to a temporary ScoreService.withTelemetry instance.
-func serviceWrapper(ctx context.Context, operationName string, roundID sharedtypes.RoundID, serviceFunc func(ctx context.Context) (ScoreOperationResult, error), logger *slog.Logger, metrics scoremetrics.ScoreMetrics, tracer trace.Tracer) (ScoreOperationResult, error) {
-	// Create a lightweight service instance to reuse withTelemetry logic
-	svc := &ScoreService{logger: logger, metrics: metrics, tracer: tracer}
-
-	adaptedOp := func(ctx context.Context) (results.OperationResult, error) {
-		res, err := serviceFunc(ctx)
-		if err != nil {
-			return results.OperationResult{}, err
-		}
-		return results.OperationResult{Success: res.Success, Failure: res.Failure}, nil
-	}
-
-	opRes, err := svc.withTelemetry(ctx, operationName, roundID, adaptedOp)
-	if err != nil {
-		return ScoreOperationResult{Error: err}, err
-	}
-	return ScoreOperationResult{Success: opRes.Success, Failure: opRes.Failure}, nil
+	// Simple read methods often don't need the full telemetry/tx wrapper unless complex,
+	// but you can wrap it if you want metrics for every call.
+	return s.repo.GetScoresForRound(ctx, nil, guildID, roundID)
 }

@@ -28,19 +28,3 @@ func (l *Leaderboard) BeforeInsert(ctx context.Context) error {
 	}
 	return nil
 }
-
-// TagAssignment represents a single tag assignment for database operations
-type TagAssignment struct {
-	UserID    sharedtypes.DiscordID
-	TagNumber sharedtypes.TagNumber
-}
-
-// FindEntryForUser returns a pointer to the entry for the given user, or nil if not found.
-func (l *Leaderboard) FindEntryForUser(userID sharedtypes.DiscordID) *leaderboardtypes.LeaderboardEntry {
-	for i := range l.LeaderboardData {
-		if l.LeaderboardData[i].UserID == userID {
-			return &l.LeaderboardData[i]
-		}
-	}
-	return nil
-}

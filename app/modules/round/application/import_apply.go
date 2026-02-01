@@ -2,58 +2,62 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/uptrace/bun"
 )
 
 // ApplyImportedScores applies imported scores to round participants in the database.
 // Returns ImportScoresAppliedPayloadV1 for singles, or DoublesScoresReadyPayloadV1 for doubles.
 func (s *RoundService) ApplyImportedScores(
 	ctx context.Context,
-	payload roundevents.ImportCompletedPayloadV1,
-) (results.OperationResult, error) {
-	return s.withTelemetry(ctx, "ApplyImportedScores", payload.RoundID, func(ctx context.Context) (results.OperationResult, error) {
-		if len(payload.Scores) == 0 {
-			return results.OperationResult{}, nil
+	req roundtypes.ImportApplyScoresInput,
+) (ApplyImportedScoresResult, error) {
+	return withTelemetry(s, ctx, "ApplyImportedScores", req.RoundID, func(ctx context.Context) (ApplyImportedScoresResult, error) {
+		return s.executeApplyImportedScores(ctx, req)
+	})
+}
+
+func (s *RoundService) executeApplyImportedScores(
+	ctx context.Context,
+	req roundtypes.ImportApplyScoresInput,
+) (ApplyImportedScoresResult, error) {
+	return runInTx(s, ctx, func(ctx context.Context, tx bun.IDB) (ApplyImportedScoresResult, error) {
+		if len(req.Scores) == 0 {
+			return results.OperationResult[*roundtypes.ImportApplyScoresResult, error]{}, nil
 		}
 
 		// --- Singles vs Teams ---
-		if payload.RoundMode == sharedtypes.RoundModeDoubles || payload.RoundMode == sharedtypes.RoundModeTriples {
-			return s.applyTeamScores(ctx, payload)
+		round, err := s.repo.GetRound(ctx, tx, req.GuildID, req.RoundID)
+		if err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get round: %w", err)), nil
 		}
 
-		return s.applySinglesScores(ctx, payload)
+		if len(round.Teams) > 0 {
+			return s.applyTeamScores(ctx, tx, req, round)
+		}
+
+		return s.applySinglesScores(ctx, tx, req, round)
 	})
 }
 
 // applySinglesScores applies scores for singles mode imports.
-// For singles: only add participants when a matched user (with guild_membership) is found.
-// Do not create guest participants for singles; only add matched guild_membership users.
 func (s *RoundService) applySinglesScores(
 	ctx context.Context,
-	payload roundevents.ImportCompletedPayloadV1,
-) (results.OperationResult, error) {
+	tx bun.IDB,
+	req roundtypes.ImportApplyScoresInput,
+	round *roundtypes.Round,
+) (ApplyImportedScoresResult, error) {
 	// Get existing participants to check for duplicates and update in place
-	existingParticipants, err := s.repo.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+	existingParticipants, err := s.repo.GetParticipants(ctx, tx, req.GuildID, req.RoundID)
 	if err != nil {
-		return results.OperationResult{
-			Failure: &roundevents.ImportFailedPayloadV1{
-				GuildID:   payload.GuildID,
-				RoundID:   payload.RoundID,
-				ImportID:  payload.ImportID,
-				UserID:    payload.UserID,
-				ChannelID: payload.ChannelID,
-				Error:     fmt.Sprintf("failed to get existing participants: %v", err),
-				ErrorCode: "DB_ERROR",
-				Timestamp: time.Now().UTC(),
-			},
-		}, nil
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get existing participants: %w", err)), nil
 	}
 
 	// Build map of existing participants by UserID for deduplication
@@ -65,7 +69,7 @@ func (s *RoundService) applySinglesScores(
 	}
 
 	updatedCount := 0
-	for _, scoreInfo := range payload.Scores {
+	for _, scoreInfo := range req.Scores {
 		// Do not create guest participants for singles; only add matched guild_membership users.
 		// If UserID is empty, this is an unmatched/guest player - skip entirely for singles.
 		if scoreInfo.UserID == "" {
@@ -76,7 +80,7 @@ func (s *RoundService) applySinglesScores(
 		}
 
 		// UserID is present, meaning resolveUserID found a match (user has guild_membership)
-		score := scoreInfo.Score
+		score := sharedtypes.Score(scoreInfo.Score)
 		if idx, exists := existingMap[scoreInfo.UserID]; exists {
 			// Update existing participant's score
 			existingParticipants[idx].Score = &score
@@ -95,82 +99,62 @@ func (s *RoundService) applySinglesScores(
 	}
 
 	if updatedCount == 0 {
-		return results.OperationResult{
-			Failure: &roundevents.ImportFailedPayloadV1{
-				GuildID:   payload.GuildID,
-				RoundID:   payload.RoundID,
-				ImportID:  payload.ImportID,
-				UserID:    payload.UserID,
-				ChannelID: payload.ChannelID,
-				Error:     "no scores were successfully applied",
-				ErrorCode: "NO_UPDATES",
-				Timestamp: time.Now().UTC(),
-			},
-		}, nil
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](errors.New("no scores were successfully applied")), nil
 	}
 
 	// Persist participants using existing repository method for consistent team derivation
 	updates := []roundtypes.RoundUpdate{{
-		RoundID:      payload.RoundID,
+		RoundID:      req.RoundID,
 		Participants: existingParticipants,
 	}}
 
-	if err := s.repo.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
-		return results.OperationResult{
-			Failure: &roundevents.ImportFailedPayloadV1{
-				GuildID:   payload.GuildID,
-				RoundID:   payload.RoundID,
-				ImportID:  payload.ImportID,
-				UserID:    payload.UserID,
-				ChannelID: payload.ChannelID,
-				Error:     fmt.Sprintf("failed to persist participants: %v", err),
-				ErrorCode: "DB_ERROR",
-				Timestamp: time.Now().UTC(),
-			},
-		}, nil
+	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to persist participants: %w", err)), nil
 	}
 
-	round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
-	if err != nil {
-		return results.OperationResult{
-			Failure: &roundevents.RoundErrorPayloadV1{
-				GuildID: payload.GuildID,
-				RoundID: payload.RoundID,
-				Error:   fmt.Sprintf("failed to get round: %v", err),
-			},
-		}, nil
-	}
-
-	return results.OperationResult{
-		Success: &roundevents.ImportScoresAppliedPayloadV1{
-			GuildID:        payload.GuildID,
-			RoundID:        payload.RoundID,
-			ImportID:       payload.ImportID,
-			Participants:   existingParticipants,
-			EventMessageID: round.EventMessageID,
-			Timestamp:      time.Now().UTC(),
-		},
-	}, nil
+	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
+		GuildID:        req.GuildID,
+		RoundID:        req.RoundID,
+		ImportID:       req.ImportID,
+		Participants:   existingParticipants,
+		RoundData:      round,
+		EventMessageID: round.EventMessageID,
+		Timestamp:      time.Now().UTC(),
+	}), nil
 }
 
 // --- New: applyTeamScores handles doubles/multi-player teams ---
 func (s *RoundService) applyTeamScores(
 	ctx context.Context,
-	payload roundevents.ImportCompletedPayloadV1,
-) (results.OperationResult, error) {
-	existingParticipants, err := s.repo.GetParticipants(ctx, payload.GuildID, payload.RoundID)
+	tx bun.IDB,
+	req roundtypes.ImportApplyScoresInput,
+	round *roundtypes.Round,
+) (ApplyImportedScoresResult, error) {
+	existingParticipants, err := s.repo.GetParticipants(ctx, tx, req.GuildID, req.RoundID)
 	if err != nil {
-		return results.OperationResult{Failure: &roundevents.RoundErrorPayloadV1{Error: err.Error()}}, nil
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get participants: %w", err)), nil
 	}
 
-	hasGroups, err := s.repo.RoundHasGroups(ctx, payload.RoundID)
+	hasGroups, err := s.repo.RoundHasGroups(ctx, tx, req.RoundID)
 	if err != nil {
-		return results.OperationResult{Failure: &roundevents.RoundErrorPayloadV1{Error: err.Error()}}, nil
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed checking round groups: %w", err)), nil
 	}
 
 	if !hasGroups {
-		if err := s.repo.CreateRoundGroups(ctx, payload.RoundID, s.mapScoresToParticipants(payload.Scores)); err != nil {
-			return results.OperationResult{Failure: &roundevents.RoundErrorPayloadV1{Error: err.Error()}}, nil
+		participantsToGroup := make([]roundtypes.Participant, len(req.Scores))
+		for i, sc := range req.Scores {
+			score := sharedtypes.Score(sc.Score)
+			participantsToGroup[i] = roundtypes.Participant{
+				UserID:   sc.UserID,
+				Score:    &score,
+				Response: roundtypes.ResponseAccept,
+				TeamID:   sc.TeamID,
+				RawName:  sc.RawName,
+			}
+		}
+
+		if err := s.repo.CreateRoundGroups(ctx, tx, req.RoundID, participantsToGroup); err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to create round groups: %w", err)), nil
 		}
 	}
 
@@ -181,10 +165,10 @@ func (s *RoundService) applyTeamScores(
 	}
 
 	// Update existing participants and add new ones from import
-	for _, sc := range payload.Scores {
+	for _, sc := range req.Scores {
 		// Guest users (empty UserID) are always added as new participants
 		if sc.UserID == "" {
-			score := sc.Score
+			score := sharedtypes.Score(sc.Score)
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
 				UserID:   "",
 				Score:    &score,
@@ -197,13 +181,13 @@ func (s *RoundService) applyTeamScores(
 
 		if idx, exists := existingMap[sc.UserID]; exists {
 			// Update existing participant
-			score := sc.Score
+			score := sharedtypes.Score(sc.Score)
 			existingParticipants[idx].Score = &score
 			existingParticipants[idx].Response = roundtypes.ResponseAccept
 			existingParticipants[idx].TeamID = sc.TeamID
 		} else {
 			// Add new participant (user wasn't RSVP'd but is in the scorecard)
-			score := sc.Score
+			score := sharedtypes.Score(sc.Score)
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
 				UserID:   sc.UserID,
 				Score:    &score,
@@ -214,44 +198,22 @@ func (s *RoundService) applyTeamScores(
 	}
 
 	updates := []roundtypes.RoundUpdate{{
-		RoundID:      payload.RoundID,
+		RoundID:      req.RoundID,
 		Participants: existingParticipants,
 	}}
 
-	if err := s.repo.UpdateRoundsAndParticipants(ctx, payload.GuildID, updates); err != nil {
-		return results.OperationResult{Failure: &roundevents.RoundErrorPayloadV1{Error: err.Error()}}, nil
+	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to update rounds and participants: %w", err)), nil
 	}
 
-	round, err := s.repo.GetRound(ctx, payload.GuildID, payload.RoundID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "Failed to get round for event message ID", attr.Error(err))
-	}
-
-	// Return standard applied payload so handler can trigger updates
-	return results.OperationResult{
-		Success: &roundevents.ImportScoresAppliedPayloadV1{
-			GuildID:        payload.GuildID,
-			RoundID:        payload.RoundID,
-			ImportID:       payload.ImportID,
-			Participants:   existingParticipants,
-			EventMessageID: round.EventMessageID,
-			Timestamp:      time.Now().UTC(),
-		},
-	}, nil
-}
-
-// --- Helper: mapScoresToParticipants converts ScoreInfo -> Participant ---
-func (s *RoundService) mapScoresToParticipants(scores []sharedtypes.ScoreInfo) []roundtypes.Participant {
-	participants := make([]roundtypes.Participant, len(scores))
-	for i, sc := range scores {
-		score := sc.Score
-		participants[i] = roundtypes.Participant{
-			UserID:   sc.UserID,
-			Score:    &score,
-			Response: roundtypes.ResponseAccept,
-			TeamID:   sc.TeamID,
-			RawName:  sc.RawName,
-		}
-	}
-	return participants
+	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
+		GuildID:        req.GuildID,
+		RoundID:        req.RoundID,
+		ImportID:       req.ImportID,
+		Participants:   existingParticipants,
+		Teams:          round.Teams,
+		RoundData:      round,
+		EventMessageID: round.EventMessageID,
+		Timestamp:      time.Now().UTC(),
+	}), nil
 }

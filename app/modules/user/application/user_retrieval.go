@@ -3,207 +3,172 @@ package userservice
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/uptrace/bun"
 )
 
-// GetUser retrieves user data and returns a response payload.
-func (s *UserService) GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult, error) {
-	if userID == "" {
-		s.logger.WarnContext(ctx, "Attempted to get user with empty Discord ID")
-		return results.FailureResult(&userevents.GetUserFailedPayloadV1{GuildID: guildID, UserID: userID, Reason: "GetUser: Discord ID cannot be empty"}), errors.New("GetUser: Discord ID cannot be empty")
+// MapDBUserWithMembershipToDomain converts the DB join result to our clean application struct.
+func MapDBUserWithMembershipToDomain(dbUser *userdb.UserWithMembership) *UserWithMembership {
+	if dbUser == nil {
+		return nil
+	}
+	return &UserWithMembership{
+		UserData: usertypes.UserData{
+			ID:     dbUser.User.ID,
+			UserID: dbUser.User.UserID,
+			Role:   dbUser.Role,
+		},
+		DisplayName:   dbUser.User.GetDisplayName(),
+		AvatarHash:    dbUser.User.AvatarHash,
+		UDiscUsername: dbUser.User.UDiscUsername,
+		UDiscName:     dbUser.User.UDiscName,
+		IsMember:      true,
+	}
+}
+
+// GetUser retrieves user data and maps it to a clean domain type.
+func (s *UserService) GetUser(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (UserWithMembershipResult, error) {
+
+	getUserOp := func(ctx context.Context, db bun.IDB) (UserWithMembershipResult, error) {
+		return s.executeGetUser(ctx, db, guildID, userID)
 	}
 
-	operationName := "GetUser"
-
-	result, err := s.withTelemetry(ctx, operationName, userID, func(ctx context.Context) (results.OperationResult, error) {
-		user, dbErr := s.repo.GetUserByUserID(ctx, userID, guildID)
-		if dbErr != nil {
-			// If record not found, return domain failure with nil error so caller can publish
-			if errors.Is(dbErr, userdb.ErrNotFound) {
-				s.logger.InfoContext(ctx, "User not found in DB (GetUser inner op)",
-					attr.String("user_id", string(userID)),
-					attr.String("guild_id", string(guildID)),
-				)
-				s.metrics.RecordUserRetrievalFailure(ctx, userID)
-				return results.FailureResult(&userevents.GetUserFailedPayloadV1{
-					GuildID: guildID,
-					UserID:  userID,
-					Reason:  "user not found",
-				}), nil
-			}
-
-			// Technical DB error -> return failure payload but do not propagate top-level error
-			s.logger.ErrorContext(ctx, "Failed to get user from DB",
-				attr.Error(dbErr),
-				attr.String("user_id", string(userID)),
-				attr.String("guild_id", string(guildID)),
-			)
-			s.metrics.RecordUserRetrievalFailure(ctx, userID)
-			return results.FailureResult(&userevents.GetUserFailedPayloadV1{GuildID: guildID, UserID: userID, Reason: "failed to retrieve user from database"}), nil
-		}
-
-		if user == nil {
-			// Domain-level not-found -> return failure payload with nil error so caller can publish
-			s.logger.InfoContext(ctx, "User not found in DB (GetUser inner op)",
-				attr.String("user_id", string(userID)),
-				attr.String("guild_id", string(guildID)),
-			)
-			s.metrics.RecordUserRetrievalFailure(ctx, userID)
-			return results.FailureResult(&userevents.GetUserFailedPayloadV1{
-				GuildID: guildID,
-				UserID:  userID,
-				Reason:  "user not found",
-			}), nil
-		}
-
-		return results.SuccessResult(&userevents.GetUserResponsePayloadV1{
-			GuildID: guildID,
-			User: &usertypes.UserData{
-				ID:     user.User.ID,
-				UserID: user.User.UserID,
-				Role:   user.Role,
-			},
-		}), nil
+	result, err := withTelemetry(s, ctx, "GetUser", userID, func(ctx context.Context) (UserWithMembershipResult, error) {
+		return getUserOp(ctx, s.db)
 	})
+
+	return result, err
+
+}
+
+func (s *UserService) executeGetUser(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (UserWithMembershipResult, error) {
+
+	if userID == "" {
+		return results.FailureResult[*UserWithMembership](ErrInvalidDiscordID), ErrInvalidDiscordID
+	}
+
+	user, err := s.repo.GetUserByUserID(ctx, db, userID, guildID)
 	if err != nil {
-		// Technical error from inner operation
-		s.logger.ErrorContext(ctx, "Failed to get user due to technical error",
-			attr.Error(err),
-			attr.String("user_id", string(userID)),
-			attr.String("guild_id", string(guildID)),
-		)
-		s.metrics.RecordUserRetrievalFailure(ctx, userID)
-
-		return results.FailureResult(&userevents.GetUserFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "failed to retrieve user from database",
-		}), err
+		if errors.Is(err, userdb.ErrNotFound) {
+			return results.FailureResult[*UserWithMembership](ErrUserNotFound), nil
+		}
+		return UserWithMembershipResult{}, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// If wrapper returned nil error but result indicates domain failure, propagate it
-	// Only treat as internal error if BOTH Success and Failure are nil (unexpected)
-	if result.Success == nil && result.Failure == nil {
-		return results.FailureResult(&userevents.GetUserFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "internal service error",
-		}), errors.New("internal service error: unexpected nil success payload")
+	// MAP TO DOMAIN HERE
+	return results.SuccessResult[*UserWithMembership, error](MapDBUserWithMembershipToDomain(user)), nil
+}
+
+// GetUserRole remains simple because UserRoleEnum is already a shared type
+func (s *UserService) GetUserRole(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (UserRoleResult, error) {
+
+	getUserRoleOp := func(ctx context.Context, db bun.IDB) (UserRoleResult, error) {
+		return s.executeGetUserRole(ctx, db, guildID, userID)
 	}
 
-	s.metrics.RecordUserRetrievalSuccess(ctx, userID)
+	result, err := withTelemetry(s, ctx, "GetUserRole", userID, func(ctx context.Context) (UserRoleResult, error) {
+		return getUserRoleOp(ctx, s.db)
+	})
+
+	if err != nil {
+		return UserRoleResult{}, fmt.Errorf("GetUserRole failed: %w", err)
+	}
+
 	return result, nil
 }
 
-func (s *UserService) GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult, error) {
-	operationName := "GetUserRole"
+func (s *UserService) executeGetUserRole(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+) (UserRoleResult, error) {
 
-	innerOp := func(ctx context.Context) (results.OperationResult, error) {
-		role, dbErr := s.repo.GetUserRole(ctx, userID, guildID)
-		if dbErr != nil {
-			// If not found, return domain failure so caller can publish a not-found event
-			if errors.Is(dbErr, userdb.ErrNotFound) {
-				s.logger.InfoContext(ctx, "User role not found in DB",
-					attr.String("user_id", string(userID)),
-					attr.String("guild_id", string(guildID)),
-				)
-				return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
-					GuildID: guildID,
-					UserID:  userID,
-					Reason:  "user not found",
-				}), nil
-			}
-
-			s.logger.ErrorContext(ctx, "Failed to get user role from DB",
-				attr.Error(dbErr),
-				attr.String("userID", string(userID)),
-				attr.String("guild_id", string(guildID)),
-			)
-			// Return failure payload but do not propagate top-level error
-			return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{GuildID: guildID, UserID: userID, Reason: "failed to retrieve user role from database"}), nil
-		}
-
-		return results.SuccessResult(&userevents.GetUserRoleResponsePayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Role:    role,
-		}), nil
-	}
-
-	result, err := s.withTelemetry(ctx, operationName, userID, innerOp)
+	role, err := s.repo.GetUserRole(ctx, db, userID, guildID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Technical error during GetUserRole operation",
-			attr.Error(err),
-			attr.String("user_id", string(userID)),
-			attr.String("guild_id", string(guildID)),
-		)
-		s.metrics.RecordUserRetrievalFailure(ctx, userID)
-
-		return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "failed to retrieve user role from database",
-		}), err
+		if errors.Is(err, userdb.ErrNotFound) {
+			return results.FailureResult[sharedtypes.UserRoleEnum](ErrUserNotFound), nil
+		}
+		return UserRoleResult{}, fmt.Errorf("failed to get user role: %w", err)
 	}
 
-	// If wrapper returned nil error but result indicates domain failure, propagate it
-	// Only treat as internal error if BOTH Success and Failure are nil (unexpected)
-	if result.Success == nil && result.Failure == nil {
-		s.logger.ErrorContext(ctx, "serviceWrapper returned nil error and no payload for GetUserRole",
-			attr.String("user_id", string(userID)),
-			attr.String("guild_id", string(guildID)),
-		)
-		internalErr := errors.New("internal service error: unexpected nil success payload")
-		// Return nil error so handler publishes failure event
-		return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "internal service error",
-		}), internalErr
+	if !role.IsValid() {
+		return results.FailureResult[sharedtypes.UserRoleEnum](fmt.Errorf("invalid role: %s", role)), nil
 	}
 
-	// If operation returned a failure payload, propagate it to the caller (no top-level error)
-	if result.Failure != nil {
-		return result, nil
+	return results.SuccessResult[sharedtypes.UserRoleEnum, error](role), nil
+}
+
+// FindByUDiscUsername searches for a user by their UDisc username.
+func (s *UserService) FindByUDiscUsername(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	username string,
+) (UserWithMembershipResult, error) {
+	op := func(ctx context.Context, db bun.IDB) (UserWithMembershipResult, error) {
+		user, err := s.repo.FindByUDiscUsername(ctx, db, guildID, username)
+		if err != nil {
+			if errors.Is(err, userdb.ErrNotFound) {
+				return results.FailureResult[*UserWithMembership](ErrUserNotFound), nil
+			}
+			return UserWithMembershipResult{}, fmt.Errorf("failed to find user by udisc username: %w", err)
+		}
+		return results.SuccessResult[*UserWithMembership, error](MapDBUserWithMembershipToDomain(user)), nil
 	}
 
-	successPayload, ok := result.Success.(*userevents.GetUserRoleResponsePayloadV1)
-	if !ok {
-		s.logger.ErrorContext(ctx, "serviceWrapper returned nil error but result.Success has unexpected type for GetUserRole",
-			attr.String("user_id", string(userID)),
-			attr.String("guild_id", string(guildID)),
-		)
-		internalErr := errors.New("internal service error: unexpected success payload type")
-		// Return nil error so handler publishes failure event
-		return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "internal service error",
-		}), internalErr
+	result, err := withTelemetry(s, ctx, "FindByUDiscUsername", "", func(ctx context.Context) (UserWithMembershipResult, error) {
+		return op(ctx, s.db)
+	})
+
+	if err != nil {
+		return UserWithMembershipResult{}, fmt.Errorf("FindByUDiscUsername failed: %w", err)
 	}
 
-	if !successPayload.Role.IsValid() {
-		s.logger.ErrorContext(ctx, "Retrieved invalid role for user",
-			attr.String("userID", string(userID)),
-			attr.String("guild_id", string(guildID)),
-			attr.String("role", string(successPayload.Role)),
-		)
-		s.metrics.RecordUserRetrievalFailure(ctx, userID)
+	return result, nil
+}
 
-		return results.FailureResult(&userevents.GetUserRoleFailedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			Reason:  "user found but has invalid role",
-		}), nil
+// FindByUDiscName searches for a user by their UDisc name.
+func (s *UserService) FindByUDiscName(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	name string,
+) (UserWithMembershipResult, error) {
+	op := func(ctx context.Context, db bun.IDB) (UserWithMembershipResult, error) {
+		user, err := s.repo.FindByUDiscName(ctx, db, guildID, name)
+		if err != nil {
+			if errors.Is(err, userdb.ErrNotFound) {
+				return results.FailureResult[*UserWithMembership](ErrUserNotFound), nil
+			}
+			return UserWithMembershipResult{}, fmt.Errorf("failed to find user by udisc name: %w", err)
+		}
+		return results.SuccessResult[*UserWithMembership, error](MapDBUserWithMembershipToDomain(user)), nil
 	}
 
-	s.metrics.RecordUserRetrievalSuccess(ctx, userID)
+	result, err := withTelemetry(s, ctx, "FindByUDiscName", "", func(ctx context.Context) (UserWithMembershipResult, error) {
+		return op(ctx, s.db)
+	})
+
+	if err != nil {
+		return UserWithMembershipResult{}, fmt.Errorf("FindByUDiscName failed: %w", err)
+	}
 
 	return result, nil
 }

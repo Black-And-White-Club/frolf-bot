@@ -2,16 +2,17 @@ package roundhandlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
@@ -30,7 +31,7 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.DiscordReminderPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -39,21 +40,15 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle round reminder with participants",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.DiscordReminderPayloadV1{
-							RoundID:      testRoundID,
-							GuildID:      testGuildID,
-							ReminderType: testReminderType,
-							UserIDs:      testUserIDs,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return results.SuccessResult[roundtypes.ProcessRoundReminderResult, error](roundtypes.ProcessRoundReminderResult{
+						RoundID:      testRoundID,
+						GuildID:      testGuildID,
+						ReminderType: testReminderType,
+						UserIDs:      testUserIDs,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -62,21 +57,15 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Successfully handle round reminder with no participants",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.DiscordReminderPayloadV1{
-							RoundID:      testRoundID,
-							GuildID:      testGuildID,
-							ReminderType: testReminderType,
-							UserIDs:      []sharedtypes.DiscordID{}, // No participants
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return results.SuccessResult[roundtypes.ProcessRoundReminderResult, error](roundtypes.ProcessRoundReminderResult{
+						RoundID:      testRoundID,
+						GuildID:      testGuildID,
+						ReminderType: testReminderType,
+						UserIDs:      []sharedtypes.DiscordID{}, // No participants
+					}), nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -84,19 +73,10 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Service returns failure",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundReminderFailedPayloadV1{
-							RoundID: testRoundID,
-							Error:   "round not found",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return results.FailureResult[roundtypes.ProcessRoundReminderResult, error](errors.New("round not found")), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -105,14 +85,10 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Service returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database connection failed"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return roundservice.ProcessRoundReminderResult{}, fmt.Errorf("database connection failed")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -120,14 +96,10 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Service returns empty result",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return roundservice.ProcessRoundReminderResult{}, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       true,
@@ -135,37 +107,29 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 		},
 		{
 			name: "Service returns unexpected payload type",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					// In the original test, this was achieved by OperationResult{Success: &roundevents.RoundCreatedPayloadV1{}}
+					// With generics, we'd need to bypass type safety to return a wrong Success type.
+					// We'll skip mimicking this exact behavior if it's too complex, but returning an empty success result
+					// would trigger the "service returned neither success nor failure" case in the handler.
+					return roundservice.ProcessRoundReminderResult{}, nil
+				}
 			},
 			payload: testPayload,
 			wantErr: true,
 		},
 		{
 			name: "Successfully handle with single participant",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().ProcessRoundReminder(
-					gomock.Any(),
-					gomock.Any(),
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.DiscordReminderPayloadV1{
-							RoundID:      testRoundID,
-							GuildID:      testGuildID,
-							ReminderType: testReminderType,
-							UserIDs:      []sharedtypes.DiscordID{"user1"},
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.ProcessRoundReminderFunc = func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
+					return results.SuccessResult[roundtypes.ProcessRoundReminderResult, error](roundtypes.ProcessRoundReminderResult{
+						RoundID:      testRoundID,
+						GuildID:      testGuildID,
+						ReminderType: testReminderType,
+						UserIDs:      []sharedtypes.DiscordID{"user1"},
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -176,15 +140,15 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

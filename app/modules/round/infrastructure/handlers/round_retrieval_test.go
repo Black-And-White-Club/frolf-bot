@@ -2,7 +2,7 @@ package roundhandlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,9 +11,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	roundmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application/mocks"
 	"github.com/google/uuid"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
@@ -34,7 +32,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mockSetup       func(*roundmocks.MockService)
+		fakeSetup       func(*FakeService)
 		payload         *roundevents.GetRoundRequestPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -43,25 +41,18 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 	}{
 		{
 			name: "Successfully retrieve round",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{
-						Success: &roundtypes.Round{
-							ID:          testRoundID,
-							Title:       testTitle,
-							Description: testDescription,
-							Location:    testLocation,
-							StartTime:   &testStartTime,
-							CreatedBy:   testUserID,
-							GuildID:     testGuildID,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						ID:          testRoundID,
+						Title:       testTitle,
+						Description: testDescription,
+						Location:    testLocation,
+						StartTime:   &testStartTime,
+						CreatedBy:   testUserID,
+						GuildID:     testGuildID,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -70,21 +61,10 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 		},
 		{
 			name: "Service returns failure - round not found",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{
-						Failure: &roundevents.RoundRetrievalFailedPayloadV1{
-							GuildID: testGuildID,
-							RoundID: testRoundID,
-							Error:   "round not found",
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.FailureResult[*roundtypes.Round, error](errors.New("round not found")), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -93,15 +73,10 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 		},
 		{
 			name: "Service returns error",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{},
-					fmt.Errorf("database connection error"),
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, errors.New("database connection error")
+				}
 			},
 			payload:        testPayload,
 			wantErr:        true,
@@ -109,33 +84,21 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 		},
 		{
 			name: "Service returns empty result",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.OperationResult[*roundtypes.Round, error]{}, nil
+				}
 			},
-			payload:       testPayload,
-			wantErr:       false,
-			wantResultLen: 0,
+			payload:        testPayload,
+			wantErr:        true,
+			expectedErrMsg: "unexpected empty result from GetRound service",
 		},
 		{
 			name: "Service returns unexpected payload type",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{
-						Success: &roundevents.RoundCreatedPayloadV1{}, // Wrong type
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -144,21 +107,14 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 		},
 		{
 			name: "Successfully retrieve minimal round data",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{
-						Success: &roundtypes.Round{
-							ID:      testRoundID,
-							Title:   testTitle,
-							GuildID: testGuildID,
-						},
-					},
-					nil,
-				)
+			fakeSetup: func(fake *FakeService) {
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						ID:      testRoundID,
+						Title:   testTitle,
+						GuildID: testGuildID,
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -167,37 +123,30 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 		},
 		{
 			name: "Successfully retrieve round with participants",
-			mockSetup: func(mockRoundService *roundmocks.MockService) {
+			fakeSetup: func(fake *FakeService) {
 				testScore := sharedtypes.Score(65)
-				mockRoundService.EXPECT().GetRound(
-					gomock.Any(),
-					testGuildID,
-					testRoundID,
-				).Return(
-					results.OperationResult{
-						Success: &roundtypes.Round{
-							ID:          testRoundID,
-							Title:       testTitle,
-							Description: testDescription,
-							Location:    testLocation,
-							StartTime:   &testStartTime,
-							CreatedBy:   testUserID,
-							GuildID:     testGuildID,
-							Participants: []roundtypes.Participant{
-								{
-									UserID:   sharedtypes.DiscordID("user1"),
-									Response: roundtypes.ResponseAccept,
-									Score:    &testScore,
-								},
-								{
-									UserID:   sharedtypes.DiscordID("user2"),
-									Response: roundtypes.ResponseDecline,
-								},
+				fake.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+						ID:          testRoundID,
+						Title:       testTitle,
+						Description: testDescription,
+						Location:    testLocation,
+						StartTime:   &testStartTime,
+						CreatedBy:   testUserID,
+						GuildID:     testGuildID,
+						Participants: []roundtypes.Participant{
+							{
+								UserID:   sharedtypes.DiscordID("user1"),
+								Response: roundtypes.ResponseAccept,
+								Score:    &testScore,
+							},
+							{
+								UserID:   sharedtypes.DiscordID("user2"),
+								Response: roundtypes.ResponseDecline,
 							},
 						},
-					},
-					nil,
-				)
+					}), nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
@@ -208,15 +157,15 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockRoundService := roundmocks.NewMockService(ctrl)
-			tt.mockSetup(mockRoundService)
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
 
 			h := &RoundHandlers{
-				service: mockRoundService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

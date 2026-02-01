@@ -8,8 +8,6 @@ import (
 
 	"github.com/uptrace/bun"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -52,16 +50,16 @@ func TestLeaderboardReadOperations(t *testing.T) {
 				return s.GetLeaderboard(ctx, "test_guild_1")
 			},
 			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(results.OperationResult)
+				opResult := result.(results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error])
 				if err != nil {
 					t.Fatalf("expected no system error, got: %v", err)
 				}
-				successPayload, ok := opResult.Success.(*leaderboardevents.GetLeaderboardResponsePayloadV1)
-				if !ok || successPayload == nil {
-					t.Fatalf("expected success payload of type *leaderboardevents.GetLeaderboardResponsePayloadV1, got %T", opResult.Success)
+				if opResult.Success == nil {
+					t.Fatalf("expected success payload, got nil")
 				}
-				if len(successPayload.Leaderboard) != 1 {
-					t.Errorf("expected 1 entry, got %d", len(successPayload.Leaderboard))
+				entries := *opResult.Success
+				if len(entries) != 1 {
+					t.Errorf("expected 1 entry, got %d", len(entries))
 				}
 			},
 		},
@@ -95,20 +93,19 @@ func TestLeaderboardReadOperations(t *testing.T) {
 				_, _ = db.NewInsert().Model(lb).Exec(ctx)
 			},
 			runOperation: func(s leaderboardService.Service) (any, error) {
-				payload := sharedevents.RoundTagLookupRequestedPayloadV1{UserID: "round_user"}
-				return s.RoundGetTagByUserID(ctx, "test_guild_1", payload)
+				return s.RoundGetTagByUserID(ctx, "test_guild_1", "round_user")
 			},
 			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(results.OperationResult)
+				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
 				if err != nil {
 					t.Fatalf("expected no system error, got: %v", err)
 				}
-				successPayload, ok := opResult.Success.(*sharedevents.RoundTagLookupResultPayloadV1)
-				if !ok || successPayload == nil {
-					t.Fatalf("expected success payload of type *sharedevents.RoundTagLookupResultPayloadV1, got %T", opResult.Success)
+				if opResult.Success == nil {
+					t.Fatalf("expected success payload, got nil")
 				}
-				if successPayload.TagNumber == nil || *successPayload.TagNumber != 42 {
-					t.Errorf("expected tag 42, got: %v", successPayload.TagNumber)
+				tag := *opResult.Success
+				if tag != 42 {
+					t.Errorf("expected tag 42, got: %v", tag)
 				}
 			},
 		},
@@ -128,7 +125,14 @@ func TestLeaderboardReadOperations(t *testing.T) {
 				return s.GetTagByUserID(ctx, "test_guild_1", "raw_user")
 			},
 			validate: func(t *testing.T, result any, err error) {
-				tag := result.(sharedtypes.TagNumber)
+				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
+				if err != nil {
+					t.Fatalf("expected no system error, got: %v", err)
+				}
+				if opResult.Success == nil {
+					t.Fatalf("expected success payload, got nil")
+				}
+				tag := *opResult.Success
 				if tag != 10 {
 					t.Errorf("expected tag 10, got %d", tag)
 				}
@@ -147,10 +151,17 @@ func TestLeaderboardReadOperations(t *testing.T) {
 			runOperation: func(s leaderboardService.Service) (any, error) {
 				return s.GetTagByUserID(ctx, "test_guild_1", "ghost_user")
 			},
-			wantErr: true,
+			wantErr: false,
 			validate: func(t *testing.T, result any, err error) {
-				if !errors.Is(err, sql.ErrNoRows) {
-					t.Errorf("expected sql.ErrNoRows, got %v", err)
+				if err != nil {
+					t.Fatalf("expected no system error, got %v", err)
+				}
+				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
+				if opResult.Failure == nil {
+					t.Fatalf("expected domain failure, got nil")
+				}
+				if !errors.Is(*opResult.Failure, sql.ErrNoRows) {
+					t.Errorf("expected sql.ErrNoRows, got %v", *opResult.Failure)
 				}
 			},
 		},

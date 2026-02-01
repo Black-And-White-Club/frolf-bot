@@ -4,10 +4,8 @@ import (
 	"testing"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -34,11 +32,11 @@ func TestUDiscIntegration(t *testing.T) {
 		name := "Test Name 1"
 
 		// Update identity
-		result, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, guildID, userID1, &username, &name)
+		result, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID1, &username, &name)
 		if err != nil {
 			t.Fatalf("UpdateUDiscIdentity failed: %v", err)
 		}
-		if result.Success != true {
+		if !result.IsSuccess() || *result.Success != true {
 			t.Errorf("Expected success true, got %v", result.Success)
 		}
 
@@ -48,16 +46,16 @@ func TestUDiscIntegration(t *testing.T) {
 			t.Logf("FindByUDiscUsername failed, skipping assertions: %v", err)
 			return
 		}
-		if foundUser.Success == nil {
+		if !foundUser.IsSuccess() {
 			t.Logf("FindByUDiscUsername returned failure payload, skipping assertions: %+v", foundUser.Failure)
 			return
 		}
-		foundUserPayload := foundUser.Success.(*userdb.UserWithMembership)
-		if foundUserPayload.User.UserID != userID1 {
-			t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.User.UserID)
+		foundUserPayload := *foundUser.Success
+		if foundUserPayload.UserID != userID1 {
+			t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.UserID)
 		}
-		if *foundUserPayload.User.UDiscUsername != "testuser1" {
-			t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.User.UDiscUsername)
+		if *foundUserPayload.UDiscUsername != "testuser1" {
+			t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.UDiscUsername)
 		}
 	})
 
@@ -66,7 +64,7 @@ func TestUDiscIntegration(t *testing.T) {
 		name := "Test Name 2"
 
 		// Update identity
-		_, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, guildID, userID2, &username, &name)
+		_, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID2, &username, &name)
 		if err != nil {
 			t.Fatalf("UpdateUDiscIdentity failed: %v", err)
 		}
@@ -77,16 +75,16 @@ func TestUDiscIntegration(t *testing.T) {
 			t.Logf("FindByUDiscName failed, skipping assertions: %v", err)
 			return
 		}
-		if foundUser.Success == nil {
+		if !foundUser.IsSuccess() {
 			t.Logf("FindByUDiscName returned failure payload, skipping assertions: %+v", foundUser.Failure)
 			return
 		}
-		foundUserPayload := foundUser.Success.(*userdb.UserWithMembership)
-		if foundUserPayload.User.UserID != userID2 {
-			t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.User.UserID)
+		foundUserPayload := *foundUser.Success
+		if foundUserPayload.UserID != userID2 {
+			t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.UserID)
 		}
-		if *foundUserPayload.User.UDiscName != "test name 2" {
-			t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.User.UDiscName)
+		if *foundUserPayload.UDiscName != "test name 2" {
+			t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.UDiscName)
 		}
 	})
 
@@ -108,19 +106,21 @@ func TestUDiscIntegration(t *testing.T) {
 			},
 		}
 
-		result, err := deps.Service.MatchParsedScorecard(deps.Ctx, payload)
+		playerNames := make([]string, len(payload.ParsedData.PlayerScores))
+		for i, ps := range payload.ParsedData.PlayerScores {
+			playerNames[i] = ps.PlayerName
+		}
+
+		result, err := deps.Service.MatchParsedScorecard(deps.Ctx, payload.GuildID, payload.UserID, playerNames)
 		if err != nil {
 			t.Logf("MatchParsedScorecard failed, skipping assertions: %v", err)
 			return
 		}
-		if result.Success == nil {
+		if !result.IsSuccess() {
 			t.Logf("MatchParsedScorecard returned failure payload, skipping assertions: %+v", result.Failure)
 			return
 		}
-		matchPayload, ok := result.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
-		if !ok {
-			t.Fatalf("Expected UDiscMatchConfirmedPayloadV1, got %T", result.Success)
-		}
+		matchPayload := *result.Success
 
 		if len(matchPayload.Mappings) != 2 {
 			t.Errorf("Expected 2 mappings, got %d", len(matchPayload.Mappings))

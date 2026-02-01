@@ -26,7 +26,7 @@ var (
 // TestDeps holds dependencies needed by individual tests.
 type TestDeps struct {
 	Ctx     context.Context
-	DB      guilddb.GuildDB
+	DB      guilddb.Repository
 	BunDB   *bun.DB
 	Service guildservice.Service
 	Cleanup func()
@@ -87,6 +87,7 @@ func SetupTestGuildService(t *testing.T) TestDeps {
 		testLogger,
 		noOpMetrics,
 		noOpTracer,
+		env.DB,
 	)
 	log.Printf("[%s] SetupTestGuildService: Service created", t.Name())
 

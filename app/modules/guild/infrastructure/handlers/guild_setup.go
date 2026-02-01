@@ -22,8 +22,25 @@ func (h *GuildHandlers) HandleGuildSetup(ctx context.Context, payload *guildtype
 		return nil, err
 	}
 
-	return mapOperationResult(result,
-		guildevents.GuildConfigCreatedV1,
-		guildevents.GuildConfigCreationFailedV1,
-	), nil
+	if result.Success != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigCreatedV1,
+			Payload: guildevents.GuildConfigCreatedPayloadV1{
+				GuildID: payload.GuildID,
+				Config:  **result.Success,
+			},
+		}}, nil
+	}
+
+	if result.Failure != nil {
+		return []handlerwrapper.Result{{
+			Topic: guildevents.GuildConfigCreationFailedV1,
+			Payload: guildevents.GuildConfigCreationFailedPayloadV1{
+				GuildID: payload.GuildID,
+				Reason:  (*result.Failure).Error(),
+			},
+		}}, nil
+	}
+
+	return nil, nil
 }

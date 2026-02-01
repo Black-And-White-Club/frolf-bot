@@ -11,7 +11,7 @@ import (
 )
 
 // HandleBulkCorrectScoreRequest processes a ScoreBulkUpdateRequest by iterating each update
-// and invoking the existing CorrectScore service call. It emits success/failure events per user.
+// and invoking the existing CorrectScore service call.
 func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreBulkUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
@@ -25,19 +25,22 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		}
 	}
 
+	// 1. Process all updates via the service
 	for _, upd := range payload.Updates {
 		result, err := h.service.CorrectScore(ctx, payload.GuildID, payload.RoundID, upd.UserID, upd.Score, upd.TagNumber)
 		if err != nil {
+			// Infrastructure error (DB down, etc) - trigger retry/bubbles up
 			return nil, err
 		}
+
 		if result.Failure != nil {
-			if failure, ok := result.Failure.(*sharedevents.ScoreUpdateFailedPayloadV1); ok {
-				return nil, fmt.Errorf("bulk score update failed for user %s: %s", failure.UserID, failure.Reason)
-			}
-			return nil, fmt.Errorf("bulk score update failed for user %s", upd.UserID)
+			// Domain error (Invalid score, Round locked, etc)
+			// We cast the Failure (which is an error type) to a string for the message
+			return nil, fmt.Errorf("bulk score update failed for user %s: %w", upd.UserID, *result.Failure)
 		}
 	}
 
+	// 2. Prepare the bulk update event payload
 	updates := make([]roundevents.ScoreUpdateRequestPayloadV1, 0, len(payload.Updates))
 	for _, upd := range payload.Updates {
 		score := upd.Score
@@ -59,11 +62,11 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		Updates:   updates,
 	}
 
-	results := []handlerwrapper.Result{{
+	// 3. Wrap result for the handler wrapper
+	// Note: Since this is a "Request" handler that triggers further downstream
+	// async work, we manually construct the Result slice.
+	return []handlerwrapper.Result{{
 		Topic:   roundevents.RoundScoreBulkUpdateRequestedV1,
 		Payload: bulk,
-	}}
-
-	// Handlers delegate observability to the service layer; no logging here.
-	return results, nil
+	}}, nil
 }

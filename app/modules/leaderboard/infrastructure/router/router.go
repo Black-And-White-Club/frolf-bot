@@ -214,6 +214,7 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 
 	// READS: Handlers that query the current state
 	registerHandler(deps, leaderboardevents.GetLeaderboardRequestedV1, handlers.HandleGetLeaderboardRequest)
+	registerHandler(deps, "leaderboard.snapshot.request.v1.>", handlers.HandleGetLeaderboardRequest)
 	registerHandler(deps, sharedevents.DiscordTagLookupRequestedV1, handlers.HandleGetTagByUserIDRequest)
 	registerHandler(deps, sharedevents.RoundTagLookupRequestedV1, handlers.HandleRoundGetTagRequest)
 	registerHandler(deps, sharedevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)

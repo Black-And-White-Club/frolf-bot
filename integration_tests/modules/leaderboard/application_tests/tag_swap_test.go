@@ -8,7 +8,6 @@ import (
 
 	"github.com/uptrace/bun"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -30,7 +29,7 @@ func TestTagSwapRequested(t *testing.T) {
 		targetTag       sharedtypes.TagNumber
 		expectedError   bool
 		expectedSuccess bool
-		validateResult  func(t *testing.T, deps TestDeps, result results.OperationResult)
+		validateResult  func(t *testing.T, deps TestDeps, result results.OperationResult[leaderboardtypes.LeaderboardData, error])
 		validateDB      func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard)
 	}{
 		{
@@ -54,14 +53,25 @@ func TestTagSwapRequested(t *testing.T) {
 			targetTag:       20, // Targets user_swap_B
 			expectedError:   false,
 			expectedSuccess: true,
-			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult[leaderboardtypes.LeaderboardData, error]) {
 				// Expect a success payload indicating the swap was processed
-				successPayload, ok := result.Success.(*leaderboardevents.TagSwapProcessedPayloadV1)
-				if !ok || successPayload == nil {
-					t.Fatalf("expected success payload of type *leaderboardevents.TagSwapProcessedPayloadV1, got %T", result.Success)
+				if result.Success == nil {
+					t.Fatalf("expected success payload, got nil")
 				}
-				if successPayload.RequestorID != "user_swap_A" || successPayload.TargetID != "user_swap_B" {
-					t.Errorf("unexpected swap payload values: %+v", successPayload)
+				// Success is *LeaderboardData
+				successData := *result.Success
+				// Verify swap happened in the returned data
+				var foundA, foundB bool
+				for _, entry := range successData {
+					if entry.UserID == "user_swap_A" && entry.TagNumber == 20 {
+						foundA = true
+					}
+					if entry.UserID == "user_swap_B" && entry.TagNumber == 10 {
+						foundB = true
+					}
+				}
+				if !foundA || !foundB {
+					t.Errorf("returned data does not reflect swap: %+v", successData)
 				}
 			},
 			validateDB: func(t *testing.T, deps TestDeps, initialLeaderboard *leaderboarddb.Leaderboard) {
@@ -109,17 +119,19 @@ func TestTagSwapRequested(t *testing.T) {
 			userID:        "stranger_danger",
 			targetTag:     20,
 			expectedError: false, // Business logic error returned in Result.Err
-			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult[leaderboardtypes.LeaderboardData, error]) {
 				// Expect a business failure payload
 				if result.Failure == nil {
 					t.Fatalf("expected failure payload but got success: %v", result.Success)
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
-				if !ok || failurePayload == nil {
-					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
+				if result.Failure == nil {
+					t.Fatalf("expected failure payload but got success: %v", result.Success)
 				}
-				if !strings.Contains(failurePayload.Reason, "requesting user not on leaderboard") {
-					t.Errorf("expected reason about requesting user not on leaderboard, got: %s", failurePayload.Reason)
+				err := *result.Failure
+				// Business logic failure for TagSwap returns error (wrapped or custom)
+				// We check if it contains expected string
+				if !strings.Contains(err.Error(), "requesting user not on leaderboard") {
+					t.Errorf("expected reason about requesting user not on leaderboard, got: %s", err.Error())
 				}
 			},
 		},
@@ -138,16 +150,16 @@ func TestTagSwapRequested(t *testing.T) {
 			},
 			userID:    "user_swap_A",
 			targetTag: 999, // Non-existent tag
-			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult[leaderboardtypes.LeaderboardData, error]) {
 				if result.Failure == nil {
 					t.Fatalf("expected failure payload but got success: %v", result.Success)
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
-				if !ok || failurePayload == nil {
-					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
+				if result.Failure == nil {
+					t.Fatalf("expected failure payload but got success: %v", result.Success)
 				}
-				if !strings.Contains(failurePayload.Reason, "target tag not currently assigned") {
-					t.Errorf("expected reason about target tag not assigned, got: %s", failurePayload.Reason)
+				err := *result.Failure
+				if !strings.Contains(err.Error(), "target tag not currently assigned") {
+					t.Errorf("expected reason about target tag not assigned, got: %s", err.Error())
 				}
 			},
 		},
@@ -166,16 +178,16 @@ func TestTagSwapRequested(t *testing.T) {
 			},
 			userID:    "user_swap_A",
 			targetTag: 10,
-			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult) {
+			validateResult: func(t *testing.T, deps TestDeps, result results.OperationResult[leaderboardtypes.LeaderboardData, error]) {
 				if result.Failure == nil {
 					t.Fatalf("expected failure payload but got success: %v", result.Success)
 				}
-				failurePayload, ok := result.Failure.(*leaderboardevents.TagSwapFailedPayloadV1)
-				if !ok || failurePayload == nil {
-					t.Fatalf("expected failure payload type *leaderboardevents.TagSwapFailedPayloadV1, got %T", result.Failure)
-				}
-				if !strings.Contains(failurePayload.Reason, "cannot swap tag with self") {
-					t.Errorf("expected reason about swapping with self, got: %s", failurePayload.Reason)
+				// Failure is just an error now in the generic [S, F] signature where F is error?
+				// Or is F a struct? Service definition says: OperationResult[leaderboardtypes.LeaderboardData, error]
+				// So Failure is *error.
+				err := *result.Failure
+				if !strings.Contains(err.Error(), "cannot swap tag with self") {
+					t.Errorf("expected error about swapping with self, got: %v", err)
 				}
 			},
 		},

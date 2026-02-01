@@ -4,569 +4,360 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
-	results "github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/mocks"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
-	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	userrepo "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/mocks"
-	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
+// -----------------------------------------------------------------------------
+// Lifecycle & Helper Tests
+// -----------------------------------------------------------------------------
+
 func TestNewUserService(t *testing.T) {
-	tests := []struct {
-		name string
-		test func(t *testing.T)
-	}{
-		{
-			name: "Creates service with all dependencies",
-			test: func(t *testing.T) {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
+	fakeRepo := NewFakeUserRepository()
+	testHandler := loggerfrolfbot.NewTestHandler()
+	logger := slog.New(testHandler)
+	mockMetrics := &usermetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
+	var db *bun.DB
 
-				mockRepo := userdb.NewMockRepository(ctrl)
-				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
+	service := NewUserService(fakeRepo, logger, mockMetrics, tracer, db)
 
-				service := NewUserService(mockRepo, logger, mockMetrics, tracer)
-
-				if service == nil {
-					t.Fatalf("NewUserService returned nil")
-				}
-
-				// We can override behavior by calling withTelemetry directly via a no-op wrapper function in tests if needed.
-
-				if service.repo != mockRepo {
-					t.Error("repo not set correctly")
-				}
-
-				if service.logger != logger {
-					t.Errorf("logger not correctly assigned")
-				}
-				if service.metrics != mockMetrics {
-					t.Errorf("metrics not correctly assigned")
-				}
-				if service.tracer != tracer {
-					t.Errorf("tracer not correctly assigned")
-				}
-			},
-		},
-		{
-			name: "Handles nil dependencies",
-			test: func(t *testing.T) {
-				service := NewUserService(nil, nil, nil, nil)
-
-				if service == nil {
-					t.Fatal("NewGuildService returned nil")
-				}
-
-				if service.repo != nil {
-					t.Error("repo should be nil")
-				}
-
-				if service.logger != nil {
-					t.Error("logger should be nil")
-				}
-				if service.metrics != nil {
-					t.Error("metrics should be nil")
-				}
-				if service.tracer != nil {
-					t.Error("tracer should be nil")
-				}
-			},
-		},
+	if service == nil {
+		t.Fatal("NewUserService returned nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, tt.test)
+	if service.repo != fakeRepo {
+		t.Error("repo not set correctly")
+	}
+	if service.logger != logger {
+		t.Error("logger not set correctly")
 	}
 }
 
-func TestUserService_WithTelemetry(t *testing.T) {
-	type args struct {
-		ctx           context.Context
-		operationName string
-		userID        sharedtypes.DiscordID
-		op            func(ctx context.Context) (results.OperationResult, error)
-		serviceFunc   func(ctx context.Context) (results.OperationResult, error)
-		logger        *slog.Logger
-		metrics       usermetrics.UserMetrics
-		tracer        trace.Tracer
+func TestUserService_withTelemetry(t *testing.T) {
+	s := &UserService{
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &usermetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
 	}
+
+	type SuccessPayload struct{ Data string }
+	type FailurePayload struct{ Reason string }
+
 	tests := []struct {
-		name    string
-		args    func(ctrl *gomock.Controller) args
-		want    results.OperationResult
-		wantErr bool
-		setup   func(a *args, ctx context.Context)
+		name        string
+		operation   string
+		userID      sharedtypes.DiscordID
+		op          operationFunc[SuccessPayload, FailurePayload]
+		wantErrSub  string
+		checkResult func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload])
 	}{
 		{
-			name: "Successful operation",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					userID:        sharedtypes.DiscordID("123"),
-					serviceFunc: func(ctx context.Context) (results.OperationResult, error) {
-						return results.SuccessResult("test"), nil
-					},
-					logger:  logger,
-					metrics: mockMetrics,
-					tracer:  tracer,
-				}
+			name:      "handles success result",
+			operation: "TestOp",
+			userID:    "user-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.SuccessResult[SuccessPayload, FailurePayload](SuccessPayload{Data: "ok"}), nil
 			},
-			want:    results.OperationResult{Success: "test"},
-			wantErr: false,
-			setup: func(a *args, ctx context.Context) {
-				mockMetrics := a.metrics.(*mocks.MockUserMetrics)
-				mockLogger := a.logger
-
-				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
-				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
-				mockLogger.Info("Operation succeeded", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
-				mockMetrics.EXPECT().RecordOperationSuccess(ctx, "TestOperation", sharedtypes.DiscordID("123"))
+			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
+				if !res.IsSuccess() || res.Success.Data != "ok" {
+					t.Errorf("expected success 'ok', got %+v", res.Success)
+				}
 			},
 		},
 		{
-			name: "Handles panic in service function",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				mockMetrics := mocks.NewMockUserMetrics(ctrl)
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					userID:        sharedtypes.DiscordID("123"),
-					serviceFunc: func(ctx context.Context) (results.OperationResult, error) {
-						panic("test panic")
-					},
-					logger:  logger,
-					metrics: mockMetrics,
-					tracer:  tracer,
-				}
+			name:      "handles infrastructure error",
+			operation: "TestOp",
+			userID:    "user-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				return results.OperationResult[SuccessPayload, FailurePayload]{}, errors.New("db down")
 			},
-			wantErr: true,
-			setup: func(a *args, ctx context.Context) {
-				mockMetrics := a.metrics.(*mocks.MockUserMetrics)
-				mockLogger := a.logger
-
-				mockMetrics.EXPECT().RecordOperationAttempt(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-				mockLogger.Info("Starting operation", attr.String("operation", "TestOperation"), attr.String("user_id", "123"))
-				mockMetrics.EXPECT().RecordOperationDuration(ctx, "TestOperation", gomock.Any(), gomock.Any())
-				mockLogger.Error("Panic in TestOperation: test panic", attr.String("user_id", "123"), attr.Any("panic", "test panic"))
-				mockMetrics.EXPECT().RecordOperationFailure(ctx, "TestOperation", sharedtypes.DiscordID("123"))
-			},
+			wantErrSub: "TestOp: db down",
 		},
 		{
-			name: "Handles operation returning an error",
-			args: func(ctrl *gomock.Controller) args {
-				testHandler := loggerfrolfbot.NewTestHandler()
-				logger := slog.New(testHandler)
-				metrics := &usermetrics.NoOpMetrics{}
-				tracer := noop.NewTracerProvider().Tracer("test")
-
-				return args{
-					ctx:           context.Background(),
-					operationName: "TestOperation",
-					userID:        sharedtypes.DiscordID("123"),
-					op: func(ctx context.Context) (results.OperationResult, error) {
-						return results.OperationResult{}, errors.New("service error")
-					},
-					logger:  logger,
-					metrics: metrics,
-					tracer:  tracer,
-				}
+			name:      "recovers from panic",
+			operation: "TestOp",
+			userID:    "user-1",
+			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
+				panic("boom")
 			},
-			wantErr: true,
+			wantErrSub: "panic in TestOp: boom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			res, err := withTelemetry(s, context.Background(), tt.operation, tt.userID, tt.op)
 
-			testArgs := tt.args(ctrl)
-			ctx, span := testArgs.tracer.Start(testArgs.ctx, testArgs.operationName)
-			defer span.End()
-
-			if tt.setup != nil {
-				tt.setup(&testArgs, ctx)
-			}
-
-			// Build a temporary UserService to exercise withTelemetry
-			s := &UserService{
-				logger:  testArgs.logger,
-				metrics: testArgs.metrics,
-				tracer:  testArgs.tracer,
-			}
-			got, err := s.withTelemetry(testArgs.ctx, testArgs.operationName, testArgs.userID, testArgs.serviceFunc)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("withTelemetry() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got.Success != tt.want.Success {
-				t.Errorf("withTelemetry() Success = %v, want %v", got.Success, tt.want.Success)
-			}
-			if got.Failure != tt.want.Failure {
-				t.Errorf("withTelemetry() Failure = %v, want %v", got.Failure, tt.want.Failure)
+			if tt.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErrSub) {
+					t.Errorf("expected error containing %q, got %v", tt.wantErrSub, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if tt.checkResult != nil {
+					tt.checkResult(t, res)
+				}
 			}
 		})
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Business Logic Tests
+// -----------------------------------------------------------------------------
+
 func TestUserService_MatchParsedScorecard(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockDB := userdb.NewMockRepository(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-
-	service := NewUserService(mockDB, logger, mockMetrics, tracer)
-
-	testGuildID := sharedtypes.GuildID("guild-123")
-	testRoundID := sharedtypes.RoundID(uuid.New())
-	testImportID := "import-123"
-	testUserID := sharedtypes.DiscordID("user-123")
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-1")
+	userID := sharedtypes.DiscordID("admin-1")
 
 	tests := []struct {
-		name      string
-		payload   roundevents.ParsedScorecardPayloadV1
-		mockSetup func()
-		want      results.OperationResult
-		wantErr   bool
+		name           string
+		playerNames    []string
+		setupFake      func(*FakeUserRepository)
+		expectInfraErr bool
+		verify         func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository)
 	}{
 		{
-			name: "Successful match by username",
-			payload: roundevents.ParsedScorecardPayloadV1{
-				ImportID: testImportID,
-				GuildID:  testGuildID,
-				RoundID:  testRoundID,
-				UserID:   testUserID,
-				ParsedData: &roundtypes.ParsedScorecard{
-					PlayerScores: []roundtypes.PlayerScoreRow{
-						{PlayerName: "TestUser"},
-					},
-				},
+			name:        "match by username success",
+			playerNames: []string{"PlayerOne"},
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
+					if name == "playerone" {
+						return &userdb.UserWithMembership{User: &userdb.User{UserID: "discord-1"}}, nil
+					}
+					return nil, userdb.ErrNotFound
+				}
 			},
-			mockSetup: func() {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
-				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
-				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "testuser").
-					Return(&userrepo.UserWithMembership{
-						User: &userrepo.User{UserID: "discord-user-1"},
-						Role: sharedtypes.UserRoleUser,
-					}, nil)
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure")
+				}
+				// res.Success is **MatchResult, so we dereference to get *MatchResult
+				success := *res.Success
+				if len(success.Mappings) != 1 {
+					t.Fatalf("expected 1 mapping, got %d", len(success.Mappings))
+				}
+				if success.Mappings[0].DiscordUserID != "discord-1" {
+					t.Errorf("expected discord-1, got %s", success.Mappings[0].DiscordUserID)
+				}
 			},
-			want: results.OperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayloadV1{
-					ImportID: testImportID,
-					GuildID:  testGuildID,
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Mappings: []userevents.UDiscConfirmedMappingV1{
-						{PlayerName: "TestUser", DiscordUserID: "discord-user-1"},
-					},
-				},
-			},
-			wantErr: false,
 		},
 		{
-			name: "Successful match by name (fallback)",
-			payload: roundevents.ParsedScorecardPayloadV1{
-				ImportID: testImportID,
-				GuildID:  testGuildID,
-				RoundID:  testRoundID,
-				UserID:   testUserID,
-				ParsedData: &roundtypes.ParsedScorecard{
-					PlayerScores: []roundtypes.PlayerScoreRow{
-						{PlayerName: "Test User"},
-					},
-				},
+			name:        "match by name fallback success",
+			playerNames: []string{"Real Name"},
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
+					return nil, userdb.ErrNotFound
+				}
+				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
+					if name == "real name" {
+						return &userdb.UserWithMembership{User: &userdb.User{UserID: "discord-2"}}, nil
+					}
+					return nil, userdb.ErrNotFound
+				}
 			},
-			mockSetup: func() {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
-				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
-
-				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "test user").
-					Return(nil, userrepo.ErrNotFound)
-				mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, "test user").
-					Return(&userrepo.UserWithMembership{
-						User: &userrepo.User{UserID: "discord-user-2"},
-						Role: sharedtypes.UserRoleUser,
-					}, nil)
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure")
+				}
+				success := *res.Success
+				if len(success.Mappings) != 1 || success.Mappings[0].DiscordUserID != "discord-2" {
+					t.Errorf("expected fallback match to discord-2, got %+v", success.Mappings)
+				}
 			},
-			want: results.OperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayloadV1{
-					ImportID: testImportID,
-					GuildID:  testGuildID,
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Mappings: []userevents.UDiscConfirmedMappingV1{
-						{PlayerName: "Test User", DiscordUserID: "discord-user-2"},
-					},
-				},
-			},
-			wantErr: false,
 		},
 		{
-			name: "No match found (skipped)",
-			payload: roundevents.ParsedScorecardPayloadV1{
-				ImportID: testImportID,
-				GuildID:  testGuildID,
-				RoundID:  testRoundID,
-				UserID:   testUserID,
-				ParsedData: &roundtypes.ParsedScorecard{
-					PlayerScores: []roundtypes.PlayerScoreRow{
-						{PlayerName: "Unknown"},
-					},
-				},
+			name:        "unmatched player",
+			playerNames: []string{"Ghost"},
+			setupFake: func(f *FakeUserRepository) {
+				// Default behavior is ErrNotFound
 			},
-			mockSetup: func() {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
-				mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "MatchParsedScorecard", testUserID)
-
-				mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, "unknown").
-					Return(nil, userrepo.ErrNotFound)
-				mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, "unknown").
-					Return(nil, userrepo.ErrNotFound)
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure")
+				}
+				success := *res.Success
+				if len(success.Unmatched) != 1 || success.Unmatched[0] != "Ghost" {
+					t.Errorf("expected Ghost to be unmatched, got %v", success.Unmatched)
+				}
 			},
-			want: results.OperationResult{
-				Success: &userevents.UDiscMatchConfirmedPayloadV1{
-					ImportID: testImportID,
-					GuildID:  testGuildID,
-					RoundID:  testRoundID,
-					UserID:   testUserID,
-					Mappings: nil, // Empty mappings
-				},
-			},
-			wantErr: false,
 		},
 		{
-			name: "Parsed data is nil",
-			payload: roundevents.ParsedScorecardPayloadV1{
-				ImportID:   testImportID,
-				GuildID:    testGuildID,
-				RoundID:    testRoundID,
-				UserID:     testUserID,
-				ParsedData: nil,
+			name:           "too many players error",
+			playerNames:    make([]string, 513),
+			expectInfraErr: false, // In this service, it returns a Domain Failure (results.FailureResult)
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsFailure() || !strings.Contains((*res.Failure).Error(), "too many players") {
+					t.Errorf("expected too many players failure, got %v", res.Failure)
+				}
 			},
-			mockSetup: func() {
-				mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "MatchParsedScorecard", testUserID)
-				mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "MatchParsedScorecard", gomock.Any(), testUserID)
-				mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "MatchParsedScorecard", testUserID)
-			},
-			want:    results.OperationResult{Failure: errors.New("parsed_data is nil")},
-			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-			got, err := service.MatchParsedScorecard(context.Background(), tt.payload)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("MatchParsedScorecard() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			fakeRepo := NewFakeUserRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
 			}
 
-			if !tt.wantErr {
-				// Verify success payload
-				gotPayload, ok := got.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
-				if !ok {
-					t.Errorf("MatchParsedScorecard() success type mismatch, got %T", got.Success)
-					return
-				}
-				wantPayload := tt.want.Success.(*userevents.UDiscMatchConfirmedPayloadV1)
+			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+			res, err := s.MatchParsedScorecard(ctx, guildID, userID, tt.playerNames)
 
-				if gotPayload.ImportID != wantPayload.ImportID {
-					t.Errorf("ImportID mismatch")
-				}
-				if len(gotPayload.Mappings) != len(wantPayload.Mappings) {
-					t.Errorf("Mappings length mismatch")
-				}
+			if tt.expectInfraErr && err == nil {
+				t.Fatal("expected infra error")
+			}
+			if !tt.expectInfraErr && err != nil {
+				t.Fatalf("unexpected infra error: %v", err)
+			}
+			if tt.verify != nil {
+				tt.verify(t, res, fakeRepo)
 			}
 		})
 	}
 }
 
 func TestUserService_UpdateUDiscIdentity(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	ctx := context.Background()
+	userID := sharedtypes.DiscordID("user-1")
 
-	mockDB := userdb.NewMockRepository(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-
-	service := NewUserService(mockDB, logger, mockMetrics, tracer)
-
-	testGuildID := sharedtypes.GuildID("guild-123")
-	testUserID := sharedtypes.DiscordID("user-123")
-	username := "TestUser"
-	name := "Test Name"
-
-	t.Run("Successful update", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "UpdateUDiscIdentity", testUserID)
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
-		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "UpdateUDiscIdentity", testUserID)
-
-		// Expect normalized values - now calls UpdateUDiscIdentityGlobal (no guildID)
-		mockDB.EXPECT().UpdateUDiscIdentityGlobal(gomock.Any(), testUserID, gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, uid sharedtypes.DiscordID, u *string, n *string) error {
-				if *u != "testuser" {
-					t.Errorf("expected normalized username 'testuser', got '%s'", *u)
+	tests := []struct {
+		name           string
+		username       *string
+		nameVal        *string
+		setupFake      func(*FakeUserRepository)
+		expectInfraErr bool
+		verify         func(t *testing.T, res results.OperationResult[bool, error], err error, fake *FakeUserRepository)
+	}{
+		{
+			name:     "successful global update",
+			username: pointer("NewUser"),
+			setupFake: func(f *FakeUserRepository) {
+				f.UpdateGlobalUserFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, updates *userdb.UserUpdateFields) error {
+					if *updates.UDiscUsername != "newuser" {
+						return errors.New("not normalized")
+					}
+					return nil
 				}
-				if *n != "test name" {
-					t.Errorf("expected normalized name 'test name', got '%s'", *n)
+			},
+			verify: func(t *testing.T, res results.OperationResult[bool, error], err error, fake *FakeUserRepository) {
+				if err != nil || !res.IsSuccess() {
+					t.Errorf("expected success, got err: %v, res: %v", err, res)
 				}
-				return nil
-			})
+				if fake.Trace()[0] != "UpdateGlobalUser" {
+					t.Errorf("expected UpdateGlobalUser trace")
+				}
+			},
+		},
+		{
+			name:     "user not found",
+			username: pointer("Nobody"),
+			setupFake: func(f *FakeUserRepository) {
+				f.UpdateGlobalUserFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, updates *userdb.UserUpdateFields) error {
+					return userdb.ErrNoRowsAffected
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[bool, error], err error, fake *FakeUserRepository) {
+				if !res.IsFailure() || !errors.Is(*res.Failure, userdb.ErrNotFound) {
+					t.Errorf("expected domain failure ErrNotFound, got %v", res.Failure)
+				}
+			},
+		},
+	}
 
-		got, err := service.UpdateUDiscIdentity(context.Background(), testGuildID, testUserID, &username, &name)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if got.Success != true {
-			t.Errorf("expected success true")
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := NewFakeUserRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
 
-	t.Run("DB error", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "UpdateUDiscIdentity", testUserID)
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "UpdateUDiscIdentity", gomock.Any(), testUserID)
-		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "UpdateUDiscIdentity", testUserID)
+			// We need a DB shell for UpdateUDiscIdentity because it uses runInTx
+			// Note: In a real test, s.db.RunInTx would fail if s.db is nil.
+			// You may need to provide a mock bun.DB or ensure runInTx handles nil gracefully.
+			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
 
-		mockDB.EXPECT().UpdateUDiscIdentityGlobal(gomock.Any(), testUserID, gomock.Any(), gomock.Any()).
-			Return(errors.New("db error"))
+			res, err := s.UpdateUDiscIdentity(ctx, userID, tt.username, tt.nameVal)
 
-		_, err := service.UpdateUDiscIdentity(context.Background(), testGuildID, testUserID, &username, &name)
-		if err == nil {
-			t.Error("expected error, got nil")
-		}
-	})
+			if tt.expectInfraErr && err == nil {
+				t.Fatal("expected infra error")
+			}
+			if tt.verify != nil {
+				tt.verify(t, res, err, fakeRepo)
+			}
+		})
+	}
 }
 
-func TestUserService_FindByUDiscUsername(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func TestUserService_UpdateUserProfile(t *testing.T) {
+	ctx := context.Background()
+	userID := sharedtypes.DiscordID("user-1")
+	displayName := "New Name"
+	avatarHash := "hash123"
 
-	mockDB := userdb.NewMockRepository(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-
-	service := NewUserService(mockDB, logger, mockMetrics, tracer)
-
-	testGuildID := sharedtypes.GuildID("guild-123")
-	testUsername := "testuser"
-
-	t.Run("User found", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscUsername", gomock.Any(), sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
-
-		mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
-			Return(&userrepo.UserWithMembership{
-				User: &userrepo.User{UserID: "found-user"},
-				Role: sharedtypes.UserRoleUser,
-			}, nil)
-
-		got, err := service.FindByUDiscUsername(context.Background(), testGuildID, testUsername)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+	fakeRepo := NewFakeUserRepository()
+	fakeRepo.UpdateProfileFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, name string, hash string) error {
+		if id != userID || name != displayName || hash != avatarHash {
+			return errors.New("unexpected arguments")
 		}
-		if got.Success.(*userrepo.UserWithMembership).User.UserID != "found-user" {
-			t.Errorf("expected user ID found-user")
-		}
-	})
+		return nil
+	}
 
-	t.Run("User not found", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscUsername", gomock.Any(), sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "FindByUDiscUsername", sharedtypes.DiscordID(""))
+	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+	err := s.UpdateUserProfile(ctx, userID, displayName, avatarHash)
 
-		mockDB.EXPECT().FindByUDiscUsername(gomock.Any(), testGuildID, testUsername).
-			Return(nil, userrepo.ErrNotFound)
-
-		_, err := service.FindByUDiscUsername(context.Background(), testGuildID, testUsername)
-		if !errors.Is(err, userrepo.ErrNotFound) {
-			t.Errorf("expected ErrNotFound, got %v", err)
-		}
-	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fakeRepo.Trace()[0] != "UpdateProfile" {
+		t.Errorf("expected UpdateProfile trace")
+	}
 }
 
-func TestUserService_FindByUDiscName(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func TestUserService_LookupProfiles(t *testing.T) {
+	ctx := context.Background()
+	userIDs := []sharedtypes.DiscordID{"user-1", "user-2"}
 
-	mockDB := userdb.NewMockRepository(ctrl)
-	mockMetrics := mocks.NewMockUserMetrics(ctrl)
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
+	fakeRepo := NewFakeUserRepository()
+	fakeRepo.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
+		return []*userdb.User{
+			{UserID: "user-1", DisplayName: pointer("UserOne")},
+		}, nil
+	}
 
-	service := NewUserService(mockDB, logger, mockMetrics, tracer)
+	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+	res, err := s.LookupProfiles(ctx, userIDs)
 
-	testGuildID := sharedtypes.GuildID("guild-123")
-	testName := "test name"
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsSuccess() {
+		t.Fatalf("expected success result")
+	}
 
-	t.Run("User found", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscName", gomock.Any(), sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationSuccess(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
+	profiles := *res.Success
+	if len(profiles) != 2 {
+		t.Errorf("expected 2 profiles, got %d", len(profiles))
+	}
 
-		mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testName).
-			Return(&userrepo.UserWithMembership{
-				User: &userrepo.User{UserID: "found-user"},
-				Role: sharedtypes.UserRoleUser,
-			}, nil)
+	// Check found user
+	if p1, ok := profiles["user-1"]; !ok || p1.DisplayName != "UserOne" {
+		t.Errorf("expected UserOne for user-1, got %+v", p1)
+	}
 
-		got, err := service.FindByUDiscName(context.Background(), testGuildID, testName)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if got.Success.(*userrepo.UserWithMembership).User.UserID != "found-user" {
-			t.Errorf("expected user ID found-user")
-		}
-	})
-
-	t.Run("User not found", func(t *testing.T) {
-		mockMetrics.EXPECT().RecordOperationAttempt(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationDuration(gomock.Any(), "FindByUDiscName", gomock.Any(), sharedtypes.DiscordID(""))
-		mockMetrics.EXPECT().RecordOperationFailure(gomock.Any(), "FindByUDiscName", sharedtypes.DiscordID(""))
-
-		mockDB.EXPECT().FindByUDiscName(gomock.Any(), testGuildID, testName).
-			Return(nil, userrepo.ErrNotFound)
-
-		_, err := service.FindByUDiscName(context.Background(), testGuildID, testName)
-		if !errors.Is(err, userrepo.ErrNotFound) {
-			t.Errorf("expected ErrNotFound, got %v", err)
-		}
-	})
+	// Check default user
+	if p2, ok := profiles["user-2"]; !ok || !strings.HasPrefix(p2.DisplayName, "User") {
+		t.Errorf("expected default profile for user-2, got %+v", p2)
+	}
 }

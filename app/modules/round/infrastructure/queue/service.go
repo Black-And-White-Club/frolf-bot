@@ -87,7 +87,8 @@ func NewServiceWithOptions(ctx context.Context, bunDB *bun.DB, logger *slog.Logg
 		return nil, fmt.Errorf("failed to create pgx pool: %w", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
+	err = pool.Ping(ctx)
+	if err != nil {
 		pool.Close()
 		ctxLogger.Error("Failed to ping database for River", attr.Error(err))
 		metrics.RecordOperationFailure(ctx, "initialize_service", "river")

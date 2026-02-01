@@ -1,0 +1,30 @@
+postgres:
+  dsn: "postgres://user:password@localhost:5432/frolf_bot?sslmode=disable"
+
+nats:
+  url: "nats://localhost:4222"
+
+jwt:
+  secret: ""  # Set via JWT_SECRET env var
+  default_ttl: 24h
+
+pwa:
+  base_url: https://pwa.frolf-bot.com
+
+auth_callout:
+  enabled: false
+  subject: "$SYS.REQ.USER.AUTH"
+  issuer_nkey: ""
+  signing_nkey: ""
+
+observability:
+  loki_url: ""
+  loki_tenant_id: ""
+  metrics_address: ""
+  tempo_endpoint: ""
+  tempo_insecure: false
+  tempo_sample_rate: 0.1
+  environment: "development"
+  otlp_endpoint: ""
+  otlp_transport: "grpc"
+  otlp_logs_enabled: false

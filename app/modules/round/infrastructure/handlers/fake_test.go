@@ -3,13 +3,16 @@ package roundhandlers
 import (
 	"context"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // ------------------------
@@ -20,58 +23,61 @@ type FakeService struct {
 	trace []string
 
 	// Create Round
-	ValidateAndProcessRoundWithClockFn func(ctx context.Context, payload roundevents.CreateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (results.OperationResult, error)
-	StoreRoundFn                       func(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundEntityCreatedPayloadV1) (results.OperationResult, error)
-	UpdateRoundMessageIDFn             func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
+	ValidateRoundCreationWithClockFunc func(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error)
+	StoreRoundFunc                     func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error)
+	UpdateRoundMessageIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 
 	// Update Round
-	ValidateAndProcessRoundUpdateWithClockFn func(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (results.OperationResult, error)
-	ValidateAndProcessRoundUpdateFn          func(ctx context.Context, payload roundevents.UpdateRoundRequestedPayloadV1, timeParser roundtime.TimeParserInterface) (results.OperationResult, error)
-	UpdateRoundEntityFn                      func(ctx context.Context, payload roundevents.RoundUpdateValidatedPayloadV1) (results.OperationResult, error)
-	UpdateScheduledRoundEventsFn             func(ctx context.Context, payload roundevents.RoundScheduleUpdatePayloadV1) (results.OperationResult, error)
+	ValidateRoundUpdateWithClockFunc func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error)
+	ValidateRoundUpdateFunc          func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface) (roundservice.UpdateRoundResult, error)
+	UpdateRoundEntityFunc            func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error)
+	UpdateScheduledRoundEventsFunc   func(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error)
 
 	// Delete Round
-	ValidateRoundDeleteRequestFn func(ctx context.Context, payload roundevents.RoundDeleteRequestPayloadV1) (results.OperationResult, error)
-	DeleteRoundFn                func(ctx context.Context, payload roundevents.RoundDeleteAuthorizedPayloadV1) (results.OperationResult, error)
+	ValidateRoundDeletionFunc func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error)
+	DeleteRoundFunc           func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error)
 
 	// Start Round
-	ProcessRoundStartFn func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error)
+	StartRoundFunc func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error)
 
 	// Join Round
-	ValidateParticipantJoinRequestFn func(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error)
-	UpdateParticipantStatusFn        func(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error)
-	ParticipantRemovalFn             func(ctx context.Context, payload roundevents.ParticipantRemovalRequestPayloadV1) (results.OperationResult, error)
-	CheckParticipantStatusFn         func(ctx context.Context, payload roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error)
+	ValidateJoinRequestFunc            func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.JoinRoundRequest, error], error)
+	JoinRoundFunc                      func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error)
+	CheckParticipantStatusFunc         func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error], error)
+	ValidateParticipantJoinRequestFunc func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.JoinRoundRequest, error], error)
+	UpdateParticipantStatusFunc        func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error)
+	ParticipantRemovalFunc             func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error)
 
 	// Score Round
-	ValidateScoreUpdateRequestFn  func(ctx context.Context, payload roundevents.ScoreUpdateRequestPayloadV1) (results.OperationResult, error)
-	UpdateParticipantScoreFn      func(ctx context.Context, payload roundevents.ScoreUpdateValidatedPayloadV1) (results.OperationResult, error)
-	UpdateParticipantScoresBulkFn func(ctx context.Context, payload roundevents.ScoreBulkUpdateRequestPayloadV1) (results.OperationResult, error)
-	CheckAllScoresSubmittedFn     func(ctx context.Context, payload roundevents.ParticipantScoreUpdatedPayloadV1) (results.OperationResult, error)
+	ValidateScoreUpdateRequestFunc  func(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (results.OperationResult[*roundtypes.ScoreUpdateRequest, error], error)
+	UpdateParticipantScoreFunc      func(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (roundservice.ScoreUpdateResult, error)
+	UpdateParticipantScoresBulkFunc func(ctx context.Context, req *roundtypes.BulkScoreUpdateRequest) (roundservice.BulkScoreUpdateResult, error)
+	CheckAllScoresSubmittedFunc     func(ctx context.Context, req *roundtypes.CheckAllScoresSubmittedRequest) (roundservice.AllScoresSubmittedResult, error)
 
 	// Finalize Round
-	FinalizeRoundFn     func(ctx context.Context, payload roundevents.AllScoresSubmittedPayloadV1) (results.OperationResult, error)
-	NotifyScoreModuleFn func(ctx context.Context, payload roundevents.RoundFinalizedPayloadV1) (results.OperationResult, error)
+	FinalizeRoundFunc     func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error)
+	NotifyScoreModuleFunc func(ctx context.Context, result *roundtypes.FinalizeRoundResult) (results.OperationResult[*roundtypes.Round, error], error)
 
 	// Round Reminder
-	ProcessRoundReminderFn func(ctx context.Context, payload roundevents.DiscordReminderPayloadV1) (results.OperationResult, error)
+	ProcessRoundReminderFunc func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error)
 
 	// Retrieve Round
-	GetRoundFn func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult, error)
+	GetRoundFunc          func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error)
+	GetRoundsForGuildFunc func(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
 
 	// Schedule Round Events
-	ScheduleRoundEventsFn func(ctx context.Context, guildID sharedtypes.GuildID, payload roundevents.RoundScheduledPayloadV1, discordMessageID string) (results.OperationResult, error)
+	ScheduleRoundEventsFunc func(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error)
 
 	// Update Participant Tags
-	UpdateScheduledRoundsWithNewTagsFn func(ctx context.Context, guildID sharedtypes.GuildID, changedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber) (results.OperationResult, error)
+	UpdateScheduledRoundsWithNewTagsFunc func(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error)
 
 	// Scorecard Import
-	ScorecardURLRequestedFn     func(ctx context.Context, payload roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error)
-	CreateImportJobFn           func(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1) (results.OperationResult, error)
-	ParseScorecardFn            func(ctx context.Context, payload roundevents.ScorecardUploadedPayloadV1, fileData []byte) (results.OperationResult, error)
-	NormalizeParsedScorecardFn  func(ctx context.Context, parsed *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult, error)
-	IngestNormalizedScorecardFn func(ctx context.Context, payload roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error)
-	ApplyImportedScoresFn       func(ctx context.Context, payload roundevents.ImportCompletedPayloadV1) (results.OperationResult, error)
+	ScorecardURLRequestedFunc     func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error)
+	CreateImportJobFunc           func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error)
+	ParseScorecardFunc            func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error)
+	NormalizeParsedScorecardFunc  func(ctx context.Context, data *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error)
+	IngestNormalizedScorecardFunc func(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error)
+	ApplyImportedScoresFunc       func(ctx context.Context, req roundtypes.ImportApplyScoresInput) (roundservice.ApplyImportedScoresResult, error)
 }
 
 func NewFakeService() *FakeService {
@@ -83,250 +89,362 @@ func (f *FakeService) record(step string) {
 }
 
 func (f *FakeService) Trace() []string {
-	return f.trace
+	out := make([]string, len(f.trace))
+	copy(out, f.trace)
+	return out
 }
 
 // --- Implementation ---
 
-func (f *FakeService) ValidateAndProcessRoundWithClock(ctx context.Context, p roundevents.CreateRoundRequestedPayloadV1, tp roundtime.TimeParserInterface, c roundutil.Clock) (results.OperationResult, error) {
-	f.record("ValidateAndProcessRoundWithClock")
-	if f.ValidateAndProcessRoundWithClockFn != nil {
-		return f.ValidateAndProcessRoundWithClockFn(ctx, p, tp, c)
+// Create Round
+
+func (f *FakeService) ValidateRoundCreationWithClock(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error) {
+	f.record("ValidateRoundCreationWithClock")
+	if f.ValidateRoundCreationWithClockFunc != nil {
+		return f.ValidateRoundCreationWithClockFunc(ctx, req, timeParser, clock)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.CreateRoundResult{}, nil
 }
 
-func (f *FakeService) StoreRound(ctx context.Context, g sharedtypes.GuildID, p roundevents.RoundEntityCreatedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) StoreRound(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 	f.record("StoreRound")
-	if f.StoreRoundFn != nil {
-		return f.StoreRoundFn(ctx, g, p)
+	if f.StoreRoundFunc != nil {
+		return f.StoreRoundFunc(ctx, round, guildID)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.CreateRoundResult{}, nil
 }
 
-func (f *FakeService) UpdateRoundMessageID(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID, m string) (*roundtypes.Round, error) {
+func (f *FakeService) UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
 	f.record("UpdateRoundMessageID")
-	if f.UpdateRoundMessageIDFn != nil {
-		return f.UpdateRoundMessageIDFn(ctx, g, r, m)
+	if f.UpdateRoundMessageIDFunc != nil {
+		return f.UpdateRoundMessageIDFunc(ctx, guildID, roundID, discordMessageID)
 	}
-	return &roundtypes.Round{}, nil
+	return nil, nil
 }
 
-func (f *FakeService) ValidateAndProcessRoundUpdateWithClock(ctx context.Context, p roundevents.UpdateRoundRequestedPayloadV1, tp roundtime.TimeParserInterface, c roundutil.Clock) (results.OperationResult, error) {
-	f.record("ValidateAndProcessRoundUpdateWithClock")
-	if f.ValidateAndProcessRoundUpdateWithClockFn != nil {
-		return f.ValidateAndProcessRoundUpdateWithClockFn(ctx, p, tp, c)
+// Update Round
+
+func (f *FakeService) ValidateRoundUpdateWithClock(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error) {
+	f.record("ValidateRoundUpdateWithClock")
+	if f.ValidateRoundUpdateWithClockFunc != nil {
+		return f.ValidateRoundUpdateWithClockFunc(ctx, req, timeParser, clock)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.UpdateRoundResult{}, nil
 }
 
-func (f *FakeService) ValidateAndProcessRoundUpdate(ctx context.Context, p roundevents.UpdateRoundRequestedPayloadV1, tp roundtime.TimeParserInterface) (results.OperationResult, error) {
-	f.record("ValidateAndProcessRoundUpdate")
-	if f.ValidateAndProcessRoundUpdateFn != nil {
-		return f.ValidateAndProcessRoundUpdateFn(ctx, p, tp)
+func (f *FakeService) ValidateRoundUpdate(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface) (roundservice.UpdateRoundResult, error) {
+	f.record("ValidateRoundUpdate")
+	if f.ValidateRoundUpdateFunc != nil {
+		return f.ValidateRoundUpdateFunc(ctx, req, timeParser)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.UpdateRoundResult{}, nil
 }
 
-func (f *FakeService) UpdateRoundEntity(ctx context.Context, p roundevents.RoundUpdateValidatedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) UpdateRoundEntity(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 	f.record("UpdateRoundEntity")
-	if f.UpdateRoundEntityFn != nil {
-		return f.UpdateRoundEntityFn(ctx, p)
+	if f.UpdateRoundEntityFunc != nil {
+		return f.UpdateRoundEntityFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.UpdateRoundResult{}, nil
 }
 
-func (f *FakeService) UpdateScheduledRoundEvents(ctx context.Context, p roundevents.RoundScheduleUpdatePayloadV1) (results.OperationResult, error) {
+func (f *FakeService) UpdateScheduledRoundEvents(ctx context.Context, req *roundtypes.UpdateScheduledRoundEventsRequest) (roundservice.UpdateScheduledRoundEventsResult, error) {
 	f.record("UpdateScheduledRoundEvents")
-	if f.UpdateScheduledRoundEventsFn != nil {
-		return f.UpdateScheduledRoundEventsFn(ctx, p)
+	if f.UpdateScheduledRoundEventsFunc != nil {
+		return f.UpdateScheduledRoundEventsFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.UpdateScheduledRoundEventsResult{}, nil
 }
 
-func (f *FakeService) ValidateRoundDeleteRequest(ctx context.Context, p roundevents.RoundDeleteRequestPayloadV1) (results.OperationResult, error) {
-	f.record("ValidateRoundDeleteRequest")
-	if f.ValidateRoundDeleteRequestFn != nil {
-		return f.ValidateRoundDeleteRequestFn(ctx, p)
+// Delete Round
+
+func (f *FakeService) ValidateRoundDeletion(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[*roundtypes.Round, error], error) {
+	f.record("ValidateRoundDeletion")
+	if f.ValidateRoundDeletionFunc != nil {
+		return f.ValidateRoundDeletionFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
 }
 
-func (f *FakeService) DeleteRound(ctx context.Context, p roundevents.RoundDeleteAuthorizedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) DeleteRound(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 	f.record("DeleteRound")
-	if f.DeleteRoundFn != nil {
-		return f.DeleteRoundFn(ctx, p)
+	if f.DeleteRoundFunc != nil {
+		return f.DeleteRoundFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[bool, error]{}, nil
 }
 
-func (f *FakeService) ProcessRoundStart(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (results.OperationResult, error) {
-	f.record("ProcessRoundStart")
-	if f.ProcessRoundStartFn != nil {
-		return f.ProcessRoundStartFn(ctx, g, r)
+// Start Round
+
+func (f *FakeService) StartRound(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
+	f.record("StartRound")
+	if f.StartRoundFunc != nil {
+		return f.StartRoundFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.StartRoundResult{}, nil
 }
 
-func (f *FakeService) ValidateParticipantJoinRequest(ctx context.Context, p roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error) {
-	f.record("ValidateParticipantJoinRequest")
-	if f.ValidateParticipantJoinRequestFn != nil {
-		return f.ValidateParticipantJoinRequestFn(ctx, p)
+// Join Round
+
+func (f *FakeService) ValidateJoinRequest(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.JoinRoundRequest, error], error) {
+	f.record("ValidateJoinRequest")
+	if f.ValidateJoinRequestFunc != nil {
+		return f.ValidateJoinRequestFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.JoinRoundRequest, error]{}, nil
 }
 
-func (f *FakeService) UpdateParticipantStatus(ctx context.Context, p roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error) {
-	f.record("UpdateParticipantStatus")
-	if f.UpdateParticipantStatusFn != nil {
-		return f.UpdateParticipantStatusFn(ctx, p)
+func (f *FakeService) JoinRound(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+	f.record("JoinRound")
+	if f.JoinRoundFunc != nil {
+		return f.JoinRoundFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
 }
 
-func (f *FakeService) ParticipantRemoval(ctx context.Context, p roundevents.ParticipantRemovalRequestPayloadV1) (results.OperationResult, error) {
-	f.record("ParticipantRemoval")
-	if f.ParticipantRemovalFn != nil {
-		return f.ParticipantRemovalFn(ctx, p)
-	}
-	return results.OperationResult{}, nil
-}
-
-func (f *FakeService) CheckParticipantStatus(ctx context.Context, p roundevents.ParticipantJoinRequestPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) CheckParticipantStatus(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error], error) {
 	f.record("CheckParticipantStatus")
-	if f.CheckParticipantStatusFn != nil {
-		return f.CheckParticipantStatusFn(ctx, p)
+	if f.CheckParticipantStatusFunc != nil {
+		return f.CheckParticipantStatusFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.ParticipantStatusCheckResult, error]{}, nil
 }
 
-func (f *FakeService) ValidateScoreUpdateRequest(ctx context.Context, p roundevents.ScoreUpdateRequestPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) ValidateParticipantJoinRequest(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.JoinRoundRequest, error], error) {
+	f.record("ValidateParticipantJoinRequest")
+	if f.ValidateParticipantJoinRequestFunc != nil {
+		return f.ValidateParticipantJoinRequestFunc(ctx, req)
+	}
+	return results.OperationResult[*roundtypes.JoinRoundRequest, error]{}, nil
+}
+
+func (f *FakeService) UpdateParticipantStatus(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+	f.record("UpdateParticipantStatus")
+	if f.UpdateParticipantStatusFunc != nil {
+		return f.UpdateParticipantStatusFunc(ctx, req)
+	}
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
+}
+
+func (f *FakeService) ParticipantRemoval(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
+	f.record("ParticipantRemoval")
+	if f.ParticipantRemovalFunc != nil {
+		return f.ParticipantRemovalFunc(ctx, req)
+	}
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
+}
+
+// Score Round
+
+func (f *FakeService) ValidateScoreUpdateRequest(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (results.OperationResult[*roundtypes.ScoreUpdateRequest, error], error) {
 	f.record("ValidateScoreUpdateRequest")
-	if f.ValidateScoreUpdateRequestFn != nil {
-		return f.ValidateScoreUpdateRequestFn(ctx, p)
+	if f.ValidateScoreUpdateRequestFunc != nil {
+		return f.ValidateScoreUpdateRequestFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.ScoreUpdateRequest, error]{}, nil
 }
 
-func (f *FakeService) UpdateParticipantScore(ctx context.Context, p roundevents.ScoreUpdateValidatedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) UpdateParticipantScore(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (roundservice.ScoreUpdateResult, error) {
 	f.record("UpdateParticipantScore")
-	if f.UpdateParticipantScoreFn != nil {
-		return f.UpdateParticipantScoreFn(ctx, p)
+	if f.UpdateParticipantScoreFunc != nil {
+		return f.UpdateParticipantScoreFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.ScoreUpdateResult{}, nil
 }
 
-func (f *FakeService) UpdateParticipantScoresBulk(ctx context.Context, p roundevents.ScoreBulkUpdateRequestPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) UpdateParticipantScoresBulk(ctx context.Context, req *roundtypes.BulkScoreUpdateRequest) (roundservice.BulkScoreUpdateResult, error) {
 	f.record("UpdateParticipantScoresBulk")
-	if f.UpdateParticipantScoresBulkFn != nil {
-		return f.UpdateParticipantScoresBulkFn(ctx, p)
+	if f.UpdateParticipantScoresBulkFunc != nil {
+		return f.UpdateParticipantScoresBulkFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.BulkScoreUpdateResult{}, nil
 }
 
-func (f *FakeService) CheckAllScoresSubmitted(ctx context.Context, p roundevents.ParticipantScoreUpdatedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) CheckAllScoresSubmitted(ctx context.Context, req *roundtypes.CheckAllScoresSubmittedRequest) (roundservice.AllScoresSubmittedResult, error) {
 	f.record("CheckAllScoresSubmitted")
-	if f.CheckAllScoresSubmittedFn != nil {
-		return f.CheckAllScoresSubmittedFn(ctx, p)
+	if f.CheckAllScoresSubmittedFunc != nil {
+		return f.CheckAllScoresSubmittedFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.AllScoresSubmittedResult{}, nil
 }
 
-func (f *FakeService) FinalizeRound(ctx context.Context, p roundevents.AllScoresSubmittedPayloadV1) (results.OperationResult, error) {
+// Finalize Round
+
+func (f *FakeService) FinalizeRound(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 	f.record("FinalizeRound")
-	if f.FinalizeRoundFn != nil {
-		return f.FinalizeRoundFn(ctx, p)
+	if f.FinalizeRoundFunc != nil {
+		return f.FinalizeRoundFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.FinalizeRoundResult{}, nil
 }
 
-func (f *FakeService) NotifyScoreModule(ctx context.Context, p roundevents.RoundFinalizedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) NotifyScoreModule(ctx context.Context, result *roundtypes.FinalizeRoundResult) (results.OperationResult[*roundtypes.Round, error], error) {
 	f.record("NotifyScoreModule")
-	if f.NotifyScoreModuleFn != nil {
-		return f.NotifyScoreModuleFn(ctx, p)
+	if f.NotifyScoreModuleFunc != nil {
+		return f.NotifyScoreModuleFunc(ctx, result)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
 }
 
-func (f *FakeService) ProcessRoundReminder(ctx context.Context, p roundevents.DiscordReminderPayloadV1) (results.OperationResult, error) {
+// Round Reminder
+
+func (f *FakeService) ProcessRoundReminder(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error) {
 	f.record("ProcessRoundReminder")
-	if f.ProcessRoundReminderFn != nil {
-		return f.ProcessRoundReminderFn(ctx, p)
+	if f.ProcessRoundReminderFunc != nil {
+		return f.ProcessRoundReminderFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.ProcessRoundReminderResult{}, nil
 }
 
-func (f *FakeService) GetRound(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (results.OperationResult, error) {
+// Retrieve Round
+
+func (f *FakeService) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
 	f.record("GetRound")
-	if f.GetRoundFn != nil {
-		return f.GetRoundFn(ctx, g, r)
+	if f.GetRoundFunc != nil {
+		return f.GetRoundFunc(ctx, guildID, roundID)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.Round, error]{}, nil
 }
 
-func (f *FakeService) ScheduleRoundEvents(ctx context.Context, g sharedtypes.GuildID, p roundevents.RoundScheduledPayloadV1, m string) (results.OperationResult, error) {
+func (f *FakeService) GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error) {
+	f.record("GetRoundsForGuild")
+	if f.GetRoundsForGuildFunc != nil {
+		return f.GetRoundsForGuildFunc(ctx, guildID)
+	}
+	return []*roundtypes.Round{}, nil
+}
+
+// Schedule Round Events
+
+func (f *FakeService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error) {
 	f.record("ScheduleRoundEvents")
-	if f.ScheduleRoundEventsFn != nil {
-		return f.ScheduleRoundEventsFn(ctx, g, p, m)
+	if f.ScheduleRoundEventsFunc != nil {
+		return f.ScheduleRoundEventsFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.ScheduleRoundEventsResult{}, nil
 }
 
-func (f *FakeService) UpdateScheduledRoundsWithNewTags(ctx context.Context, g sharedtypes.GuildID, ct map[sharedtypes.DiscordID]sharedtypes.TagNumber) (results.OperationResult, error) {
+// Update Participant Tags
+
+func (f *FakeService) UpdateScheduledRoundsWithNewTags(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (roundservice.UpdateScheduledRoundsWithNewTagsResult, error) {
 	f.record("UpdateScheduledRoundsWithNewTags")
-	if f.UpdateScheduledRoundsWithNewTagsFn != nil {
-		return f.UpdateScheduledRoundsWithNewTagsFn(ctx, g, ct)
+	if f.UpdateScheduledRoundsWithNewTagsFunc != nil {
+		return f.UpdateScheduledRoundsWithNewTagsFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.UpdateScheduledRoundsWithNewTagsResult{}, nil
 }
 
-func (f *FakeService) ScorecardURLRequested(ctx context.Context, p roundevents.ScorecardURLRequestedPayloadV1) (results.OperationResult, error) {
+// Scorecard Import
+
+func (f *FakeService) ScorecardURLRequested(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
 	f.record("ScorecardURLRequested")
-	if f.ScorecardURLRequestedFn != nil {
-		return f.ScorecardURLRequestedFn(ctx, p)
+	if f.ScorecardURLRequestedFunc != nil {
+		return f.ScorecardURLRequestedFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.CreateImportJobResult{}, nil
 }
 
-func (f *FakeService) CreateImportJob(ctx context.Context, p roundevents.ScorecardUploadedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) CreateImportJob(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
 	f.record("CreateImportJob")
-	if f.CreateImportJobFn != nil {
-		return f.CreateImportJobFn(ctx, p)
+	if f.CreateImportJobFunc != nil {
+		return f.CreateImportJobFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.CreateImportJobResult{}, nil
 }
 
-func (f *FakeService) ParseScorecard(ctx context.Context, p roundevents.ScorecardUploadedPayloadV1, fd []byte) (results.OperationResult, error) {
+func (f *FakeService) ParseScorecard(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
 	f.record("ParseScorecard")
-	if f.ParseScorecardFn != nil {
-		return f.ParseScorecardFn(ctx, p, fd)
+	if f.ParseScorecardFunc != nil {
+		return f.ParseScorecardFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.ParseScorecardResult{}, nil
 }
 
-func (f *FakeService) NormalizeParsedScorecard(ctx context.Context, pr *roundtypes.ParsedScorecard, m roundtypes.Metadata) (results.OperationResult, error) {
+func (f *FakeService) NormalizeParsedScorecard(ctx context.Context, data *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
 	f.record("NormalizeParsedScorecard")
-	if f.NormalizeParsedScorecardFn != nil {
-		return f.NormalizeParsedScorecardFn(ctx, pr, m)
+	if f.NormalizeParsedScorecardFunc != nil {
+		return f.NormalizeParsedScorecardFunc(ctx, data, meta)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.NormalizedScorecard, error]{}, nil
 }
 
-func (f *FakeService) IngestNormalizedScorecard(ctx context.Context, p roundevents.ScorecardNormalizedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) IngestNormalizedScorecard(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 	f.record("IngestNormalizedScorecard")
-	if f.IngestNormalizedScorecardFn != nil {
-		return f.IngestNormalizedScorecardFn(ctx, p)
+	if f.IngestNormalizedScorecardFunc != nil {
+		return f.IngestNormalizedScorecardFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return results.OperationResult[*roundtypes.IngestScorecardResult, error]{}, nil
 }
 
-func (f *FakeService) ApplyImportedScores(ctx context.Context, p roundevents.ImportCompletedPayloadV1) (results.OperationResult, error) {
+func (f *FakeService) ApplyImportedScores(ctx context.Context, req roundtypes.ImportApplyScoresInput) (roundservice.ApplyImportedScoresResult, error) {
 	f.record("ApplyImportedScores")
-	if f.ApplyImportedScoresFn != nil {
-		return f.ApplyImportedScoresFn(ctx, p)
+	if f.ApplyImportedScoresFunc != nil {
+		return f.ApplyImportedScoresFunc(ctx, req)
 	}
-	return results.OperationResult{}, nil
+	return roundservice.ApplyImportedScoresResult{}, nil
 }
 
-// Interface assertion
 var _ roundservice.Service = (*FakeService)(nil)
+var _ userservice.Service = (*FakeUserService)(nil)
+var _ utils.Helpers = (*FakeHelpers)(nil)
+
+// FakeUserService implements userservice.Service for handler testing.
+type FakeUserService struct {
+	LookupProfilesFunc func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+}
+
+func NewFakeUserService() *FakeUserService {
+	return &FakeUserService{}
+}
+
+func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	if f.LookupProfilesFunc != nil {
+		return f.LookupProfilesFunc(ctx, userIDs)
+	}
+	// Return empty map results
+	return results.SuccessResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error](map[sharedtypes.DiscordID]*usertypes.UserProfile{}), nil
+}
+
+// Implement other methods as no-ops to satisfy interface
+func (f *FakeUserService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+	return userservice.UserResult{}, nil
+}
+func (f *FakeUserService) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (userservice.UpdateIdentityResult, error) {
+	return userservice.UpdateIdentityResult{}, nil
+}
+func (f *FakeUserService) GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+	return userservice.UserRoleResult{}, nil
+}
+func (f *FakeUserService) GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) UpdateUDiscIdentity(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) (userservice.UpdateIdentityResult, error) {
+	return userservice.UpdateIdentityResult{}, nil
+}
+func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (userservice.MatchResultResult, error) {
+	return userservice.MatchResultResult{}, nil
+}
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+	return nil
+}
+
+// FakeHelpers implements utils.Helpers for testing
+type FakeHelpers struct{}
+
+func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload interface{}, topic string) (*message.Message, error) {
+	return message.NewMessage("test-id", nil), nil
+}
+
+func (f *FakeHelpers) CreateNewMessage(payload interface{}, topic string) (*message.Message, error) {
+	return message.NewMessage("test-id", nil), nil
+}
+
+func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload interface{}) error {
+	return nil
+}

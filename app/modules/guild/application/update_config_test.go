@@ -6,23 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
-	guilddbmocks "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/mocks"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.uber.org/mock/gomock"
 )
 
 func TestGuildService_UpdateGuildConfig(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
-	mockRepo := guilddbmocks.NewMockRepository(ctrl)
 	logger := loggerfrolfbot.NoOpLogger
 	metrics := &guildmetrics.NoOpMetrics{}
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -33,100 +27,125 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		mockSetup   func(*guilddbmocks.MockRepository)
-		config      *guildtypes.GuildConfig
-		wantSuccess bool
-		wantFailure bool
-		wantErr     error
-		failReason  string
+		name           string
+		config         *guildtypes.GuildConfig
+		setupFake      func(*FakeGuildRepository)
+		expectInfraErr bool
+		verify         func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository)
 	}{
 		{
-			name: "success",
-			mockSetup: func(m *guilddbmocks.MockRepository) {
-				m.EXPECT().UpdateConfig(gomock.Any(), sharedtypes.GuildID("guild-1"), gomock.Any()).Return(nil)
+			name:   "success",
+			config: validConfig,
+			setupFake: func(f *FakeGuildRepository) {
+				f.UpdateConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID, updates *guilddb.UpdateFields) error {
+					return nil
+				}
 			},
-			config:      validConfig,
-			wantSuccess: true,
-		},
-		{
-			name: "not found",
-			mockSetup: func(m *guilddbmocks.MockRepository) {
-				m.EXPECT().UpdateConfig(gomock.Any(), sharedtypes.GuildID("guild-2"), gomock.Any()).Return(guilddb.ErrNoRowsAffected)
+			expectInfraErr: false,
+			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if res.Failure != nil {
+					t.Fatalf("expected domain success, got failure: %v", *res.Failure)
+				}
+				if res.Success == nil || (*res.Success).GuildID != "guild-1" {
+					t.Errorf("expected success payload for guild-1, got %v", res.Success)
+				}
+				if fake.Trace()[0] != "UpdateConfig" {
+					t.Errorf("expected UpdateConfig to be called, got %v", fake.Trace())
+				}
 			},
-			config:      &guildtypes.GuildConfig{GuildID: "guild-2"},
-			wantFailure: true,
-			failReason:  ErrGuildConfigNotFound.Error(),
 		},
 		{
-			name: "db error on update",
-			mockSetup: func(m *guilddbmocks.MockRepository) {
-				m.EXPECT().UpdateConfig(gomock.Any(), sharedtypes.GuildID("guild-4"), gomock.Any()).Return(errors.New("update error"))
+			name:   "not found (domain failure)",
+			config: &guildtypes.GuildConfig{GuildID: "guild-2"},
+			setupFake: func(f *FakeGuildRepository) {
+				f.UpdateConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID, updates *guilddb.UpdateFields) error {
+					return guilddb.ErrNoRowsAffected
+				}
 			},
-			config:      &guildtypes.GuildConfig{GuildID: "guild-4"},
-			wantFailure: true,
-			wantErr:     errors.New("update error"),
-			failReason:  "update error",
+			expectInfraErr: false,
+			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrGuildConfigNotFound) {
+					t.Fatalf("expected domain failure ErrGuildConfigNotFound, got %v", res.Failure)
+				}
+			},
 		},
 		{
-			name:        "invalid guildID",
-			mockSetup:   func(m *guilddbmocks.MockRepository) {},
-			config:      &guildtypes.GuildConfig{GuildID: ""},
-			wantFailure: true,
-			failReason:  ErrInvalidGuildID.Error(),
+			name:   "database error (infra failure)",
+			config: &guildtypes.GuildConfig{GuildID: "guild-4"},
+			setupFake: func(f *FakeGuildRepository) {
+				f.UpdateConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID, updates *guilddb.UpdateFields) error {
+					return errors.New("update error")
+				}
+			},
+			expectInfraErr: true,
+			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
+				if infraErr == nil || !strings.Contains(infraErr.Error(), "update error") {
+					t.Fatalf("expected update error, got %v", infraErr)
+				}
+			},
 		},
 		{
-			name:        "nil config",
-			mockSetup:   func(m *guilddbmocks.MockRepository) {},
-			config:      nil,
-			wantFailure: true,
-			failReason:  ErrNilConfig.Error(),
+			name:           "invalid guildID (domain failure)",
+			config:         &guildtypes.GuildConfig{GuildID: ""},
+			expectInfraErr: false,
+			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if res.Failure == nil || !errors.Is(*res.Failure, ErrInvalidGuildID) {
+					t.Fatalf("expected domain failure ErrInvalidGuildID, got %v", res.Failure)
+				}
+				if len(fake.Trace()) > 0 {
+					t.Errorf("repo should not have been called for invalid ID")
+				}
+			},
+		},
+		{
+			name:           "nil config (infra failure)",
+			config:         nil,
+			expectInfraErr: true,
+			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
+				if !errors.Is(infraErr, ErrNilConfig) {
+					t.Fatalf("expected ErrNilConfig, got %v", infraErr)
+				}
+				if len(fake.Trace()) > 0 {
+					t.Errorf("repo should not have been called for nil config")
+				}
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup(mockRepo)
+			fakeRepo := NewFakeGuildRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
+
 			s := &GuildService{
-				repo:    mockRepo,
+				repo:    fakeRepo,
 				logger:  logger,
 				metrics: metrics,
 				tracer:  tracer,
 			}
 
-			got, err := s.UpdateGuildConfig(ctx, tt.config)
+			res, err := s.UpdateGuildConfig(ctx, tt.config)
 
-			// Error check
-			if tt.wantErr != nil {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.wantErr.Error())
-				} else if !strings.Contains(err.Error(), tt.wantErr.Error()) {
-					t.Errorf("expected error containing %q, got %q", tt.wantErr.Error(), err.Error())
-				}
-				return
+			if tt.expectInfraErr && err == nil {
+				t.Fatal("expected infrastructure error but got nil")
+			}
+			if !tt.expectInfraErr && err != nil {
+				t.Fatalf("unexpected infrastructure error: %v", err)
 			}
 
-			if err != nil && tt.wantErr == nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			// Success check
-			if tt.wantSuccess {
-				if got.Success == nil {
-					t.Errorf("expected success payload, got nil")
-				}
-			}
-
-			// Failure check
-			if tt.wantFailure {
-				if got.Failure == nil {
-					t.Errorf("expected failure payload, got nil")
-					return
-				}
-				actual := got.Failure.(*guildevents.GuildConfigUpdateFailedPayloadV1)
-				if actual.Reason != tt.failReason {
-					t.Errorf("expected reason %q, got %q", tt.failReason, actual.Reason)
-				}
+			if tt.verify != nil {
+				tt.verify(t, res, err, fakeRepo)
 			}
 		})
 	}
