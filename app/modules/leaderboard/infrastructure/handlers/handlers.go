@@ -16,12 +16,14 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // LeaderboardHandlers implements the Handlers interface for leaderboard events.
 type LeaderboardHandlers struct {
 	service         leaderboardservice.Service
+	userService     userservice.Service
 	sagaCoordinator saga.SagaCoordinator
 	helpers         utils.Helpers
 }
@@ -29,6 +31,7 @@ type LeaderboardHandlers struct {
 // NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
 func NewLeaderboardHandlers(
 	service leaderboardservice.Service,
+	userService userservice.Service,
 	sagaCoordinator saga.SagaCoordinator,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -37,6 +40,7 @@ func NewLeaderboardHandlers(
 ) Handlers {
 	return &LeaderboardHandlers{
 		service:         service,
+		userService:     userService,
 		sagaCoordinator: sagaCoordinator,
 		helpers:         helpers,
 	}

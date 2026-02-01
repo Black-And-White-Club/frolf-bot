@@ -1,6 +1,8 @@
 package userdb
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -19,6 +21,11 @@ type User struct {
 
 	// ORM relationships
 	Memberships []*GuildMembership `bun:"rel:has-many,join:user_id=user_id" json:"-"`
+
+	// Profile fields
+	DisplayName      *string    `bun:"display_name,nullzero" json:"display_name,omitempty"`
+	AvatarHash       *string    `bun:"avatar_hash,nullzero" json:"avatar_hash,omitempty"`
+	ProfileUpdatedAt *time.Time `bun:"profile_updated_at,nullzero" json:"profile_updated_at,omitempty"`
 }
 
 // GuildMembership represents a user's membership in a specific guild.
@@ -54,4 +61,34 @@ func (u *User) GetID() int64 {
 
 func (u *User) GetUserID() sharedtypes.DiscordID {
 	return u.UserID
+}
+
+// AvatarURL returns the Discord CDN URL for the user's avatar
+func (u *User) AvatarURL(size int) string {
+	if u.AvatarHash != nil && *u.AvatarHash != "" {
+		ext := "png"
+		// Animated avatars start with "a_"
+		if len(*u.AvatarHash) > 2 && (*u.AvatarHash)[:2] == "a_" {
+			ext = "gif"
+		}
+		return fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s?size=%d",
+			u.UserID, *u.AvatarHash, ext, size)
+	}
+	// Default avatar based on user ID
+	userIDInt, _ := strconv.ParseUint(string(u.UserID), 10, 64)
+	index := (userIDInt >> 22) % 6
+	return fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", index)
+}
+
+// GetDisplayName returns display name or a fallback
+func (u *User) GetDisplayName() string {
+	if u.DisplayName != nil && *u.DisplayName != "" {
+		return *u.DisplayName
+	}
+	// Fallback to last 6 chars of Discord ID
+	id := string(u.UserID)
+	if len(id) > 6 {
+		return "User ..." + id[len(id)-6:]
+	}
+	return "User " + id
 }

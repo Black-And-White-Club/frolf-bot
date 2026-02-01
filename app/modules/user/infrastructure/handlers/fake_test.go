@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
@@ -23,6 +24,8 @@ type FakeUserService struct {
 	FindByUDiscUsernameFunc      func(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error)
 	FindByUDiscNameFunc          func(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error)
 	MatchParsedScorecardFunc     func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (results.OperationResult[*userservice.MatchResult, error], error)
+	UpdateUserProfileFunc        func(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error
+	LookupProfilesFunc           func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
 }
 
 func NewFakeUserService() *FakeUserService {
@@ -101,6 +104,22 @@ func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID shar
 		return f.MatchParsedScorecardFunc(ctx, guildID, userID, playerNames)
 	}
 	return results.OperationResult[*userservice.MatchResult, error]{}, nil
+}
+
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+	f.record("UpdateUserProfile")
+	if f.UpdateUserProfileFunc != nil {
+		return f.UpdateUserProfileFunc(ctx, userID, displayName, avatarHash)
+	}
+	return nil
+}
+
+func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	f.record("LookupProfiles")
+	if f.LookupProfilesFunc != nil {
+		return f.LookupProfilesFunc(ctx, userIDs)
+	}
+	return results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error]{}, nil
 }
 
 var _ userservice.Service = (*FakeUserService)(nil)

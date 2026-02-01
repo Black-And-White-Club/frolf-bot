@@ -146,8 +146,9 @@ func TestRoundHandlers_HandleRoundReminder(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

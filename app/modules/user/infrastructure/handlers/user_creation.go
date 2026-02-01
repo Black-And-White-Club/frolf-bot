@@ -32,40 +32,29 @@ func (h *UserHandlers) HandleUserSignupRequest(
 		return nil, err
 	}
 
-	// Manual mapping
-	if result.IsSuccess() {
-		success := *result.Success
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.UserCreatedV1,
-				Payload: &userevents.UserCreatedPayloadV1{
-					GuildID:         payload.GuildID,
-					UserID:          success.UserID,
-					TagNumber:       success.TagNumber,
-					IsReturningUser: success.IsReturningUser,
-				},
-			},
-		}, nil
-	}
+	// Map result to event payloads
+	mappedResult := result.Map(
+		func(success *userservice.CreateUserResponse) any {
+			return &userevents.UserCreatedPayloadV1{
+				GuildID:         payload.GuildID,
+				UserID:          success.UserID,
+				TagNumber:       success.TagNumber,
+				IsReturningUser: success.IsReturningUser,
+			}
+		},
+		func(failure error) any {
+			reason := failure.Error()
+			if errors.Is(failure, userservice.ErrUserAlreadyExists) {
+				reason = "user already exists in this guild"
+			}
+			return &userevents.UserCreationFailedPayloadV1{
+				GuildID:   payload.GuildID,
+				UserID:    payload.UserID,
+				TagNumber: payload.TagNumber,
+				Reason:    reason,
+			}
+		},
+	)
 
-	if result.IsFailure() {
-		failure := *result.Failure
-		reason := failure.Error()
-		if errors.Is(failure, userservice.ErrUserAlreadyExists) {
-			reason = "user already exists in this guild"
-		}
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.UserCreationFailedV1,
-				Payload: &userevents.UserCreationFailedPayloadV1{
-					GuildID:   payload.GuildID,
-					UserID:    payload.UserID,
-					TagNumber: payload.TagNumber,
-					Reason:    reason,
-				},
-			},
-		}, nil
-	}
-
-	return nil, nil
+	return mapOperationResult(mappedResult, userevents.UserCreatedV1, userevents.UserCreationFailedV1), nil
 }

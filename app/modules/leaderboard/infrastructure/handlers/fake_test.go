@@ -5,9 +5,13 @@ import (
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 // FakeService implements leaderboardservice.Service for handler testing.
@@ -139,3 +143,66 @@ func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID shared
 // Ensure interface compliance
 var _ leaderboardservice.Service = (*FakeService)(nil)
 var _ saga.SagaCoordinator = (*FakeSagaCoordinator)(nil)
+var _ userservice.Service = (*FakeUserService)(nil)
+var _ utils.Helpers = (*FakeHelpers)(nil)
+
+// FakeUserService implements userservice.Service for handler testing.
+type FakeUserService struct {
+	LookupProfilesFunc func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+}
+
+func NewFakeUserService() *FakeUserService {
+	return &FakeUserService{}
+}
+
+func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	if f.LookupProfilesFunc != nil {
+		return f.LookupProfilesFunc(ctx, userIDs)
+	}
+	// Return empty map results
+	return results.SuccessResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error](map[sharedtypes.DiscordID]*usertypes.UserProfile{}), nil
+}
+
+// Implement other methods as no-ops to satisfy interface
+func (f *FakeUserService) CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+	return userservice.UserResult{}, nil
+}
+func (f *FakeUserService) UpdateUserRoleInDatabase(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (userservice.UpdateIdentityResult, error) {
+	return userservice.UpdateIdentityResult{}, nil
+}
+func (f *FakeUserService) GetUserRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+	return userservice.UserRoleResult{}, nil
+}
+func (f *FakeUserService) GetUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) FindByUDiscUsername(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) FindByUDiscName(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error) {
+	return userservice.UserWithMembershipResult{}, nil
+}
+func (f *FakeUserService) UpdateUDiscIdentity(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) (userservice.UpdateIdentityResult, error) {
+	return userservice.UpdateIdentityResult{}, nil
+}
+func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (userservice.MatchResultResult, error) {
+	return userservice.MatchResultResult{}, nil
+}
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+	return nil
+}
+
+// FakeHelpers implements utils.Helpers for testing
+type FakeHelpers struct{}
+
+func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload interface{}, topic string) (*message.Message, error) {
+	return message.NewMessage("test-id", nil), nil
+}
+
+func (f *FakeHelpers) CreateNewMessage(payload interface{}, topic string) (*message.Message, error) {
+	return message.NewMessage("test-id", nil), nil
+}
+
+func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload interface{}) error {
+	return nil
+}

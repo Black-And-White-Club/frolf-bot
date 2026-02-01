@@ -8,6 +8,7 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -36,12 +37,36 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 		}}, nil
 	}
 
-	resp := &leaderboardevents.GetLeaderboardResponsePayloadV1{
-		GuildID:     payload.GuildID,
-		Leaderboard: *result.Success,
+	leaderboard := *result.Success
+
+	// Collect user IDs from leaderboard entries
+	userIDs := make([]sharedtypes.DiscordID, 0, len(leaderboard))
+	for _, entry := range leaderboard {
+		userIDs = append(userIDs, entry.UserID)
 	}
 
-	return []handlerwrapper.Result{{Topic: leaderboardevents.GetLeaderboardResponseV1, Payload: resp}}, nil
+	// Lookup profiles
+	profiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile)
+	if len(userIDs) > 0 {
+		profileResult, _ := h.userService.LookupProfiles(ctx, userIDs)
+		if profileResult.IsSuccess() {
+			profiles = *profileResult.Success
+		}
+	}
+
+	resp := &leaderboardevents.GetLeaderboardResponsePayloadV1{
+		GuildID:     payload.GuildID,
+		Leaderboard: leaderboard,
+		Profiles:    profiles,
+	}
+
+	// Check for reply_to subject for Request-Reply pattern
+	topic := leaderboardevents.GetLeaderboardResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
+	return []handlerwrapper.Result{{Topic: topic, Payload: resp}}, nil
 }
 
 // HandleGetTagByUserIDRequest performs a single tag lookup.

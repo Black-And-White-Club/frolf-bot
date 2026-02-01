@@ -100,8 +100,9 @@ func TestRoundHandlers_HandleScoreUpdateRequest(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -213,8 +214,9 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -340,8 +342,9 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

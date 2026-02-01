@@ -34,6 +34,7 @@ type FakeUserRepository struct {
 	GetUserGlobalFunc    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*userdb.User, error)
 	SaveGlobalUserFunc   func(ctx context.Context, db bun.IDB, user *userdb.User) error
 	UpdateGlobalUserFunc func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *userdb.UserUpdateFields) error
+	GetByUserIDsFunc     func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*userdb.User, error)
 
 	// Guild membership operations
 	CreateGuildMembershipFunc func(ctx context.Context, db bun.IDB, membership *userdb.GuildMembership) error
@@ -48,6 +49,9 @@ type FakeUserRepository struct {
 	FindByUDiscUsernameFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*userdb.UserWithMembership, error)
 	FindByUDiscNameFunc      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error)
 	FindByUDiscNameFuzzyFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error)
+
+	// Profile operations
+	UpdateProfileFunc func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -174,5 +178,23 @@ func (f *FakeUserRepository) FindByUDiscNameFuzzy(ctx context.Context, db bun.ID
 	return []*userdb.UserWithMembership{}, nil
 }
 
+func (f *FakeUserRepository) GetByUserIDs(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*userdb.User, error) {
+	f.record("GetByUserIDs")
+	if f.GetByUserIDsFunc != nil {
+		return f.GetByUserIDsFunc(ctx, db, userIDs)
+	}
+	return []*userdb.User{}, nil
+}
+
+func (f *FakeUserRepository) UpdateProfile(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error {
+	f.record("UpdateProfile")
+	if f.UpdateProfileFunc != nil {
+		return f.UpdateProfileFunc(ctx, db, userID, displayName, avatarHash)
+	}
+	return nil
+}
+
 // Ensure the fake actually satisfies the interface
 var _ userdb.Repository = (*FakeUserRepository)(nil)
+
+func pointer(s string) *string { return &s }

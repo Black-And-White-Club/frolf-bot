@@ -16,6 +16,7 @@ import (
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/router"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -42,6 +43,7 @@ func NewRoundModule(
 	roundDB rounddb.Repository,
 	db *bun.DB,
 	userDB userdb.Repository,
+	userService userservice.Service,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -90,7 +92,7 @@ func NewRoundModule(
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, helpers, tracer, prometheusRegistry)
 
 	// 2. Initialize Handlers
-	handlers := roundhandlers.NewRoundHandlers(service, logger, helpers)
+	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers)
 
 	// 3. Configure the router with handlers (registers topics and middleware)
 	if err := roundRouter.Configure(routerCtx, handlers); err != nil {

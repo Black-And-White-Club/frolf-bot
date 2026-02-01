@@ -72,6 +72,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
+				userService:     NewFakeUserService(),
 				sagaCoordinator: fakeSaga,
 			}
 

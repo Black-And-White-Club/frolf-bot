@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
 	authhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/handlers"
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
@@ -34,6 +36,8 @@ func NewModule(
 	cfg *config.Config,
 	obs observability.Observability,
 	nc *nats.Conn,
+	eventBus eventbus.EventBus,
+	helper utils.Helpers,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -69,7 +73,7 @@ func NewModule(
 	)
 
 	// Create handlers
-	handlers := authhandlers.NewAuthHandlers(service, logger, tracer)
+	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer)
 
 	// Create router
 	router := authrouter.NewRouter(handlers, nc)

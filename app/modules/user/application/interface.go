@@ -23,6 +23,8 @@ type UserResult = results.OperationResult[*CreateUserResponse, error]
 // If you need membership details, define a small struct here or in usertypes
 type UserWithMembership struct {
 	usertypes.UserData
+	DisplayName   string  `json:"display_name"`
+	AvatarHash    *string `json:"avatar_hash"`
 	UDiscUsername *string `json:"udisc_username"`
 	UDiscName     *string `json:"udisc_name"`
 	IsMember      bool    `json:"is_member"`
@@ -55,4 +57,8 @@ type Service interface {
 	UpdateUDiscIdentity(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) (UpdateIdentityResult, error)
 	// UDisc Matching
 	MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (MatchResultResult, error)
+
+	// User Profile
+	UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error
+	LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
 }

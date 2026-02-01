@@ -121,6 +121,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
+				userService:     NewFakeUserService(),
 				sagaCoordinator: fakeSaga,
 			}
 

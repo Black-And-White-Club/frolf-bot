@@ -300,4 +300,64 @@ func TestUserService_UpdateUDiscIdentity(t *testing.T) {
 	}
 }
 
-func pointer(s string) *string { return &s }
+func TestUserService_UpdateUserProfile(t *testing.T) {
+	ctx := context.Background()
+	userID := sharedtypes.DiscordID("user-1")
+	displayName := "New Name"
+	avatarHash := "hash123"
+
+	fakeRepo := NewFakeUserRepository()
+	fakeRepo.UpdateProfileFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, name string, hash string) error {
+		if id != userID || name != displayName || hash != avatarHash {
+			return errors.New("unexpected arguments")
+		}
+		return nil
+	}
+
+	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+	err := s.UpdateUserProfile(ctx, userID, displayName, avatarHash)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fakeRepo.Trace()[0] != "UpdateProfile" {
+		t.Errorf("expected UpdateProfile trace")
+	}
+}
+
+func TestUserService_LookupProfiles(t *testing.T) {
+	ctx := context.Background()
+	userIDs := []sharedtypes.DiscordID{"user-1", "user-2"}
+
+	fakeRepo := NewFakeUserRepository()
+	fakeRepo.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
+		return []*userdb.User{
+			{UserID: "user-1", DisplayName: pointer("UserOne")},
+		}, nil
+	}
+
+	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+	res, err := s.LookupProfiles(ctx, userIDs)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsSuccess() {
+		t.Fatalf("expected success result")
+	}
+
+	profiles := *res.Success
+	if len(profiles) != 2 {
+		t.Errorf("expected 2 profiles, got %d", len(profiles))
+	}
+
+	// Check found user
+	if p1, ok := profiles["user-1"]; !ok || p1.DisplayName != "UserOne" {
+		t.Errorf("expected UserOne for user-1, got %+v", p1)
+	}
+
+	// Check default user
+	if p2, ok := profiles["user-2"]; !ok || !strings.HasPrefix(p2.DisplayName, "User") {
+		t.Errorf("expected default profile for user-2, got %+v", p2)
+	}
+}

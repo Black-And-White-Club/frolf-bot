@@ -7,6 +7,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
 
 // HandleTagAvailable handles the TagAvailable event.
@@ -34,38 +35,27 @@ func (h *UserHandlers) HandleTagAvailable(
 		return nil, err
 	}
 
-	// Manual mapping since UserCreatedPayloadV1 needs fields from both payload and result
-	if result.IsSuccess() {
-		success := *result.Success
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.UserCreatedV1,
-				Payload: &userevents.UserCreatedPayloadV1{
-					GuildID:         payload.GuildID,
-					UserID:          success.UserID,
-					TagNumber:       success.TagNumber,
-					IsReturningUser: success.IsReturningUser,
-				},
-			},
-		}, nil
-	}
+	// Map result to event payloads
+	mappedResult := result.Map(
+		func(success *userservice.CreateUserResponse) any {
+			return &userevents.UserCreatedPayloadV1{
+				GuildID:         payload.GuildID,
+				UserID:          success.UserID,
+				TagNumber:       success.TagNumber,
+				IsReturningUser: success.IsReturningUser,
+			}
+		},
+		func(failure error) any {
+			return &userevents.UserCreationFailedPayloadV1{
+				GuildID:   payload.GuildID,
+				UserID:    payload.UserID,
+				TagNumber: &payload.TagNumber,
+				Reason:    failure.Error(),
+			}
+		},
+	)
 
-	if result.IsFailure() {
-		failure := *result.Failure
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.UserCreationFailedV1,
-				Payload: &userevents.UserCreationFailedPayloadV1{
-					GuildID:   payload.GuildID,
-					UserID:    payload.UserID,
-					TagNumber: &payload.TagNumber,
-					Reason:    failure.Error(),
-				},
-			},
-		}, nil
-	}
-
-	return nil, nil
+	return mapOperationResult(mappedResult, userevents.UserCreatedV1, userevents.UserCreationFailedV1), nil
 }
 
 // HandleTagUnavailable remains largely the same as it doesn't call the service,

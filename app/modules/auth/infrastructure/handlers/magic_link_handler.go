@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	authevents "github.com/Black-And-White-Club/frolf-bot-shared/events/auth"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/nats-io/nats.go"
@@ -11,16 +12,10 @@ import (
 
 // MagicLinkRequest is the incoming request payload for magic link generation
 type MagicLinkRequest struct {
-	UserID  string `json:"user_id"`
-	GuildID string `json:"guild_id"`
-	Role    string `json:"role"`
-}
-
-// MagicLinkResponse is the response payload sent back to requesters
-type MagicLinkResponse struct {
-	Success bool   `json:"success"`
-	URL     string `json:"url,omitempty"`
-	Error   string `json:"error,omitempty"`
+	UserID        string `json:"user_id"`
+	GuildID       string `json:"guild_id"`
+	Role          string `json:"role"`
+	CorrelationID string `json:"correlation_id"`
 }
 
 // HandleMagicLinkRequest handles incoming magic link requests via NATS.
@@ -34,11 +29,7 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 		h.logger.ErrorContext(ctx, "Failed to unmarshal magic link request",
 			attr.Error(err),
 		)
-		resp := MagicLinkResponse{
-			Success: false,
-			Error:   "invalid request format",
-		}
-		h.respondMagicLink(msg, resp)
+		// Cannot reply if we can't parse the request
 		return
 	}
 
@@ -46,6 +37,7 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 		attr.String("user_id", req.UserID),
 		attr.String("guild_id", req.GuildID),
 		attr.String("role", req.Role),
+		attr.String("correlation_id", req.CorrelationID),
 	)
 
 	// Convert role string to domain type
@@ -53,48 +45,45 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 
 	// Delegate to service
 	response, err := h.service.GenerateMagicLink(ctx, req.UserID, req.GuildID, role)
+
+	// Prepare response payload
+	respPayload := authevents.MagicLinkGeneratedPayload{
+		UserID:        req.UserID,
+		GuildID:       req.GuildID,
+		CorrelationID: req.CorrelationID,
+		Success:       err == nil,
+	}
+
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Failed to generate magic link",
 			attr.Error(err),
 			attr.String("user_id", req.UserID),
 		)
-		resp := MagicLinkResponse{
-			Success: false,
-			Error:   err.Error(),
-		}
-		h.respondMagicLink(msg, resp)
-		return
-	}
-
-	// Convert service response (authservice.MagicLinkResponse) to local response
-	resp := MagicLinkResponse{
-		Success: response.Success,
-		URL:     response.URL,
-		Error:   response.Error,
-	}
-	h.respondMagicLink(msg, resp)
-
-	if response.Success {
+		respPayload.Error = err.Error()
+	} else {
+		respPayload.URL = response.URL
 		h.logger.InfoContext(ctx, "Magic link generated successfully",
 			attr.String("user_id", req.UserID),
 			attr.String("guild_id", req.GuildID),
 		)
 	}
-}
 
-// respondMagicLink sends a magic link response.
-func (h *AuthHandlers) respondMagicLink(msg *nats.Msg, resp MagicLinkResponse) {
-	data, err := json.Marshal(resp)
+	// Publish response event
+	outMsg, err := h.helper.CreateNewMessage(respPayload, authevents.MagicLinkGeneratedV1)
 	if err != nil {
-		h.logger.Error("Failed to marshal magic link response",
-			attr.Error(err),
-		)
+		h.logger.ErrorContext(ctx, "Failed to create magic link response message", attr.Error(err))
 		return
 	}
 
-	if err := msg.Respond(data); err != nil {
-		h.logger.Error("Failed to respond to magic link request",
-			attr.Error(err),
-		)
+	// Ensure Nats-Msg-Id is unique (Watermill helper does this, but good to be sure)
+	// Publish to the event bus
+	if err := h.eventBus.Publish(authevents.MagicLinkGeneratedV1, outMsg); err != nil {
+		h.logger.ErrorContext(ctx, "Failed to publish magic link response", attr.Error(err))
+		return
 	}
+
+	h.logger.InfoContext(ctx, "Published magic link response",
+		attr.String("correlation_id", req.CorrelationID),
+		attr.Bool("success", respPayload.Success),
+	)
 }

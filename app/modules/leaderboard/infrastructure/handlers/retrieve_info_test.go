@@ -57,7 +57,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
 			res, err := h.HandleGetLeaderboardRequest(context.Background(), testPayload)
 
@@ -114,7 +114,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
 			res, _ := h.HandleGetTagByUserIDRequest(context.Background(), testPayload)
 
@@ -180,7 +180,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
 
 			res, err := h.HandleRoundGetTagRequest(context.Background(), testPayload)
 

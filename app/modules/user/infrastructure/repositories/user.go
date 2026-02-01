@@ -59,6 +59,28 @@ func (r *Impl) GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes
 	return user, nil
 }
 
+// GetByUserIDs fetches multiple users by their Discord IDs
+func (r *Impl) GetByUserIDs(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error) {
+	if db == nil {
+		db = r.db
+	}
+	if len(userIDs) == 0 {
+		return []*User{}, nil
+	}
+
+	var users []*User
+	err := db.NewSelect().
+		Model(&users).
+		Where("user_id IN (?)", bun.In(userIDs)).
+		Scan(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetByUserIDs: %w", err)
+	}
+
+	return users, nil
+}
+
 // SaveGlobalUser creates or updates a global user (upsert).
 func (r *Impl) SaveGlobalUser(ctx context.Context, db bun.IDB, user *User) error {
 	if db == nil {
@@ -102,6 +124,38 @@ func (r *Impl) UpdateGlobalUser(ctx context.Context, db bun.IDB, userID sharedty
 	if rows == 0 {
 		return ErrNoRowsAffected
 	}
+	return nil
+}
+
+// UpdateProfile updates user's display name and avatar.
+func (r *Impl) UpdateProfile(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error {
+	if db == nil {
+		db = r.db
+	}
+	now := time.Now().UTC()
+
+	user := &User{
+		UserID:           userID,
+		DisplayName:      &displayName,
+		AvatarHash:       &avatarHash,
+		ProfileUpdatedAt: &now,
+		UpdatedAt:        now,
+		CreatedAt:        now,
+	}
+
+	_, err := db.NewInsert().
+		Model(user).
+		On("CONFLICT (user_id) DO UPDATE").
+		Set("display_name = EXCLUDED.display_name").
+		Set("avatar_hash = EXCLUDED.avatar_hash").
+		Set("profile_updated_at = EXCLUDED.profile_updated_at").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+
+	if err != nil {
+		return fmt.Errorf("userdb.UpdateProfile: %w", err)
+	}
+
 	return nil
 }
 

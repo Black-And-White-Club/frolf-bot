@@ -23,7 +23,25 @@ func (h *UserHandlers) HandleUpdateUDiscIdentityRequest(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	mappedResult := result.Map(
+		func(_ bool) any {
+			return &userevents.UDiscIdentityUpdatedPayloadV1{
+				GuildID:  payload.GuildID,
+				UserID:   payload.UserID,
+				Username: payload.Username,
+				Name:     payload.Name,
+			}
+		},
+		func(failure error) any {
+			return &userevents.UDiscIdentityUpdateFailedPayloadV1{
+				GuildID: payload.GuildID,
+				UserID:  payload.UserID,
+				Reason:  failure.Error(),
+			}
+		},
+	)
+
+	return mapOperationResult(mappedResult,
 		userevents.UDiscIdentityUpdatedV1,
 		userevents.UDiscIdentityUpdateFailedV1,
 	), nil

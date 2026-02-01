@@ -108,7 +108,8 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
+				service:     fakeService,
+				userService: NewFakeUserService(),
 			}
 
 			ctx := context.Background()
@@ -187,6 +188,21 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			wantResultTopic: roundevents.RoundCreatedV1,
 		},
 		{
+			name: "Successfully handle RoundEntityCreated verify channel ID",
+			fakeSetup: func(fake *FakeService) {
+				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
+						Round:     &roundtypes.Round{ID: testRoundID},
+						ChannelID: "test-channel-id", // Should be ignored in favor of payload
+					}), nil
+				}
+			},
+			payload:         testPayload, // has DiscordChannelID: "test-channel-id"
+			wantErr:         false,
+			wantResultLen:   2,
+			wantResultTopic: roundevents.RoundCreatedV1,
+		},
+		{
 			name: "Service failure returns creation failed",
 			fakeSetup: func(fake *FakeService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
@@ -230,7 +246,8 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
+				service:     fakeService,
+				userService: NewFakeUserService(),
 			}
 
 			ctx := context.Background()
@@ -316,7 +333,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 				}
 			},
 			payload:        testPayload,
-			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			ctx:            context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:        true,
 			expectedErrMsg: "database error",
 		},
@@ -328,7 +345,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 				}
 			},
 			payload:        testPayload,
-			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			ctx:            context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:        true,
 			expectedErrMsg: "updated round object is nil",
 		},
@@ -342,7 +359,8 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
+				service:     fakeService,
+				userService: NewFakeUserService(),
 			}
 
 			results, err := h.HandleRoundEventMessageIDUpdate(tt.ctx, tt.payload)

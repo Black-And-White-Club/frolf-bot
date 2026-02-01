@@ -17,9 +17,11 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
 	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -138,11 +140,14 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 	// Create round validator
 	roundValidator := roundutil.NewRoundValidator()
 
+	// Create user repository for the adapter
+	userRepository := userdb.NewRepository(env.DB)
+
 	service := roundservice.NewRoundService(
 		realDB,
 		queueService,
 		eventBusImpl,
-		nil,
+		roundadapters.NewUserLookupAdapter(userRepository, env.DB),
 		noOpMetrics,
 		testLogger,
 		noOpTracer,

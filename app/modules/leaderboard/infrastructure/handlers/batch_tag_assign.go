@@ -55,5 +55,19 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, *result.Failure
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment"), nil
+	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment")
+
+	// Propagate correlation_id if present to allow Discord to update the interaction
+	if val := ctx.Value("correlation_id"); val != nil {
+		if correlationID, ok := val.(string); ok && correlationID != "" {
+			for i := range results {
+				if results[i].Metadata == nil {
+					results[i].Metadata = make(map[string]string)
+				}
+				results[i].Metadata["correlation_id"] = correlationID
+			}
+		}
+	}
+
+	return results, nil
 }

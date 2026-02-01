@@ -22,6 +22,8 @@ type FakeRepository struct {
 	FindByUDiscUsernameFn   func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindByUDiscNameFn       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
 	FindByUDiscNameFuzzyFn  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
+	GetByUserIDsFn          func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
+	UpdateProfileFn         func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
 }
 
 func (f *FakeRepository) GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error) {
@@ -29,6 +31,13 @@ func (f *FakeRepository) GetUserGlobal(ctx context.Context, db bun.IDB, userID s
 		return f.GetUserGlobalFn(ctx, db, userID)
 	}
 	return nil, nil
+}
+
+func (f *FakeRepository) GetByUserIDs(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error) {
+	if f.GetByUserIDsFn != nil {
+		return f.GetByUserIDsFn(ctx, db, userIDs)
+	}
+	return []*User{}, nil
 }
 
 func (f *FakeRepository) SaveGlobalUser(ctx context.Context, db bun.IDB, user *User) error {
@@ -41,6 +50,13 @@ func (f *FakeRepository) SaveGlobalUser(ctx context.Context, db bun.IDB, user *U
 func (f *FakeRepository) UpdateGlobalUser(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *UserUpdateFields) error {
 	if f.UpdateGlobalUserFn != nil {
 		return f.UpdateGlobalUserFn(ctx, db, userID, updates)
+	}
+	return nil
+}
+
+func (f *FakeRepository) UpdateProfile(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error {
+	if f.UpdateProfileFn != nil {
+		return f.UpdateProfileFn(ctx, db, userID, displayName, avatarHash)
 	}
 	return nil
 }

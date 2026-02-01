@@ -87,8 +87,9 @@ func TestRoundHandlers_HandleParticipantJoinRequest_Basic(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleParticipantJoinRequest(context.Background(), tt.payload)

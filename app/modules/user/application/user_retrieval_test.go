@@ -203,3 +203,124 @@ func TestUserService_GetUserRole(t *testing.T) {
 		})
 	}
 }
+func TestUserService_FindByUDiscUsername(t *testing.T) {
+	ctx := context.Background()
+	testGuildID := sharedtypes.GuildID("guild-1")
+	testUsername := "playerone"
+
+	logger := loggerfrolfbot.NoOpLogger
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	tests := []struct {
+		name      string
+		setupFake func(*FakeUserRepository)
+		verify    func(t *testing.T, res UserWithMembershipResult, infraErr error)
+	}{
+		{
+			name: "success",
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, uname string) (*userdb.UserWithMembership, error) {
+					return &userdb.UserWithMembership{
+						User: &userdb.User{UserID: "user-1", UDiscUsername: pointer(uname)},
+						Role: sharedtypes.UserRoleUser,
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res UserWithMembershipResult, infraErr error) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if !res.IsSuccess() || (*res.Success).UDiscUsername == nil || *(*res.Success).UDiscUsername != testUsername {
+					t.Errorf("expected success for username %s, got %+v", testUsername, res.Success)
+				}
+			},
+		},
+		{
+			name: "not found",
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, uname string) (*userdb.UserWithMembership, error) {
+					return nil, userdb.ErrNotFound
+				}
+			},
+			verify: func(t *testing.T, res UserWithMembershipResult, infraErr error) {
+				if !res.IsFailure() || !errors.Is(*res.Failure, ErrUserNotFound) {
+					t.Errorf("expected ErrUserNotFound, got %v", res.Failure)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := &FakeUserRepository{}
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
+			s := &UserService{repo: fakeRepo, logger: logger, metrics: metrics, tracer: tracer}
+			res, err := s.FindByUDiscUsername(ctx, testGuildID, testUsername)
+			tt.verify(t, res, err)
+		})
+	}
+}
+
+func TestUserService_FindByUDiscName(t *testing.T) {
+	ctx := context.Background()
+	testGuildID := sharedtypes.GuildID("guild-1")
+	testName := "Real Name"
+
+	logger := loggerfrolfbot.NoOpLogger
+	metrics := &usermetrics.NoOpMetrics{}
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	tests := []struct {
+		name      string
+		setupFake func(*FakeUserRepository)
+		verify    func(t *testing.T, res UserWithMembershipResult, infraErr error)
+	}{
+		{
+			name: "success",
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
+					return &userdb.UserWithMembership{
+						User: &userdb.User{UserID: "user-2", UDiscName: pointer(name)},
+						Role: sharedtypes.UserRoleUser,
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res UserWithMembershipResult, infraErr error) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if !res.IsSuccess() || (*res.Success).UDiscName == nil || *(*res.Success).UDiscName != testName {
+					t.Errorf("expected success for name %s, got %+v", testName, res.Success)
+				}
+			},
+		},
+		{
+			name: "not found",
+			setupFake: func(f *FakeUserRepository) {
+				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
+					return nil, userdb.ErrNotFound
+				}
+			},
+			verify: func(t *testing.T, res UserWithMembershipResult, infraErr error) {
+				if !res.IsFailure() || !errors.Is(*res.Failure, ErrUserNotFound) {
+					t.Errorf("expected ErrUserNotFound, got %v", res.Failure)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := &FakeUserRepository{}
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
+			s := &UserService{repo: fakeRepo, logger: logger, metrics: metrics, tracer: tracer}
+			res, err := s.FindByUDiscName(ctx, testGuildID, testName)
+			tt.verify(t, res, err)
+		})
+	}
+}

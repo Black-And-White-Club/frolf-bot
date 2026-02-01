@@ -97,8 +97,9 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleRoundStartRequested(context.Background(), tt.payload)

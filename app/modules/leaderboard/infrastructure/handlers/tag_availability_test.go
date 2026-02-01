@@ -101,7 +101,8 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 			}
 
 			h := &LeaderboardHandlers{
-				service: fakeSvc,
+				service:     fakeSvc,
+				userService: NewFakeUserService(),
 			}
 
 			res, err := h.HandleTagAvailabilityCheckRequested(context.Background(), tt.payload)

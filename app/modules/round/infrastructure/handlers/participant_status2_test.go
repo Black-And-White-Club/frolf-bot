@@ -77,8 +77,9 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleTagNumberFound(context.Background(), tt.payload)
@@ -161,8 +162,9 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			results, err := h.HandleParticipantDeclined(context.Background(), tt.payload)

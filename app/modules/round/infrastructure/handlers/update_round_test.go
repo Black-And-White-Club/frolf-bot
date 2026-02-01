@@ -102,8 +102,9 @@ func TestRoundHandlers_HandleRoundUpdateRequest(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -242,8 +243,9 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()
@@ -366,8 +368,9 @@ func TestRoundHandlers_HandleRoundScheduleUpdate(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			ctx := context.Background()

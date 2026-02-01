@@ -20,14 +20,15 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 		{
 			name: "Creates handlers with all dependencies",
 			test: func(t *testing.T) {
-				// Create fake/no-op dependencies
 				fakeService := NewFakeService()
+				fakeUserService := NewFakeUserService()
 				fakeSaga := NewFakeSagaCoordinator()
 				tracer := noop.NewTracerProvider().Tracer("test")
+				fakeHelpers := &FakeHelpers{}
 				noOpMetrics := &leaderboardmetrics.NoOpMetrics{}
 
 				// Call the constructor
-				handlers := NewLeaderboardHandlers(fakeService, fakeSaga, nil, tracer, nil, noOpMetrics)
+				handlers := NewLeaderboardHandlers(fakeService, fakeUserService, fakeSaga, nil, tracer, fakeHelpers, noOpMetrics)
 
 				if handlers == nil {
 					t.Fatalf("NewLeaderboardHandlers returned nil")
@@ -42,15 +43,21 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				if lbHandlers.service != fakeService {
 					t.Errorf("service not correctly assigned")
 				}
+				if lbHandlers.userService != fakeUserService {
+					t.Errorf("userService not correctly assigned")
+				}
 				if lbHandlers.sagaCoordinator != fakeSaga {
 					t.Errorf("saga coordinator not correctly assigned")
+				}
+				if lbHandlers.helpers != fakeHelpers {
+					t.Errorf("helpers not correctly assigned")
 				}
 			},
 		},
 		{
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
-				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil, nil)
+				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil, nil, nil)
 
 				if handlers == nil {
 					t.Fatalf("NewLeaderboardHandlers returned nil")

@@ -67,8 +67,9 @@ func TestRoundHandlers_HandleScorecardURLRequested(t *testing.T) {
 			}
 			logger := loggerfrolfbot.NoOpLogger
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			res, err := h.HandleScorecardURLRequested(ctx, tt.payload)
@@ -142,8 +143,9 @@ func TestRoundHandlers_HandleScorecardParsedForNormalization(t *testing.T) {
 			}
 			logger := loggerfrolfbot.NoOpLogger
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			res, err := h.HandleScorecardParsedForNormalization(ctx, tt.payload)
@@ -208,8 +210,9 @@ func TestRoundHandlers_HandleScorecardNormalized(t *testing.T) {
 			}
 			logger := loggerfrolfbot.NoOpLogger
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
 			}
 
 			res, err := h.HandleScorecardNormalized(ctx, tt.payload)

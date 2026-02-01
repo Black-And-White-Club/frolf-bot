@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -122,14 +123,14 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	fmt.Println("DEBUG: User module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing leaderboard module...")
-	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.GetDB(), app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.EventBus.GetJetStream()); err != nil {
+	if app.LeaderboardModule, err = leaderboard.NewLeaderboardModule(ctx, app.Config, app.Observability, app.DB.GetDB(), app.DB.LeaderboardDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.EventBus.GetJetStream(), app.UserModule.UserService); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize leaderboard module", attr.Error(err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}
 	fmt.Println("DEBUG: Leaderboard module initialized successfully")
 
 	fmt.Println("DEBUG: Initializing round module...")
-	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.UserModule.UserService, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize round module", attr.Error(err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
@@ -151,7 +152,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 
 	// Initialize auth module (handles magic links and auth callout)
 	fmt.Println("DEBUG: Initializing auth module...")
-	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection()); err != nil {
+	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize auth module", attr.Error(err))
 		return fmt.Errorf("failed to initialize auth module: %w", err)
 	}
@@ -185,6 +186,11 @@ func (app *App) Run(ctx context.Context) error {
 		cancel()
 		return fmt.Errorf("failed during module initialization: %w", err)
 	}
+
+	// Start Auth Module (runs its own NATS router)
+	var wg sync.WaitGroup // Create a WaitGroup for modules that need it
+	wg.Add(1)
+	go app.AuthModule.Run(ctx, &wg)
 
 	go func() {
 		fmt.Println("DEBUG: Starting Watermill router...")

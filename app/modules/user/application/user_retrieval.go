@@ -23,6 +23,8 @@ func MapDBUserWithMembershipToDomain(dbUser *userdb.UserWithMembership) *UserWit
 			UserID: dbUser.User.UserID,
 			Role:   dbUser.Role,
 		},
+		DisplayName:   dbUser.User.GetDisplayName(),
+		AvatarHash:    dbUser.User.AvatarHash,
 		UDiscUsername: dbUser.User.UDiscUsername,
 		UDiscName:     dbUser.User.UDiscName,
 		IsMember:      true,

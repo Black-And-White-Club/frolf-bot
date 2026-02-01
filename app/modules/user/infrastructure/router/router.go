@@ -179,6 +179,7 @@ func (r *UserRouter) registerHandlers(ctx context.Context, handlers userhandlers
 	registerHandler(deps, sharedevents.TagAvailableV1, handlers.HandleTagAvailable)
 	registerHandler(deps, userevents.UpdateUDiscIdentityRequestedV1, handlers.HandleUpdateUDiscIdentityRequest)
 	registerHandler(deps, roundevents.ScorecardParsedV1, handlers.HandleScorecardParsed)
+	registerHandler(deps, userevents.UserProfileUpdatedV1, handlers.HandleUserProfileUpdated)
 
 	return nil
 }

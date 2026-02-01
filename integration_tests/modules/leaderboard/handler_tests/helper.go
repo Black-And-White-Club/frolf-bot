@@ -19,6 +19,8 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -149,6 +151,10 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 	// Use real helpers but with a discard logger
 	realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
+	// Initialize user service for the leaderboard module
+	userRepo := userdb.NewRepository(env.DB)
+	userService := userservice.NewUserService(userRepo, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, noop.NewTracerProvider().Tracer("noop"), env.DB)
+
 	// Create the leaderboard module
 	leaderboardModule, err := leaderboard.NewLeaderboardModule(
 		env.Ctx,
@@ -161,6 +167,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		realHelpers,
 		routerRunCtx,
 		eventBusImpl.GetJetStream(),
+		userService,
 	)
 	if err != nil {
 		eventBusImpl.Close()

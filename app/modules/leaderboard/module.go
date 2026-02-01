@@ -13,6 +13,7 @@ import (
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/nats-io/nats.go/jetstream"
@@ -43,6 +44,7 @@ func NewLeaderboardModule(
 	helpers utils.Helpers,
 	routerCtx context.Context,
 	js jetstream.JetStream,
+	userService userservice.Service,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.LeaderboardMetrics
@@ -64,7 +66,7 @@ func NewLeaderboardModule(
 	promRegistry := prometheus.NewRegistry()
 	lbRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, promRegistry)
 
-	handlers := leaderboardhandlers.NewLeaderboardHandlers(service, sagaCoord, logger, tracer, helpers, metrics)
+	handlers := leaderboardhandlers.NewLeaderboardHandlers(service, userService, sagaCoord, logger, tracer, helpers, metrics)
 
 	if err := lbRouter.Configure(routerCtx, handlers); err != nil {
 		return nil, fmt.Errorf("failed to configure leaderboard router: %w", err)

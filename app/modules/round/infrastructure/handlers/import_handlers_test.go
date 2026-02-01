@@ -79,7 +79,11 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			if tt.fakeSetup != nil {
 				tt.fakeSetup(fakeService)
 			}
-			h := &RoundHandlers{service: fakeService, logger: loggerfrolfbot.NoOpLogger}
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      loggerfrolfbot.NoOpLogger,
+			}
 
 			results, err := h.HandleScorecardUploaded(ctx, tt.payload)
 
@@ -128,8 +132,9 @@ func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
 	}
 
 	h := &RoundHandlers{
-		service: svc,
-		logger:  loggerfrolfbot.NoOpLogger,
+		service:     svc,
+		userService: NewFakeUserService(),
+		logger:      loggerfrolfbot.NoOpLogger,
 	}
 
 	res, err := h.HandleImportCompleted(ctx, payload)
@@ -164,7 +169,11 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 		return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
 	}
 
-	h := &RoundHandlers{service: svc, logger: loggerfrolfbot.NoOpLogger}
+	h := &RoundHandlers{
+		service:     svc,
+		userService: NewFakeUserService(),
+		logger:      loggerfrolfbot.NoOpLogger,
+	}
 	res, err := h.HandleParseScorecardRequest(ctx, payload)
 
 	if err != nil {

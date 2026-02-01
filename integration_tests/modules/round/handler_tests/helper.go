@@ -17,6 +17,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill"
@@ -130,6 +131,10 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	userRepo := userdb.NewRepository(env.DB)
 	realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
+	// Initialize user service for the round module
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	userService := userservice.NewUserService(userRepo, logger, nil, noop.NewTracerProvider().Tracer("noop"), env.DB)
+
 	roundModule, err := round.NewRoundModule(
 		testCtx,
 		env.Config,
@@ -140,6 +145,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 		realDB,
 		env.DB,
 		userRepo,
+		userService,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,

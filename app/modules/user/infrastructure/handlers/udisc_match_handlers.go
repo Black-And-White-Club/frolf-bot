@@ -46,10 +46,18 @@ func (h *UserHandlers) HandleScorecardParsed(
 	var res []handlerwrapper.Result
 
 	// Emit confirmed mappings
-	for _, mapping := range matchResult.Mappings {
+	if len(matchResult.Mappings) > 0 {
 		res = append(res, handlerwrapper.Result{
-			Topic:   userevents.UDiscMatchConfirmedV1,
-			Payload: mapping,
+			Topic: userevents.UDiscMatchConfirmedV1,
+			Payload: userevents.UDiscMatchConfirmedPayloadV1{
+				GuildID:   payload.GuildID,
+				RoundID:   payload.RoundID,
+				ImportID:  payload.ImportID,
+				UserID:    payload.UserID,
+				ChannelID: payload.ChannelID,
+				Timestamp: time.Now(),
+				Mappings:  matchResult.Mappings,
+			},
 		})
 	}
 

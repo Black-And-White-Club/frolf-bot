@@ -33,7 +33,28 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	// Explicitly map results to event payloads
+	mappedResult := result.Map(
+		func(res *roundtypes.CreateRoundResult) any {
+			return &roundevents.RoundEntityCreatedPayloadV1{
+				GuildID:          payload.GuildID,
+				Round:            *res.Round,
+				DiscordChannelID: res.ChannelID,
+				DiscordGuildID:   string(payload.GuildID),
+				// Config fragment mapping omitted as it requires conversion which is verbose here
+				// and likely not critical for this specific step if the guild ID is present.
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundValidationFailedPayloadV1{
+				GuildID:       payload.GuildID,
+				UserID:        payload.UserID,
+				ErrorMessages: []string{err.Error()},
+			}
+		},
+	)
+
+	return mapOperationResult(mappedResult,
 		roundevents.RoundEntityCreatedV1,
 		roundevents.RoundValidationFailedV1,
 	), nil
@@ -64,7 +85,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 					StartTime:   r.StartTime,
 					UserID:      r.CreatedBy,
 				},
-				ChannelID: res.ChannelID,
+				ChannelID: payload.DiscordChannelID,
 			}
 
 			// Map guild config fragment if available

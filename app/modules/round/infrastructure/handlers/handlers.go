@@ -11,25 +11,29 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
 
 // RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
-	service roundservice.Service
-	logger  *slog.Logger
-	helpers utils.Helpers
+	service     roundservice.Service
+	userService userservice.Service
+	logger      *slog.Logger
+	helpers     utils.Helpers
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
 func NewRoundHandlers(
 	service roundservice.Service,
+	userService userservice.Service,
 	logger *slog.Logger,
 	helpers utils.Helpers,
 ) Handlers {
 	return &RoundHandlers{
-		service: service,
-		logger:  logger,
-		helpers: helpers,
+		service:     service,
+		userService: userService,
+		logger:      logger,
+		helpers:     helpers,
 	}
 }
 

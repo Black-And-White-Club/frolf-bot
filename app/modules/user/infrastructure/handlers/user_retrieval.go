@@ -4,7 +4,9 @@ import (
 	"context"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 )
 
 // HandleGetUserRequest handles the GetUserRequest event.
@@ -16,32 +18,23 @@ func (h *UserHandlers) HandleGetUserRequest(
 	if err != nil {
 		return nil, err
 	}
-	if result.IsSuccess() {
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.GetUserResponseV1,
-				Payload: &userevents.GetUserResponsePayloadV1{
-					GuildID: payload.GuildID,
-					User:    &(*result.Success).UserData,
-				},
-			},
-		}, nil
-	}
+	mappedResult := result.Map(
+		func(success *userservice.UserWithMembership) any {
+			return &userevents.GetUserResponsePayloadV1{
+				GuildID: payload.GuildID,
+				User:    &success.UserData,
+			}
+		},
+		func(failure error) any {
+			return &userevents.GetUserFailedPayloadV1{
+				GuildID: payload.GuildID,
+				UserID:  payload.UserID,
+				Reason:  failure.Error(),
+			}
+		},
+	)
 
-	if result.IsFailure() {
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.GetUserFailedV1,
-				Payload: &userevents.GetUserFailedPayloadV1{
-					GuildID: payload.GuildID,
-					UserID:  payload.UserID,
-					Reason:  (*result.Failure).Error(),
-				},
-			},
-		}, nil
-	}
-
-	return nil, nil
+	return mapOperationResult(mappedResult, userevents.GetUserResponseV1, userevents.GetUserFailedV1), nil
 }
 
 // HandleGetUserRoleRequest handles the GetUserRoleRequest event.
@@ -53,31 +46,23 @@ func (h *UserHandlers) HandleGetUserRoleRequest(
 	if err != nil {
 		return nil, err
 	}
-	if result.IsSuccess() {
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.GetUserRoleResponseV1,
-				Payload: &userevents.GetUserRoleResponsePayloadV1{
-					GuildID: payload.GuildID,
-					UserID:  payload.UserID,
-					Role:    *result.Success,
-				},
-			},
-		}, nil
-	}
 
-	if result.IsFailure() {
-		return []handlerwrapper.Result{
-			{
-				Topic: userevents.GetUserRoleFailedV1,
-				Payload: &userevents.GetUserRoleFailedPayloadV1{
-					GuildID: payload.GuildID,
-					UserID:  payload.UserID,
-					Reason:  (*result.Failure).Error(),
-				},
-			},
-		}, nil
-	}
+	mappedResult := result.Map(
+		func(role sharedtypes.UserRoleEnum) any {
+			return &userevents.GetUserRoleResponsePayloadV1{
+				GuildID: payload.GuildID,
+				UserID:  payload.UserID,
+				Role:    role,
+			}
+		},
+		func(failure error) any {
+			return &userevents.GetUserRoleFailedPayloadV1{
+				GuildID: payload.GuildID,
+				UserID:  payload.UserID,
+				Reason:  failure.Error(),
+			}
+		},
+	)
 
-	return nil, nil
+	return mapOperationResult(mappedResult, userevents.GetUserRoleResponseV1, userevents.GetUserRoleFailedV1), nil
 }

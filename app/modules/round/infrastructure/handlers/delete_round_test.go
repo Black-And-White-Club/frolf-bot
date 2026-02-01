@@ -94,9 +94,10 @@ func TestRoundHandlers_HandleRoundDeleteRequest(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
-				helpers: utils.NewHelper(logger),
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+				helpers:     utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()
@@ -155,9 +156,10 @@ func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
 			fakeService := NewFakeService()
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
-				helpers: utils.NewHelper(logger),
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+				helpers:     utils.NewHelper(logger),
 			}
 
 			ctx := context.Background()
@@ -285,9 +287,10 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			}
 
 			h := &RoundHandlers{
-				service: fakeService,
-				logger:  logger,
-				helpers: utils.NewHelper(logger),
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+				helpers:     utils.NewHelper(logger),
 			}
 
 			results, err := h.HandleRoundDeleteAuthorized(tt.ctx, tt.payload)

@@ -15,6 +15,7 @@ import (
 type UserHandlers struct {
 	service userservice.Service
 	helpers utils.Helpers
+	logger  *slog.Logger
 }
 
 // NewUserHandlers creates a new UserHandlers instance.
@@ -29,6 +30,7 @@ func NewUserHandlers(
 	return &UserHandlers{
 		service: service,
 		helpers: helpers,
+		logger:  logger,
 	}
 }
 
