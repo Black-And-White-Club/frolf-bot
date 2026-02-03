@@ -131,6 +131,10 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	}
 
 	perms := s.permissionBuilder.ForRole(claims)
+	if s.userJWTBuilder == nil {
+		s.logger.ErrorContext(ctx, "NATS JWT builder not configured (AuthCallout.Enabled likely false)")
+		return nil, ErrGenerateUserJWT
+	}
 	natsToken, err := s.userJWTBuilder.BuildUserJWT(claims, perms)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ticket: %w", err)

@@ -32,7 +32,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
+// replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
