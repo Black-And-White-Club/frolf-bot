@@ -9,21 +9,26 @@ import (
 )
 
 const (
-	RefreshTokenCookie = "refresh_token"
+	RefreshTokenCookie  = "refresh_token"
+	RefreshTokenExpiry  = 30 * 24 * time.Hour
 )
+
+func (h *AuthHandlers) httpError(w http.ResponseWriter, r *http.Request, message string, code int, err error) {
+	h.logger.WarnContext(r.Context(), message, attr.Error(err), attr.Int("code", code))
+	http.Error(w, message, code)
+}
 
 func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	token := r.URL.Query().Get("t")
 	if token == "" {
-		http.Error(w, "missing token", http.StatusBadRequest)
+		h.httpError(w, r, "missing token", http.StatusBadRequest, nil)
 		return
 	}
 
 	resp, err := h.service.LoginUser(ctx, token)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "HTTP Login failed", attr.Error(err))
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
+		h.httpError(w, r, "authentication failed", http.StatusUnauthorized, err)
 		return
 	}
 
@@ -33,11 +38,12 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    resp.RefreshToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true, // Should be true in production
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
-		Expires:  time.Now().Add(30 * 24 * time.Hour),
+		Expires:  time.Now().Add(RefreshTokenExpiry),
 	})
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "user_uuid": resp.UserUUID})
 }
@@ -46,14 +52,13 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	cookie, err := r.Cookie(RefreshTokenCookie)
 	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, err)
 		return
 	}
 
 	resp, err := h.service.GetTicket(ctx, cookie.Value)
 	if err != nil {
-		h.logger.WarnContext(ctx, "Ticket request failed", attr.Error(err))
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, err)
 		return
 	}
 
@@ -65,7 +70,7 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
-		Expires:  time.Now().Add(30 * 24 * time.Hour),
+		Expires:  time.Now().Add(RefreshTokenExpiry),
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -87,6 +92,8 @@ func (h *AuthHandlers) HandleHTTPLogout(w http.ResponseWriter, r *http.Request) 
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
 

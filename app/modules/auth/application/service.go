@@ -53,6 +53,11 @@ func NewService(
 	}
 }
 
+const (
+	DefaultTokenTTL    = 24 * time.Hour
+	RefreshTokenExpiry = 30 * 24 * time.Hour
+)
+
 // GenerateMagicLink generates a magic link URL for the given user and guild.
 func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string, role authdomain.Role) (*MagicLinkResponse, error) {
 	ctx, span := s.tracer.Start(ctx, "AuthService.GenerateMagicLink")
@@ -102,40 +107,46 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 	// Fetch all club memberships for the user
 	memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, nil, userUUID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "Failed to fetch club memberships",
+		s.logger.ErrorContext(ctx, "Failed to fetch club memberships",
 			attr.Error(err),
 			attr.String("user_uuid", userUUID.String()),
 		)
-		// Non-fatal, but we'll at least have the active club
+		return &MagicLinkResponse{
+			Success: false,
+			Error:   "failed to fetch club memberships",
+		}, nil
 	}
 
 	clubs := make([]authdomain.ClubRole, 0, len(memberships))
+	foundActive := false
 	for _, m := range memberships {
-		clubs = append(clubs, authdomain.ClubRole{
+		clubRole := authdomain.ClubRole{
 			ClubUUID: m.ClubUUID,
 			Role:     authdomain.Role(m.Role),
-		})
-	}
-
-	// Ensure active club is in the list if not already there
-	found := false
-	for _, c := range clubs {
-		if c.ClubUUID == clubUUID {
-			found = true
-			break
+		}
+		clubs = append(clubs, clubRole)
+		if m.ClubUUID == clubUUID {
+			foundActive = true
 		}
 	}
-	if !found {
-		clubs = append(clubs, authdomain.ClubRole{
-			ClubUUID: clubUUID,
-			Role:     role,
-		})
+
+	// Based on the review "doesn't verify active club is actually valid for user",
+	// let's ensure it's valid.
+	if !foundActive {
+		s.logger.WarnContext(ctx, "User is not a member of the requested club",
+			attr.String("user_uuid", userUUID.String()),
+			attr.String("club_uuid", clubUUID.String()),
+		)
+		return &MagicLinkResponse{
+			Success: false,
+			Error:   "unauthorized: user is not a member of the requested club",
+		}, nil
 	}
 
 	// Generate the token using the default TTL
 	ttl := s.config.DefaultTTL
 	if ttl == 0 {
-		ttl = 24 * time.Hour
+		ttl = DefaultTokenTTL
 	}
 
 	claims := &authdomain.Claims{

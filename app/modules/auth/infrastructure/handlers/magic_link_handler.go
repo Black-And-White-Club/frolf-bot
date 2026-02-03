@@ -33,6 +33,19 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 		return
 	}
 
+	// Sanitize CorrelationID
+	if len(req.CorrelationID) > 64 {
+		req.CorrelationID = req.CorrelationID[:64]
+	}
+	// Simple alphanumeric + hyphen check
+	sanitizedID := ""
+	for _, r := range req.CorrelationID {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			sanitizedID += string(r)
+		}
+	}
+	req.CorrelationID = sanitizedID
+
 	h.logger.InfoContext(ctx, "Generating magic link",
 		attr.String("user_id", req.UserID),
 		attr.String("guild_id", req.GuildID),

@@ -85,7 +85,10 @@ func NewModule(
 
 	// Register HTTP routes
 	if httpRouter != nil {
+		limiter := authhandlers.NewIPRateLimiter(5, 10)
 		httpRouter.Route("/api/auth", func(r chi.Router) {
+			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
+			r.Use(authhandlers.RateLimitMiddleware(limiter))
 			r.Get("/callback", handlers.HandleHTTPLogin)
 			r.Get("/ticket", handlers.HandleHTTPTicket)
 			r.Post("/logout", handlers.HandleHTTPLogout)

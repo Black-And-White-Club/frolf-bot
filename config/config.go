@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -23,7 +24,8 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Port string `yaml:"port" env:"HTTP_PORT"`
+	Port           string   `yaml:"port" env:"HTTP_PORT"`
+	AllowedOrigins []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
 }
 
 // PostgresConfig holds Postgres configuration.
@@ -153,6 +155,11 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("AUTH_CALLOUT_SIGNING_NKEY"); v != "" {
 		cfg.AuthCallout.SigningNKey = v
 	}
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	} else if len(cfg.HTTP.AllowedOrigins) == 0 && cfg.PWA.BaseURL != "" {
+		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -240,6 +247,12 @@ func loadConfigFromEnv() (*Config, error) {
 	}
 	cfg.AuthCallout.IssuerNKey = os.Getenv("AUTH_CALLOUT_ISSUER_NKEY")
 	cfg.AuthCallout.SigningNKey = os.Getenv("AUTH_CALLOUT_SIGNING_NKEY")
+
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	} else if cfg.PWA.BaseURL != "" {
+		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err

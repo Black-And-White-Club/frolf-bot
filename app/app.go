@@ -46,6 +46,7 @@ type App struct {
 	EventBus          eventbus.EventBus
 	Helpers           utils.Helpers
 	HTTPRouter        *chi.Mux
+	HTTPServer        *http.Server
 }
 
 func (app *App) GetHealthCheckers() []eventbus.HealthChecker {
@@ -67,6 +68,7 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	app.HTTPRouter.Use(chi_middleware.Logger)
 	app.HTTPRouter.Use(chi_middleware.Recoverer)
 	app.HTTPRouter.Use(chi_middleware.RealIP)
+	app.HTTPRouter.Use(SecurityHeaders)
 	// Add CORS if needed (PWA and Backend might be on different subdomains)
 	// app.HTTPRouter.Use(cors.Handler(cors.Options{...}))
 
@@ -244,20 +246,21 @@ func (app *App) Run(ctx context.Context) error {
 	}()
 
 	// Start HTTP Server
+	port := app.Config.HTTP.Port
+	if port == "" {
+		port = ":3001"
+	}
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+	app.HTTPServer = &http.Server{
+		Addr:    port,
+		Handler: app.HTTPRouter,
+	}
+
 	go func() {
-		port := app.Config.HTTP.Port
-		if port == "" {
-			port = ":3001"
-		}
-		if !strings.HasPrefix(port, ":") {
-			port = ":" + port
-		}
-		server := &http.Server{
-			Addr:    port,
-			Handler: app.HTTPRouter,
-		}
 		fmt.Printf("DEBUG: Starting HTTP server on %s\n", port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := app.HTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("FATAL: HTTP server failed: %v\n", err)
 			app.Observability.Provider.Logger.Error("HTTP server failed", attr.Error(err))
 			cancel()
@@ -290,6 +293,17 @@ func (app *App) Run(ctx context.Context) error {
 }
 
 func (app *App) Close() error {
+	// Shutdown HTTP Server
+	if app.HTTPServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := app.HTTPServer.Shutdown(ctx); err != nil {
+			app.Observability.Provider.Logger.Error("Error during HTTP server shutdown", attr.Error(err))
+		} else {
+			app.Observability.Provider.Logger.Info("HTTP server shut down successfully")
+		}
+	}
+
 	// Modules' Close methods should handle closing their internal components
 	if app.UserModule != nil {
 		app.UserModule.Close()
@@ -317,4 +331,16 @@ func (app *App) Close() error {
 	}
 
 	return nil
+}
+
+// SecurityHeaders adds standard security headers to the response.
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none';")
+		next.ServeHTTP(w, r)
+	})
 }

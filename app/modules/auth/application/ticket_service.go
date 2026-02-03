@@ -52,13 +52,16 @@ func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginRes
 	}
 
 	hashedToken := hashToken(token)
-	familyID, _ := generateRandomToken(16) // Start a new token family
+	familyID, err := generateRandomToken(16)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate token family: %w", err)
+	}
 
 	refreshToken := &userdb.RefreshToken{
 		Hash:        hashedToken,
 		UserUUID:    userUUID,
 		TokenFamily: familyID,
-		ExpiresAt:   time.Now().Add(30 * 24 * time.Hour),
+		ExpiresAt:   time.Now().Add(RefreshTokenExpiry),
 		Revoked:     false,
 	}
 
@@ -141,14 +144,17 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	}
 
 	// 4. Token Rotation
-	newToken, _ := generateRandomToken(32)
+	newToken, err := generateRandomToken(32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate rotated token: %w", err)
+	}
 	newHashed := hashToken(newToken)
 
 	newRefreshToken := &userdb.RefreshToken{
 		Hash:        newHashed,
 		UserUUID:    token.UserUUID,
 		TokenFamily: token.TokenFamily,
-		ExpiresAt:   time.Now().Add(30 * 24 * time.Hour),
+		ExpiresAt:   time.Now().Add(RefreshTokenExpiry),
 		Revoked:     false,
 	}
 

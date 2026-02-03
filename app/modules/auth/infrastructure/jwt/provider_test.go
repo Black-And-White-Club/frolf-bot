@@ -2,6 +2,7 @@ package authjwt
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -10,7 +11,10 @@ import (
 )
 
 func TestProvider_GenerateAndValidateToken(t *testing.T) {
-	secret := "test-secret"
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "test-secret-at-least-32-chars-long!!"
+	}
 	p := NewProvider(secret)
 
 	userUUID := uuid.New()

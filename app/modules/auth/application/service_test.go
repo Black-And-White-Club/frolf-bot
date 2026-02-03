@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -40,6 +41,17 @@ func TestService_GenerateMagicLink(t *testing.T) {
 			guildID: "g1",
 			role:    authdomain.RolePlayer,
 			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder, r *userdb.FakeRepository) {
+				userUUID := uuid.New()
+				clubUUID := uuid.New()
+				r.GetUUIDByDiscordIDFn = func(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+					return userUUID, nil
+				}
+				r.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return clubUUID, nil
+				}
+				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
+					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "player"}}, nil
+				}
 				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
 					return "valid-jwt", nil
 				}
@@ -80,6 +92,17 @@ func TestService_GenerateMagicLink(t *testing.T) {
 			guildID: "g1",
 			role:    authdomain.RolePlayer,
 			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder, r *userdb.FakeRepository) {
+				userUUID := uuid.New()
+				clubUUID := uuid.New()
+				r.GetUUIDByDiscordIDFn = func(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+					return userUUID, nil
+				}
+				r.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return clubUUID, nil
+				}
+				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
+					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "player"}}, nil
+				}
 				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
 					return "", errors.New("jwt error")
 				}
