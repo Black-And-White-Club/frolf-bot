@@ -3,6 +3,7 @@ package authhandlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	authevents "github.com/Black-And-White-Club/frolf-bot-shared/events/auth"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -37,14 +38,15 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 	if len(req.CorrelationID) > 64 {
 		req.CorrelationID = req.CorrelationID[:64]
 	}
-	// Simple alphanumeric + hyphen check
-	sanitizedID := ""
+	// Simple alphanumeric + hyphen check using strings.Builder for efficiency
+	var sb strings.Builder
+	sb.Grow(len(req.CorrelationID))
 	for _, r := range req.CorrelationID {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			sanitizedID += string(r)
+			sb.WriteRune(r)
 		}
 	}
-	req.CorrelationID = sanitizedID
+	req.CorrelationID = sb.String()
 
 	h.logger.InfoContext(ctx, "Generating magic link",
 		attr.String("user_id", req.UserID),
