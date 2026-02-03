@@ -20,7 +20,7 @@ func InsertUser(t *testing.T, db *bun.DB, userID sharedtypes.DiscordID, guildID 
 
 	// Create global user if not exists
 	user := &userdb.User{
-		UserID: userID,
+		UserID: &userID,
 	}
 	// Insert or ignore if user already exists
 	_, err := db.NewInsert().Model(user).On("CONFLICT (user_id) DO NOTHING").Exec(context.Background())

@@ -134,7 +134,7 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 			setupFake: func(f *FakeUserRepository) {
 				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
 					if name == "playerone" {
-						return &userdb.UserWithMembership{User: &userdb.User{UserID: "discord-1"}}, nil
+						return &userdb.UserWithMembership{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-1"))}}, nil
 					}
 					return nil, userdb.ErrNotFound
 				}
@@ -162,7 +162,7 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 				}
 				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
 					if name == "real name" {
-						return &userdb.UserWithMembership{User: &userdb.User{UserID: "discord-2"}}, nil
+						return &userdb.UserWithMembership{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-2"))}}, nil
 					}
 					return nil, userdb.ErrNotFound
 				}
@@ -315,7 +315,7 @@ func TestUserService_UpdateUserProfile(t *testing.T) {
 	}
 
 	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-	err := s.UpdateUserProfile(ctx, userID, displayName, avatarHash)
+	err := s.UpdateUserProfile(ctx, userID, "", displayName, avatarHash)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -332,7 +332,7 @@ func TestUserService_LookupProfiles(t *testing.T) {
 	fakeRepo := NewFakeUserRepository()
 	fakeRepo.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
 		return []*userdb.User{
-			{UserID: "user-1", DisplayName: pointer("UserOne")},
+			{UserID: pointer(sharedtypes.DiscordID("user-1")), DisplayName: pointer("UserOne")},
 		}, nil
 	}
 

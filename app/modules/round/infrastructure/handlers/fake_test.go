@@ -430,7 +430,7 @@ func (f *FakeUserService) UpdateUDiscIdentity(ctx context.Context, userID shared
 func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (userservice.MatchResultResult, error) {
 	return userservice.MatchResultResult{}, nil
 }
-func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 	return nil
 }
 

@@ -7,6 +7,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	"github.com/google/uuid"
 )
 
 // CreateUserResponse contains the outcome of a user creation operation.
@@ -59,6 +60,10 @@ type Service interface {
 	MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (MatchResultResult, error)
 
 	// User Profile
-	UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error
+	UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error
 	LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+
+	// Identity Resolution
+	GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }

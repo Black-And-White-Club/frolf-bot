@@ -13,6 +13,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
+func pointer[T any](v T) *T { return &v }
+
 type (
 	RoundID      sharedtypes.RoundID
 	DiscordID    sharedtypes.DiscordID
@@ -76,7 +78,7 @@ func InsertTestUsers(ctx context.Context, db *bun.DB, testUsers []User, guildID 
 	// Insert global users first
 	for _, testUser := range testUsers {
 		globalUser := &userdb.User{
-			UserID: sharedtypes.DiscordID(testUser.UserID),
+			UserID: pointer(sharedtypes.DiscordID(testUser.UserID)),
 		}
 		// Insert or ignore if user already exists
 		_, err := db.NewInsert().Model(globalUser).On("CONFLICT (user_id) DO NOTHING").Exec(ctx)

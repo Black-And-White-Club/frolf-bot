@@ -37,6 +37,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	mappedResult := result.Map(
 		func(req *roundtypes.ScoreUpdateRequest) any {
 			return &roundevents.ScoreUpdateValidatedPayloadV1{
+				GuildID: req.GuildID, // Set top-level GuildID
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 					GuildID: req.GuildID,
 					RoundID: req.RoundID,
@@ -80,7 +81,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 		return nil, err
 	}
 
-	return mapOperationResult(result.Map(
+	results := mapOperationResult(result.Map(
 		func(s *roundtypes.ScoreUpdateResult) any {
 			return &roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        s.GuildID,
@@ -106,7 +107,12 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	),
 		roundevents.RoundParticipantScoreUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
-	), nil
+	)
+
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleScoreBulkUpdateRequest handles bulk score overrides for a round.

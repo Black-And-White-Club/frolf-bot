@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -22,6 +24,7 @@ type Config struct {
 
 // service implements the Service interface.
 type service struct {
+	repo              userdb.Repository
 	jwtProvider       authjwt.Provider
 	userJWTBuilder    authnats.UserJWTBuilder
 	permissionBuilder *permissions.Builder
@@ -34,11 +37,13 @@ type service struct {
 func NewService(
 	jwtProvider authjwt.Provider,
 	userJWTBuilder authnats.UserJWTBuilder,
+	repo userdb.Repository,
 	config Config,
 	logger *slog.Logger,
 	tracer trace.Tracer,
 ) Service {
 	return &service{
+		repo:              repo,
 		jwtProvider:       jwtProvider,
 		userJWTBuilder:    userJWTBuilder,
 		permissionBuilder: permissions.NewBuilder(),
@@ -69,13 +74,80 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 		}, nil
 	}
 
+	// Resolve UUIDs
+	userUUID, err := s.repo.GetUUIDByDiscordID(ctx, nil, sharedtypes.DiscordID(userID))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to resolve User UUID",
+			attr.Error(err),
+			attr.String("user_id", userID),
+		)
+		return &MagicLinkResponse{
+			Success: false,
+			Error:   "identity resolution failed",
+		}, nil
+	}
+
+	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, sharedtypes.GuildID(guildID))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to resolve Club UUID",
+			attr.Error(err),
+			attr.String("guild_id", guildID),
+		)
+		return &MagicLinkResponse{
+			Success: false,
+			Error:   "club resolution failed",
+		}, nil
+	}
+
+	// Fetch all club memberships for the user
+	memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, nil, userUUID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "Failed to fetch club memberships",
+			attr.Error(err),
+			attr.String("user_uuid", userUUID.String()),
+		)
+		// Non-fatal, but we'll at least have the active club
+	}
+
+	clubs := make([]authdomain.ClubRole, 0, len(memberships))
+	for _, m := range memberships {
+		clubs = append(clubs, authdomain.ClubRole{
+			ClubUUID: m.ClubUUID,
+			Role:     authdomain.Role(m.Role),
+		})
+	}
+
+	// Ensure active club is in the list if not already there
+	found := false
+	for _, c := range clubs {
+		if c.ClubUUID == clubUUID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		clubs = append(clubs, authdomain.ClubRole{
+			ClubUUID: clubUUID,
+			Role:     role,
+		})
+	}
+
 	// Generate the token using the default TTL
 	ttl := s.config.DefaultTTL
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
 
-	token, err := s.jwtProvider.GenerateToken(userID, guildID, role, ttl)
+	claims := &authdomain.Claims{
+		UserID:         userID,
+		UserUUID:       userUUID,
+		ActiveClubUUID: clubUUID,
+		GuildID:        guildID,
+		Role:           role,
+		Clubs:          clubs,
+	}
+
+	token, err := s.jwtProvider.GenerateToken(claims, ttl)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to generate token",
 			attr.Error(err),
@@ -162,8 +234,8 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 		attr.String("role", claims.Role.String()),
 	)
 
-	// Build permissions based on role
-	perms := s.permissionBuilder.ForRole(claims.Role, claims.GuildID, claims.UserID)
+	// Build permissions based on claims
+	perms := s.permissionBuilder.ForRole(claims)
 
 	// Generate NATS user JWT with permissions
 	if s.userJWTBuilder == nil {
@@ -173,7 +245,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 		}, nil
 	}
 
-	userJWT, err := s.userJWTBuilder.BuildUserJWT(claims.UserID, claims.GuildID, perms)
+	userJWT, err := s.userJWTBuilder.BuildUserJWT(claims, perms)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to generate user JWT",
 			attr.Error(err),

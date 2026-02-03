@@ -13,8 +13,11 @@ import (
 // pwaClaims represents the JWT claims structure.
 type pwaClaims struct {
 	jwt.RegisteredClaims
-	Guild string `json:"guild"`
-	Role  string `json:"role"`
+	UserUUID       string                `json:"user_uuid,omitempty"`
+	ActiveClubUUID string                `json:"active_club_uuid,omitempty"`
+	Clubs          []authdomain.ClubRole `json:"clubs,omitempty"`
+	Guild          string                `json:"guild,omitempty"` // Legacy Discord Guild ID
+	Role           string                `json:"role,omitempty"`  // Legacy Role
 }
 
 // provider implements the Provider interface.
@@ -29,18 +32,21 @@ func NewProvider(secret string) Provider {
 	}
 }
 
-// GenerateToken creates a signed JWT token for the given user, guild, and role.
-func (p *provider) GenerateToken(userID, guildID string, role authdomain.Role, ttl time.Duration) (string, error) {
+// GenerateToken creates a signed JWT token from the given claims.
+func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := &pwaClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
-			Subject:   userID,
+			Subject:   domainClaims.UserID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
-		Guild: guildID,
-		Role:  string(role),
+		UserUUID:       domainClaims.UserUUID.String(),
+		ActiveClubUUID: domainClaims.ActiveClubUUID.String(),
+		Clubs:          domainClaims.Clubs,
+		Guild:          domainClaims.GuildID,
+		Role:           string(domainClaims.Role),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -81,6 +87,14 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 		UserID:  claims.Subject,
 		GuildID: claims.Guild,
 		Role:    authdomain.Role(claims.Role),
+		Clubs:   claims.Clubs,
+	}
+
+	if claims.UserUUID != "" {
+		domainClaims.UserUUID, _ = uuid.Parse(claims.UserUUID)
+	}
+	if claims.ActiveClubUUID != "" {
+		domainClaims.ActiveClubUUID, _ = uuid.Parse(claims.ActiveClubUUID)
 	}
 
 	if claims.ExpiresAt != nil {

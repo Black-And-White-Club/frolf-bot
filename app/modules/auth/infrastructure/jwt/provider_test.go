@@ -16,8 +16,14 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 	role := authdomain.RolePlayer
 	ttl := 1 * time.Hour
 
+	claims := &authdomain.Claims{
+		UserID:  userID,
+		GuildID: guildID,
+		Role:    role,
+	}
+
 	t.Run("success", func(t *testing.T) {
-		token, err := p.GenerateToken(userID, guildID, role, ttl)
+		token, err := p.GenerateToken(claims, ttl)
 		if err != nil {
 			t.Fatalf("failed to generate token: %v", err)
 		}
@@ -26,25 +32,25 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 			t.Fatal("generated token is empty")
 		}
 
-		claims, err := p.ValidateToken(token)
+		validatedClaims, err := p.ValidateToken(token)
 		if err != nil {
 			t.Fatalf("failed to validate token: %v", err)
 		}
 
-		if claims.UserID != userID {
-			t.Errorf("expected userID %s, got %s", userID, claims.UserID)
+		if validatedClaims.UserID != userID {
+			t.Errorf("expected userID %s, got %s", userID, validatedClaims.UserID)
 		}
-		if claims.GuildID != guildID {
-			t.Errorf("expected guildID %s, got %s", guildID, claims.GuildID)
+		if validatedClaims.GuildID != guildID {
+			t.Errorf("expected guildID %s, got %s", guildID, validatedClaims.GuildID)
 		}
-		if claims.Role != role {
-			t.Errorf("expected role %s, got %s", role, claims.Role)
+		if validatedClaims.Role != role {
+			t.Errorf("expected role %s, got %s", role, validatedClaims.Role)
 		}
 	})
 
 	t.Run("expired token", func(t *testing.T) {
 		// Generate token with negative TTL to expire it immediately
-		token, err := p.GenerateToken(userID, guildID, role, -1*time.Hour)
+		token, err := p.GenerateToken(claims, -1*time.Hour)
 		if err != nil {
 			t.Fatalf("failed to generate token: %v", err)
 		}
@@ -56,7 +62,7 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 	})
 
 	t.Run("invalid signature", func(t *testing.T) {
-		token, err := p.GenerateToken(userID, guildID, role, ttl)
+		token, err := p.GenerateToken(claims, ttl)
 		if err != nil {
 			t.Fatalf("failed to generate token: %v", err)
 		}

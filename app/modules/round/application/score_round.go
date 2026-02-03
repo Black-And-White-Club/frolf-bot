@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -52,37 +54,59 @@ func (s *RoundService) ValidateScoreUpdateRequest(ctx context.Context, req *roun
 func (s *RoundService) UpdateParticipantScore(ctx context.Context, req *roundtypes.ScoreUpdateRequest) (ScoreUpdateResult, error) {
 	result, err := withTelemetry[*roundtypes.ScoreUpdateResult, error](s, ctx, "UpdateParticipantScore", req.RoundID, func(ctx context.Context) (ScoreUpdateResult, error) {
 		return runInTx[*roundtypes.ScoreUpdateResult, error](s, ctx, func(ctx context.Context, tx bun.IDB) (ScoreUpdateResult, error) {
-			// Fetch the round first to get the event message ID
+			// Fetch the round first to get the event message ID and check existence
 			round, err := s.repo.GetRound(ctx, tx, req.GuildID, req.RoundID)
 			if err != nil {
+				// If not found, return clean error without double-wrapping
+				// But we still log it for debugging context
 				s.logger.ErrorContext(ctx, "Failed to fetch round",
 					attr.RoundID("round_id", req.RoundID),
 					attr.String("guild_id", string(req.GuildID)),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("round not found: %w", err)), nil
+				if errors.Is(err, rounddb.ErrNotFound) {
+					// Return the original error (or a clean wrapper)
+					return results.FailureResult[*roundtypes.ScoreUpdateResult, error](err), nil
+				}
+				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("failed to fetch round: %w", err)), nil
 			}
 
-			// Update the participant's score in the database
-			err = s.repo.UpdateParticipantScore(ctx, tx, req.GuildID, req.RoundID, req.UserID, sharedtypes.Score(*req.Score))
+			// Check if participant is already in the round
+			isParticipant := false
+			for _, p := range round.Participants {
+				if p.UserID == req.UserID {
+					isParticipant = true
+					break
+				}
+			}
+
+			// Prepare participant object for update/upsert
+			p := roundtypes.Participant{
+				UserID: req.UserID,
+				Score:  req.Score,
+			}
+
+			if !isParticipant {
+				// Auto-join: If not a participant, we set their response to Accept.
+				// This allows them to join by submitting a score.
+				p.Response = roundtypes.ResponseAccept
+				s.logger.InfoContext(ctx, "Auto-joining participant via score submission",
+					attr.RoundID("round_id", req.RoundID),
+					attr.String("user_id", string(req.UserID)),
+				)
+			}
+
+			// Use UpdateParticipant instead of UpdateParticipantScore.
+			// UpdateParticipant handles both updating existing and adding new (upsert).
+			updatedParticipants, err := s.repo.UpdateParticipant(ctx, tx, req.GuildID, req.RoundID, p)
 			if err != nil {
 				s.logger.ErrorContext(ctx, "Failed to update participant score in DB",
 					attr.RoundID("round_id", req.RoundID),
 					attr.String("guild_id", string(req.GuildID)),
+					attr.String("user_id", string(req.UserID)),
 					attr.Error(err),
 				)
 				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("failed to update score in database: %w", err)), nil
-			}
-
-			// Fetch the full, updated list of participants for this round
-			updatedParticipants, err := s.repo.GetParticipants(ctx, tx, req.GuildID, req.RoundID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "Failed to get updated participants after score update",
-					attr.RoundID("round_id", req.RoundID),
-					attr.String("guild_id", string(req.GuildID)),
-					attr.Error(err),
-				)
-				return results.FailureResult[*roundtypes.ScoreUpdateResult, error](fmt.Errorf("failed to retrieve updated participants list: %w", err)), nil
 			}
 
 			// Return domain result

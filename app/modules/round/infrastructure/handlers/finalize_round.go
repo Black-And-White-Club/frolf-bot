@@ -77,8 +77,8 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		},
 	}
 
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundFinalizedV1, payload.GuildID)
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV1, payload.GuildID)
 
 	return results, nil
 }

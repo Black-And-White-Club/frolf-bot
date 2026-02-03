@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -14,17 +15,27 @@ import (
 //   - ErrNoRowsAffected: UPDATE/DELETE matched no rows
 //   - other errors: infrastructure failures
 type Repository interface {
+	// ... (existing methods remain, but we add UUID resolution)
+	GetUUIDByDiscordID(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error)
+
 	// Global user operations
 	GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error)
 	GetByUserIDs(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
 	SaveGlobalUser(ctx context.Context, db bun.IDB, user *User) error
 	UpdateGlobalUser(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *UserUpdateFields) error
 
-	// Guild membership operations
+	// Guild membership operations (Legacy Discord-scoped)
 	CreateGuildMembership(ctx context.Context, db bun.IDB, membership *GuildMembership) error
 	GetGuildMembership(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*GuildMembership, error)
 	UpdateMembershipRole(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	GetUserMemberships(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) ([]*GuildMembership, error)
+
+	// Club operations (New Identity Abstraction)
+	GetClubMembership(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
+	GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
+	UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error
+	GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
 
 	// Guild-scoped operations
 	GetUserByUserID(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)

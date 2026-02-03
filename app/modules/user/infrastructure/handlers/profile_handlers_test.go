@@ -35,7 +35,7 @@ func TestUserHandlers_HandleUserProfileUpdated(t *testing.T) {
 				AvatarHash:  testAvatarHash,
 			},
 			setupFake: func(f *FakeUserService) {
-				f.UpdateUserProfileFunc = func(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+				f.UpdateUserProfileFunc = func(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 					if userID != testUserID || displayName != testDisplayName || avatarHash != testAvatarHash {
 						return errors.New("unexpected arguments")
 					}
@@ -50,7 +50,7 @@ func TestUserHandlers_HandleUserProfileUpdated(t *testing.T) {
 				UserID: testUserID,
 			},
 			setupFake: func(f *FakeUserService) {
-				f.UpdateUserProfileFunc = func(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+				f.UpdateUserProfileFunc = func(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 					return errors.New("db error")
 				}
 			},

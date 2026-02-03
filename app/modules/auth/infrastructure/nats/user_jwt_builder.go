@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	"github.com/nats-io/nkeys"
 )
@@ -23,7 +24,7 @@ func NewUserJWTBuilder(signingKey nkeys.KeyPair, issuerAccount string) UserJWTBu
 }
 
 // BuildUserJWT creates a NATS user JWT with the specified permissions.
-func (b *userJWTBuilder) BuildUserJWT(userID, guildID string, perms *permissions.Permissions) (string, error) {
+func (b *userJWTBuilder) BuildUserJWT(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
 	// Get public key from signing key
 	publicKey, err := b.signingKey.PublicKey()
 	if err != nil {
@@ -32,7 +33,7 @@ func (b *userJWTBuilder) BuildUserJWT(userID, guildID string, perms *permissions
 
 	// Create user claims for NATS
 	uc := NewUserClaims(publicKey)
-	uc.Name = fmt.Sprintf("%s@%s", userID, guildID)
+	uc.Name = fmt.Sprintf("%s@%s", claims.UserUUID.String(), claims.ActiveClubUUID.String())
 	uc.Audience = b.issuerAccount
 	uc.Expires = time.Now().Add(24 * time.Hour).Unix()
 

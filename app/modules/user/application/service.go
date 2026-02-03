@@ -17,6 +17,7 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -229,7 +230,7 @@ func (s *UserService) executeMatchParsedScorecard(
 		if user != nil {
 			matchResult.Mappings = append(matchResult.Mappings, userevents.UDiscConfirmedMappingV1{
 				PlayerName:    rawName,
-				DiscordUserID: user.User.UserID,
+				DiscordUserID: user.User.GetUserID(),
 			})
 		} else {
 			matchResult.Unmatched = append(matchResult.Unmatched, rawName)
@@ -266,14 +267,56 @@ func (s *UserService) UpdateUDiscIdentity(
 func (s *UserService) UpdateUserProfile(
 	ctx context.Context,
 	userID sharedtypes.DiscordID,
+	guildID sharedtypes.GuildID,
 	displayName string,
 	avatarHash string,
 ) error {
 
 	op := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		// Update global profile
 		if err := s.repo.UpdateProfile(ctx, db, userID, displayName, avatarHash); err != nil {
 			return results.OperationResult[bool, error]{}, err
 		}
+
+		// Update club membership if guildID is provided
+		if guildID != "" {
+			userUUID, err := s.repo.GetUUIDByDiscordID(ctx, db, userID)
+			if err != nil {
+				return results.OperationResult[bool, error]{}, err
+			}
+			clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
+			if err != nil {
+				return results.OperationResult[bool, error]{}, err
+			}
+
+			// Upsert club membership with Discord as source
+			avatarURL := ""
+			if avatarHash != "" {
+				avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", string(userID), avatarHash)
+			}
+
+			membership := &userdb.ClubMembership{
+				UserUUID:    userUUID,
+				ClubUUID:    clubUUID,
+				DisplayName: &displayName,
+				AvatarURL:   &avatarURL,
+				Source:      "discord",
+				ExternalID:  pointer(string(userID)),
+			}
+
+			// Get existing to preserve role
+			existing, err := s.repo.GetClubMembership(ctx, db, userUUID, clubUUID)
+			if err == nil && existing != nil {
+				membership.Role = existing.Role
+			} else {
+				membership.Role = sharedtypes.UserRoleUser
+			}
+
+			if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
+				return results.OperationResult[bool, error]{}, err
+			}
+		}
+
 		return results.SuccessResult[bool, error](true), nil
 	}
 
@@ -282,6 +325,47 @@ func (s *UserService) UpdateUserProfile(
 	})
 
 	return err
+}
+
+func (s *UserService) UpdateClubMembership(
+	ctx context.Context,
+	clubUUID uuid.UUID,
+	userUUID uuid.UUID,
+	displayName *string,
+	avatarURL *string,
+	role *sharedtypes.UserRoleEnum,
+) (results.OperationResult[bool, error], error) {
+	op := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		// Get existing to determine role if not provided
+		existing, err := s.repo.GetClubMembership(ctx, db, userUUID, clubUUID)
+		if err != nil && !errors.Is(err, userdb.ErrNotFound) {
+			return results.OperationResult[bool, error]{}, err
+		}
+
+		membership := &userdb.ClubMembership{
+			UserUUID:    userUUID,
+			ClubUUID:    clubUUID,
+			DisplayName: displayName,
+			AvatarURL:   avatarURL,
+		}
+
+		if role != nil {
+			membership.Role = *role
+		} else if existing != nil {
+			membership.Role = existing.Role
+		} else {
+			membership.Role = sharedtypes.UserRoleUser
+		}
+
+		if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
+			return results.OperationResult[bool, error]{}, err
+		}
+		return results.SuccessResult[bool, error](true), nil
+	}
+
+	return withTelemetry(s, ctx, "UpdateClubMembership", "", func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		return runInTx(s, ctx, op)
+	})
 }
 
 func (s *UserService) LookupProfiles(
@@ -318,8 +402,8 @@ func (s *UserService) executeLookupProfiles(
 
 	result := make(map[sharedtypes.DiscordID]*usertypes.UserProfile, len(users))
 	for _, u := range users {
-		result[u.UserID] = &usertypes.UserProfile{
-			UserID:      u.UserID,
+		result[u.GetUserID()] = &usertypes.UserProfile{
+			UserID:      u.GetUserID(),
 			DisplayName: u.GetDisplayName(),
 			AvatarURL:   u.AvatarURL(64), // 64px for list views
 		}
@@ -415,4 +499,16 @@ func runInTx[S any, F any](
 	})
 
 	return result, err
+}
+
+func (s *UserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	return s.repo.GetUUIDByDiscordID(ctx, s.db, discordID)
+}
+
+func (s *UserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	return s.repo.GetClubUUIDByDiscordGuildID(ctx, s.db, guildID)
+}
+
+func pointer[T any](v T) *T {
+	return &v
 }

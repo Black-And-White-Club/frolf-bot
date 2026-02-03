@@ -4,26 +4,78 @@ import (
 	"context"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
 // FakeRepository is a fake implementation of Repository for testing.
 type FakeRepository struct {
+	GetUUIDByDiscordIDFn          func(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetClubUUIDByDiscordGuildIDFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error)
+
 	GetUserGlobalFn         func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error)
+	GetByUserIDsFn          func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
 	SaveGlobalUserFn        func(ctx context.Context, db bun.IDB, user *User) error
 	UpdateGlobalUserFn      func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *UserUpdateFields) error
 	CreateGuildMembershipFn func(ctx context.Context, db bun.IDB, membership *GuildMembership) error
 	GetGuildMembershipFn    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*GuildMembership, error)
 	UpdateMembershipRoleFn  func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	GetUserMembershipsFn    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) ([]*GuildMembership, error)
-	GetUserByUserIDFn       func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
-	GetUserRoleFn           func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
-	UpdateUserRoleFn        func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
-	FindByUDiscUsernameFn   func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
-	FindByUDiscNameFn       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
-	FindByUDiscNameFuzzyFn  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
-	GetByUserIDsFn          func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
-	UpdateProfileFn         func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+
+	GetClubMembershipFn             func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
+	UpsertClubMembershipFn          func(ctx context.Context, db bun.IDB, membership *ClubMembership) error
+	GetClubMembershipByExternalIDFn func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
+	GetClubMembershipsByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
+
+	GetUserByUserIDFn      func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
+	GetUserRoleFn          func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
+	UpdateUserRoleFn       func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	FindByUDiscUsernameFn  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
+	FindByUDiscNameFn      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
+	FindByUDiscNameFuzzyFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
+	UpdateProfileFn        func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+}
+
+func (f *FakeRepository) GetUUIDByDiscordID(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	if f.GetUUIDByDiscordIDFn != nil {
+		return f.GetUUIDByDiscordIDFn(ctx, db, discordID)
+	}
+	return uuid.Nil, nil
+}
+
+func (f *FakeRepository) GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	if f.GetClubUUIDByDiscordGuildIDFn != nil {
+		return f.GetClubUUIDByDiscordGuildIDFn(ctx, db, guildID)
+	}
+	return uuid.Nil, nil
+}
+
+func (f *FakeRepository) GetClubMembership(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error) {
+	if f.GetClubMembershipFn != nil {
+		return f.GetClubMembershipFn(ctx, db, userUUID, clubUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepository) UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error {
+	if f.UpsertClubMembershipFn != nil {
+		return f.UpsertClubMembershipFn(ctx, db, membership)
+	}
+	return nil
+}
+
+func (f *FakeRepository) GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error) {
+	if f.GetClubMembershipByExternalIDFn != nil {
+		return f.GetClubMembershipByExternalIDFn(ctx, db, externalID, clubUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepository) GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error) {
+	if f.GetClubMembershipsByUserUUIDFn != nil {
+		return f.GetClubMembershipsByUserUUIDFn(ctx, db, userUUID)
+	}
+	return nil, nil
 }
 
 func (f *FakeRepository) GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error) {

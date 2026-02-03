@@ -9,6 +9,7 @@ import (
 	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -36,6 +37,40 @@ func (u *UserUpdateFields) IsEmpty() bool {
 		return true
 	}
 	return u.UDiscUsername == nil && u.UDiscName == nil
+}
+
+// --- IDENTITY RESOLUTION METHODS ---
+
+func (r *Impl) GetUUIDByDiscordID(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	if db == nil {
+		db = r.db
+	}
+	var u User
+	err := db.NewSelect().Model(&u).Column("uuid").Where("user_id = ?", discordID).Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, err
+	}
+	return u.UUID, nil
+}
+
+func (r *Impl) GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	if db == nil {
+		db = r.db
+	}
+	var gc struct {
+		UUID uuid.UUID `bun:"uuid"`
+	}
+	err := db.NewSelect().Table("guild_configs").Column("uuid").Where("guild_id = ?", guildID).Scan(ctx, &gc)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, err
+	}
+	return gc.UUID, nil
 }
 
 // --- GLOBAL USER METHODS ---
@@ -135,7 +170,7 @@ func (r *Impl) UpdateProfile(ctx context.Context, db bun.IDB, userID sharedtypes
 	now := time.Now().UTC()
 
 	user := &User{
-		UserID:           userID,
+		UserID:           &userID,
 		DisplayName:      &displayName,
 		AvatarHash:       &avatarHash,
 		ProfileUpdatedAt: &now,
@@ -228,6 +263,73 @@ func (r *Impl) GetUserMemberships(ctx context.Context, db bun.IDB, userID shared
 		return nil, fmt.Errorf("userdb.GetUserMemberships: %w", err)
 	}
 	return memberships, nil
+}
+
+// --- CLUB MEMBERSHIP METHODS ---
+
+func (r *Impl) GetClubMembership(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	cm := &ClubMembership{}
+	err := db.NewSelect().Model(cm).Where("user_uuid = ? AND club_uuid = ?", userUUID, clubUUID).Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetClubMembership: %w", err)
+	}
+	return cm, nil
+}
+
+func (r *Impl) GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	var memberships []*ClubMembership
+	err := db.NewSelect().
+		Model(&memberships).
+		Where("user_uuid = ?", userUUID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetClubMembershipsByUserUUID: %w", err)
+	}
+	return memberships, nil
+}
+
+func (r *Impl) UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error {
+	if db == nil {
+		db = r.db
+	}
+	now := time.Now().UTC()
+	membership.UpdatedAt = now
+	_, err := db.NewInsert().
+		Model(membership).
+		On("CONFLICT (user_uuid, club_uuid) DO UPDATE").
+		Set("display_name = EXCLUDED.display_name").
+		Set("avatar_url = EXCLUDED.avatar_url").
+		Set("role = EXCLUDED.role").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.UpsertClubMembership: %w", err)
+	}
+	return nil
+}
+
+func (r *Impl) GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	cm := &ClubMembership{}
+	err := db.NewSelect().Model(cm).Where("external_id = ? AND club_uuid = ?", externalID, clubUUID).Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetClubMembershipByExternalID: %w", err)
+	}
+	return cm, nil
 }
 
 // --- USER WITH MEMBERSHIP METHODS ---
@@ -365,7 +467,7 @@ func (r *Impl) FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, guildID sha
 
 	userIDs := make([]sharedtypes.DiscordID, len(users))
 	for i, u := range users {
-		userIDs[i] = u.UserID
+		userIDs[i] = u.GetUserID()
 	}
 
 	var memberships []*GuildMembership
@@ -385,7 +487,7 @@ func (r *Impl) FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, guildID sha
 
 	results := make([]*UserWithMembership, 0, len(users))
 	for _, u := range users {
-		if m, ok := mMap[u.UserID]; ok {
+		if m, ok := mMap[u.GetUserID()]; ok {
 			results = append(results, &UserWithMembership{
 				User:     u,
 				Role:     m.Role,

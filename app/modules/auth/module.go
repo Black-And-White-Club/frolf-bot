@@ -14,6 +14,7 @@ import (
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
 	authrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/router"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
@@ -38,6 +39,7 @@ func NewModule(
 	nc *nats.Conn,
 	eventBus eventbus.EventBus,
 	helper utils.Helpers,
+	userRepo userdb.Repository,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -67,6 +69,7 @@ func NewModule(
 	service := authservice.NewService(
 		jwtProvider,
 		userJWTBuilder,
+		userRepo,
 		serviceConfig,
 		logger,
 		tracer,

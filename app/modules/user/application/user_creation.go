@@ -20,7 +20,7 @@ func MapDBUserToUserData(dbUser *userdb.User, tag *sharedtypes.TagNumber, return
 	return &CreateUserResponse{
 		UserData: usertypes.UserData{
 			ID:     dbUser.ID,
-			UserID: dbUser.UserID,
+			UserID: dbUser.GetUserID(),
 			Role:   sharedtypes.UserRoleUser,
 		},
 		TagNumber:       tag,
@@ -106,7 +106,7 @@ func (s *UserService) executeCreateUser(
 
 	// 3. New user flow
 	newUser := &userdb.User{
-		UserID:        userID,
+		UserID:        &userID,
 		UDiscUsername: normalizeStringPointer(udiscUsername),
 		UDiscName:     normalizeStringPointer(udiscName),
 	}

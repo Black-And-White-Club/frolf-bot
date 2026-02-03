@@ -17,6 +17,7 @@ import (
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -120,6 +121,22 @@ func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, gui
 				Metadata: r.Metadata,
 			}
 			return append(results, guildScopedResult)
+		}
+	}
+
+	return results
+}
+
+// addParallelIdentityResults appends both legacy GuildID and internal ClubUUID scoped versions of the event.
+func (h *LeaderboardHandlers) addParallelIdentityResults(ctx context.Context, results []handlerwrapper.Result, baseTopic string, guildID sharedtypes.GuildID) []handlerwrapper.Result {
+	// 1. Add legacy GuildID scoped result
+	results = addGuildScopedResult(results, baseTopic, guildID)
+
+	// 2. Add internal ClubUUID scoped result
+	if guildID != "" {
+		clubUUID, err := h.userService.GetClubUUIDByDiscordGuildID(ctx, guildID)
+		if err == nil && clubUUID != uuid.Nil {
+			results = addGuildScopedResult(results, baseTopic, clubUUID)
 		}
 	}
 

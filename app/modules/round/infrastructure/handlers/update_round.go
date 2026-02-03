@@ -249,12 +249,12 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 			},
 		}
 
-		// Add guild-scoped version for PWA permission scoping
+		// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 		guildID := updatedPayload.GuildID
 		if guildID == "" && updatedPayload.Round.GuildID != "" {
 			guildID = updatedPayload.Round.GuildID
 		}
-		results = addGuildScopedResult(results, roundevents.RoundUpdatedV1, guildID)
+		results = h.addParallelIdentityResults(ctx, results, roundevents.RoundUpdatedV1, guildID)
 
 		// Check if we need to reschedule (only for time-sensitive fields)
 		if h.shouldRescheduleEvents(payload.RoundUpdateRequestPayload) {

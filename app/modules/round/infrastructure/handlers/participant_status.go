@@ -175,8 +175,8 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 		{Topic: roundevents.RoundParticipantJoinedV1, Payload: joinedPayload},
 	}
 
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundParticipantJoinedV1, payload.GuildID)
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantJoinedV1, payload.GuildID)
 
 	return results, nil
 }

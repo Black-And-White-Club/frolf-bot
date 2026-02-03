@@ -4,6 +4,7 @@ import (
 	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -37,6 +38,7 @@ type GuildConfig struct {
 	bun.BaseModel `bun:"table:guild_configs,alias:g"`
 
 	GuildID   sharedtypes.GuildID `bun:"guild_id,pk,notnull,type:varchar(20)"`
+	UUID      uuid.UUID           `bun:"uuid,unique,notnull,default:gen_random_uuid()" json:"uuid"`
 	CreatedAt time.Time           `bun:"created_at,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt time.Time           `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 	IsActive  bool                `bun:"is_active,notnull,default:true"`

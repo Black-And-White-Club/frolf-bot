@@ -38,7 +38,7 @@ func TestUserService_GetUser(t *testing.T) {
 			setupFake: func(f *FakeUserRepository) {
 				f.GetUserByUserIDFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, gID sharedtypes.GuildID) (*userdb.UserWithMembership, error) {
 					return &userdb.UserWithMembership{
-						User: &userdb.User{ID: 1, UserID: id},
+						User: &userdb.User{ID: 1, UserID: &id},
 						// Assuming db structure is dbUser.Role based on your Map function
 						Role: sharedtypes.UserRoleAdmin,
 					}, nil
@@ -222,7 +222,7 @@ func TestUserService_FindByUDiscUsername(t *testing.T) {
 			setupFake: func(f *FakeUserRepository) {
 				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, uname string) (*userdb.UserWithMembership, error) {
 					return &userdb.UserWithMembership{
-						User: &userdb.User{UserID: "user-1", UDiscUsername: pointer(uname)},
+						User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("user-1")), UDiscUsername: pointer(uname)},
 						Role: sharedtypes.UserRoleUser,
 					}, nil
 				}
@@ -283,7 +283,7 @@ func TestUserService_FindByUDiscName(t *testing.T) {
 			setupFake: func(f *FakeUserRepository) {
 				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, gID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
 					return &userdb.UserWithMembership{
-						User: &userdb.User{UserID: "user-2", UDiscName: pointer(name)},
+						User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("user-2")), UDiscName: pointer(name)},
 						Role: sharedtypes.UserRoleUser,
 					}, nil
 				}

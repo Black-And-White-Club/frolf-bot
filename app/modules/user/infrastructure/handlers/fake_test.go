@@ -24,7 +24,7 @@ type FakeUserService struct {
 	FindByUDiscUsernameFunc      func(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error)
 	FindByUDiscNameFunc          func(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error)
 	MatchParsedScorecardFunc     func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (results.OperationResult[*userservice.MatchResult, error], error)
-	UpdateUserProfileFunc        func(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error
+	UpdateUserProfileFunc        func(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error
 	LookupProfilesFunc           func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
 }
 
@@ -106,10 +106,10 @@ func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID shar
 	return results.OperationResult[*userservice.MatchResult, error]{}, nil
 }
 
-func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 	f.record("UpdateUserProfile")
 	if f.UpdateUserProfileFunc != nil {
-		return f.UpdateUserProfileFunc(ctx, userID, displayName, avatarHash)
+		return f.UpdateUserProfileFunc(ctx, userID, guildID, displayName, avatarHash)
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -26,11 +27,11 @@ func TestService_GenerateMagicLink(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		fakeJWT := "valid-jwt"
 		jwtProvider := &FakeJWTProvider{
-			GenerateTokenFunc: func(userID, guildID string, role authdomain.Role, ttl time.Duration) (string, error) {
+			GenerateTokenFunc: func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
 				return fakeJWT, nil
 			},
 		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, config, logger, tracer)
+		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
 
 		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.RolePlayer)
 		if err != nil {
@@ -48,7 +49,7 @@ func TestService_GenerateMagicLink(t *testing.T) {
 	})
 
 	t.Run("invalid role", func(t *testing.T) {
-		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, config, logger, tracer)
+		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
 
 		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.Role("invalid"))
 		if err != nil {
@@ -66,11 +67,11 @@ func TestService_GenerateMagicLink(t *testing.T) {
 
 	t.Run("jwt generation failure", func(t *testing.T) {
 		jwtProvider := &FakeJWTProvider{
-			GenerateTokenFunc: func(userID, guildID string, role authdomain.Role, ttl time.Duration) (string, error) {
+			GenerateTokenFunc: func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
 				return "", errors.New("jwt error")
 			},
 		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, config, logger, tracer)
+		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
 
 		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.RolePlayer)
 		if err != nil {
@@ -100,11 +101,11 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 			},
 		}
 		natsBuilder := &FakeUserJWTBuilder{
-			BuildUserJWTFunc: func(userID, guildID string, perms *permissions.Permissions) (string, error) {
+			BuildUserJWTFunc: func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
 				return "nats-jwt", nil
 			},
 		}
-		s := NewService(jwtProvider, natsBuilder, config, logger, tracer)
+		s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
 
 		req := &NATSAuthRequest{
 			ConnectOpts: ConnectOptions{Password: "valid-token"},
@@ -124,7 +125,7 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 	})
 
 	t.Run("missing token", func(t *testing.T) {
-		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, config, logger, tracer)
+		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
 
 		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: ""}}
 		resp, err := s.HandleNATSAuthRequest(ctx, req)
@@ -143,7 +144,7 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 				return nil, errors.New("invalid")
 			},
 		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, config, logger, tracer)
+		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
 
 		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "bad-token"}}
 		resp, err := s.HandleNATSAuthRequest(ctx, req)
@@ -163,11 +164,11 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 			},
 		}
 		natsBuilder := &FakeUserJWTBuilder{
-			BuildUserJWTFunc: func(userID, guildID string, perms *permissions.Permissions) (string, error) {
+			BuildUserJWTFunc: func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
 				return "", errors.New("nats error")
 			},
 		}
-		s := NewService(jwtProvider, natsBuilder, config, logger, tracer)
+		s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
 
 		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}}
 		resp, err := s.HandleNATSAuthRequest(ctx, req)
