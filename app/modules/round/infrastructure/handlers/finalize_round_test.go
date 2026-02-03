@@ -3,6 +3,7 @@ package roundhandlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 	testLocation := roundtypes.Location("Test Location")
 	testStartTime := sharedtypes.StartTime(time.Now().UTC())
 	testGuildID := sharedtypes.GuildID("guild-123")
+	testClubUUID := uuid.New()
 	testEventMessageID := "msg-123"
 
 	testParticipants := []roundtypes.Participant{
@@ -61,7 +63,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		fakeSetup      func(*FakeService)
+		fakeSetup      func(*FakeService, *FakeUserService)
 		payload        *roundevents.AllScoresSubmittedPayloadV1
 		wantErr        bool
 		wantResultLen  int
@@ -69,7 +71,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle AllScoresSubmitted",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
 						Round: &roundtypes.Round{
@@ -82,14 +84,17 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 						Participants: testParticipants,
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 3, // Discord + Backend finalization + Guild-scoped
+			wantResultLen: 4, // Discord + Backend finalization + Guild-scoped + Club-scoped
 		},
 		{
 			name: "Service returns finalization failure",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					return results.FailureResult[*roundtypes.FinalizeRoundResult, error](errors.New("finalization failed")), nil
 				}
@@ -100,7 +105,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 		},
 		{
 			name: "Service returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					return roundservice.FinalizeRoundResult{}, errors.New("database error")
 				}
@@ -111,7 +116,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 		},
 		{
 			name: "Service returns empty result",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					return roundservice.FinalizeRoundResult{}, nil
 				}
@@ -122,7 +127,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 		},
 		{
 			name: "Payload with no GuildID",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
 						Round: &roundtypes.Round{
@@ -155,7 +160,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 		},
 		{
 			name: "Payload with multiple participants",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
 					manyParticipants := []roundtypes.Participant{
 						{UserID: sharedtypes.DiscordID("user1"), Response: roundtypes.ResponseAccept, Score: scorePointer(sharedtypes.Score(60))},
@@ -171,6 +176,9 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 						},
 						Participants: manyParticipants,
 					}), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
 				}
 			},
 			payload: &roundevents.AllScoresSubmittedPayloadV1{
@@ -196,20 +204,21 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantResultLen: 3,
+			wantResultLen: 4,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 				logger:      logger,
 				helpers:     utils.NewHelper(logger),
 			}
@@ -228,7 +237,7 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 			}
 
 			// Verify metadata for Discord message
-			if tt.wantResultLen == 3 {
+			if tt.wantResultLen == 4 {
 				if results[0].Topic != roundevents.RoundFinalizedDiscordV1 {
 					t.Errorf("First result should be Discord finalization, got %v", results[0].Topic)
 				}
@@ -241,6 +250,10 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				// Third result should be guild-scoped backend finalization
 				if results[2].Topic != "round.finalized.v1.guild-123" {
 					t.Errorf("Third result should be guild-scoped finalization, got %v", results[2].Topic)
+				}
+				// Fourth result should be club-scoped backend finalization
+				if results[3].Topic != fmt.Sprintf("%s.%s", roundevents.RoundFinalizedV1, testClubUUID.String()) {
+					t.Errorf("Fourth result should be club-scoped finalization, got %v", results[3].Topic)
 				}
 			}
 		})

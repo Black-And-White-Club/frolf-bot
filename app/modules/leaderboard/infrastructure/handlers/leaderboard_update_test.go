@@ -17,6 +17,7 @@ import (
 func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("test-guild")
+	testClubUUID := uuid.New()
 	testSortedParticipantTags := []string{
 		"1:12345678901234567", // 1st place
 		"2:12345678901234568", // 2nd place
@@ -32,7 +33,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setupFake     func(f *FakeService, s *FakeSagaCoordinator)
+		setupFake     func(f *FakeService, s *FakeSagaCoordinator, u *FakeUserService)
 		payload       *leaderboardevents.LeaderboardUpdateRequestedPayloadV1
 		wantErr       bool
 		wantResultLen int
@@ -41,26 +42,30 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle LeaderboardUpdateRequested",
-			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator, u *FakeUserService) {
 				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					return results.SuccessResult[leaderboardtypes.LeaderboardData, error](leaderboardtypes.LeaderboardData{
 						{UserID: "12345678901234567", TagNumber: 1},
 						{UserID: "12345678901234568", TagNumber: 2},
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 3,
+			wantResultLen: 4,
 			wantTopics: []string{
 				leaderboardevents.LeaderboardUpdatedV1,                                     // 0: Global
 				sharedevents.SyncRoundsTagRequestV1,                                        // 1: Sync
 				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, "test-guild"), // 2: Scoped
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, testClubUUID.String()), // 3: Scoped Club
 			},
 		},
 		{
 			name: "Tag Swap Required - Triggers Saga",
-			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator, u *FakeUserService) {
 				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					err := error(&leaderboardservice.TagSwapNeededError{
 						RequestorID: "12345678901234567",
@@ -81,7 +86,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		},
 		{
 			name: "Service Infrastructure Error",
-			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator, u *FakeUserService) {
 				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, fmt.Errorf("database down")
 				}
@@ -92,7 +97,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		},
 		{
 			name: "Invalid tag format in payload - skips bad entries",
-			setupFake: func(f *FakeService, s *FakeSagaCoordinator) {
+			setupFake: func(f *FakeService, s *FakeSagaCoordinator, u *FakeUserService) {
 				f.ExecuteBatchTagAssignmentFunc = func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 					// Verify only the valid tag was passed to the service
 					if len(requests) != 1 {
@@ -107,7 +112,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				SortedParticipantTags: []string{"invalid_format", "1:12345"},
 			},
 			wantErr:       false,
-			wantResultLen: 3,
+			wantResultLen: 4,
 		},
 	}
 
@@ -115,13 +120,14 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			fakeSaga := NewFakeSagaCoordinator()
+			fakeUserService := NewFakeUserService()
 			if tt.setupFake != nil {
-				tt.setupFake(fakeSvc, fakeSaga)
+				tt.setupFake(fakeSvc, fakeSaga, fakeUserService)
 			}
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
-				userService:     NewFakeUserService(),
+				userService:     fakeUserService,
 				sagaCoordinator: fakeSaga,
 			}
 

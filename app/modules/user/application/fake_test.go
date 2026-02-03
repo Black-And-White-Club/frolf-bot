@@ -63,6 +63,12 @@ type FakeUserRepository struct {
 
 	// Profile operations
 	UpdateProfileFunc func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+
+	// Refresh Token operations
+	SaveRefreshTokenFn    func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error
+	GetRefreshTokenFn     func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error)
+	RevokeRefreshTokenFn  func(ctx context.Context, db bun.IDB, hash string) error
+	RevokeAllUserTokensFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -249,6 +255,38 @@ func (f *FakeUserRepository) UpdateProfile(ctx context.Context, db bun.IDB, user
 	f.record("UpdateProfile")
 	if f.UpdateProfileFunc != nil {
 		return f.UpdateProfileFunc(ctx, db, userID, displayName, avatarHash)
+	}
+	return nil
+}
+
+func (f *FakeUserRepository) SaveRefreshToken(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error {
+	f.record("SaveRefreshToken")
+	if f.SaveRefreshTokenFn != nil {
+		return f.SaveRefreshTokenFn(ctx, db, token)
+	}
+	return nil
+}
+
+func (f *FakeUserRepository) GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+	f.record("GetRefreshToken")
+	if f.GetRefreshTokenFn != nil {
+		return f.GetRefreshTokenFn(ctx, db, hash)
+	}
+	return nil, nil
+}
+
+func (f *FakeUserRepository) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error {
+	f.record("RevokeRefreshToken")
+	if f.RevokeRefreshTokenFn != nil {
+		return f.RevokeRefreshTokenFn(ctx, db, hash)
+	}
+	return nil
+}
+
+func (f *FakeUserRepository) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error {
+	f.record("RevokeAllUserTokens")
+	if f.RevokeAllUserTokensFn != nil {
+		return f.RevokeAllUserTokensFn(ctx, db, userUUID)
 	}
 	return nil
 }

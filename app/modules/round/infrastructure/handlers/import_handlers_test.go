@@ -108,6 +108,8 @@ func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
 	roundID := sharedtypes.RoundID(uuid.New())
 	guildID := sharedtypes.GuildID("guild-123")
 	initiatorID := sharedtypes.DiscordID("admin-user")
+	testClubUUID := uuid.New()
+
 	payload := &roundevents.ImportCompletedPayloadV1{
 		GuildID: guildID,
 		RoundID: roundID,
@@ -131,9 +133,14 @@ func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
 		}), nil
 	}
 
+	userService := NewFakeUserService()
+	userService.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+		return testClubUUID, nil
+	}
+
 	h := &RoundHandlers{
 		service:     svc,
-		userService: NewFakeUserService(),
+		userService: userService,
 		logger:      loggerfrolfbot.NoOpLogger,
 	}
 
@@ -143,9 +150,9 @@ func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// We expect 3 results now: RPSU, RASS, and a guild-scoped RPSU
-	if len(res) != 3 {
-		t.Errorf("expected 3 trigger results, got %d", len(res))
+	// We expect 4 results now: RPSU, RASS, Guild-scoped RPSU, Club-scoped RPSU
+	if len(res) != 4 {
+		t.Errorf("expected 4 trigger results, got %d", len(res))
 	}
 
 	if res[0].Topic != roundevents.RoundParticipantScoreUpdatedV1 {

@@ -213,6 +213,7 @@ func TestHandleScoreUpdateRequest(t *testing.T) {
 				helper := testutils.NewRoundTestHelper(env.EventBus, nil)
 				roundID := helper.CreateRoundInDBWithState(t, deps.DB, data.UserID, roundtypes.RoundStateInProgress)
 
+				// Create payload with nil score
 				payload := createScoreUpdateRequestPayload(roundID, data.UserID, nil)
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -229,7 +230,7 @@ func TestHandleScoreUpdateRequest(t *testing.T) {
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				msgs := receivedMsgs[roundevents.RoundScoreUpdateErrorV1]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one error message on topic %q", roundevents.RoundScoreUpdateErrorV1)
+					t.Fatalf("Expected at least one message on topic %q, but received none", roundevents.RoundScoreUpdateErrorV1)
 				}
 			},
 			timeout: 5 * time.Second,

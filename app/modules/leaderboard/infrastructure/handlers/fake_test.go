@@ -12,6 +12,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 // FakeService implements leaderboardservice.Service for handler testing.
@@ -148,7 +149,8 @@ var _ utils.Helpers = (*FakeHelpers)(nil)
 
 // FakeUserService implements userservice.Service for handler testing.
 type FakeUserService struct {
-	LookupProfilesFunc func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
 func NewFakeUserService() *FakeUserService {
@@ -190,6 +192,17 @@ func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID shar
 }
 func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 	return nil
+}
+
+func (f *FakeUserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	return uuid.New(), nil
+}
+
+func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	if f.GetClubUUIDByDiscordGuildIDFunc != nil {
+		return f.GetClubUUIDByDiscordGuildIDFunc(ctx, guildID)
+	}
+	return uuid.New(), nil
 }
 
 // FakeHelpers implements utils.Helpers for testing

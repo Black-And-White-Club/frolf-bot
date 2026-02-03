@@ -499,6 +499,71 @@ func (r *Impl) FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, guildID sha
 	return results, nil
 }
 
+// --- REFRESH TOKEN METHODS ---
+
+func (r *Impl) SaveRefreshToken(ctx context.Context, db bun.IDB, token *RefreshToken) error {
+	if db == nil {
+		db = r.db
+	}
+	_, err := db.NewInsert().Model(token).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.SaveRefreshToken: %w", err)
+	}
+	return nil
+}
+
+func (r *Impl) GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error) {
+	if db == nil {
+		db = r.db
+	}
+	token := &RefreshToken{}
+	err := db.NewSelect().
+		Model(token).
+		Where("hash = ?", hash).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetRefreshToken: %w", err)
+	}
+	return token, nil
+}
+
+func (r *Impl) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error {
+	if db == nil {
+		db = r.db
+	}
+	_, err := db.NewUpdate().
+		Model((*RefreshToken)(nil)).
+		TableExpr("refresh_tokens").
+		Set("revoked = ?", true).
+		Set("revoked_at = ?", time.Now()).
+		Where("hash = ?", hash).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.RevokeRefreshToken: %w", err)
+	}
+	return nil
+}
+
+func (r *Impl) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error {
+	if db == nil {
+		db = r.db
+	}
+	_, err := db.NewUpdate().
+		Model((*RefreshToken)(nil)).
+		TableExpr("refresh_tokens").
+		Set("revoked = ?", true).
+		Set("revoked_at = ?", time.Now()).
+		Where("user_uuid = ?", userUUID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.RevokeAllUserTokens: %w", err)
+	}
+	return nil
+}
+
 // --- HELPERS ---
 
 func normalizeNullablePointer(val *string) *string {

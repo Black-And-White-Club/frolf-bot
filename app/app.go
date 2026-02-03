@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -25,7 +26,9 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/Black-And-White-Club/frolf-bot/db/bundb"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	wm_middleware "github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/go-chi/chi/v5"
+	chi_middleware "github.com/go-chi/chi/v5/middleware"
 )
 
 // App holds the application components.
@@ -42,6 +45,7 @@ type App struct {
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
 	Helpers           utils.Helpers
+	HTTPRouter        *chi.Mux
 }
 
 func (app *App) GetHealthCheckers() []eventbus.HealthChecker {
@@ -58,6 +62,14 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	app.Observability = obs
 
 	logger := obs.Provider.Logger
+	// Initialize HTTP Router
+	app.HTTPRouter = chi.NewRouter()
+	app.HTTPRouter.Use(chi_middleware.Logger)
+	app.HTTPRouter.Use(chi_middleware.Recoverer)
+	app.HTTPRouter.Use(chi_middleware.RealIP)
+	// Add CORS if needed (PWA and Backend might be on different subdomains)
+	// app.HTTPRouter.Use(cors.Handler(cors.Options{...}))
+
 	logger.Info("App Initialize started")
 
 	// Initialize database
@@ -86,16 +98,16 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	// Add Middleware
 	fmt.Println("DEBUG: Adding middleware...")
 	app.Router.AddMiddleware(
-		middleware.CorrelationID,
-		middleware.Recoverer,
+		wm_middleware.CorrelationID,
+		wm_middleware.Recoverer,
 		tracingfrolfbot.TraceHandler(obs.Registry.Tracer),
 	)
 
 	// Initialize EventBus
 	fmt.Printf("DEBUG: Initializing EventBus with NATS URL: %s\n", app.Config.NATS.URL)
-	tracer := obs.Provider.TracerProvider.Tracer("eventbus")
+	eventBusTracer := obs.Provider.TracerProvider.Tracer("eventbus")
 
-	app.EventBus, err = eventbus.NewEventBus(ctx, app.Config.NATS.URL, logger, "backend", obs.Registry.EventBusMetrics, tracer)
+	app.EventBus, err = eventbus.NewEventBus(ctx, app.Config.NATS.URL, logger, "backend", obs.Registry.EventBusMetrics, eventBusTracer)
 	if err != nil {
 		fmt.Printf("DEBUG: EventBus creation failed: %v\n", err)
 		return fmt.Errorf("failed to create event bus: %w", err)
@@ -152,7 +164,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 
 	// Initialize auth module (handles magic links and auth callout)
 	fmt.Println("DEBUG: Initializing auth module...")
-	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers, app.DB.UserDB); err != nil {
+	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers, app.DB.UserDB, app.HTTPRouter); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize auth module", attr.Error(err))
 		return fmt.Errorf("failed to initialize auth module: %w", err)
 	}
@@ -227,6 +239,27 @@ func (app *App) Run(ctx context.Context) error {
 			// Router finished normally - this should NOT happen for long-running event-driven apps
 			fmt.Println("DEBUG: Watermill router finished unexpectedly - this indicates a problem")
 			app.Observability.Provider.Logger.Error("Watermill router finished unexpectedly. This should not happen for a long-running event-driven application.")
+			cancel()
+		}
+	}()
+
+	// Start HTTP Server
+	go func() {
+		port := app.Config.HTTP.Port
+		if port == "" {
+			port = ":3001"
+		}
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
+		server := &http.Server{
+			Addr:    port,
+			Handler: app.HTTPRouter,
+		}
+		fmt.Printf("DEBUG: Starting HTTP server on %s\n", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("FATAL: HTTP server failed: %v\n", err)
+			app.Observability.Provider.Logger.Error("HTTP server failed", attr.Error(err))
 			cancel()
 		}
 	}()

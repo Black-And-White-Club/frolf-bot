@@ -5,6 +5,7 @@ import (
 
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
+	"github.com/google/uuid"
 )
 
 // ------------------------
@@ -40,9 +41,10 @@ func (f *FakeJWTProvider) ValidateToken(tokenString string) (*authdomain.Claims,
 		return f.ValidateTokenFunc(tokenString)
 	}
 	return &authdomain.Claims{
-		UserID:  "test-user",
-		GuildID: "test-guild",
-		Role:    authdomain.RolePlayer,
+		UserID:   "test-user",
+		UserUUID: uuid.New(),
+		GuildID:  "test-guild",
+		Role:     authdomain.RolePlayer,
 	}, nil
 }
 

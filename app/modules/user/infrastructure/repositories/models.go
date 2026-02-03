@@ -62,6 +62,23 @@ type ClubMembership struct {
 	User *User `bun:"rel:belongs-to,join:user_uuid=uuid" json:"-"`
 }
 
+// RefreshToken represents a long-lived session token.
+type RefreshToken struct {
+	bun.BaseModel `bun:"table:refresh_tokens,alias:rt"`
+
+	Hash        string     `bun:"hash,pk"`
+	UserUUID    uuid.UUID  `bun:"user_uuid,notnull"`
+	TokenFamily string     `bun:"token_family,notnull"` // Detect token reuse
+	ExpiresAt   time.Time  `bun:"expires_at,notnull"`
+	CreatedAt   time.Time  `bun:"created_at,notnull,default:current_timestamp"`
+	LastUsedAt  *time.Time `bun:"last_used_at"`
+	Revoked     bool       `bun:"revoked,notnull,default:false"`
+	RevokedAt   *time.Time `bun:"revoked_at"`
+	RevokedBy   *string    `bun:"revoked_by"` // 'user' | 'admin' | 'security'
+	IPAddress   string     `bun:"ip_address"`
+	UserAgent   string     `bun:"user_agent"`
+}
+
 // UserWithMembership combines user identity with guild-specific data.
 // Used for queries that need both global and guild context.
 type UserWithMembership struct {

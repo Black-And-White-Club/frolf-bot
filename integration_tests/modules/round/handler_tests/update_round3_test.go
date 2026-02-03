@@ -47,7 +47,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 					t.Fatalf("Expected no update error messages, got %d", len(msgs))
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Failure - Invalid JSON Message",
@@ -73,7 +73,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 					}
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 	}
 

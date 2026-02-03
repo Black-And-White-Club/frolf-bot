@@ -16,6 +16,7 @@ import (
 	authrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/router"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/go-chi/chi/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
@@ -40,6 +41,7 @@ func NewModule(
 	eventBus eventbus.EventBus,
 	helper utils.Helpers,
 	userRepo userdb.Repository,
+	httpRouter chi.Router,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -80,6 +82,15 @@ func NewModule(
 
 	// Create router
 	router := authrouter.NewRouter(handlers, nc)
+
+	// Register HTTP routes
+	if httpRouter != nil {
+		httpRouter.Route("/api/auth", func(r chi.Router) {
+			r.Get("/callback", handlers.HandleHTTPLogin)
+			r.Get("/ticket", handlers.HandleHTTPTicket)
+			r.Post("/logout", handlers.HandleHTTPLogout)
+		})
+	}
 
 	module := &Module{
 		config:        cfg,

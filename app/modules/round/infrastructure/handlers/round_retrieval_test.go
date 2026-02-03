@@ -24,8 +24,9 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 	testUserID := sharedtypes.DiscordID("user-123")
 
 	testPayload := &roundevents.GetRoundRequestPayloadV1{
-		GuildID: testGuildID,
-		RoundID: testRoundID,
+		GuildID:  testGuildID,
+		// ClubUUID: testClubUUID, // Not yet in shared library struct
+		RoundID:  testRoundID,
 	}
 
 	logger := loggerfrolfbot.NoOpLogger

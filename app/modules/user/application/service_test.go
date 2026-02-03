@@ -10,6 +10,7 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
@@ -143,7 +144,6 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 				if !res.IsSuccess() {
 					t.Fatalf("expected success, got failure")
 				}
-				// res.Success is **MatchResult, so we dereference to get *MatchResult
 				success := *res.Success
 				if len(success.Mappings) != 1 {
 					t.Fatalf("expected 1 mapping, got %d", len(success.Mappings))
@@ -196,7 +196,7 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 		{
 			name:           "too many players error",
 			playerNames:    make([]string, 513),
-			expectInfraErr: false, // In this service, it returns a Domain Failure (results.FailureResult)
+			expectInfraErr: false,
 			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
 				if !res.IsFailure() || !strings.Contains((*res.Failure).Error(), "too many players") {
 					t.Errorf("expected too many players failure, got %v", res.Failure)
@@ -283,11 +283,7 @@ func TestUserService_UpdateUDiscIdentity(t *testing.T) {
 				tt.setupFake(fakeRepo)
 			}
 
-			// We need a DB shell for UpdateUDiscIdentity because it uses runInTx
-			// Note: In a real test, s.db.RunInTx would fail if s.db is nil.
-			// You may need to provide a mock bun.DB or ensure runInTx handles nil gracefully.
 			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-
 			res, err := s.UpdateUDiscIdentity(ctx, userID, tt.username, tt.nameVal)
 
 			if tt.expectInfraErr && err == nil {
@@ -303,25 +299,44 @@ func TestUserService_UpdateUDiscIdentity(t *testing.T) {
 func TestUserService_UpdateUserProfile(t *testing.T) {
 	ctx := context.Background()
 	userID := sharedtypes.DiscordID("user-1")
-	displayName := "New Name"
-	avatarHash := "hash123"
 
-	fakeRepo := NewFakeUserRepository()
-	fakeRepo.UpdateProfileFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, name string, hash string) error {
-		if id != userID || name != displayName || hash != avatarHash {
-			return errors.New("unexpected arguments")
-		}
-		return nil
+	tests := []struct {
+		name        string
+		displayName string
+		avatarHash  string
+		setupFake   func(*FakeUserRepository)
+		verify      func(t *testing.T, err error, fake *FakeUserRepository)
+	}{
+		{
+			name:        "success",
+			displayName: "New Name",
+			avatarHash:  "hash123",
+			setupFake: func(f *FakeUserRepository) {
+				f.UpdateProfileFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID, name string, hash string) error {
+					return nil
+				}
+			},
+			verify: func(t *testing.T, err error, fake *FakeUserRepository) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if fake.Trace()[0] != "UpdateProfile" {
+					t.Errorf("expected UpdateProfile trace")
+				}
+			},
+		},
 	}
 
-	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-	err := s.UpdateUserProfile(ctx, userID, "", displayName, avatarHash)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fakeRepo.Trace()[0] != "UpdateProfile" {
-		t.Errorf("expected UpdateProfile trace")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := NewFakeUserRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
+			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+			err := s.UpdateUserProfile(ctx, userID, "", tt.displayName, tt.avatarHash)
+			tt.verify(t, err, fakeRepo)
+		})
 	}
 }
 
@@ -329,35 +344,52 @@ func TestUserService_LookupProfiles(t *testing.T) {
 	ctx := context.Background()
 	userIDs := []sharedtypes.DiscordID{"user-1", "user-2"}
 
-	fakeRepo := NewFakeUserRepository()
-	fakeRepo.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
-		return []*userdb.User{
-			{UserID: pointer(sharedtypes.DiscordID("user-1")), DisplayName: pointer("UserOne")},
-		}, nil
+	tests := []struct {
+		name      string
+		ids       []sharedtypes.DiscordID
+		setupFake func(*FakeUserRepository)
+		verify    func(t *testing.T, res results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], err error)
+	}{
+		{
+			name: "success with partial match",
+			ids:  userIDs,
+			setupFake: func(f *FakeUserRepository) {
+				f.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
+					return []*userdb.User{
+						{UserID: pointer(sharedtypes.DiscordID("user-1")), DisplayName: pointer("UserOne")},
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success")
+				}
+				profiles := *res.Success
+				if len(profiles) != 2 {
+					t.Errorf("expected 2 profiles, got %d", len(profiles))
+				}
+				if p1, ok := profiles["user-1"]; !ok || p1.DisplayName != "UserOne" {
+					t.Errorf("expected UserOne for user-1")
+				}
+				if p2, ok := profiles["user-2"]; !ok || !strings.HasPrefix(p2.DisplayName, "User") {
+					t.Errorf("expected default profile for user-2")
+				}
+			},
+		},
 	}
 
-	s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-	res, err := s.LookupProfiles(ctx, userIDs)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsSuccess() {
-		t.Fatalf("expected success result")
-	}
-
-	profiles := *res.Success
-	if len(profiles) != 2 {
-		t.Errorf("expected 2 profiles, got %d", len(profiles))
-	}
-
-	// Check found user
-	if p1, ok := profiles["user-1"]; !ok || p1.DisplayName != "UserOne" {
-		t.Errorf("expected UserOne for user-1, got %+v", p1)
-	}
-
-	// Check default user
-	if p2, ok := profiles["user-2"]; !ok || !strings.HasPrefix(p2.DisplayName, "User") {
-		t.Errorf("expected default profile for user-2, got %+v", p2)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := NewFakeUserRepository()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeRepo)
+			}
+			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
+			res, err := s.LookupProfiles(ctx, tt.ids)
+			tt.verify(t, res, err)
+		})
 	}
 }

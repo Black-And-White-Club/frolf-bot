@@ -47,4 +47,10 @@ type Repository interface {
 
 	// Profile operations
 	UpdateProfile(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+
+	// Refresh Token operations
+	SaveRefreshToken(ctx context.Context, db bun.IDB, token *RefreshToken) error
+	GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error
+	RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 }

@@ -19,8 +19,11 @@ type Config struct {
 	PWA           PWAConfig           `yaml:"pwa"`
 	AuthCallout   AuthCalloutConfig   `yaml:"auth_callout"`
 	Observability ObservabilityConfig `yaml:"observability"`
-	// Discord     DiscordConfig      `yaml:"discord"`
-	// ... other configuration fields ...
+	HTTP          HTTPConfig          `yaml:"http"`
+}
+
+type HTTPConfig struct {
+	Port string `yaml:"port" env:"HTTP_PORT"`
 }
 
 // PostgresConfig holds Postgres configuration.

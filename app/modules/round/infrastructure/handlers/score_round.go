@@ -18,16 +18,11 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	var score sharedtypes.Score
-	if payload.Score != nil {
-		score = *payload.Score
-	}
-
 	result, err := h.service.ValidateScoreUpdateRequest(ctx, &roundtypes.ScoreUpdateRequest{
 		GuildID: payload.GuildID,
 		RoundID: payload.RoundID,
 		UserID:  payload.UserID,
-		Score:   &score,
+		Score:   payload.Score,
 	})
 	if err != nil {
 		return nil, err
@@ -75,7 +70,7 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 		GuildID: payload.GuildID,
 		RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 		UserID:  payload.ScoreUpdateRequestPayload.UserID,
-		Score:   &score,
+		Score:   payload.ScoreUpdateRequestPayload.Score,
 	})
 	if err != nil {
 		return nil, err

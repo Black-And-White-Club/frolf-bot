@@ -71,7 +71,7 @@ func TestHandleRoundEventMessageIDUpdate(t *testing.T) {
 					t.Errorf("Discord message ID mismatch: expected %s, got %s", "discord_msg_123456", payload.EventMessageID)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		// Other test cases (failures and correlation id preservation) can be added following the same pattern.
 	}

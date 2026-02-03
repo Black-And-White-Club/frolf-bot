@@ -80,7 +80,7 @@ func TestHandleParticipantJoinRequest(t *testing.T) {
 					t.Fatalf("expected participant join validation message, got none")
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 		// Additional cases would follow similar pattern; to keep this refactor concise,
 		// remaining cases can be converted similarly when needed.

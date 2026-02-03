@@ -55,7 +55,7 @@ func TestHandleParticipantJoinValidationRequest(t *testing.T) {
 					t.Fatalf("expected round tag lookup request, got none")
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 	}
 

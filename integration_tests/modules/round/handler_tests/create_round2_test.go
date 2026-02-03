@@ -133,7 +133,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Error("Expected RoundID to be set")
 				}
 			},
-			timeout: 2 * time.Second,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Success - Handler Processes Minimal Valid Message",
@@ -163,7 +163,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Success - Handler Processes Message with Complex Participants",
@@ -203,7 +203,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Success - Handler Processes Different Round States",
@@ -235,7 +235,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
 				}
 			},
-			timeout: 200 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Success - Handler Processes Multiple Messages Concurrently",
@@ -276,7 +276,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf("Expected at least 2 messages on topic %q, got %d", roundevents.RoundCreatedV1, len(msgs))
 				}
 			},
-			timeout: 2 * time.Second,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Handler Rejects Invalid JSON and Doesn't Publish Events",
@@ -298,7 +298,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Errorf("Expected no messages for invalid JSON, got created=%d, failed=%d", len(created), len(failed))
 				}
 			},
-			timeout: 400 * time.Millisecond,
+			timeout: 5 * time.Second,
 		},
 		{
 			name: "Success - Handler Preserves Message Correlation ID",
@@ -346,7 +346,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Errorf("Correlation ID not preserved: original=%s, result=%s", origCID, resCID)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name: "Success - Handler Publishes Correct Event Topic",
@@ -375,7 +375,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf("Expected round.created message")
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 	}
 

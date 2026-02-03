@@ -34,15 +34,21 @@ func runMigrationsWithConnStr(db *bun.DB, pgConnStr string) error {
 		return fmt.Errorf("failed to run River migrations: %w", err)
 	}
 
-	// Run all module migrations
-	for name, m := range map[string]*migrate.Migrations{
-		"leaderboard": leaderboardmigrations.Migrations,
-		"user":        usermigrations.Migrations,
-		"round":       roundmigrations.Migrations,
-		"score":       scoremigrations.Migrations,
-		"guild":       guildmigrations.Migrations,
-	} {
-		if err := runModuleMigrations(ctx, db, m, name); err != nil {
+	// Run all module migrations in a deterministic order
+	// Order matters due to foreign key constraints (e.g. user -> guild)
+	orderedModules := []struct {
+		name       string
+		migrations *migrate.Migrations
+	}{
+		{"guild", guildmigrations.Migrations},
+		{"user", usermigrations.Migrations},
+		{"round", roundmigrations.Migrations},
+		{"leaderboard", leaderboardmigrations.Migrations},
+		{"score", scoremigrations.Migrations},
+	}
+
+	for _, mod := range orderedModules {
+		if err := runModuleMigrations(ctx, db, mod.migrations, mod.name); err != nil {
 			return err
 		}
 	}

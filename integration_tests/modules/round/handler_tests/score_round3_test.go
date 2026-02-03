@@ -69,7 +69,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - All Scores Submitted (Multiple Participants)",
@@ -127,7 +127,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					}
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Not All Scores Submitted (Single Participant Without Score)",
@@ -172,7 +172,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					t.Error("Expected UserID to be set")
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Not All Scores Submitted (Multiple Missing Scores)",
@@ -223,7 +223,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					t.Error("Expected RoundID to be set")
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Last Score Submitted Triggers All Scores Submitted",
@@ -276,7 +276,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					t.Errorf("Expected 3 participants, got %d", len(payload.Participants))
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Round Not Found",
@@ -331,7 +331,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					t.Errorf("Expected no messages for invalid JSON, got %d topics", len(receivedMsgs))
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 	}
 

@@ -33,7 +33,14 @@ type FakeRepository struct {
 	FindByUDiscUsernameFn  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindByUDiscNameFn      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
 	FindByUDiscNameFuzzyFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
-	UpdateProfileFn        func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+	// Profile operations
+	UpdateProfileFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
+
+	// Refresh Token operations
+	SaveRefreshTokenFn    func(ctx context.Context, db bun.IDB, token *RefreshToken) error
+	GetRefreshTokenFn     func(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error)
+	RevokeRefreshTokenFn  func(ctx context.Context, db bun.IDB, hash string) error
+	RevokeAllUserTokensFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 }
 
 func (f *FakeRepository) GetUUIDByDiscordID(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
@@ -181,4 +188,32 @@ func (f *FakeRepository) FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, g
 		return f.FindByUDiscNameFuzzyFn(ctx, db, guildID, partialName)
 	}
 	return nil, nil
+}
+
+func (f *FakeRepository) SaveRefreshToken(ctx context.Context, db bun.IDB, token *RefreshToken) error {
+	if f.SaveRefreshTokenFn != nil {
+		return f.SaveRefreshTokenFn(ctx, db, token)
+	}
+	return nil
+}
+
+func (f *FakeRepository) GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error) {
+	if f.GetRefreshTokenFn != nil {
+		return f.GetRefreshTokenFn(ctx, db, hash)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepository) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error {
+	if f.RevokeRefreshTokenFn != nil {
+		return f.RevokeRefreshTokenFn(ctx, db, hash)
+	}
+	return nil
+}
+
+func (f *FakeRepository) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error {
+	if f.RevokeAllUserTokensFn != nil {
+		return f.RevokeAllUserTokensFn(ctx, db, userUUID)
+	}
+	return nil
 }

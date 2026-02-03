@@ -7,6 +7,7 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/google/uuid"
 )
 
 // ------------------------
@@ -16,16 +17,18 @@ import (
 type FakeUserService struct {
 	trace []string
 
-	CreateUserFunc               func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error)
-	UpdateUserRoleInDatabaseFunc func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (results.OperationResult[bool, error], error)
-	GetUserRoleFunc              func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.UserRoleEnum, error], error)
-	GetUserFunc                  func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserWithMembershipResult, error)
-	UpdateUDiscIdentityFunc      func(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) (results.OperationResult[bool, error], error)
-	FindByUDiscUsernameFunc      func(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error)
-	FindByUDiscNameFunc          func(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error)
-	MatchParsedScorecardFunc     func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (results.OperationResult[*userservice.MatchResult, error], error)
-	UpdateUserProfileFunc        func(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error
-	LookupProfilesFunc           func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	CreateUserFunc                  func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error)
+	UpdateUserRoleInDatabaseFunc    func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, newRole sharedtypes.UserRoleEnum) (results.OperationResult[bool, error], error)
+	GetUserRoleFunc                 func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.UserRoleEnum, error], error)
+	GetUserFunc                     func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserWithMembershipResult, error)
+	UpdateUDiscIdentityFunc         func(ctx context.Context, userID sharedtypes.DiscordID, username *string, name *string) (results.OperationResult[bool, error], error)
+	FindByUDiscUsernameFunc         func(ctx context.Context, guildID sharedtypes.GuildID, username string) (userservice.UserWithMembershipResult, error)
+	FindByUDiscNameFunc             func(ctx context.Context, guildID sharedtypes.GuildID, name string) (userservice.UserWithMembershipResult, error)
+	MatchParsedScorecardFunc        func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (results.OperationResult[*userservice.MatchResult, error], error)
+	UpdateUserProfileFunc           func(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error
+	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	GetUUIDByDiscordIDFunc          func(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
 func NewFakeUserService() *FakeUserService {
@@ -120,6 +123,20 @@ func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedty
 		return f.LookupProfilesFunc(ctx, userIDs)
 	}
 	return results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error]{}, nil
+}
+
+func (f *FakeUserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	if f.GetUUIDByDiscordIDFunc != nil {
+		return f.GetUUIDByDiscordIDFunc(ctx, discordID)
+	}
+	return uuid.New(), nil
+}
+
+func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	if f.GetClubUUIDByDiscordGuildIDFunc != nil {
+		return f.GetClubUUIDByDiscordGuildIDFunc(ctx, guildID)
+	}
+	return uuid.New(), nil
 }
 
 var _ userservice.Service = (*FakeUserService)(nil)

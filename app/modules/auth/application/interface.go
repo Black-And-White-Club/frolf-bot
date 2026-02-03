@@ -16,6 +16,25 @@ type Service interface {
 
 	// HandleNATSAuthRequest processes a NATS auth callout request.
 	HandleNATSAuthRequest(ctx context.Context, req *NATSAuthRequest) (*NATSAuthResponse, error)
+
+	// LoginUser validates a one-time token and creates a long-lived session (refresh token).
+	LoginUser(ctx context.Context, oneTimeToken string) (*LoginResponse, error)
+
+	// GetTicket validates a refresh token and mints a short-lived NATS ticket.
+	GetTicket(ctx context.Context, refreshToken string) (*TicketResponse, error)
+
+	// LogoutUser revokes a refresh token.
+	LogoutUser(ctx context.Context, refreshToken string) error
+}
+
+type LoginResponse struct {
+	RefreshToken string
+	UserUUID     string
+}
+
+type TicketResponse struct {
+	NATSToken    string
+	RefreshToken string
 }
 
 // NATSAuthRequest represents a NATS auth callout request.

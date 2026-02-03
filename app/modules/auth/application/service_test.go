@@ -12,6 +12,8 @@ import (
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -24,68 +26,160 @@ func TestService_GenerateMagicLink(t *testing.T) {
 		DefaultTTL: 1 * time.Hour,
 	}
 
-	t.Run("success", func(t *testing.T) {
-		fakeJWT := "valid-jwt"
-		jwtProvider := &FakeJWTProvider{
-			GenerateTokenFunc: func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
-				return fakeJWT, nil
+	tests := []struct {
+		name      string
+		userID    string
+		guildID   string
+		role      authdomain.Role
+		setupMock func(j *FakeJWTProvider, n *FakeUserJWTBuilder, r *userdb.FakeRepository)
+		verify    func(t *testing.T, resp *MagicLinkResponse, err error)
+	}{
+		{
+			name:    "success",
+			userID:  "u1",
+			guildID: "g1",
+			role:    authdomain.RolePlayer,
+			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder, r *userdb.FakeRepository) {
+				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
+					return "valid-jwt", nil
+				}
 			},
-		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
-
-		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.RolePlayer)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !resp.Success {
-			t.Errorf("expected success, got failure with error: %s", resp.Error)
-		}
-
-		expectedURL := "https://frolf.bot?t=" + fakeJWT
-		if resp.URL != expectedURL {
-			t.Errorf("expected URL %s, got %s", expectedURL, resp.URL)
-		}
-	})
-
-	t.Run("invalid role", func(t *testing.T) {
-		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
-
-		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.Role("invalid"))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if resp.Success {
-			t.Error("expected failure for invalid role")
-		}
-
-		if resp.Error != ErrInvalidRole.Error() {
-			t.Errorf("expected error %v, got %s", ErrInvalidRole, resp.Error)
-		}
-	})
-
-	t.Run("jwt generation failure", func(t *testing.T) {
-		jwtProvider := &FakeJWTProvider{
-			GenerateTokenFunc: func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
-				return "", errors.New("jwt error")
+			verify: func(t *testing.T, resp *MagicLinkResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !resp.Success {
+					t.Errorf("expected success, got failure: %s", resp.Error)
+				}
+				expectedURL := "https://frolf.bot?t=valid-jwt"
+				if resp.URL != expectedURL {
+					t.Errorf("expected URL %s, got %s", expectedURL, resp.URL)
+				}
 			},
-		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
+		},
+		{
+			name:    "invalid role",
+			userID:  "u1",
+			guildID: "g1",
+			role:    authdomain.Role("invalid"),
+			verify: func(t *testing.T, resp *MagicLinkResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.Success {
+					t.Error("expected failure for invalid role")
+				}
+				if resp.Error != ErrInvalidRole.Error() {
+					t.Errorf("expected error %v, got %s", ErrInvalidRole, resp.Error)
+				}
+			},
+		},
+		{
+			name:    "jwt generation failure",
+			userID:  "u1",
+			guildID: "g1",
+			role:    authdomain.RolePlayer,
+			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder, r *userdb.FakeRepository) {
+				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
+					return "", errors.New("jwt error")
+				}
+			},
+			verify: func(t *testing.T, resp *MagicLinkResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.Success {
+					t.Error("expected failure")
+				}
+				if resp.Error != ErrGenerateToken.Error() {
+					t.Errorf("expected error %v, got %s", ErrGenerateToken, resp.Error)
+				}
+			},
+		},
+	}
 
-		resp, err := s.GenerateMagicLink(ctx, "u1", "g1", authdomain.RolePlayer)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jwtProvider := &FakeJWTProvider{}
+			natsBuilder := &FakeUserJWTBuilder{}
+			repo := &userdb.FakeRepository{}
+			if tt.setupMock != nil {
+				tt.setupMock(jwtProvider, natsBuilder, repo)
+			}
 
-		if resp.Success {
-			t.Error("expected failure")
-		}
+			s := NewService(jwtProvider, natsBuilder, repo, config, logger, tracer)
+			resp, err := s.GenerateMagicLink(ctx, tt.userID, tt.guildID, tt.role)
+			tt.verify(t, resp, err)
+		})
+	}
+}
 
-		if resp.Error != ErrGenerateToken.Error() {
-			t.Errorf("expected error %v, got %s", ErrGenerateToken, resp.Error)
-		}
-	})
+func TestService_ValidateToken(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	config := Config{}
+
+	tests := []struct {
+		name        string
+		tokenString string
+		setupMock   func(j *FakeJWTProvider)
+		verify      func(t *testing.T, claims *authdomain.Claims, err error)
+	}{
+		{
+			name:        "empty token",
+			tokenString: "",
+			verify: func(t *testing.T, claims *authdomain.Claims, err error) {
+				if !errors.Is(err, ErrMissingToken) {
+					t.Errorf("expected ErrMissingToken, got %v", err)
+				}
+			},
+		},
+		{
+			name:        "valid token",
+			tokenString: "valid-token",
+			setupMock: func(j *FakeJWTProvider) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return &authdomain.Claims{UserID: "u1"}, nil
+				}
+			},
+			verify: func(t *testing.T, claims *authdomain.Claims, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if claims.UserID != "u1" {
+					t.Errorf("expected user ID u1, got %s", claims.UserID)
+				}
+			},
+		},
+		{
+			name:        "invalid token",
+			tokenString: "invalid-token",
+			setupMock: func(j *FakeJWTProvider) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return nil, errors.New("invalid token")
+				}
+			},
+			verify: func(t *testing.T, claims *authdomain.Claims, err error) {
+				if err == nil || !strings.Contains(err.Error(), "invalid token") {
+					t.Errorf("expected invalid token error, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jwtProvider := &FakeJWTProvider{}
+			if tt.setupMock != nil {
+				tt.setupMock(jwtProvider)
+			}
+
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
+			claims, err := s.ValidateToken(ctx, tt.tokenString)
+			tt.verify(t, claims, err)
+		})
+	}
 }
 
 func TestService_HandleNATSAuthRequest(t *testing.T) {
@@ -94,90 +188,276 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 	config := Config{}
 
-	t.Run("success", func(t *testing.T) {
-		jwtProvider := &FakeJWTProvider{
-			ValidateTokenFunc: func(tokenString string) (*authdomain.Claims, error) {
-				return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+	tests := []struct {
+		name      string
+		req       *NATSAuthRequest
+		setupMock func(j *FakeJWTProvider, n *FakeUserJWTBuilder)
+		verify    func(t *testing.T, resp *NATSAuthResponse, err error)
+	}{
+		{
+			name: "success",
+			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}},
+			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+				}
+				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+					return "nats-jwt", nil
+				}
 			},
-		}
-		natsBuilder := &FakeUserJWTBuilder{
-			BuildUserJWTFunc: func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
-				return "nats-jwt", nil
+			verify: func(t *testing.T, resp *NATSAuthResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.Error != "" {
+					t.Errorf("unexpected error in response: %s", resp.Error)
+				}
+				if resp.Jwt != "nats-jwt" {
+					t.Errorf("expected nats-jwt, got %s", resp.Jwt)
+				}
 			},
-		}
-		s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
-
-		req := &NATSAuthRequest{
-			ConnectOpts: ConnectOptions{Password: "valid-token"},
-		}
-		resp, err := s.HandleNATSAuthRequest(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if resp.Error != "" {
-			t.Errorf("unexpected error in response: %s", resp.Error)
-		}
-
-		if resp.Jwt != "nats-jwt" {
-			t.Errorf("expected nats-jwt, got %s", resp.Jwt)
-		}
-	})
-
-	t.Run("missing token", func(t *testing.T) {
-		s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
-
-		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: ""}}
-		resp, err := s.HandleNATSAuthRequest(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if resp.Error != ErrMissingToken.Error() {
-			t.Errorf("expected error %v, got %s", ErrMissingToken, resp.Error)
-		}
-	})
-
-	t.Run("invalid token", func(t *testing.T) {
-		jwtProvider := &FakeJWTProvider{
-			ValidateTokenFunc: func(tokenString string) (*authdomain.Claims, error) {
-				return nil, errors.New("invalid")
+		},
+		{
+			name: "missing token",
+			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: ""}},
+			verify: func(t *testing.T, resp *NATSAuthResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.Error != ErrMissingToken.Error() {
+					t.Errorf("expected error %v, got %s", ErrMissingToken, resp.Error)
+				}
 			},
-		}
-		s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
-
-		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "bad-token"}}
-		resp, err := s.HandleNATSAuthRequest(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !strings.Contains(resp.Error, "invalid token") {
-			t.Errorf("expected invalid token error, got %s", resp.Error)
-		}
-	})
-
-	t.Run("nats builder error", func(t *testing.T) {
-		jwtProvider := &FakeJWTProvider{
-			ValidateTokenFunc: func(tokenString string) (*authdomain.Claims, error) {
-				return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+		},
+		{
+			name: "invalid token",
+			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "bad-token"}},
+			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return nil, errors.New("invalid")
+				}
 			},
-		}
-		natsBuilder := &FakeUserJWTBuilder{
-			BuildUserJWTFunc: func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
-				return "", errors.New("nats error")
+			verify: func(t *testing.T, resp *NATSAuthResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !strings.Contains(resp.Error, "invalid token") {
+					t.Errorf("expected invalid token error, got %s", resp.Error)
+				}
 			},
-		}
-		s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
+		},
+		{
+			name: "nats builder error",
+			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}},
+			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+				}
+				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+					return "", errors.New("nats error")
+				}
+			},
+			verify: func(t *testing.T, resp *NATSAuthResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.Error != ErrGenerateUserJWT.Error() {
+					t.Errorf("expected error %v, got %s", ErrGenerateUserJWT, resp.Error)
+				}
+			},
+		},
+	}
 
-		req := &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}}
-		resp, err := s.HandleNATSAuthRequest(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jwtProvider := &FakeJWTProvider{}
+			natsBuilder := &FakeUserJWTBuilder{}
+			if tt.setupMock != nil {
+				tt.setupMock(jwtProvider, natsBuilder)
+			}
 
-		if resp.Error != ErrGenerateUserJWT.Error() {
-			t.Errorf("expected error %v, got %s", ErrGenerateUserJWT, resp.Error)
-		}
-	})
+			s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
+			resp, err := s.HandleNATSAuthRequest(ctx, tt.req)
+			tt.verify(t, resp, err)
+		})
+	}
+}
+
+func TestService_LoginUser(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	config := Config{}
+	userUUID := uuid.New()
+
+	tests := []struct {
+		name         string
+		oneTimeToken string
+		setupMock    func(j *FakeJWTProvider, r *userdb.FakeRepository)
+		verify       func(t *testing.T, resp *LoginResponse, err error)
+	}{
+		{
+			name:         "success",
+			oneTimeToken: "otp",
+			setupMock: func(j *FakeJWTProvider, r *userdb.FakeRepository) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return &authdomain.Claims{UserUUID: userUUID}, nil
+				}
+				r.SaveRefreshTokenFn = func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error {
+					return nil
+				}
+			},
+			verify: func(t *testing.T, resp *LoginResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.UserUUID != userUUID.String() {
+					t.Errorf("expected user uuid %s, got %s", userUUID.String(), resp.UserUUID)
+				}
+				if resp.RefreshToken == "" {
+					t.Error("expected refresh token, got empty")
+				}
+			},
+		},
+		{
+			name:         "invalid token",
+			oneTimeToken: "bad-otp",
+			setupMock: func(j *FakeJWTProvider, r *userdb.FakeRepository) {
+				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
+					return nil, errors.New("invalid")
+				}
+			},
+			verify: func(t *testing.T, resp *LoginResponse, err error) {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jwtProvider := &FakeJWTProvider{}
+			repo := &userdb.FakeRepository{}
+			if tt.setupMock != nil {
+				tt.setupMock(jwtProvider, repo)
+			}
+
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer)
+			resp, err := s.LoginUser(ctx, tt.oneTimeToken)
+			tt.verify(t, resp, err)
+		})
+	}
+}
+
+func TestService_GetTicket(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	config := Config{}
+	userUUID := uuid.New()
+	clubUUID := uuid.New()
+
+	tests := []struct {
+		name         string
+		refreshToken string
+		setupMock    func(r *userdb.FakeRepository, n *FakeUserJWTBuilder)
+		verify       func(t *testing.T, resp *TicketResponse, err error)
+	}{
+		{
+			name:         "success",
+			refreshToken: "valid-rt",
+			setupMock: func(r *userdb.FakeRepository, n *FakeUserJWTBuilder) {
+				r.GetRefreshTokenFn = func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+					return &userdb.RefreshToken{
+						UserUUID:    userUUID,
+						TokenFamily: "family1",
+						ExpiresAt:   time.Now().Add(1 * time.Hour),
+						Revoked:     false,
+					}, nil
+				}
+				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
+					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "admin"}}, nil
+				}
+				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+					return "nats-ticket", nil
+				}
+			},
+			verify: func(t *testing.T, resp *TicketResponse, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if resp.NATSToken != "nats-ticket" {
+					t.Errorf("expected nats-ticket, got %s", resp.NATSToken)
+				}
+			},
+		},
+		{
+			name:         "revoked token",
+			refreshToken: "revoked-rt",
+			setupMock: func(r *userdb.FakeRepository, n *FakeUserJWTBuilder) {
+				r.GetRefreshTokenFn = func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+					return &userdb.RefreshToken{UserUUID: userUUID, Revoked: true}, nil
+				}
+			},
+			verify: func(t *testing.T, resp *TicketResponse, err error) {
+				if err == nil || !strings.Contains(err.Error(), "session revoked") {
+					t.Errorf("expected session revoked error, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &userdb.FakeRepository{}
+			natsBuilder := &FakeUserJWTBuilder{}
+			if tt.setupMock != nil {
+				tt.setupMock(repo, natsBuilder)
+			}
+
+			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, config, logger, tracer)
+			resp, err := s.GetTicket(ctx, tt.refreshToken)
+			tt.verify(t, resp, err)
+		})
+	}
+}
+
+func TestService_LogoutUser(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	tests := []struct {
+		name         string
+		refreshToken string
+		setupMock    func(r *userdb.FakeRepository)
+		verify       func(t *testing.T, err error)
+	}{
+		{
+			name:         "success",
+			refreshToken: "rt",
+			setupMock: func(r *userdb.FakeRepository) {
+				r.RevokeRefreshTokenFn = func(ctx context.Context, db bun.IDB, hash string) error { return nil }
+			},
+			verify: func(t *testing.T, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &userdb.FakeRepository{}
+			if tt.setupMock != nil {
+				tt.setupMock(repo)
+			}
+
+			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer)
+			err := s.LogoutUser(ctx, tt.refreshToken)
+			tt.verify(t, err)
+		})
+	}
 }
