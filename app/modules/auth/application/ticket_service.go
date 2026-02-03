@@ -36,14 +36,30 @@ func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginRes
 	ctx, span := s.tracer.Start(ctx, "AuthService.LoginUser")
 	defer span.End()
 
-	// 1. Validate the one-time token (JWT)
-	claims, err := s.jwtProvider.ValidateToken(oneTimeToken)
+	// 1. Validate the one-time token (DB)
+	ml, err := s.repo.GetMagicLink(ctx, nil, oneTimeToken)
 	if err != nil {
 		s.logger.WarnContext(ctx, "Invalid one-time token", attr.Error(err))
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
-	userUUID := claims.UserUUID
+	if ml.Used {
+		s.logger.WarnContext(ctx, "One-time token already used", attr.String("token", oneTimeToken))
+		return nil, fmt.Errorf("token already used")
+	}
+
+	if time.Now().After(ml.ExpiresAt) {
+		s.logger.WarnContext(ctx, "One-time token expired", attr.String("token", oneTimeToken))
+		return nil, fmt.Errorf("token expired")
+	}
+
+	// Mark as used
+	if err := s.repo.MarkMagicLinkUsed(ctx, nil, oneTimeToken); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to mark token used", attr.Error(err))
+		return nil, fmt.Errorf("failed to process token: %w", err)
+	}
+
+	userUUID := ml.UserUUID
 
 	// 2. Generate a refresh token
 	token, err := generateRandomToken(32)
@@ -104,7 +120,14 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		return nil, fmt.Errorf("session expired")
 	}
 
-	// 2. Load user roles/memberships
+	// 2. Generate rotated token early so we can put its hash in the claims
+	newToken, err := generateRandomToken(32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate rotated token: %w", err)
+	}
+	newHashed := hashToken(newToken)
+
+	// 3. Load user roles/memberships
 	memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, nil, token.UserUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load memberships: %w", err)
@@ -125,12 +148,13 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		}
 	}
 
-	// 3. Mint NATS Ticket
+	// 4. Mint NATS Ticket with the hash of the NEW rotated refresh token
 	claims := &authdomain.Claims{
-		UserUUID:       token.UserUUID,
-		ActiveClubUUID: activeClubUUID,
-		Role:           activeRole,
-		Clubs:          clubs,
+		UserUUID:         token.UserUUID,
+		ActiveClubUUID:   activeClubUUID,
+		Role:             activeRole,
+		Clubs:            clubs,
+		RefreshTokenHash: newHashed,
 	}
 
 	perms := s.permissionBuilder.ForRole(claims)
@@ -143,13 +167,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		return nil, fmt.Errorf("failed to generate ticket: %w", err)
 	}
 
-	// 4. Token Rotation
-	newToken, err := generateRandomToken(32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate rotated token: %w", err)
-	}
-	newHashed := hashToken(newToken)
-
+	// 5. Finalize Token Rotation (Save new, revoke old)
 	newRefreshToken := &userdb.RefreshToken{
 		Hash:        newHashed,
 		UserUUID:    token.UserUUID,
@@ -158,9 +176,10 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		Revoked:     false,
 	}
 
-	if err := s.repo.SaveRefreshToken(ctx, nil, newRefreshToken); err == nil {
-		_ = s.repo.RevokeRefreshToken(ctx, nil, hashedToken)
+	if err := s.repo.SaveRefreshToken(ctx, nil, newRefreshToken); err != nil {
+		return nil, fmt.Errorf("failed to save rotated token: %w", err)
 	}
+	_ = s.repo.RevokeRefreshToken(ctx, nil, hashedToken)
 
 	return &TicketResponse{
 		NATSToken:    natsToken,

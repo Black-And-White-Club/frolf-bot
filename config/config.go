@@ -42,6 +42,8 @@ type NATSConfig struct {
 type JWTConfig struct {
 	Secret     string        `yaml:"secret" env:"JWT_SECRET"`
 	DefaultTTL time.Duration `yaml:"default_ttl" env:"JWT_DEFAULT_TTL"`
+	Issuer     string        `yaml:"issuer" env:"JWT_ISSUER"`
+	Audience   string        `yaml:"audience" env:"JWT_AUDIENCE"`
 }
 
 // PWAConfig holds PWA configuration.

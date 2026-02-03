@@ -15,17 +15,20 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 	if secret == "" {
 		secret = "test-secret-at-least-32-chars-long!!"
 	}
-	p := NewProvider(secret)
+	issuer := "frolf-bot"
+	audience := "frolf-pwa"
+	p := NewProvider(secret, issuer, audience)
 
 	userUUID := uuid.New()
 	clubUUID := uuid.New()
 
 	claims := &authdomain.Claims{
-		UserID:         "user-123",
-		UserUUID:       userUUID,
-		ActiveClubUUID: clubUUID,
-		GuildID:        "guild-456",
-		Role:           authdomain.RolePlayer,
+		UserID:           "user-123",
+		UserUUID:         userUUID,
+		ActiveClubUUID:   clubUUID,
+		GuildID:          "guild-456",
+		Role:             authdomain.RolePlayer,
+		RefreshTokenHash: "fake-hash",
 	}
 
 	tests := []struct {
@@ -51,6 +54,9 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 				if validated.ActiveClubUUID != claims.ActiveClubUUID {
 					t.Errorf("expected ActiveClubUUID %v, got %v", claims.ActiveClubUUID, validated.ActiveClubUUID)
 				}
+				if validated.RefreshTokenHash != claims.RefreshTokenHash {
+					t.Errorf("expected RefreshTokenHash %s, got %s", claims.RefreshTokenHash, validated.RefreshTokenHash)
+				}
 			},
 		},
 		{
@@ -64,7 +70,7 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 			name:        "invalid signature",
 			setupClaims: claims,
 			ttl:         1 * time.Hour,
-			provider:    NewProvider("wrong-secret"),
+			provider:    NewProvider("wrong-secret", issuer, audience),
 			expectedErr: ErrInvalidSignature,
 		},
 		{

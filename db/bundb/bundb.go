@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
@@ -94,6 +95,11 @@ func bunDB(sqldb *sql.DB) *bun.DB {
 // PgConn creates a new SQL DB connection - exported for testing
 func PgConn(dsn string) (*sql.DB, error) {
 	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
+
+	// Set connection pooling settings
+	sqldb.SetMaxOpenConns(25)
+	sqldb.SetMaxIdleConns(25)
+	sqldb.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := sqldb.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)

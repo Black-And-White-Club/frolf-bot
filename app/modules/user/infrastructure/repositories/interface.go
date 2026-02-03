@@ -34,6 +34,7 @@ type Repository interface {
 	// Club operations (New Identity Abstraction)
 	GetClubMembership(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
 	GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
+	GetClubMembershipsByUserUUIDs(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
 	UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error
 	GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
 
@@ -43,6 +44,8 @@ type Repository interface {
 	UpdateUserRole(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
+	GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error)
+	GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error)
 	FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
 
 	// Profile operations
@@ -53,4 +56,9 @@ type Repository interface {
 	GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error
 	RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
+
+	// Magic Link operations
+	SaveMagicLink(ctx context.Context, db bun.IDB, link *MagicLink) error
+	GetMagicLink(ctx context.Context, db bun.IDB, token string) (*MagicLink, error)
+	MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) error
 }

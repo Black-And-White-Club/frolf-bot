@@ -49,11 +49,11 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				r.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return clubUUID, nil
 				}
-				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
-					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "player"}}, nil
+				r.GetClubMembershipFn = func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error) {
+					return &userdb.ClubMembership{ClubUUID: clubUUID, Role: "player"}, nil
 				}
-				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
-					return "valid-jwt", nil
+				r.SaveMagicLinkFn = func(ctx context.Context, db bun.IDB, link *userdb.MagicLink) error {
+					return nil
 				}
 			},
 			verify: func(t *testing.T, resp *MagicLinkResponse, err error) {
@@ -63,9 +63,8 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				if !resp.Success {
 					t.Errorf("expected success, got failure: %s", resp.Error)
 				}
-				expectedURL := "https://frolf.bot?t=valid-jwt"
-				if resp.URL != expectedURL {
-					t.Errorf("expected URL %s, got %s", expectedURL, resp.URL)
+				if !strings.HasPrefix(resp.URL, "https://frolf.bot?t=") {
+					t.Errorf("expected URL to start with base URL, got %s", resp.URL)
 				}
 			},
 		},
@@ -87,7 +86,7 @@ func TestService_GenerateMagicLink(t *testing.T) {
 			},
 		},
 		{
-			name:    "jwt generation failure",
+			name:    "save magic link failure",
 			userID:  "u1",
 			guildID: "g1",
 			role:    authdomain.RolePlayer,
@@ -100,11 +99,11 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				r.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return clubUUID, nil
 				}
-				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
-					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "player"}}, nil
+				r.GetClubMembershipFn = func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error) {
+					return &userdb.ClubMembership{ClubUUID: clubUUID, Role: "player"}, nil
 				}
-				j.GenerateTokenFunc = func(claims *authdomain.Claims, ttl time.Duration) (string, error) {
-					return "", errors.New("jwt error")
+				r.SaveMagicLinkFn = func(ctx context.Context, db bun.IDB, link *userdb.MagicLink) error {
+					return errors.New("db error")
 				}
 			},
 			verify: func(t *testing.T, resp *MagicLinkResponse, err error) {
@@ -112,10 +111,10 @@ func TestService_GenerateMagicLink(t *testing.T) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				if resp.Success {
-					t.Error("expected failure")
+					t.Error("expected failure for save error")
 				}
-				if resp.Error != ErrGenerateToken.Error() {
-					t.Errorf("expected error %v, got %s", ErrGenerateToken, resp.Error)
+				if resp.Error != "failed to generate magic link" {
+					t.Errorf("expected error 'failed to generate magic link', got %s", resp.Error)
 				}
 			},
 		},
@@ -326,6 +325,17 @@ func TestService_LoginUser(t *testing.T) {
 				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
 					return &authdomain.Claims{UserUUID: userUUID}, nil
 				}
+				r.GetMagicLinkFn = func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error) {
+					return &userdb.MagicLink{
+						Token:     token,
+						UserUUID:  userUUID,
+						ExpiresAt: time.Now().Add(time.Hour),
+						Used:      false,
+					}, nil
+				}
+				r.MarkMagicLinkUsedFn = func(ctx context.Context, db bun.IDB, token string) error {
+					return nil
+				}
 				r.SaveRefreshTokenFn = func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error {
 					return nil
 				}
@@ -346,8 +356,8 @@ func TestService_LoginUser(t *testing.T) {
 			name:         "invalid token",
 			oneTimeToken: "bad-otp",
 			setupMock: func(j *FakeJWTProvider, r *userdb.FakeRepository) {
-				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
-					return nil, errors.New("invalid")
+				r.GetMagicLinkFn = func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error) {
+					return nil, userdb.ErrNotFound
 				}
 			},
 			verify: func(t *testing.T, resp *LoginResponse, err error) {

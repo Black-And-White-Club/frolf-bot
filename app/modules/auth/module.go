@@ -49,7 +49,7 @@ func NewModule(
 	logger.InfoContext(ctx, "Initializing auth module")
 
 	// Create JWT provider
-	jwtProvider := authjwt.NewProvider(cfg.JWT.Secret)
+	jwtProvider := authjwt.NewProvider(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience)
 
 	// Create NATS JWT builder if auth callout is enabled
 	var userJWTBuilder authnats.UserJWTBuilder
@@ -89,9 +89,16 @@ func NewModule(
 		httpRouter.Route("/api/auth", func(r chi.Router) {
 			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
 			r.Use(authhandlers.RateLimitMiddleware(limiter))
+			
+			// Public routes
 			r.Get("/callback", handlers.HandleHTTPLogin)
-			r.Get("/ticket", handlers.HandleHTTPTicket)
-			r.Post("/logout", handlers.HandleHTTPLogout)
+
+			// Protected routes
+			r.Group(func(r chi.Router) {
+				r.Use(authhandlers.AuthMiddleware)
+				r.Get("/ticket", handlers.HandleHTTPTicket)
+				r.Post("/logout", handlers.HandleHTTPLogout)
+			})
 		})
 	}
 

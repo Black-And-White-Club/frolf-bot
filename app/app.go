@@ -254,8 +254,12 @@ func (app *App) Run(ctx context.Context) error {
 		port = ":" + port
 	}
 	app.HTTPServer = &http.Server{
-		Addr:    port,
-		Handler: app.HTTPRouter,
+		Addr:              port,
+		Handler:           app.HTTPRouter,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

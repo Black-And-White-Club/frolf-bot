@@ -196,44 +196,91 @@ func (s *UserService) executeMatchParsedScorecard(
 		return results.FailureResult[*MatchResult](fmt.Errorf("too many players: %d", len(playerNames))), nil
 	}
 
-	matchResult := &MatchResult{
-		Mappings:  []userevents.UDiscConfirmedMappingV1{},
-		Unmatched: []string{},
-	}
+	// 1. Normalize and collect unique names to look up
+	uniqueNames := make(map[string]string) // normalized -> raw (one representation)
+	unmatchedRaw := make([]string, 0)
 
-	for _, rawName := range playerNames {
-		name := strings.TrimSpace(rawName)
+	for _, raw := range playerNames {
+		name := strings.TrimSpace(raw)
 		if name == "" {
 			continue
 		}
-
 		if len([]rune(name)) > maxNameRune {
-			matchResult.Unmatched = append(matchResult.Unmatched, name[:maxNameRune])
+			unmatchedRaw = append(unmatchedRaw, name)
 			continue
 		}
-		norm := strings.ToLower(name)
+		uniqueNames[strings.ToLower(name)] = raw
+	}
 
-		// Try Username
-		user, err := s.repo.FindByUDiscUsername(ctx, db, guildID, norm)
-		if err != nil && !errors.Is(err, userdb.ErrNotFound) {
-			return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("error finding by username: %w", err)
+	if len(uniqueNames) == 0 {
+		return results.SuccessResult[*MatchResult, error](&MatchResult{
+			Mappings:  []userevents.UDiscConfirmedMappingV1{},
+			Unmatched: unmatchedRaw,
+		}), nil
+	}
+
+	normList := make([]string, 0, len(uniqueNames))
+	for norm := range uniqueNames {
+		normList = append(normList, norm)
+	}
+
+	// 2. Batch lookup by Username
+	byUsername, err := s.repo.GetUsersByUDiscUsernames(ctx, db, guildID, normList)
+	if err != nil {
+		return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("batch username lookup failed: %w", err)
+	}
+
+	matchedUsers := make(map[string]sharedtypes.DiscordID)
+	for _, u := range byUsername {
+		if u.User.UDiscUsername != nil {
+			matchedUsers[strings.ToLower(*u.User.UDiscUsername)] = u.User.GetUserID()
 		}
+	}
 
-		// Try Name if not found
-		if user == nil || errors.Is(err, userdb.ErrNotFound) {
-			user, err = s.repo.FindByUDiscName(ctx, db, guildID, norm)
-			if err != nil && !errors.Is(err, userdb.ErrNotFound) {
-				return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("error finding by name: %w", err)
+	// 3. Batch lookup by Name for names still unmatched
+	stillMissing := make([]string, 0)
+	for _, norm := range normList {
+		if _, ok := matchedUsers[norm]; !ok {
+			stillMissing = append(stillMissing, norm)
+		}
+	}
+
+	if len(stillMissing) > 0 {
+		byName, err := s.repo.GetUsersByUDiscNames(ctx, db, guildID, stillMissing)
+		if err != nil {
+			return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("batch name lookup failed: %w", err)
+		}
+		for _, u := range byName {
+			if u.User.UDiscName != nil {
+				matchedUsers[strings.ToLower(*u.User.UDiscName)] = u.User.GetUserID()
 			}
 		}
+	}
 
-		if user != nil {
+	// 4. Build output result map
+	matchResult := &MatchResult{
+		Mappings:  []userevents.UDiscConfirmedMappingV1{},
+		Unmatched: unmatchedRaw,
+	}
+
+	// Keep track of which names we've already matched to avoid duplicates if the same name appears multiple times
+	processedNorms := make(map[string]bool)
+
+	for _, raw := range playerNames {
+		name := strings.TrimSpace(raw)
+		norm := strings.ToLower(name)
+		if norm == "" || len([]rune(name)) > maxNameRune {
+			continue
+		}
+
+		if userID, ok := matchedUsers[norm]; ok {
 			matchResult.Mappings = append(matchResult.Mappings, userevents.UDiscConfirmedMappingV1{
-				PlayerName:    rawName,
-				DiscordUserID: user.User.GetUserID(),
+				PlayerName:    raw,
+				DiscordUserID: userID,
 			})
-		} else {
-			matchResult.Unmatched = append(matchResult.Unmatched, rawName)
+		} else if !processedNorms[norm] {
+			matchResult.Unmatched = append(matchResult.Unmatched, raw)
+			processedNorms[norm] = true
 		}
 	}
 

@@ -13,22 +13,27 @@ import (
 // pwaClaims represents the JWT claims structure.
 type pwaClaims struct {
 	jwt.RegisteredClaims
-	UserUUID       string                `json:"user_uuid,omitempty"`
-	ActiveClubUUID string                `json:"active_club_uuid,omitempty"`
-	Clubs          []authdomain.ClubRole `json:"clubs,omitempty"`
-	Guild          string                `json:"guild,omitempty"` // Legacy Discord Guild ID
-	Role           string                `json:"role,omitempty"`  // Legacy Role
+	UserUUID         string                `json:"user_uuid,omitempty"`
+	ActiveClubUUID   string                `json:"active_club_uuid,omitempty"`
+	Clubs            []authdomain.ClubRole `json:"clubs,omitempty"`
+	RefreshTokenHash string                `json:"rt_hash,omitempty"`
+	Guild            string                `json:"guild,omitempty"` // Legacy Discord Guild ID
+	Role             string                `json:"role,omitempty"`  // Legacy Role
 }
 
 // provider implements the Provider interface.
 type provider struct {
-	secret []byte
+	secret   []byte
+	issuer   string
+	audience string
 }
 
 // NewProvider creates a new JWT provider.
-func NewProvider(secret string) Provider {
+func NewProvider(secret, issuer, audience string) Provider {
 	return &provider{
-		secret: []byte(secret),
+		secret:   []byte(secret),
+		issuer:   issuer,
+		audience: audience,
 	}
 }
 
@@ -39,14 +44,18 @@ func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Durat
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
 			Subject:   domainClaims.UserID,
+			Issuer:    p.issuer,
+			Audience:  jwt.ClaimStrings{p.audience},
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 		},
-		UserUUID:       domainClaims.UserUUID.String(),
-		ActiveClubUUID: domainClaims.ActiveClubUUID.String(),
-		Clubs:          domainClaims.Clubs,
-		Guild:          domainClaims.GuildID,
-		Role:           string(domainClaims.Role),
+		UserUUID:         domainClaims.UserUUID.String(),
+		ActiveClubUUID:   domainClaims.ActiveClubUUID.String(),
+		Clubs:            domainClaims.Clubs,
+		RefreshTokenHash: domainClaims.RefreshTokenHash,
+		Guild:            domainClaims.GuildID,
+		Role:             string(domainClaims.Role),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -65,7 +74,7 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 			return nil, ErrInvalidSignature
 		}
 		return p.secret, nil
-	})
+	}, jwt.WithIssuer(p.issuer), jwt.WithAudience(p.audience), jwt.WithLeeway(5*time.Second))
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -84,10 +93,11 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 
 	// Convert to domain claims
 	domainClaims := &authdomain.Claims{
-		UserID:  claims.Subject,
-		GuildID: claims.Guild,
-		Role:    authdomain.Role(claims.Role),
-		Clubs:   claims.Clubs,
+		UserID:           claims.Subject,
+		RefreshTokenHash: claims.RefreshTokenHash,
+		GuildID:          claims.Guild,
+		Role:             authdomain.Role(claims.Role),
+		Clubs:            claims.Clubs,
 	}
 
 	if claims.UserUUID != "" {

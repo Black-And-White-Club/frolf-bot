@@ -11,15 +11,16 @@ import (
 
 // UserClaims represents NATS user JWT claims.
 type UserClaims struct {
-	Subject     string          `json:"sub"`
-	Audience    string          `json:"aud,omitempty"`
-	Expires     int64           `json:"exp,omitempty"`
-	IssuedAt    int64           `json:"iat"`
-	Issuer      string          `json:"iss"`
-	Name        string          `json:"name,omitempty"`
-	Type        string          `json:"type"`
-	Version     int             `json:"version"`
-	Permissions UserPermissions `json:"nats"`
+	Subject          string          `json:"sub"`
+	Audience         string          `json:"aud,omitempty"`
+	Expires          int64           `json:"exp,omitempty"`
+	IssuedAt         int64           `json:"iat"`
+	Issuer           string          `json:"iss"`
+	Name             string          `json:"name,omitempty"`
+	Type             string          `json:"type"`
+	Version          int             `json:"version"`
+	RefreshTokenHash string          `json:"rt_hash,omitempty"`
+	Permissions      UserPermissions `json:"nats"`
 }
 
 // UserPermissions contains the NATS permissions for a user.

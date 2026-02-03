@@ -14,14 +14,15 @@ type ClubRole struct {
 
 // Claims represents the domain model for authentication claims.
 type Claims struct {
-	UserID         string // Legacy Discord User ID (kept for compatibility)
-	UserUUID       uuid.UUID
-	ActiveClubUUID uuid.UUID
-	Clubs          []ClubRole
-	GuildID        string // Legacy Discord Guild ID (kept for compatibility)
-	Role           Role   // Legacy Role (kept for compatibility, refers to ActiveClubUUID)
-	ExpiresAt      time.Time
-	IssuedAt       time.Time
+	UserID           string // Legacy Discord User ID (kept for compatibility)
+	UserUUID         uuid.UUID
+	ActiveClubUUID   uuid.UUID
+	Clubs            []ClubRole
+	GuildID          string // Legacy Discord Guild ID (kept for compatibility)
+	Role             Role   // Legacy Role (kept for compatibility, refers to ActiveClubUUID)
+	RefreshTokenHash string // Hash of the refresh token used to mint this ticket
+	ExpiresAt        time.Time
+	IssuedAt         time.Time
 }
 
 // IsExpired checks if the claims have expired.

@@ -36,6 +36,7 @@ func (b *userJWTBuilder) BuildUserJWT(claims *authdomain.Claims, perms *permissi
 	uc.Name = fmt.Sprintf("%s@%s", claims.UserUUID.String(), claims.ActiveClubUUID.String())
 	uc.Audience = b.issuerAccount
 	uc.Expires = time.Now().Add(24 * time.Hour).Unix()
+	uc.RefreshTokenHash = claims.RefreshTokenHash
 
 	// Set permissions
 	uc.Permissions.Pub.Allow = perms.Publish.Allow

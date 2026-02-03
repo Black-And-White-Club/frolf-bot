@@ -20,4 +20,10 @@ var (
 
 	// ErrGenerateUserJWT is returned when NATS user JWT generation fails.
 	ErrGenerateUserJWT = errors.New("failed to generate user credentials")
+
+	// ErrSessionMismatch is returned when the refresh token hash in a ticket doesn't match the current valid session.
+	ErrSessionMismatch = errors.New("session mismatch: token has been rotated or invalidated")
+
+	// ErrRevokedSession is returned when a session has been explicitly revoked.
+	ErrRevokedSession = errors.New("session has been revoked")
 )

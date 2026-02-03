@@ -133,11 +133,13 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 			name:        "match by username success",
 			playerNames: []string{"PlayerOne"},
 			setupFake: func(f *FakeUserRepository) {
-				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
-					if name == "playerone" {
-						return &userdb.UserWithMembership{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-1"))}}, nil
+				f.GetUsersByUDiscUsernamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error) {
+					for _, u := range usernames {
+						if u == "playerone" {
+							return []userdb.UserWithMembership{{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-1")), UDiscUsername: pointer("playerone")}}}, nil
+						}
 					}
-					return nil, userdb.ErrNotFound
+					return []userdb.UserWithMembership{}, nil
 				}
 			},
 			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
@@ -157,14 +159,16 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 			name:        "match by name fallback success",
 			playerNames: []string{"Real Name"},
 			setupFake: func(f *FakeUserRepository) {
-				f.FindByUDiscUsernameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
-					return nil, userdb.ErrNotFound
+				f.GetUsersByUDiscUsernamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error) {
+					return []userdb.UserWithMembership{}, nil
 				}
-				f.FindByUDiscNameFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
-					if name == "real name" {
-						return &userdb.UserWithMembership{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-2"))}}, nil
+				f.GetUsersByUDiscNamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, names []string) ([]userdb.UserWithMembership, error) {
+					for _, n := range names {
+						if n == "real name" {
+							return []userdb.UserWithMembership{{User: &userdb.User{UserID: pointer(sharedtypes.DiscordID("discord-2")), UDiscName: pointer("real name")}}}, nil
+						}
 					}
-					return nil, userdb.ErrNotFound
+					return []userdb.UserWithMembership{}, nil
 				}
 			},
 			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {

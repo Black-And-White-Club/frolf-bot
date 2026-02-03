@@ -297,6 +297,24 @@ func (r *Impl) GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, use
 	return memberships, nil
 }
 
+func (r *Impl) GetClubMembershipsByUserUUIDs(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	if len(userUUIDs) == 0 {
+		return []*ClubMembership{}, nil
+	}
+	var memberships []*ClubMembership
+	err := db.NewSelect().
+		Model(&memberships).
+		Where("user_uuid IN (?)", bun.In(userUUIDs)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetClubMembershipsByUserUUIDs: %w", err)
+	}
+	return memberships, nil
+}
+
 func (r *Impl) UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error {
 	if db == nil {
 		db = r.db
@@ -439,6 +457,52 @@ func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedty
 	return uwm, nil
 }
 
+func (r *Impl) GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	var results []UserWithMembership
+	err := db.NewSelect().
+		Model((*User)(nil)).
+		ColumnExpr("u.*").
+		ColumnExpr("gm.role").
+		ColumnExpr("gm.joined_at").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("LOWER(u.udisc_name) IN (?)", bun.In(names)).
+		Where("gm.guild_id = ?", guildID).
+		Scan(ctx, &results)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetUsersByUDiscNames: %w", err)
+	}
+	return results, nil
+}
+
+func (r *Impl) GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	if len(usernames) == 0 {
+		return nil, nil
+	}
+	var results []UserWithMembership
+	err := db.NewSelect().
+		Model((*User)(nil)).
+		ColumnExpr("u.*").
+		ColumnExpr("gm.role").
+		ColumnExpr("gm.joined_at").
+		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
+		Where("LOWER(u.udisc_username) IN (?)", bun.In(usernames)).
+		Where("gm.guild_id = ?", guildID).
+		Scan(ctx, &results)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetUsersByUDiscUsernames: %w", err)
+	}
+	return results, nil
+}
+
 // Fuzzy search by partial username or name
 func (r *Impl) FindByUDiscNameFuzzy(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partial string) ([]*UserWithMembership, error) {
 	if db == nil {
@@ -572,4 +636,52 @@ func normalizeNullablePointer(val *string) *string {
 	}
 	normalized := strings.ToLower(strings.TrimSpace(*val))
 	return &normalized
+}
+
+// --- MAGIC LINK METHODS ---
+
+func (r *Impl) SaveMagicLink(ctx context.Context, db bun.IDB, link *MagicLink) error {
+	if db == nil {
+		db = r.db
+	}
+	if _, err := db.NewInsert().Model(link).Exec(ctx); err != nil {
+		return fmt.Errorf("userdb.SaveMagicLink: %w", err)
+	}
+	return nil
+}
+
+func (r *Impl) GetMagicLink(ctx context.Context, db bun.IDB, token string) (*MagicLink, error) {
+	if db == nil {
+		db = r.db
+	}
+	ml := &MagicLink{}
+	err := db.NewSelect().Model(ml).Where("token = ?", token).Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetMagicLink: %w", err)
+	}
+	return ml, nil
+}
+
+func (r *Impl) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) error {
+	if db == nil {
+		db = r.db
+	}
+	now := time.Now().UTC()
+	res, err := db.NewUpdate().
+		Model((*MagicLink)(nil)).
+		Set("used = ?", true).
+		Set("used_at = ?", now).
+		Where("token = ?", token).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.MarkMagicLinkUsed: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return ErrNoRowsAffected
+	}
+	return nil
 }

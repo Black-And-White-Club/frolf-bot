@@ -13,6 +13,7 @@ import (
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -63,125 +64,98 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 	ctx, span := s.tracer.Start(ctx, "AuthService.GenerateMagicLink")
 	defer span.End()
 
-	s.logger.InfoContext(ctx, "Generating magic link",
+	s.logger.InfoContext(ctx, "Generating magic link request",
 		attr.String("user_id", userID),
 		attr.String("guild_id", guildID),
-		attr.String("role", role.String()),
+		attr.String("role", string(role)),
 	)
 
+	// 1. Validate role
 	if !role.IsValid() {
-		s.logger.WarnContext(ctx, "Invalid role specified",
-			attr.String("role", role.String()),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   ErrInvalidRole.Error(),
-		}, nil
+		return &MagicLinkResponse{Success: false, Error: ErrInvalidRole.Error()}, nil
 	}
 
-	// Resolve UUIDs
-	userUUID, err := s.repo.GetUUIDByDiscordID(ctx, nil, sharedtypes.DiscordID(userID))
+	// 2. Resolve internal UUIDs
+	userUUID, clubUUID, err := s.resolveUserAndClub(ctx, userID, guildID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to resolve User UUID",
-			attr.Error(err),
-			attr.String("user_id", userID),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   "identity resolution failed",
-		}, nil
+		return &MagicLinkResponse{Success: false, Error: "identity resolution failed"}, nil
 	}
 
-	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, sharedtypes.GuildID(guildID))
+	// 3. Verify membership
+	if err := s.verifyMembership(ctx, userUUID, clubUUID); err != nil {
+		return &MagicLinkResponse{Success: false, Error: "unauthorized: user is not a member of the requested club"}, nil
+	}
+
+	// 4. Create and save magic link (stateful)
+	token, err := s.createAndSaveMagicLink(ctx, userUUID, guildID, role)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to resolve Club UUID",
-			attr.Error(err),
-			attr.String("guild_id", guildID),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   "club resolution failed",
-		}, nil
+		return &MagicLinkResponse{Success: false, Error: "failed to generate magic link"}, nil
 	}
 
-	// Fetch all club memberships for the user
-	memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, nil, userUUID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to fetch club memberships",
-			attr.Error(err),
-			attr.String("user_uuid", userUUID.String()),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   "failed to fetch club memberships",
-		}, nil
-	}
-
-	clubs := make([]authdomain.ClubRole, 0, len(memberships))
-	foundActive := false
-	for _, m := range memberships {
-		clubRole := authdomain.ClubRole{
-			ClubUUID: m.ClubUUID,
-			Role:     authdomain.Role(m.Role),
-		}
-		clubs = append(clubs, clubRole)
-		if m.ClubUUID == clubUUID {
-			foundActive = true
-		}
-	}
-
-	// Based on the review "doesn't verify active club is actually valid for user",
-	// let's ensure it's valid.
-	if !foundActive {
-		s.logger.WarnContext(ctx, "User is not a member of the requested club",
-			attr.String("user_uuid", userUUID.String()),
-			attr.String("club_uuid", clubUUID.String()),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   "unauthorized: user is not a member of the requested club",
-		}, nil
-	}
-
-	// Generate the token using the default TTL
-	ttl := s.config.DefaultTTL
-	if ttl == 0 {
-		ttl = DefaultTokenTTL
-	}
-
-	claims := &authdomain.Claims{
-		UserID:         userID,
-		UserUUID:       userUUID,
-		ActiveClubUUID: clubUUID,
-		GuildID:        guildID,
-		Role:           role,
-		Clubs:          clubs,
-	}
-
-	token, err := s.jwtProvider.GenerateToken(claims, ttl)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to generate token",
-			attr.Error(err),
-			attr.String("user_id", userID),
-		)
-		return &MagicLinkResponse{
-			Success: false,
-			Error:   ErrGenerateToken.Error(),
-		}, nil
-	}
-
-	// Build the magic link URL
-	url := fmt.Sprintf("%s?t=%s", s.config.PWABaseURL, token)
+	// 5. Build URL
+	url := s.buildMagicLinkURL(token)
 
 	s.logger.InfoContext(ctx, "Magic link generated successfully",
 		attr.String("user_id", userID),
 		attr.String("guild_id", guildID),
 	)
 
-	return &MagicLinkResponse{
-		Success: true,
-		URL:     url,
-	}, nil
+	return &MagicLinkResponse{Success: true, URL: url}, nil
+}
+
+func (s *service) createAndSaveMagicLink(ctx context.Context, userUUID uuid.UUID, guildID string, role authdomain.Role) (string, error) {
+	token, err := generateRandomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	ttl := s.config.DefaultTTL
+	if ttl == 0 {
+		ttl = DefaultTokenTTL
+	}
+
+	magicLink := &userdb.MagicLink{
+		Token:     token,
+		UserUUID:  userUUID,
+		GuildID:   guildID,
+		Role:      string(role),
+		ExpiresAt: time.Now().Add(ttl),
+	}
+
+	if err := s.repo.SaveMagicLink(ctx, nil, magicLink); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to save magic link", attr.Error(err))
+		return "", err
+	}
+
+	return token, nil
+}
+
+func (s *service) buildMagicLinkURL(token string) string {
+	return fmt.Sprintf("%s?t=%s", s.config.PWABaseURL, token)
+}
+
+func (s *service) resolveUserAndClub(ctx context.Context, userID, guildID string) (uuid.UUID, uuid.UUID, error) {
+	userUUID, err := s.repo.GetUUIDByDiscordID(ctx, nil, sharedtypes.DiscordID(userID))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve User UUID: %w", err)
+	}
+
+	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, sharedtypes.GuildID(guildID))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve Club UUID: %w", err)
+	}
+
+	return userUUID, clubUUID, nil
+}
+
+func (s *service) verifyMembership(ctx context.Context, userUUID, clubUUID uuid.UUID) error {
+	// Check if user has membership in the specific club
+	// We can use GetClubMembership which is a direct lookup
+	_, err := s.repo.GetClubMembership(ctx, nil, userUUID, clubUUID)
+	if err != nil {
+		return fmt.Errorf("user is not a member of the club")
+	}
+	return nil
 }
 
 // ValidateToken validates a JWT token and returns the claims if valid.
@@ -237,6 +211,42 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 		return &NATSAuthResponse{
 			Error: fmt.Sprintf("invalid token: %v", err),
 		}, nil
+	}
+
+	// Stateful Session Validation:
+	// If the ticket was minted from a refresh token (standard PWA flow),
+	// check if that refresh token is still valid and not revoked.
+	if claims.RefreshTokenHash != "" {
+		token, err := s.repo.GetRefreshToken(ctx, nil, claims.RefreshTokenHash)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Session validation failed: token not found",
+				attr.String("rt_hash", claims.RefreshTokenHash),
+				attr.String("user_uuid", claims.UserUUID.String()),
+			)
+			return &NATSAuthResponse{
+				Error: ErrSessionMismatch.Error(),
+			}, nil
+		}
+
+		if token.Revoked {
+			s.logger.WarnContext(ctx, "Session validation failed: token revoked",
+				attr.String("rt_hash", claims.RefreshTokenHash),
+				attr.String("user_uuid", claims.UserUUID.String()),
+			)
+			return &NATSAuthResponse{
+				Error: ErrRevokedSession.Error(),
+			}, nil
+		}
+
+		if time.Now().After(token.ExpiresAt) {
+			s.logger.WarnContext(ctx, "Session validation failed: token expired",
+				attr.String("rt_hash", claims.RefreshTokenHash),
+				attr.String("user_uuid", claims.UserUUID.String()),
+			)
+			return &NATSAuthResponse{
+				Error: ErrExpiredToken.Error(),
+			}, nil
+		}
 	}
 
 	s.logger.InfoContext(ctx, "Token validated successfully",

@@ -79,6 +79,20 @@ type RefreshToken struct {
 	UserAgent   string     `bun:"user_agent"`
 }
 
+// MagicLink represents a one-time login token.
+type MagicLink struct {
+	bun.BaseModel `bun:"table:magic_links,alias:ml"`
+
+	Token     string     `bun:"token,pk"`
+	UserUUID  uuid.UUID  `bun:"user_uuid,notnull"`
+	GuildID   string     `bun:"guild_id,notnull"`
+	Role      string     `bun:"role,notnull"`
+	ExpiresAt time.Time  `bun:"expires_at,notnull"`
+	CreatedAt time.Time  `bun:"created_at,notnull,default:current_timestamp"`
+	Used      bool       `bun:"used,notnull,default:false"`
+	UsedAt    *time.Time `bun:"used_at"`
+}
+
 // UserWithMembership combines user identity with guild-specific data.
 // Used for queries that need both global and guild context.
 type UserWithMembership struct {
