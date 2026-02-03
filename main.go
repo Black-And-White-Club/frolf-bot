@@ -41,8 +41,15 @@ func startHealthServer() {
 		w.Write([]byte("ok"))
 	})
 	go func() {
-		log.Println("Starting health server on :8080")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
+		port := os.Getenv("HEALTH_PORT")
+		if port == "" {
+			port = ":8080"
+		}
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
+		log.Printf("Starting health server on %s", port)
+		if err := http.ListenAndServe(port, nil); err != nil {
 			log.Fatalf("Health server failed: %v", err)
 		}
 	}()
