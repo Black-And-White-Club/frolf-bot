@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
 )
 
 const (
 	RefreshTokenCookie = "refresh_token"
-	RefreshTokenExpiry = 30 * 24 * time.Hour
 )
 
 func (h *AuthHandlers) httpError(w http.ResponseWriter, r *http.Request, message string, code int, err error) {
@@ -32,15 +32,16 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set HttpOnly cookie
+	// Set HttpOnly cookie — SameSite=Lax is required because the user arrives
+	// via an external magic link click, which is a cross-site top-level navigation.
 	http.SetCookie(w, &http.Cookie{
 		Name:     RefreshTokenCookie,
 		Value:    resp.RefreshToken,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.secureCookies,
-		SameSite: http.SameSiteStrictMode,
-		Expires:  time.Now().Add(RefreshTokenExpiry),
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -70,7 +71,7 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		HttpOnly: true,
 		Secure:   h.secureCookies,
 		SameSite: http.SameSiteStrictMode,
-		Expires:  time.Now().Add(RefreshTokenExpiry),
+		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
 	})
 
 	w.Header().Set("Content-Type", "application/json")

@@ -2,6 +2,7 @@ package authhandlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -96,6 +97,12 @@ func TestAuthHandlers_HandleNATSAuthCallout(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracer := noop.NewTracerProvider().Tracer("test")
 
+	// Build a valid JWT-formatted test payload (header.payload.signature).
+	// The handler decodes the payload (base64url) without verifying the signature.
+	testPayloadJSON := `{"nats":{"connect_opts":{"pass":"token"}}}`
+	testPayloadB64 := base64.RawURLEncoding.EncodeToString([]byte(testPayloadJSON))
+	validJWT := "eyJhbGciOiJub25lIn0." + testPayloadB64 + ".sig"
+
 	tests := []struct {
 		name         string
 		reqData      []byte
@@ -104,19 +111,19 @@ func TestAuthHandlers_HandleNATSAuthCallout(t *testing.T) {
 	}{
 		{
 			name:    "success",
-			reqData: []byte(`{"nats":{"connect_opts":{"pass":"token"}}}`),
+			reqData: []byte(validJWT),
 			setupService: func(s *FakeService) {
 				s.HandleNATSAuthRequestFunc = func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error) {
-					return &authservice.NATSAuthResponse{Jwt: "jwt"}, nil
+					return &authservice.NATSAuthResponse{Jwt: "jwt", SignedResponse: "signed.response.jwt"}, nil
 				}
 			},
 		},
 		{
-			name:    "invalid json",
-			reqData: []byte(`invalid`),
+			name:    "invalid format",
+			reqData: []byte(`not-a-jwt`),
 			setupService: func(s *FakeService) {
 				s.HandleNATSAuthRequestFunc = func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error) {
-					t.Error("service should not be called on invalid json")
+					t.Error("service should not be called on invalid JWT format")
 					return nil, nil
 				}
 			},

@@ -38,68 +38,79 @@ func hashToken(token string) string {
 }
 
 // LoginUser validates a one-time token and creates a long-lived session (refresh token).
+// The entire operation runs in a transaction to prevent double-redemption of magic links.
 func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginResponse, error) {
 	ctx, span := s.tracer.Start(ctx, "AuthService.LoginUser")
 	defer span.End()
 
-	// 1. Validate the one-time token (DB)
-	ml, err := s.repo.GetMagicLink(ctx, nil, oneTimeToken)
+	var resp *LoginResponse
+
+	err := s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
+		// 1. Validate the one-time token (DB)
+		ml, err := s.repo.GetMagicLink(ctx, tx, oneTimeToken)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Invalid one-time token", attr.Error(err))
+			return fmt.Errorf("invalid token: %w", err)
+		}
+
+		if ml.Used {
+			s.logger.WarnContext(ctx, "One-time token already used", attr.String("token", oneTimeToken))
+			return fmt.Errorf("token already used")
+		}
+
+		if time.Now().After(ml.ExpiresAt) {
+			s.logger.WarnContext(ctx, "One-time token expired", attr.String("token", oneTimeToken))
+			return fmt.Errorf("token expired")
+		}
+
+		// Mark as used
+		if err := s.repo.MarkMagicLinkUsed(ctx, tx, oneTimeToken); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to mark token used", attr.Error(err))
+			return fmt.Errorf("failed to process token: %w", err)
+		}
+
+		userUUID := ml.UserUUID
+
+		// 2. Generate a refresh token
+		token, err := generateRandomToken(32)
+		if err != nil {
+			return fmt.Errorf("failed to generate token: %w", err)
+		}
+
+		hashedToken := hashToken(token)
+		familyID, err := generateRandomToken(16)
+		if err != nil {
+			return fmt.Errorf("failed to generate token family: %w", err)
+		}
+
+		refreshToken := &userdb.RefreshToken{
+			Hash:        hashedToken,
+			UserUUID:    userUUID,
+			TokenFamily: familyID,
+			ExpiresAt:   time.Now().Add(RefreshTokenExpiry),
+			Revoked:     false,
+		}
+
+		// Save to DB
+		if err := s.repo.SaveRefreshToken(ctx, tx, refreshToken); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to save refresh token",
+				attr.Error(err),
+				attr.String("user_uuid", userUUID.String()),
+			)
+			return fmt.Errorf("failed to save session: %w", err)
+		}
+
+		resp = &LoginResponse{
+			RefreshToken: token,
+			UserUUID:     userUUID.String(),
+		}
+		return nil
+	})
+
 	if err != nil {
-		s.logger.WarnContext(ctx, "Invalid one-time token", attr.Error(err))
-		return nil, fmt.Errorf("invalid token: %w", err)
+		return nil, err
 	}
-
-	if ml.Used {
-		s.logger.WarnContext(ctx, "One-time token already used", attr.String("token", oneTimeToken))
-		return nil, fmt.Errorf("token already used")
-	}
-
-	if time.Now().After(ml.ExpiresAt) {
-		s.logger.WarnContext(ctx, "One-time token expired", attr.String("token", oneTimeToken))
-		return nil, fmt.Errorf("token expired")
-	}
-
-	// Mark as used
-	if err := s.repo.MarkMagicLinkUsed(ctx, nil, oneTimeToken); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to mark token used", attr.Error(err))
-		return nil, fmt.Errorf("failed to process token: %w", err)
-	}
-
-	userUUID := ml.UserUUID
-
-	// 2. Generate a refresh token
-	token, err := generateRandomToken(32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
-	}
-
-	hashedToken := hashToken(token)
-	familyID, err := generateRandomToken(16)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate token family: %w", err)
-	}
-
-	refreshToken := &userdb.RefreshToken{
-		Hash:        hashedToken,
-		UserUUID:    userUUID,
-		TokenFamily: familyID,
-		ExpiresAt:   time.Now().Add(RefreshTokenExpiry),
-		Revoked:     false,
-	}
-
-	// Save to DB
-	if err := s.repo.SaveRefreshToken(ctx, nil, refreshToken); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to save refresh token",
-			attr.Error(err),
-			attr.String("user_uuid", userUUID.String()),
-		)
-		return nil, fmt.Errorf("failed to save session: %w", err)
-	}
-
-	return &LoginResponse{
-		RefreshToken: token,
-		UserUUID:     userUUID.String(),
-	}, nil
+	return resp, nil
 }
 
 // GetTicket validates a refresh token and mints a short-lived NATS ticket.
@@ -118,7 +129,12 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	if token.Revoked {
 		s.logger.WarnContext(ctx, "Revoked token used", attr.String("token_hash", hashedToken))
 		// Security hardening: Revoke all tokens in family if a revoked token is reused
-		_ = s.repo.RevokeAllUserTokens(ctx, nil, token.UserUUID)
+		if err := s.repo.RevokeAllUserTokens(ctx, nil, token.UserUUID); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to revoke token family",
+				attr.Error(err),
+				attr.String("user_uuid", token.UserUUID.String()),
+			)
+		}
 		return nil, fmt.Errorf("session revoked")
 	}
 
@@ -144,35 +160,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	var clubs []authdomain.ClubRole
 
 	if len(memberships) == 0 {
-		// Backfill Check: If user has no club memberships, check for legacy guild memberships
-		// and create corresponding club memberships if possible.
-		user, err := s.repo.GetUserByUUID(ctx, nil, token.UserUUID)
-		if err == nil && user != nil && user.UserID != nil {
-			legacyMemberships, err := s.repo.GetUserMemberships(ctx, nil, *user.UserID)
-			if err == nil && len(legacyMemberships) > 0 {
-				s.logger.InfoContext(ctx, "Backfilling club memberships for user", attr.String("user_uuid", token.UserUUID.String()))
-				for _, lm := range legacyMemberships {
-					clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, lm.GuildID)
-					if err == nil {
-						extID := string(lm.UserID)
-						emptyName := ""
-						cm := &userdb.ClubMembership{
-							ClubUUID:    clubUUID,
-							UserUUID:    token.UserUUID,
-							Role:        lm.Role,
-							JoinedAt:    lm.JoinedAt,
-							ExternalID:  &extID,
-							DisplayName: &emptyName,
-						}
-						if err := s.repo.UpsertClubMembership(ctx, nil, cm); err != nil {
-							s.logger.WarnContext(ctx, "Failed to backfill club membership", attr.Error(err))
-						}
-					}
-				}
-				// Re-fetch memberships after backfill
-				memberships, _ = s.repo.GetClubMembershipsByUserUUID(ctx, nil, token.UserUUID)
-			}
-		}
+		memberships = s.backfillClubMemberships(ctx, token.UserUUID)
 	}
 
 	if len(memberships) > 0 {
@@ -235,7 +223,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 
 	// 4. Mint standard HMAC JWT as a "ticket"
 	// This ticket will be exchanged for a NATS User JWT via Auth Callout
-	natsToken, err := s.jwtProvider.GenerateToken(claims, DefaultTokenTTL)
+	natsToken, err := s.jwtProvider.GenerateToken(claims, TicketTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ticket: %w", err)
 	}
@@ -286,6 +274,45 @@ func (s *service) LogoutUser(ctx context.Context, rawToken string) error {
 	}
 
 	return nil
+}
+
+// backfillClubMemberships checks for legacy guild memberships and creates
+// corresponding club memberships if the user has none yet.
+func (s *service) backfillClubMemberships(ctx context.Context, userUUID uuid.UUID) []*userdb.ClubMembership {
+	user, err := s.repo.GetUserByUUID(ctx, nil, userUUID)
+	if err != nil || user == nil || user.UserID == nil {
+		return nil
+	}
+
+	legacyMemberships, err := s.repo.GetUserMemberships(ctx, nil, *user.UserID)
+	if err != nil || len(legacyMemberships) == 0 {
+		return nil
+	}
+
+	s.logger.InfoContext(ctx, "Backfilling club memberships for user", attr.String("user_uuid", userUUID.String()))
+	for _, lm := range legacyMemberships {
+		clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, lm.GuildID)
+		if err != nil {
+			continue
+		}
+		extID := string(lm.UserID)
+		emptyName := ""
+		cm := &userdb.ClubMembership{
+			ClubUUID:    clubUUID,
+			UserUUID:    userUUID,
+			Role:        lm.Role,
+			JoinedAt:    lm.JoinedAt,
+			ExternalID:  &extID,
+			DisplayName: &emptyName,
+		}
+		if err := s.repo.UpsertClubMembership(ctx, nil, cm); err != nil {
+			s.logger.WarnContext(ctx, "Failed to backfill club membership", attr.Error(err))
+		}
+	}
+
+	// Re-fetch memberships after backfill
+	memberships, _ := s.repo.GetClubMembershipsByUserUUID(ctx, nil, userUUID)
+	return memberships
 }
 
 // resolveDisplayName returns the club display name if present, otherwise fallback.

@@ -74,7 +74,8 @@ func (s *service) runInTx(ctx context.Context, fn func(ctx context.Context, db b
 }
 
 const (
-	DefaultTokenTTL      = 24 * time.Hour
+	TicketTTL            = 5 * time.Minute // Short-lived NATS ticket exchanged for a NATS User JWT
+	DefaultTokenTTL      = 24 * time.Hour  // Default magic link TTL
 	RefreshTokenExpiry   = 30 * 24 * time.Hour
 	ProfileSyncStaleness = 24 * time.Hour // Re-sync display name from Discord if older than this
 )

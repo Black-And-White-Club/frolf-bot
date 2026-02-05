@@ -60,8 +60,8 @@ type ClientInfo struct {
 
 // NATSAuthResponse represents the response to a NATS auth callout.
 type NATSAuthResponse struct {
-	Jwt            string `json:"jwt,omitempty"`            // The user JWT (for logging)
-	Error          string `json:"error,omitempty"`          // Error message if auth failed
+	Jwt            string `json:"jwt,omitempty"`             // The user JWT (for logging)
+	Error          string `json:"error,omitempty"`           // Error message if auth failed
 	SignedResponse string `json:"signed_response,omitempty"` // The signed auth response JWT to send to NATS
 }
 

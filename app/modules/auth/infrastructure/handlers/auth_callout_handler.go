@@ -53,10 +53,10 @@ func (h *AuthHandlers) HandleNATSAuthCallout(msg *nats.Msg) {
 	ctx, span := h.tracer.Start(context.Background(), "AuthHandlers.HandleNATSAuthCallout")
 	defer span.End()
 
-	       h.logger.DebugContext(ctx, "Received auth callout request",
-	                attr.String("subject", msg.Subject),
-	                attr.Int("data_length", len(msg.Data)),
-	        )
+	h.logger.DebugContext(ctx, "Received auth callout request",
+		attr.String("subject", msg.Subject),
+		attr.Int("data_length", len(msg.Data)),
+	)
 	// The auth callout message is a JWT - decode it
 	claims, err := h.decodeAuthRequestJWT(string(msg.Data))
 	if err != nil {
@@ -136,6 +136,9 @@ func (h *AuthHandlers) HandleNATSAuthCallout(msg *nats.Msg) {
 }
 
 // decodeAuthRequestJWT decodes a NATS auth callout JWT and extracts the claims.
+// Signature verification is intentionally skipped because NATS server is a trusted
+// sender and has already validated the request before forwarding it via the auth
+// callout mechanism.
 func (h *AuthHandlers) decodeAuthRequestJWT(token string) (*AuthorizationRequestClaims, error) {
 	// JWT format: header.payload.signature
 	parts := strings.Split(token, ".")
@@ -143,7 +146,7 @@ func (h *AuthHandlers) decodeAuthRequestJWT(token string) (*AuthorizationRequest
 		return nil, ErrInvalidJWTFormat
 	}
 
-	// Decode the payload (claims)
+	// Decode the payload (claims) — signature not verified; see function comment.
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		// Try standard base64 with padding
