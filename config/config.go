@@ -137,9 +137,6 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("HTTP_PORT"); v != "" {
 		cfg.HTTP.Port = v
 	}
-	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
-		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
-	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}

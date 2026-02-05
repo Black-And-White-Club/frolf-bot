@@ -68,7 +68,7 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		Value:    resp.RefreshToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 		Expires:  time.Now().Add(RefreshTokenExpiry),
 	})

@@ -303,6 +303,18 @@ func runMigrations() {
 	// 4. others
 	migrationOrder := []string{"guild", "user", "club", "round", "score", "leaderboard"}
 
+	// Validate that all migrators are included in the order list
+	orderSet := make(map[string]struct{}, len(migrationOrder))
+	for _, name := range migrationOrder {
+		orderSet[name] = struct{}{}
+	}
+	for name := range migrators {
+		if _, ok := orderSet[name]; !ok {
+			fmt.Printf("FATAL: migrator %q is not included in migrationOrder - add it to prevent silent skipping\n", name)
+			os.Exit(1)
+		}
+	}
+
 	// Initialize and run migrations for each module
 	for _, moduleName := range migrationOrder {
 		migrator := migrators[moduleName]
